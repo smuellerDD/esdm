@@ -62,16 +62,16 @@ The following dependencies are required:
 * protobuf-c: When enabling any code beyond the ESDM library, the protobuf-c
   support is needed. Either the package of your favorite distribution must be
   installed or obtain the sources from the
-  (Protobuf-C Github website)[https://github.com/protobuf-c/protobuf-c].
+  [Protobuf-C Github website](https://github.com/protobuf-c/protobuf-c).
 
 * protbuf-c-rpc: When enabling any code beyond the ESDM library, the
   protobuf-c-rpc support is needed. The split out RPC code must be present from
   your favorite distribution or from the
-  (Protobuf-C-RPC Github website)[https://github.com/protobuf-c/protobuf-c-rpc].
+  [Protobuf-C-RPC Github website](https://github.com/protobuf-c/protobuf-c-rpc).
 
 * Jitter RNG: If the Jitter RNG entropy source is enabled, install the Jitter
   RNG library from your distribution or from the
-  (Jitter RNG homepage)[https://www.chronox.de/jent.html].
+  [Jitter RNG homepage](https://www.chronox.de/jent.html).
 
 * SELinux library: If your system uses SELinux and you compile the CUSE device
   file support, the SELinux library is needed for proper device file labeling.
@@ -79,7 +79,7 @@ The following dependencies are required:
 
 * FUSE 3 library: If the CUSE daemons shall be compiled, the FUSE 3 library
   is required either from your distribution or from the
-  (libfuse Github website)[https://github.com/libfuse/libfuse/].
+  [libfuse Github website](https://github.com/libfuse/libfuse/).
 
 Beyond those dependencies, only POSIX support is required.
 
@@ -120,78 +120,66 @@ In addition, some tests require the library to be compiled with the option
 THIS MODE FOR PRODUCTION CODE! This mode per default is disabled and can
 be enabled with the command `meson configure build -Dtestmode=enabled`.
 
-## Useage
+## Usage
 
 The ESDM consists of the following components:
 
 * `libesdm.so`: The ESDM provides a library with the core of the ESDM. The
-		DRNG and entropy source managers together with all entropy
-		sources and cryptograpphic algorithm implementations are
-		implemented with this library. This library is wrapped by
-		the `esdm-server` listed below. The API for using the library
-		is exported by and documented with `esdm.h`.
+  DRNG and entropy source managers together with all entropy sources and
+  cryptograpphic algorithm implementations are implemented with this library.
+  This library is wrapped by the `esdm-server` listed below. The API for using
+  the library is exported by and documented with `esdm.h`.
 
-		The library is provided in case a user wants to employ the
-		ESDM in his projects instead of the `esdm-server`. Yet, the
-		`esdm-server` provides a wrapping daemon to the ESDM library
-		that is intended to be commonly used.
+  The library is provided in case a user wants to employ the ESDM in his
+  projects instead of the `esdm-server`. Yet, the `esdm-server` provides a
+  wrapping daemon to the ESDM library that is intended to be commonly used.
 
-		In addition, the ESDM can be configured with the options
-		specified in `esdm_config.h`. This would need to be performed
-		by the consuming application. When using the tools below, this
-		library can be ignored.
+  In addition, the ESDM can be configured with the options specified in
+  `esdm_config.h`. This would need to be performed by the consuming application.
+  When using the tools below, this library can be ignored.
 
 * `esdm-server`: The ESDM server provides the RPC server that encapsulates
-		 the ESDM with its random number generator and the entropy
-		 source management. When starting the server, a Unix domain
-		 socket is created that allows clients to request services
-		 including random numbers.
+  the ESDM with its random number generator and the entropy source management.
+  When starting the server, a Unix domain socket is created that allows clients
+  to request services including random numbers.
 
-		 The ESDM server can either be started manually or with the
-		 provided (and installed) systemd unit file. When using
-		 systemd, start the server with `systemctl start esdm-server`.
+  The ESDM server can either be started manually or with the provided (and
+  installed) systemd unit file. When using systemd, start the server with
+  `systemctl start esdm-server`.
 
-		 A wrapper library to access the ESDM server RPC interface is
-		 provided with `libesdm_rpc_client.so`. Its API is specified
-		 and documented with `esdm_rpc_client.h`.
+  A wrapper library to access the ESDM server RPC interface is provided with
+  `libesdm_rpc_client.so`. Its API is specified and documented with
+  `esdm_rpc_client.h`.
 
-		 The `esdm-server` is the backend to all of the following
-		 ESDM components.
+  The `esdm-server` is the backend to all of the following ESDM components.
 
-		 NOTE: The Unix domain sockets of the `esdm-server` are only 
-		       visible in the respective mount namespace. If you have
-		       multiple mount namespaces, you need to start the daemon
-		       in each mount namespace or make the files otherwise
-		       available if its services shall be available there.
+  NOTE: The Unix domain sockets of the `esdm-server` are only visible in the
+  respective mount namespace. If you have multiple mount namespaces, you need
+  to start the daemon in each mount namespace or make the files otherwise
+  available if its services shall be available there.
 
 * `esdm-cuse-random`: The ESDM CUSE daemon creates a device file that behaves
-		      identically to /dev/random. It must be started as root.
-		      Reading, writing and IOCTLs are implemented in an
-		      ABI-compatible way.
+  identically to /dev/random. It must be started as root. Reading, writing and
+  IOCTLs are implemented in an ABI-compatible way.
 
-		      The ESDM CUSE daemon can either be started manually or
-		      with the provided (and installed) systemd unit file. When
-		      using systemd, start the server with
-		      `systemctl start esdm-cuse-random`. Although the
-		      daemon creates a /dev/random device, the actual
-		      visible operation is atomic (a bind mount) for both
-		      creation and destruction of the new device file which
-		      implies that the daemon can be started and stopped at
-		      any time during runtime of the Linux OS.
+  The ESDM CUSE daemon can either be started manually or with the provided (and
+  installed) systemd unit file. When using systemd, start the server with
+  `systemctl start esdm-cuse-random`. Although the daemon creates a /dev/random
+  device, the actual visible operation is atomic (a bind mount) for both
+  creation and destruction of the new device file which implies that the daemon
+  can be started and stopped at any time during runtime of the Linux OS.
 
-		      NOTE: The bind mount is only visible in the respective
-			    mount namespace. If you have multiple mount
-			    namespaces, you need to start this daemon in each
-			    mount namespace or make the file otherwise
-			    available if its service shall be available there.
+  NOTE: The bind mount is only visible in the respective mount namespace. If
+  you have multiple mount namespaces, you need to start this daemon in each
+  mount namespace or make the file otherwise available if its service shall be
+  available there.
 
 * `esdm-cuse-urandom`: Same as `esdm-cuse-random` but behaving like
-		       /dev/urandom.
+  /dev/urandom.
 
 * `libesdm-getrandom.so`: The library provides a wrapper to the `getrandom` and
-			  `getentropy` libc library calls. To use the library
-			  for other consumers, use one of the following
-			  considerations:
+  `getentropy` libc library calls. To use the library for other consumers, use
+  one of the following  considerations:
 
 	- Use LD_PRELOAD="/path/to/libesdm-getentropy.so" with the intended
 	  application.
