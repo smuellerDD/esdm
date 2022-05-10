@@ -1,0 +1,24 @@
+# Systemd configuration file
+#
+# The ESDM /dev/urandom provider does not depend on any other system
+# service except the ESDM server. Furthermore, we want to start it as early as
+# possible in the boot cycle so that other services requiring
+# random numbers (like SSHD, TLS-based services) benefit from it
+
+[Unit]
+Description=Entropy Source and DRNG Manager /dev/urandom
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+Requires=esdm-server.service
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+ExecStart=@PATH@/esdm-cuse-urandom -f
+
+[Install]
+WantedBy=basic.target
+Alias=esdm-server.service

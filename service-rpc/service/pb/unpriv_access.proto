@@ -1,0 +1,179 @@
+/*
+ * Protobuf protocol for the unprivileged Unix Domain Socket (i.e. the socket
+ * that is accessible by everybody).
+ */
+
+syntax = "proto3";
+
+/******************************************************************************
+ * get_status
+ ******************************************************************************/
+
+/**
+ * @brief Request to get status
+ *
+ * @param maxlen Maximum size of buffer
+ */
+message StatusRequest {
+	uint32 maxlen = 1;
+}
+
+/**
+ * @brief Response to get status
+ *
+ * @param buffer_len Number of bytes present in the buffer - if no message
+ *		     buffer is returned, this value specifies the number of
+ *		     required bytes.
+ * @param buffer Buffer with ASCII status - this is a NULL-terminated string
+ */
+message StatusResponse {
+	int32 ret = 1;
+	string buffer = 2;
+}
+
+/******************************************************************************
+ * get_random_bytes_full
+ ******************************************************************************/
+
+/**
+ * @brief Request to get random bytes from fully seeded DRNG
+ *
+ * @param len number of random bytes that are requested
+ */
+message GetRandomBytesFullRequest {
+	uint64 len = 1;
+}
+
+/**
+ * @brief Response providing random bytes from fully seeded DRNG
+ *
+ * @param ret Return code of generation request (> 0 on success with the value
+ *	      indicating the generated number of random bytes,
+ *	      < -255 indicating the maximum number of bytes that can be
+ *	      transferred in one request, < 0 on error)
+ * @param randval Random bytes
+ */
+message GetRandomBytesFullResponse {
+	int64 ret = 1;
+	bytes randval = 2;
+}
+
+/******************************************************************************
+ * get_random_bytes_min
+ ******************************************************************************/
+
+/**
+ * @brief Request to get random bytes from minimally seeded DRNG
+ *
+ * @param len number of random bytes that are requested
+ */
+message GetRandomBytesMinRequest {
+	uint64 len = 1;
+}
+
+/**
+ * @brief Response providing random bytes from minimally seeded DRNG
+ *
+ * @param ret Return code of generation request (> 0 on success with the value
+ *	      indicating the generated number of random bytes,
+ *	      < -255 indicating the maximum number of bytes that can be
+ *	      transferred in one request, < 0 on error)
+ * @param randval Random bytes
+ */
+message GetRandomBytesMinResponse {
+	int64 ret = 1;
+	bytes randval = 2;
+}
+
+/******************************************************************************
+ * get_random_bytes
+ ******************************************************************************/
+
+/**
+ * @brief Request to get random bytes from DRNG that has no guarantee of being
+ *	  initialized at the time random numbers are generated.
+ *
+ * @param len number of random bytes that are requested
+ */
+message GetRandomBytesRequest {
+	uint64 len = 1;
+}
+
+/**
+ * @brief Response providing random bytes from DRNG that has no guarantee of
+ *	  being initialized at the time random numbers are generated.
+ *
+ * @param ret Return code of generation request (> 0 on success with the value
+ *	      indicating the generated number of random bytes,
+ *	      < -255 indicating the maximum number of bytes that can be
+ *	      transferred in one request, < 0 on error)
+ * @param randval Random bytes
+ */
+message GetRandomBytesResponse {
+	int64 ret = 1;
+	bytes randval = 2;
+}
+
+/******************************************************************************
+ * Write data
+ ******************************************************************************/
+
+/**
+ * @brief Request to write data into the auxiliary entropy pool and perform an
+ *	  immediate reseed.
+ *
+ * @param data Buffer with the data to write into the DRNG - the entropy
+ *	       estimator will remain unchanged.
+ */
+message WriteDataRequest {
+	bytes data = 1;
+}
+
+/**
+ * @brief Response providing the result of the write operation
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message WriteDataResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
+ * RNDGETENTCNT IOCTL
+ ******************************************************************************/
+
+/**
+ * @brief Request to obtain the available entropy
+ */
+message RndGetEntCntRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response returning the available entropy
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param entcnt Available entropy in bits
+ */
+message RndGetEntCntResponse {
+	int32 ret = 1;
+	uint32 entcnt = 2;
+}
+
+/******************************************************************************
+ * Protocol handler
+ ******************************************************************************/
+service UnprivAccess {
+	rpc RpcStatus (StatusRequest) returns (StatusResponse);
+	rpc RpcGetRandomBytesFull (GetRandomBytesFullRequest) returns
+				  (GetRandomBytesFullResponse);
+	rpc RpcGetRandomBytesMin (GetRandomBytesMinRequest) returns
+				 (GetRandomBytesMinResponse);
+	rpc RpcGetRandomBytes (GetRandomBytesRequest) returns
+			      (GetRandomBytesResponse);
+	rpc RpcWriteData (WriteDataRequest) returns (WriteDataResponse);
+
+	/* IOCTLs */
+	rpc RpcRndGetEntCnt (RndGetEntCntRequest) returns
+			    (RndGetEntCntResponse);
+}

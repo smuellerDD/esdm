@@ -1,0 +1,111 @@
+/*
+ * Protobuf protocol for the privileged Unix Domain Socket (i.e. the socket
+ * that is accessible by root only).
+ */
+
+syntax = "proto3";
+
+/******************************************************************************
+ * RNDADDTOENTCNT IOCTL
+ ******************************************************************************/
+
+/**
+ * @brief Request to change the entropy estimator of the ES manager
+ *
+ * @param entcnt Entropy value in bits to set to (value is capped to maximum
+ *		 possible entropy value)
+ */
+message RndAddToEntCntRequest {
+	uint32 entcnt = 1;
+}
+
+/**
+ * @brief Response of the change of the entropy estimator operation
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message RndAddToEntCntResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
+ * RNDADDENTROPY IOCTL
+ ******************************************************************************/
+/**
+ * @brief Request to add data to the auxiliary entropy pool and increase the
+ *	  pool's entropy estimate accordingly
+ *
+ * @param randval Buffer with the entropy data
+ * @param entcnt Entropy value in bits to set to (value is capped to maximum
+ *		 possible entropy value)
+ */
+message RndAddEntropyRequest {
+	bytes randval = 1;
+	uint32 entcnt = 2;
+}
+
+/**
+ * @brief Response of the addition of entropy data operation
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message RndAddEntropyResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
+ * RNDZAPENTCNT / RNDCLEARPOOL IOCTL
+ ******************************************************************************/
+
+/**
+ * @brief Request to clear the auxiliary entropy pool
+ */
+message RndClearPoolRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response of clearing the auxiliary entropy pool
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message RndClearPoolResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
+ * RNDRESEEDCRNG IOCTL
+ *
+ * Add the privilege check here to be compliant with the kernel although
+ * a caller can invoke the reseed operation by simply writing data
+ * into the DRNG.
+ ******************************************************************************/
+/**
+ * @brief Request the reseeding of the DRNGs
+ */
+message RndReseedCRNGRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response of requesting the reseed of the DRNGs
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message RndReseedCRNGResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
+ * Protocol handler
+ ******************************************************************************/
+service PrivAccess {
+	rpc RpcRndAddToEntCnt (RndAddToEntCntRequest) returns
+			      (RndAddToEntCntResponse);
+	rpc RpcRndAddEntropy (RndAddEntropyRequest) returns
+			     (RndAddEntropyResponse);
+	rpc RpcRndClearPool (RndClearPoolRequest) returns
+			    (RndClearPoolResponse);
+	rpc RpcRndReseedCRNG (RndReseedCRNGRequest) returns
+			     (RndReseedCRNGResponse);
+}

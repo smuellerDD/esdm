@@ -1,0 +1,47 @@
+# Systemd configuration file
+#
+# The ESDM server does not depend on any other system
+# services. Furthermore, we want to start it as early as possible
+# in the boot cycle so that other services requiring
+# random numbers (like SSHD, TLS-based services) benefit from it
+
+[Unit]
+Description=Entropy Source and DRNG Manager Daemon
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+DeviceAllow=/dev/null rw
+DevicePolicy=strict
+Restart=on-failure
+RestartSec=5s
+ExecStart=@PATH@/esdm-server
+IPAddressDeny=any
+LimitMEMLOCK=0
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+MountFlags=private
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateMounts=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateUsers=no
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=-/
+RemoveIPC=yes
+RestrictAddressFamilies=
+RestrictNamespaces=yes
+RestrictRealtime=yes
+UMask=0077
+
+[Install]
+WantedBy=basic.target
+Alias=esdm-server.service

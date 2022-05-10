@@ -1,0 +1,229 @@
+################################################################################
+# Jitter RNG entropy source configuration
+################################################################################
+
+option('es_jent', type: 'feature', value: 'enabled',
+       description: '''Enable support for Jitter RNG entropy source.
+
+The ESDM may use the Jitter RNG as entropy source. Enabling
+this option enables the use of the Jitter RNG.
+''')
+
+# Option for: ESDM_JENT_ENTROPY_RATE
+option('es_jent_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+       description:'''Jitter RNG entropy source entropy rate
+
+The option defines the amount of entropy the ESDM applies to 256 bits of
+data obtained from the Jitter RNG entropy source. The ESDM enforces the
+limit that this value must be in the range between 0 and 256.
+''')
+
+################################################################################
+# CPU-based Entropy Source configuration options
+################################################################################
+
+option('es_cpu', type: 'feature', value: 'enabled',
+       description: '''Enable support for CPU-based entropy source.
+
+Current CPUs commonly contain entropy sources which can be
+used to seed the ESDM. For example, the Intel RDSEED
+instruction, or the POWER DARN instruction will be sourced
+to seed the ESDM if this option is enabled.
+
+Note, if this option is enabled and the underlying CPU
+does not offer such entropy source, the ESDM will
+automatically detect this and ignore the hardware.
+''')
+
+# Option for: ESDM_CPU_ENTROPY_RATE
+option('es_cpu_entropy_rate', type: 'integer', min: 0, max: 256, value: 8,
+       description:'''CPU-based entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256
+bits of data obtained from the CPU entropy source. The ESDM
+enforces the limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the CPU entropy source will provide
+256 bits of data without being credited to contain entropy.
+''')
+
+# Option for: ESDM_CPU_FULL_ENT_MULTIPLIER
+option('es_cpu_multiplier', type: 'integer', min: 1, value: 1,
+       description: '''CPU-based entropy source data multiplier.
+
+Some entropy sources specify that its entropy source requires an
+oversampling. This multiplier is set to a default not performing an
+oversampling. However, this value is adjusted by specific CPU entropy
+source glue code.
+''')
+
+################################################################################
+# Kernel RNG entropy source configuration (/dev/random)
+################################################################################
+
+option('es_kernel', type: 'feature', value: 'enabled',
+       description: 'Enable support for kernel entropy source (/dev/random).')
+
+# Option for: ESDM_KERNEL_RNG_ENTROPY_RATE
+option('es_kernel_entropy_rate', type: 'integer', min: 0, max: 256, value: 128,
+       description:'''Kernel entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256 bits of
+data obtained from the kernel RNG entropy source. The ESDM enforces the
+limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the kernel RNG entropy source will provide
+256 bits of data without being credited to contain entropy.
+
+Note: This value is set to 0 automatically when booting the kernel in FIPS
+mode (with fips=1 kernel command line option). This is due to the fact that
+random.c is not SP800-90B compliant.
+''')
+
+################################################################################
+# Scheduler-based entropy source configuration
+################################################################################
+
+ option('es_sched', type: 'feature', value: 'enabled',
+       description: '''Enable support for scheduler-based entropy source.
+
+The LRNG models an entropy source based on the timing of the
+occurrence of scheduler-triggered context switches. Enable
+this option to enable this scheduler entropy source.
+
+The scheduler entropy source is triggered every time a
+context switch is triggered thus causes the scheduler to
+execute slightly longer. Disabling the scheduler entropy
+source implies that the performance penalty on the scheduler
+added by the LRNG is eliminated. Yet, this entropy source is
+considered to be an internal entropy source of the LRNG.
+Thus, only disable it if you ensured that other entropy
+sources are available that supply the LRNG with entropy.
+
+If you disable the scheduler entropy source, you MUST
+ensure one or more entropy sources collectively have the
+capability to deliver sufficient entropy with one invocation
+at a rate compliant to the security strength of the DRNG
+(usually 256 bits of entropy). In addition, if those
+entropy sources do not deliver sufficient entropy during
+first request, the reseed must be triggered from user
+space or kernel space when sufficient entropy is considered
+to be present.
+''')
+
+# Option for: ESDM_SCHED_ENTROPY_RATE
+option('es_sched_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+       description:'''Scheduler-based entropy source entropy rate.
+
+ES configuration done in the kernel module - see kernel module code.
+
+The option defines the amount of entropy the ESDM applies to 256 bits of
+data obtained from the scheduler entropy source. The ESDM enforces the
+limit that this value must be between 0 and 256 bits. Note, this entropy
+rate is applied on the entropy value reported by the scheduler-ES kernel
+module.
+
+Note, this value caps the scheduler ES kernel module value!
+''')
+
+################################################################################
+# Common Options
+################################################################################
+
+# Enable multi-node-DRNG support
+option('node', type: 'feature', value: 'enabled',
+       description: 'Enable support for multiple DRNG nodes.')
+
+# Enable FIPS 140 support
+option('fips140', type: 'feature', value: 'enabled',
+       description: 'Enable FIPS 140 support.')
+
+# Option for: ESDM_OVERSAMPLE_ENTROPY_SOURCES
+option('oversample_es', type: 'boolean', value: 'true',
+       description:'''Oversampling of Entropy Sources.
+
+If enabled, the ESDM oversamples the entropy sources compliant to SP800-90C.
+The oversampling is applied in FIPS-enabled mode only.
+
+The following oversampling is applied:
+* Seed the DRNG with 128 more bits of entropy from the conditioning component.
+* Inject 64 more bits of entropy from the noise source into the conditioning
+  component.
+''')
+
+# Option for: THREADING_MAX_THREADS
+option('threading_max_threads', type: 'integer', min: 1, value: 2,
+       description:'''Maximum number of concurrent threads supported.
+
+This value can be set to any arbitrary number. Depending on the number
+of threads, the required numbers of thread contexts are statically allocated.
+
+The number of threads define:
+* the number of concurrent DRNG instances that are maintained independent of
+  each other, and
+
+* the number of unprivileged Unix Domain Sockets exported by the ESDM server
+  to support concurrent client requests (the privileged interface is never
+  available with multiple threads as the provided functionality is not
+  performance-critical).
+
+There is no other value that needs changing if the number of threads
+shall be adjusted.
+
+The value must not be lower than 1.
+''')
+
+################################################################################
+# Cryptographic backends configuration
+################################################################################
+
+# Option for: ESDM_DRNG_HASH_DRBG
+option('drng_hash_drbg', type: 'boolean', value: 'true',
+       description:'''SP800-90A Hash Deterministic Random Number Generator.
+
+This configuration enables an SP800-90A Hash DRBG with SHA-512 core
+without prediction resistance.
+''')
+
+################################################################################
+# Linux Interface Configuration
+################################################################################
+
+# Enable SELinux support
+option('selinux', type: 'feature', value: 'enabled',
+       description: '''Enable SELinux labeling support.
+
+On some Linux environments, SELinux is used to label the
+/dev/random and /dev/urandom device files. This allows specially
+restricted applications, such as the OpenSSH daemon to access
+those device files.
+
+When creating the /dev/random and /dev/urandom devices, the
+SELinux support of this option is used to ensure both are labeled
+identically to the original device files.
+''')
+
+option('linux-devfiles', type: 'feature', value: 'enabled',
+       description: '''Enable the Linux /dev/random and /dev/urandom support.
+
+Using CUSE, the device files are provided.
+''')
+
+option('linux-getrandom', type: 'feature', value: 'enabled',
+       description: 'Enable the Linux getrandom system call support.')
+
+option('esdm-server', type: 'feature', value: 'enabled',
+       description: 'Enable the ESDM server')
+
+################################################################################
+# Enable Test configuration
+#
+# WARNING: DO NOT ENABLE FOR PRODUCTION MODE
+################################################################################
+option('testmode', type: 'feature', value: 'disabled',
+       description: '''Enable test configuration.
+
+This option enables various test configurations for functional verification
+testing.
+
+WARNING: DO NOT ENABLE FOR PRODUCTION MODE!''')

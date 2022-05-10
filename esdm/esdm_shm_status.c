@@ -1,0 +1,206 @@
+/*
+ * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
+ *
+ * License: see LICENSE file in root directory
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, ALL OF
+ * WHICH ARE HEREBY DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+ * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+ * USE OF THIS SOFTWARE, EVEN IF NOT ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
+ */
+
+#define _GNU_SOURCE
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <semaphore.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/shm.h>
+
+#include "esdm.h"
+#include "esdm_config.h"
+#include "esdm_es_mgr.h"
+#include "esdm_interface_dev_common.h"
+#include "esdm_rpc_server.h"
+#include "esdm_rpc_service.h"
+#include "helper.h"
+#include "logger.h"
+#include "threading_support.h"
+
+static struct esdm_shm_status *esdm_shm_status = NULL;
+static int esdm_shmid = -1;
+static sem_t *esdm_semid = SEM_FAILED;
+
+static void esdm_shm_status_up(void)
+{
+	int semval = 0;
+
+	if (esdm_semid == SEM_FAILED)
+		return;
+
+	/*
+	 * The purpose of the semaphore is to notify clients. If one
+	 * notification is sent out, a client must answer. We do not increment
+	 * the semaphore again if the client did not "consume" the notification.
+	 * The reason is that "consuming" a notification implies that the
+	 * event is not present any more for others. Hence the semaphore shall
+	 * only toggle between 0 and 1.
+	 */
+	sem_getvalue(esdm_semid, &semval);
+	if (semval > 0)
+		return;
+
+	if (sem_post(esdm_semid))
+		logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot unlock semaphore\n");
+}
+
+void esdm_shm_status_set_operational(bool enabled)
+{
+	if (!esdm_shm_status)
+		return;
+
+	if (atomic_bool_read(&esdm_shm_status->operational) != enabled) {
+		atomic_bool_set(&esdm_shm_status->operational, enabled);
+		esdm_shm_status_up();
+	}
+}
+
+void esdm_shm_status_set_need_entropy(void)
+{
+	bool new, curr;
+
+	if (!esdm_shm_status)
+		return;
+
+	curr = atomic_bool_read(&esdm_shm_status->need_entropy);
+
+	new = esdm_need_entropy();
+
+	if (curr != new) {
+		atomic_bool_set(&esdm_shm_status->need_entropy, new);
+		esdm_shm_status_up();
+	}
+}
+
+static void esdm_shm_status_delete_sem(void)
+{
+	if (esdm_semid != SEM_FAILED) {
+		sem_t *tmp = esdm_semid;
+
+		esdm_semid = SEM_FAILED;
+		sem_close(tmp);
+	}
+
+	if (sem_unlink(ESDM_SEM_NAME)) {
+		if (errno != ENOENT) {
+			logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+			       "Cannot unlink semaphore: %s\n",
+			       strerror(errno));
+		}
+	}
+}
+
+static int esdm_shm_status_create_sem(void)
+{
+	int errsv;
+
+	esdm_semid = sem_open(ESDM_SEM_NAME, O_CREAT, 0644, 0);
+	if (esdm_semid == SEM_FAILED) {
+		errsv = errno;
+		logger(LOGGER_ERR, LOGGER_C_ANY,
+		       "ESDM change indicator semaphore creation failed: %s\n",
+		       strerror(errsv));
+		return -errsv;
+	}
+
+	logger(LOGGER_DEBUG, LOGGER_C_ANY,
+	       "ESDM change indicator semaphore initialized\n");
+
+	return 0;
+}
+
+static void esdm_shm_status_delete_shm(void)
+{
+	if (esdm_shm_status) {
+		shmdt(esdm_shm_status);
+		esdm_shm_status = NULL;
+	}
+
+	if (esdm_shmid >= 0) {
+		shmctl(esdm_shmid, IPC_RMID, NULL);
+		esdm_shmid = -1;
+	}
+}
+
+static int esdm_shm_status_create_shm(void)
+{
+	int errsv;
+	void *tmp;
+	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
+
+	esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
+			    IPC_CREAT |
+			    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	if (esdm_shmid < 0) {
+		errsv = errno;
+		logger(LOGGER_ERR, LOGGER_C_ANY,
+		       "ESDM shared memory segment creation failed: %s\n",
+		       strerror(errsv));
+		return -errsv;
+	}
+
+	tmp = shmat(esdm_shmid, NULL, 0);
+	if (tmp == (void *)-1) {
+		errsv = errno;
+		logger(LOGGER_ERR, LOGGER_C_ANY,
+		       "Attaching to ESDM shared memory segment failed: %s\n",
+		       strerror(errsv));
+		esdm_shm_status_delete_shm();
+		return -errsv;
+	}
+	esdm_shm_status = tmp;
+	esdm_shm_status->version = ESDM_SHM_STATUS_VERSION;
+
+	logger(LOGGER_DEBUG, LOGGER_C_ANY,
+	       "ESDM shared memory segment initialized\n");
+
+	return 0;
+}
+
+int esdm_shm_status_init(void)
+{
+	int ret = esdm_shm_status_create_shm();
+
+	if (ret)
+		return ret;
+
+	ret = esdm_shm_status_create_sem();
+	if (ret) {
+		esdm_shm_status_delete_shm();
+		return ret;
+	}
+
+	esdm_status(esdm_shm_status->info, sizeof(esdm_shm_status->info));
+	esdm_shm_status->infolen = strlen(esdm_shm_status->info);
+	esdm_shm_status->unpriv_threads = esdm_config_online_nodes();
+
+	esdm_shm_status_set_operational(esdm_state_operational());
+	esdm_shm_status_set_need_entropy();
+
+	return 0;
+}
+
+void esdm_shm_status_exit(void)
+{
+	esdm_shm_status_delete_shm();
+	esdm_shm_status_delete_sem();
+}
