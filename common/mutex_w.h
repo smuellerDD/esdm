@@ -22,6 +22,7 @@
 
 #include <pthread.h>
 
+#include "bool.h"
 #include "logger.h"
 
 /**

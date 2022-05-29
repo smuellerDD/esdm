@@ -20,7 +20,6 @@
 #include <errno.h>
 
 #include "esdm_es_aux.h"
-#include "esdm_rpc_privileges.h"
 #include "esdm_rpc_service.h"
 #include "memset_secure.h"
 #include "unpriv_access.pb-c.h"

@@ -22,11 +22,11 @@
 
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
-#include "esdm_rpc_client_dispatcher.h"
+#include "logger.h"
+#include "ret_checkers.h"
 #include "visibility.h"
 
 struct esdm_get_status_buf {
-	protobuf_c_boolean is_done;
 	int ret;
 	char *buf;
 	size_t buflen;
@@ -41,44 +41,36 @@ static void esdm_rpcc_status_cb(const StatusResponse *response,
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
 		buffer->ret = -EINTR;
-		goto out;
+		return;
 	}
 
 	buffer->ret = response->ret;
 	if (response->ret < 0)
-		goto out;
+		return;
 
 	snprintf(buffer->buf, buffer->buflen, "%s", response->buffer);
-
-out:
-	buffer->is_done = 1;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_status(char *buf, size_t buflen)
 {
 	StatusRequest msg = STATUS_REQUEST__INIT;
-	struct esdm_dispatcher *disp;
+	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_get_status_buf buffer = {
-		.is_done = 0,
 		.ret = -ETIMEDOUT,
 		.buf = buf,
 		.buflen = buflen,
 	};
-	int ret = 0;
+	int ret;
 
-	ret = esdm_disp_get_unpriv(&disp);
-	if (ret)
-		return ret;
+	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
 
 	msg.maxlen = ESDM_RPC_MAX_MSG_SIZE;
-	unpriv_access__rpc_status(disp->service, &msg,
+	unpriv_access__rpc_status(&rpc_conn->service, &msg,
 				  esdm_rpcc_status_cb, &buffer);
-	while (!buffer.is_done)
-		protobuf_c_rpc_dispatch_run(disp->dispatch);
 
 	ret = buffer.ret;
 
-	esdm_disp_put_unpriv(disp);
+out:
 	return ret;
 }

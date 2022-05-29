@@ -29,15 +29,15 @@
 ESDM_DEFINE_CONSTRUCTOR(esdm_getrandom_lib_init);
 static void esdm_getrandom_lib_init(void)
 {
-	esdm_disp_set_max_online_nodes(1);
+	esdm_rpcc_set_max_online_nodes(1);
 	/* Return code irrelevant due to fallback in functions below */
-	esdm_disp_init_unpriv();
+	esdm_rpcc_init_unpriv_service();
 }
 
 ESDM_DEFINE_DESTRUCTOR(esdm_getrandom_lib_exit);
 static void esdm_getrandom_lib_exit(void)
 {
-	esdm_disp_fini_unpriv();
+	esdm_rpcc_fini_unpriv_service();
 }
 
 ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags);

@@ -20,63 +20,113 @@
 #ifndef ESDM_RPC_CLIENT_H
 #define ESDM_RPC_CLIENT_H
 
+#include <protobuf-c/protobuf-c.h>
 #include <stdint.h>
+#include <stdio.h>
+
+#include "atomic.h"
+#include "mutex_w.h"
+#include "threading_support.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/**
- * @brief Maximum number of allowed dispatchers
- *
- * @param mask [in] Maximum value
- */
-void esdm_disp_set_max_online_nodes(uint32_t mask);
+enum {
+	esdm_rpcc_uninitialized,
+	esdm_rpcc_in_initialization,
+	esdm_rpcc_initialized,
+	esdm_rpcc_in_termination,
+};
+
+struct esdm_rpc_client_connection {
+	ProtobufCService service;
+	char socketname[FILENAME_MAX];
+	int fd;
+
+	mutex_w_t lock;
+	atomic_t ref_cnt;
+	atomic_t state;
+	struct thread_wait_queue completion;
+};
 
 /******************************************************************************
- * Unprivileged RPC
+ * General service handlers
  ******************************************************************************/
 
 /**
- * @brief Deallocate all resources for connection handles and dispatcher queues.
+ * @brief Set maximum number of online nodes
  *
- * Use this call to clean up the connection to the unprivileged RPC endpoint
- * of the ESDM server.
+ * The number of online nodes imply the number of parallel service requests.
+ * During initialization of the services with esdm_rpcc_init_unpriv_service
+ * and esdm_rpcc_init_priv_service, the memory allowing as many parallel
+ * requests to be processed as CPUs are available to be allocated. To limit
+ * this, set maximum number of online nodes here.
+ *
+ * @param nodes [in] Number of maximum online nodes
+ *
+ * @return 0 on success, 0 < on error
  */
-void esdm_disp_fini_unpriv(void);
-
-/**
- * @brief Allocate all resources for connection handles and dispatcher queues.
- *
- * This call must be used to initialize the connection to the unprivileged RPC
- * endpoint of the ESDM server before any RPC service calls are performed.
- *
- * @return 0 on success, < 0 on error
- */
-int esdm_disp_init_unpriv(void);
+int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
 
 /******************************************************************************
- * Privileged RPC
+ * Unprivileged ESDM interface
  ******************************************************************************/
 
 /**
- * @brief Deallocate all resources for connection handles and dispatcher queues.
+ * @brief Initiate connection
  *
- *  Use this call to clean up the connection to the privileged RPC endpoint
- * of the ESDM server.
- */
-void esdm_disp_fini_priv(void);
-
-/**
- * @brief Allocate all resources for connection handles and dispatcher queues.
+ * It will be transparently initialized if it does not exist before. terminate
+ * the connection with esdm_rpc_client_fini_unpriv_service.
  *
- * This call must be used to initialize the connection to the privileged RPC
- * endpoint of the ESDM server before any RPC service calls are performed.
+ * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ *		   	located on the stack.
  *
  * @return 0 on success, < 0 on error
  */
-int esdm_disp_init_priv(void);
+int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn);
+
+/**
+ * @brief Initiate the memory for accessing the unprivileged RPC connection.
+ *
+ * @return 0 on success, < 0 on error
+ */
+int esdm_rpcc_init_unpriv_service(void);
+
+/**
+ * @brief Release all resources around the RPC connection.
+ */
+void esdm_rpcc_fini_unpriv_service(void);
+
+/******************************************************************************
+ * Privileged ESDM interface
+ ******************************************************************************/
+
+/**
+ * @brief Get the client connection handle
+ *
+ * It will be transparently initialized if it does not exist before. terminate
+ * the connection with esdm_rpc_client_fini_priv_service.
+ *
+ * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ *		    	located on the stack.
+ *
+ * @return 0 on success, < 0 on error
+ */
+int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn);
+
+/**
+ * @brief Initiate the memory for accessing the privileged RPC connection.
+ *
+ * @return 0 on success, < 0 on error
+ */
+int esdm_rpcc_init_priv_service(void);
+
+/**
+ * @brief Release all resources around the RPC connection.
+ */
+void esdm_rpcc_fini_priv_service(void);
 
 /******************************************************************************
  * RPC Service Call APIs

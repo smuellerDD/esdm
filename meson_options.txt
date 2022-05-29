@@ -152,7 +152,7 @@ The following oversampling is applied:
 ''')
 
 # Option for: THREADING_MAX_THREADS
-option('threading_max_threads', type: 'integer', min: 1, value: 2,
+option('threading_max_threads', type: 'integer', min: 1, value: 64,
        description:'''Maximum number of concurrent threads supported.
 
 This value can be set to any arbitrary number. Depending on the number
@@ -160,7 +160,8 @@ of threads, the required numbers of thread contexts are statically allocated.
 
 The number of threads define:
 * the number of concurrent DRNG instances that are maintained independent of
-  each other, and
+  each other - this value is limited by the number of found CPUs as it makes no
+  sense to have more DRNG instances than CPUs that can execute them, and
 
 * the number of unprivileged Unix Domain Sockets exported by the ESDM server
   to support concurrent client requests (the privileged interface is never

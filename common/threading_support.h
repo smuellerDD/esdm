@@ -25,6 +25,7 @@
 #include <stdint.h>
 
 #include "bool.h"
+#include "buffer.h"
 #include "config.h"
 
 #ifdef __cplusplus
@@ -62,14 +63,18 @@ extern "C" {
  * The ESDM_THREAD_MAX_SPECIAL_GROUPS specifies how many special threading
  * groups are available.
  */
-#define ESDM_THREAD_SIGHANDLER_GROUP ((uint32_t)-1)
+#define ESDM_THREAD_CUSE_POLL_GROUP ((uint32_t)-1)
 #define ESDM_THREAD_SCHED_INIT_GROUP ((uint32_t)-2)
-#define ESDM_THREAD_MAX_SPECIAL_GROUPS 2
+#define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t)-3)
+#define ESDM_THREAD_MAX_SPECIAL_GROUPS 3
 
 enum esdm_request_type {
 	drng_seed,
 	sched_seed,
-	rpc_server,
+	rpc_unpriv_server,
+	rpc_priv_server,
+	rpc_handler,
+	cuse_poll,
 };
 
 /**
@@ -81,6 +86,15 @@ enum esdm_request_type {
  * @return: 0 on success, < 0 on error
  */
 int thread_init(uint32_t groups);
+
+/**
+ * @brief - Allocate the thread-local memory
+ *
+ * @param tlh_size [in] Thread-local heap size - may be 0
+ *
+ * @return: 0 on success, < 0 on error
+ */
+int thread_init_tlh(size_t tlh_size);
 
 /**
  * @brief - Wait for currently executing threads and release threading support
@@ -100,6 +114,17 @@ int thread_release(bool force, bool system_threads);
  * @return All return codes of all thread functions ORed together.
  */
 int thread_wait(void);
+
+/**
+ * @brief - Obtain thread-local heap buffer
+ *
+ * @param tlh [out] Pointer receiving the buffer reference - the buffer is
+ *		    aligned to 64 bit boundary and can therefore be safely
+ *		    casted.
+ *
+ * @return 0 on success, < 0 on error
+ */
+int thread_local_heap(struct buffer *tlh);
 
 /**
  * @brief - Start a function in a separate thread
@@ -134,17 +159,26 @@ struct thread_wait_queue {
 	pthread_mutex_t thread_wait_lock;
 };
 
+#define WAIT_QUEUE_INIT(name)						\
+	pthread_mutex_init(&(name).thread_wait_lock, NULL)
+
+#define WAIT_QUEUE_FINI(name)						\
+	pthread_mutex_destroy(&(name).thread_wait_lock)
+
 #define DECLARE_WAIT_QUEUE(name)					\
 	struct thread_wait_queue name = {				\
 		.thread_wait_lock = PTHREAD_MUTEX_INITIALIZER,		\
 	}
 
+#define thread_wait_no_event(queue)					\
+	pthread_mutex_lock(&(queue)->thread_wait_lock);			\
+	pthread_cond_wait(&(queue)->thread_wait_cv,			\
+			  &(queue)->thread_wait_lock);			\
+	pthread_mutex_unlock(&(queue)->thread_wait_lock)
+
 #define thread_wait_event(queue, condition)				\
 	while (!condition) {						\
-		pthread_mutex_lock(&(queue)->thread_wait_lock);		\
-		pthread_cond_wait(&(queue)->thread_wait_cv,		\
-				  &(queue)->thread_wait_lock);		\
-		pthread_mutex_unlock(&(queue)->thread_wait_lock);	\
+		thread_wait_no_event(queue);				\
 	}
 
 static inline bool thread_queue_sleeper(struct thread_wait_queue *queue)

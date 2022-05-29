@@ -10,7 +10,7 @@ esdm_server = executable(
 		[ service_rpc_src, server_rpc_src, server_src, ],
 		include_directories: include_dirs_server,
 		dependencies: dependencies_server,
-		link_with: [ esdm_lib ],
+		link_with: [  esdm_common_static_lib, esdm_lib, ],
 		install: true
 		)
 

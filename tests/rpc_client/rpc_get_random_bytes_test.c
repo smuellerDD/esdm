@@ -22,7 +22,6 @@
 
 #include "env.h"
 #include "esdm_rpc_client.h"
-#include "esdm_rpc_client_dispatcher.h"
 
 int main(int argc, char *argv[])
 {
@@ -38,7 +37,7 @@ int main(int argc, char *argv[])
 	if (ret)
 		return ret;
 
-	ret = esdm_disp_init_unpriv();
+	ret = esdm_rpcc_init_unpriv_service();
 	if (ret) {
 		ret = 1;
 		goto out;
@@ -70,7 +69,7 @@ int main(int argc, char *argv[])
 	}
 
 out:
-	esdm_disp_fini_unpriv();
+	esdm_rpcc_fini_unpriv_service();
 	env_fini();
 	return ret;
 }

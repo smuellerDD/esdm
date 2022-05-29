@@ -30,8 +30,7 @@
 
 #include "bool.h"
 #include "cuse_device.h"
-#include "esdm_rpc_client_connection.h"
-#include "esdm_rpc_client_dispatcher.h"
+#include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
@@ -249,8 +248,8 @@ static void esdm_cuse_term(void)
 	 */
 	thread_release(true, true);
 
-	esdm_disp_fini_unpriv();
-	esdm_disp_fini_priv();
+	   esdm_rpcc_fini_priv_service();
+	   esdm_rpcc_fini_unpriv_service();
 
 	esdm_cuse_shm_status_close_shm();
 	esdm_cuse_shm_status_close_sem();
@@ -779,6 +778,8 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 {
 	unsigned int i, mask;
 
+	thread_set_name(cuse_poll, 0);
+
 	/* Clean out the poll status */
 	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
 		esdm_cuse_polls[i].fh = 0;
@@ -844,7 +845,8 @@ void esdm_cuse_init_done(void *userdata)
 	esdm_cuse_drop_privileges();
 	CKINT(esdm_cuse_shm_status_create_shm());
 
-	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL, 0, NULL),
+	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL,
+			       ESDM_THREAD_CUSE_POLL_GROUP, NULL),
 		  "Starting poll-in-reset thread failed: %d\n", ret);
 
 	return;
@@ -975,10 +977,11 @@ int main_common(const char *devname, const char *target,
 			free(param.dev_name);
 	}
 
-	CKINT_LOG(esdm_disp_init_unpriv(),
-		  "Initialization of dispatcher failed\n");
-	CKINT_LOG(esdm_disp_init_priv(),
-		  "Initialization of dispatcher failed\n");
+	CKINT_LOG(esdm_rpcc_init_unpriv_service(),
+                  "Initialization of dispatcher failed\n");
+	CKINT_LOG(esdm_rpcc_init_priv_service(),
+                  "Initialization of dispatcher failed\n");
+
 
 	/* One thread group */
 	CKINT(thread_init(1));

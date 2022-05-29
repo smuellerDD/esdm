@@ -64,11 +64,6 @@ The following dependencies are required:
   installed or obtain the sources from the
   [Protobuf-C Github website](https://github.com/protobuf-c/protobuf-c).
 
-* protbuf-c-rpc: When enabling any code beyond the ESDM library, the
-  protobuf-c-rpc support is needed. The split out RPC code must be present from
-  your favorite distribution or from the
-  [Protobuf-C-RPC Github website](https://github.com/protobuf-c/protobuf-c-rpc).
-
 * Jitter RNG: If the Jitter RNG entropy source is enabled, install the Jitter
   RNG library from your distribution or from the
   [Jitter RNG homepage](https://www.chronox.de/jent.html).

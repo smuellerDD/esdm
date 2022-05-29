@@ -384,7 +384,7 @@ out:
 	esdm_drng_put_instances();
 }
 
-static int _esdm_drng_seed_work(void __unused *unused)
+void esdm_drng_seed_work(void)
 {
 	do {
 		__esdm_drng_seed_work();
@@ -392,23 +392,6 @@ static int _esdm_drng_seed_work(void __unused *unused)
 
 	/* Allow the seeding operation to be called again */
 	esdm_pool_unlock();
-
-	return 0;
-}
-
-void esdm_drng_seed_work(void)
-{
-	//Threading could be used here with the following call
-	//int ret = thread_start(_esdm_drng_seed_work, NULL, 0, NULL);
-	int ret = _esdm_drng_seed_work(0);
-
-	if (ret) {
-		logger(LOGGER_ERR, LOGGER_C_THREADING,
-		       "Starting seeding thread failed: %d\n", ret);
-
-		/* Somehow firing up the thread failed */
-		esdm_pool_unlock();
-	}
 }
 
 /* Force all DRNGs to reseed before next generation */
@@ -545,7 +528,7 @@ ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen)
 }
 
 /* Reset ESDM such that all existing entropy is gone */
-static int _esdm_reset(void __unused *unused)
+void esdm_reset(void)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 
@@ -571,17 +554,6 @@ static int _esdm_reset(void __unused *unused)
 
 	esdm_reset_state();
 	esdm_drng_put_instances();
-
-	return 0;
-}
-
-void esdm_reset(void)
-{
-	int ret = thread_start(_esdm_reset, NULL, 0, NULL);
-
-	if (ret)
-		logger(LOGGER_ERR, LOGGER_C_THREADING,
-		       "Starting reset thread failed: %d\n", ret);
 }
 
 /******************* Generic ESDM kernel output interfaces ********************/

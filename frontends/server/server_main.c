@@ -178,7 +178,7 @@ static void sig_term(int sig)
 
 static void install_term(void)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Install termination signal handler");
+	logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Install termination signal handler\n");
 	signal(SIGHUP, sig_term);
 	signal(SIGINT, sig_term);
 	signal(SIGQUIT, sig_term);

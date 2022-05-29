@@ -31,11 +31,11 @@
 #include "bool.h"
 #include "config.h"
 #include "logger.h"
+#include "memset_secure.h"
 #include "mutex_w.h"
 #include "ret_checkers.h"
-#include "visibility.h"
-
 #include "threading_support.h"
+#include "visibility.h"
 
 #ifdef CONFIG_ESDM_USE_PTHREAD
 
@@ -63,6 +63,8 @@ struct thread_ctx {
 
 	int (*start_routine)(void *); /* Thread code to be executed */
 	void *data; /* Parameters used by the thread code */
+	void *tlh; /* Thread-local heap */
+	size_t tlh_size;
 
 	atomic_bool_t thread_pending; /* Is thread associated with structure? */
 	mutex_w_t inuse; /* Is thread data structure used? */
@@ -132,6 +134,61 @@ static inline void thread_block(pthread_cond_t *cv, pthread_mutex_t *lock)
 	pthread_mutex_unlock(lock);
 }
 
+static inline bool thread_dirty(unsigned int slot)
+{
+	return (atomic_bool_read(&threads[slot].thread_pending));
+}
+
+/* Thread structure cleanup after execution when thread is kept alive. */
+static inline void thread_cleanup(struct thread_ctx *tctx)
+{
+	tctx->data = NULL;
+	tctx->start_routine = NULL;
+	pthread_cond_signal(&thread_schedule_cv);
+	pthread_cond_signal(&thread_wait_cv);
+
+	/* Return values of special threads is irrelevant */
+	if (thread_is_special(tctx))
+		tctx->scheduled = false;
+}
+
+/* Thread structure cleanup when thread is terminated. */
+static inline void thread_cleanup_full(struct thread_ctx *tctx)
+{
+	thread_cleanup(tctx);
+	tctx->thread_num = 0;
+	atomic_bool_set_false(&tctx->thread_pending);
+	tctx->scheduled = false;
+	tctx->ret_ancestor = 0;
+	mutex_w_destroy(&tctx->inuse);
+	pthread_mutex_destroy(&tctx->worker_lock);
+	if (tctx->tlh) {
+		memset_secure(tctx->tlh, 0, tctx->tlh_size);
+		free(tctx->tlh);
+		tctx->tlh = NULL;
+		tctx->tlh_size = 0;
+	}
+}
+
+int thread_init_tlh(size_t tlh_size)
+{
+	unsigned int i;
+	int ret;
+
+	if (!tlh_size)
+		return -EINVAL;
+
+	for (i = 0; i < THREADING_MAX_THREADS; i++) {
+		ret = posix_memalign(&threads[i].tlh, sizeof(uint64_t),
+				     tlh_size);
+		if (ret)
+			return -ret;
+		threads[i].tlh_size = tlh_size;
+	}
+
+	return 0;
+}
+
 int thread_init(uint32_t groups)
 {
 	static uint32_t thread_initialized = 0;
@@ -179,34 +236,23 @@ out:
 	return 0;
 }
 
-static inline bool thread_dirty(unsigned int slot)
+int thread_local_heap(struct buffer *tlh)
 {
-	return (atomic_bool_read(&threads[slot].thread_pending));
-}
+	pthread_t self = pthread_self();
+	unsigned int i;
 
-/* Thread structure cleanup after execution when thread is kept alive. */
-static inline void thread_cleanup(struct thread_ctx *tctx)
-{
-	tctx->data = NULL;
-	tctx->start_routine = NULL;
-	pthread_cond_signal(&thread_schedule_cv);
-	pthread_cond_signal(&thread_wait_cv);
+	for (i = 0; i < THREADING_REALLY_ALL_THREADS; i++) {
+		if (pthread_equal(self, threads[i].thread_id)) {
+			if (!threads[i].tlh)
+				return -ENOMEM;
 
-	/* Return values of special threads is irrelevant */
-	if (thread_is_special(tctx))
-		tctx->scheduled = false;
-}
+			tlh->buf = threads[i].tlh;
+			tlh->len = threads[i].tlh_size;
+			return 0;
+		}
+	}
 
-/* Thread structure cleanup when thread is terminated. */
-static inline void thread_cleanup_full(struct thread_ctx *tctx)
-{
-	thread_cleanup(tctx);
-	tctx->thread_num = 0;
-	atomic_bool_set_false(&tctx->thread_pending);
-	tctx->scheduled = false;
-	tctx->ret_ancestor = 0;
-	mutex_w_destroy(&tctx->inuse);
-	pthread_mutex_destroy(&tctx->worker_lock);
+	return -ENOENT;
 }
 
 /* Worker loop of a thread */
@@ -435,8 +481,17 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 	case sched_seed:
 		snprintf(name, sizeof(name), "sched_es_seed");
 		break;
-	case rpc_server:
-		snprintf(name, sizeof(name), "rpc_server%d", id);
+	case rpc_unpriv_server:
+		snprintf(name, sizeof(name), "unpriv_rpc");
+		break;
+	case rpc_priv_server:
+		snprintf(name, sizeof(name), "priv_rpc");
+		break;
+	case rpc_handler:
+		snprintf(name, sizeof(name), "handler_rpc%u", id);
+		break;
+	case cuse_poll:
+		snprintf(name, sizeof(name), "cuse_poll");
 		break;
 	default:
 		snprintf(name, sizeof(name), "%u", id);

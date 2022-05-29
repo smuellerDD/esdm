@@ -22,13 +22,12 @@
 
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
-#include "esdm_rpc_client_dispatcher.h"
 #include "helper.h"
 #include "logger.h"
+#include "ret_checkers.h"
 #include "visibility.h"
 
 struct esdm_rnd_reseed_crng_buf {
-	protobuf_c_boolean is_done;
 	int ret;
 };
 
@@ -43,37 +42,29 @@ esdm_rpcc_rnd_reseed_crng_cb(const RndReseedCRNGResponse *response,
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
 		buffer->ret = -EINTR;
-		goto out;
+		return;
 	}
 
 	buffer->ret = response->ret;
-
-out:
-	buffer->is_done = 1;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_rnd_reseed_crng(void)
 {
 	RndReseedCRNGRequest msg = RND_RESEED_CRNGREQUEST__INIT;
-	struct esdm_dispatcher *disp;
+	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_rnd_reseed_crng_buf buffer;
 	int ret = 0;
 
-	ret = esdm_disp_get_priv(&disp);
-	if (ret)
-		return ret;
+	CKINT(esdm_rpcc_get_priv_service(&rpc_conn));
 
-	buffer.is_done = 0;
 	buffer.ret = -ETIMEDOUT;
 
-	priv_access__rpc_rnd_reseed_crng(disp->service, &msg,
+	priv_access__rpc_rnd_reseed_crng(&rpc_conn->service, &msg,
 					 esdm_rpcc_rnd_reseed_crng_cb, &buffer);
-	while (!buffer.is_done)
-		protobuf_c_rpc_dispatch_run(disp->dispatch);
 
 	ret = buffer.ret;
 
-	esdm_disp_put_unpriv(disp);
+out:
 	return ret;
 }

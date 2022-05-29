@@ -23,7 +23,6 @@
 #include <sys/ipc.h>
 
 #include "atomic_bool.h"
-#include "protobuf-c-rpc/protobuf-c-rpc.h"
 #include "unpriv_access.pb-c.h"
 #include "priv_access.pb-c.h"
 #include "test_pertubation.h"
@@ -37,22 +36,11 @@ extern "C"
  * IPC configuration
  ******************************************************************************/
 
-/*
- * Shall the IPC be performed using an RPC to a server?
- *
- * If yes, an IPC server is created which is queried from the client. The
- * "client" API invokes the server to access the ESDM library services.
- *
- * If no, there is no IPC server and the invoked services are provided via
- * shared libraries. The "client" API invokes the ESDM library directly.
- */
-#define ESDM_RPC_SERVER
-
 #ifdef ESDM_TESTMODE
 
-# define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv-testmode"
+# define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv-testmode.socket"
 
-# define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv-testmode"
+# define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv-testmode.socket"
 
 # define ESDM_SHM_NAME "/esdm-testmode"
 # define ESDM_SHM_STATUS 1122334456
@@ -61,9 +49,9 @@ extern "C"
 
 #else /* ESDM_TESTMODE */
 
-# define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv"
+# define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv.socket"
 
-# define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv"
+# define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv.socket"
 
 # define ESDM_SHM_NAME "/"
 # define ESDM_SHM_STATUS 1122334455
@@ -166,9 +154,7 @@ extern PrivAccess_Service priv_access_service;
  * causes a hang when choosing a value > 65512. To be a bit more conservative
  * let us pick a value with some more leeway.
  */
-#define ESDM_RPC_MAX_MSG_SIZE 65500
-
-void set_boolean_true(ProtobufCRPCDispatch *dispatch, void*func_data);
+#define ESDM_RPC_MAX_MSG_SIZE 65536
 
 #ifdef __cplusplus
 }

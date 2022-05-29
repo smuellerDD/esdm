@@ -1,7 +1,6 @@
 # for i in $(ls *.c | sort); do echo "'$i',"; done
 client_rpc_src = files([
-	'esdm_rpc_client_connection.c',
-	'esdm_rpc_client_dispatcher.c',
+	'esdm_rpc_client.c',
 	'esdm_rpc_get_random_bytes_c.c',
 	'esdm_rpc_get_random_bytes_full_c.c',
 	'esdm_rpc_get_random_bytes_min_c.c',

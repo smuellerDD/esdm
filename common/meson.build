@@ -1,6 +1,7 @@
 # for i in $(ls *.c | sort); do echo "'$i',"; done
 common_src = files([
 	'binhexbin.c',
+	'buffer.c',
 	'helper.c',
 	'logger.c',
 	'threading_support.c',

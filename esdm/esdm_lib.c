@@ -35,9 +35,6 @@ int esdm_init(void)
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_init());
 
-	/* One thread group */
-	CKINT(thread_init(1));
-
 	/*
 	 * Initialize the DRNG manager: the DRNG should be ready before the
 	 * entropy manager as the entropy manager may try to immediately
@@ -66,17 +63,6 @@ void esdm_fini(void)
 
 	/* Clear up the SHM information */
 	esdm_shm_status_exit();
-
-	thread_wait();
-
-	/* Server threads should be shut down by now */
-	thread_release(false, false);
-	thread_release(false, true);
-
-	thread_stop_spawning();
-
-	/* Server threads should be shut down by now, kill them if needed */
-	thread_release(true, true);
 
 	/* Finalize the entropy source manager and all its entropy sources. */
 	esdm_es_mgr_finalize();

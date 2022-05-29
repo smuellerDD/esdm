@@ -11,7 +11,7 @@
 # Patchlevel Version: API / ABI compatible, no functional changes, no
 #		      enhancements, bug fixes only.
 project('esdm', 'c',
-	version: '0.2.0',
+	version: '0.3.0',
 	default_options: [
 		'warning_level=3',
 		'optimization=2',
@@ -68,7 +68,6 @@ meson.add_dist_script(dist_script, meson.project_version())
 
 cc = meson.get_compiler('c')
 dependencies = [ dependency('libprotobuf-c') ]
-dependencies += cc.find_library('protobuf-c-rpc' )
 
 include_user_files = [ ]
 

@@ -18,6 +18,7 @@
  */
 
 #include "esdm.h"
+#include "esdm_rpc_protocol.h"
 #include "esdm_rpc_service.h"
 #include "memset_secure.h"
 #include "unpriv_access.pb-c.h"
@@ -29,7 +30,8 @@ void esdm_rpc_get_random_bytes_min(UnprivAccess_Service *service,
 {
 	GetRandomBytesMinResponse response =
 					GET_RANDOM_BYTES_MIN_RESPONSE__INIT;
-	uint8_t rndval[ESDM_RPC_MAX_MSG_SIZE];
+	uint8_t rndval[ESDM_RPC_MAX_MSG_SIZE -  -
+		       sizeof(struct esdm_rpc_proto_sc_header)];
 	(void) service;
 
 	if (request == NULL || request->len > sizeof(rndval)) {

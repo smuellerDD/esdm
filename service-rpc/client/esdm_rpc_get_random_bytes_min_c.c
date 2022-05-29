@@ -24,13 +24,12 @@
 
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
-#include "esdm_rpc_client_dispatcher.h"
 #include "helper.h"
 #include "logger.h"
+#include "ret_checkers.h"
 #include "visibility.h"
 
 struct esdm_get_random_bytes_min_buf {
-	protobuf_c_boolean is_done;
 	ssize_t ret;
 	uint8_t *buf;
 	size_t buflen;
@@ -47,60 +46,51 @@ esdm_rpcc_get_random_bytes_min_cb(const GetRandomBytesMinResponse *response,
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
 		buffer->ret = -EINTR;
-		goto out;
+		return;
 	}
 
 	if (response->ret < 0) {
 		buffer->ret = response->ret;
-		goto out;
+		return;
 	}
 
 	buffer->ret = min_t(ssize_t, response->randval.len, buffer->buflen);
 	memcpy(buffer->buf, response->randval.data, (size_t)buffer->ret);
-
-out:
-	buffer->is_done = 1;
 }
 
 DSO_PUBLIC
 ssize_t esdm_rpcc_get_random_bytes_min(uint8_t *buf, size_t buflen)
 {
 	GetRandomBytesMinRequest msg = GET_RANDOM_BYTES_FULL_REQUEST__INIT;
-	struct esdm_dispatcher *disp;
+	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_get_random_bytes_min_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
 	ssize_t ret = 0;
 
-	ret = esdm_disp_get_unpriv(&disp);
-	if (ret)
-		return ret;
+	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
 
 	while (buflen) {
-		buffer.is_done = 0;
 		buffer.ret = -ETIMEDOUT;
 		buffer.buf = buf;
 		buffer.buflen = buflen;
 
 		msg.len = maxbuflen;
 		unpriv_access__rpc_get_random_bytes_min(
-			disp->service, &msg,
+			&rpc_conn->service, &msg,
 			esdm_rpcc_get_random_bytes_min_cb, &buffer);
-		while (!buffer.is_done)
-			protobuf_c_rpc_dispatch_run(disp->dispatch);
 
 		if (buffer.ret < -255) {
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
 		} else if (buffer.ret < 0) {
 			ret = buffer.ret;
-			goto err;
+			goto out;
 		}
 
 		buflen -= (size_t)buffer.ret;
 		buf += buffer.ret;
 	}
 
-err:
-	esdm_disp_put_unpriv(disp);
+out:
 	return (ret < 0) ? ret : (ssize_t)orig_buflen;
 }

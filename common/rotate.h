@@ -1,7 +1,8 @@
-/*
- * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
+/* Rotate left / right functions
  *
- * License: see LICENSE file in root directory
+ * Copyright (C) 2015 - 2022, Stephan Mueller <smueller@chronox.de>
+ *
+ * License: see LICENSE file
  *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -17,36 +18,44 @@
  * DAMAGE.
  */
 
-#ifndef ESDM_RPC_PRIVILEGES_H
-#define ESDM_RPC_PRIVILEGES_H
+#ifndef ROTATE_H
+#define ROTATE_H
 
-#include "bool.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/**
- * @brief Check whether Unix Domain Socket client is privileged (UID 0)
- *
- * This call uses getsockupt(SO_PEERCRED) to obtain the remote caller's
- * UID.
- *
- * NOTE: For Protobuf-C-RPC, a connection is left open. Thus, the CUSE
- *	 daemon's drop of privileges may not be caught by this check. Therefore
- *	 the CUSE daemons are considered trusted to implement another check
- *	 whether its callers is privileged.
+/*
+ * Rotate 16 bit unsigned integer X by N bits left/right
  */
-bool esdm_rpc_client_is_privileged(void *closure_data);
+static inline uint16_t rol16(uint16_t x, uint8_t n)
+{
+	return (uint16_t)( (x << (n&(16-1))) | (x >> ((16-n)&(16-1))) );
+}
 
-/**
- * @brief Kick the dispatcher as data is present
+static inline uint16_t ror16(uint16_t x, uint8_t n)
+{
+	return (uint16_t)( (x >> (n&(16-1))) | (x << ((16-n)&(16-1))) );
+}
+
+/*
+ * Rotate 16 bit unsigned integer X by N bits left/right
  */
-void esdm_rpc_kick_dispatcher(void *closure_data);
+static inline uint32_t rol32(uint32_t x, uint8_t n)
+{
+	return ( (x << (n&(32-1))) | (x >> ((32-n)&(32-1))) );
+}
+
+static inline uint32_t ror32(uint32_t x, uint8_t n)
+{
+	return ( (x >> (n&(32-1))) | (x << ((32-n)&(32-1))) );
+}
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ESDM_RPC_PRIVILEGES_H */
+#endif /* ROTATE_H */

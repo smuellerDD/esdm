@@ -24,13 +24,12 @@
 
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
-#include "esdm_rpc_client_dispatcher.h"
 #include "helper.h"
 #include "logger.h"
+#include "ret_checkers.h"
 #include "visibility.h"
 
 struct esdm_rnd_add_to_ent_cnt_buf {
-	protobuf_c_boolean is_done;
 	int ret;
 };
 
@@ -45,38 +44,30 @@ esdm_rpcc_rnd_add_to_ent_cnt_cb(const RndAddToEntCntResponse *response,
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
 		buffer->ret = -EINTR;
-		goto out;
+		return;
 	}
 
 	buffer->ret = response->ret;
-
-out:
-	buffer->is_done = 1;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_rnd_add_to_ent_cnt(unsigned int entcnt)
 {
 	RndAddToEntCntRequest msg = RND_ADD_TO_ENT_CNT_REQUEST__INIT;
-	struct esdm_dispatcher *disp;
+	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_rnd_add_to_ent_cnt_buf buffer;
 	int ret = 0;
 
-	ret = esdm_disp_get_priv(&disp);
-	if (ret)
-		return ret;
+	CKINT(esdm_rpcc_get_priv_service(&rpc_conn));
 
-	buffer.is_done = 0;
 	buffer.ret = -ETIMEDOUT;
 
 	msg.entcnt = entcnt;
-	priv_access__rpc_rnd_add_to_ent_cnt(disp->service, &msg,
+	priv_access__rpc_rnd_add_to_ent_cnt(&rpc_conn->service, &msg,
 				esdm_rpcc_rnd_add_to_ent_cnt_cb, &buffer);
-	while (!buffer.is_done)
-		protobuf_c_rpc_dispatch_run(disp->dispatch);
 
 	ret = buffer.ret;
 
-	esdm_disp_put_priv(disp);
+out:
 	return ret;
 }

@@ -22,13 +22,12 @@
 
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
-#include "esdm_rpc_client_dispatcher.h"
 #include "helper.h"
 #include "logger.h"
+#include "ret_checkers.h"
 #include "visibility.h"
 
 struct esdm_rnd_add_entropy_buf {
-	protobuf_c_boolean is_done;
 	int ret;
 };
 
@@ -43,13 +42,10 @@ esdm_rpcc_rnd_add_entropy_cb(const RndAddEntropyResponse *response,
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
 		buffer->ret = -EINTR;
-		goto out;
+		return;
 	}
 
 	buffer->ret = response->ret;
-
-out:
-	buffer->is_done = 1;
 }
 
 DSO_PUBLIC
@@ -58,15 +54,12 @@ int esdm_rpcc_rnd_add_entropy(const uint8_t *entropy_buf,
 			      uint32_t entropy_cnt)
 {
 	RndAddEntropyRequest msg = RND_ADD_ENTROPY_REQUEST__INIT;
-	struct esdm_dispatcher *disp;
+	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_rnd_add_entropy_buf buffer;
 	int ret = 0;
 
-	ret = esdm_disp_get_priv(&disp);
-	if (ret)
-		return ret;
+	CKINT(esdm_rpcc_get_priv_service(&rpc_conn));
 
-	buffer.is_done = 0;
 	buffer.ret = -ETIMEDOUT;
 
 	//TODO unconstify
@@ -74,13 +67,10 @@ int esdm_rpcc_rnd_add_entropy(const uint8_t *entropy_buf,
 	msg.randval.len = entropy_buf_len;
 	msg.entcnt = entropy_cnt;
 
-	priv_access__rpc_rnd_add_entropy(disp->service, &msg,
+	priv_access__rpc_rnd_add_entropy(&rpc_conn->service, &msg,
 					 esdm_rpcc_rnd_add_entropy_cb, &buffer);
-	while (!buffer.is_done)
-		protobuf_c_rpc_dispatch_run(disp->dispatch);
-
 	ret = buffer.ret;
 
-	esdm_disp_put_priv(disp);
+out:
 	return ret;
 }

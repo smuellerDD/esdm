@@ -22,10 +22,25 @@
 
 #include <protobuf-c/protobuf-c.h>
 
+#include "bool.h"
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+/**
+ * @brief Check whether Unix Domain Socket client is privileged (UID 0)
+ *
+ * This call uses getsockupt(SO_PEERCRED) to obtain the remote caller's
+ * UID.
+ *
+ * NOTE: For Protobuf-C-RPC, a connection is left open. Thus, the CUSE
+ *	 daemon's drop of privileges may not be caught by this check. Therefore
+ *	 the CUSE daemons are considered trusted to implement another check
+ *	 whether its callers is privileged.
+ */
+bool esdm_rpc_client_is_privileged(void *closure_data);
 
 int esdm_rpc_server_init(const char *username);
 void esdm_rpc_server_fini(void);
