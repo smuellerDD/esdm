@@ -72,8 +72,8 @@ static DECLARE_WAIT_QUEUE(esdm_rpc_thread_init_wait);
 static pid_t server_pid = -1;
 static atomic_t server_exit = ATOMIC_INIT(0);
 
-static void handle_stale_socket(const char *path, struct sockaddr *addr,
-				unsigned addr_len)
+static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
+				   unsigned addr_len)
 {
 	struct stat statbuf;
 	int fd;
@@ -126,7 +126,7 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 		written += (size_t)ret;
 	} while (written < len);
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY, "%zu bytes written\n", len);
+	logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
 	return 0;
 }
@@ -268,7 +268,10 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 	thread_set_name(rpc_handler, (uint32_t)rpc_conn->child_fd);
 
-	/* Get pointer to thread-local storage into which we can write */
+	/*
+	 * Get pointer to thread-local storage into which we can write. Note,
+	 * the .consumed value is not filled and thus is set to 0.
+	 */
 	CKINT(thread_local_heap(&tlh));
 	esdm_rpc_allocator.allocator_data = &tlh;
 	rpc_conn->rpc_allocator = &esdm_rpc_allocator;
@@ -469,8 +472,8 @@ out:
 }
 
 static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
-				 ProtobufCService *service,
-				 struct esdm_rpcs *proto)
+			   ProtobufCService *service,
+			   struct esdm_rpcs *proto)
 {
 	struct sockaddr_un addr_un;
 	struct sockaddr_in addr_in;
@@ -481,21 +484,21 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 
 	if (unix_socket) {
 		protocol_family = PF_UNIX;
-		memset(&addr_un, 0, sizeof (addr_un));
+		memset(&addr_un, 0, sizeof(addr_un));
 		addr_un.sun_family = AF_UNIX;
 		strncpy(addr_un.sun_path, unix_socket,
 			sizeof(addr_un.sun_path));
-		address_len = sizeof (addr_un);
-		address = (struct sockaddr *) (&addr_un);
+		address_len = sizeof(addr_un);
+		address = (struct sockaddr *)(&addr_un);
 
-		handle_stale_socket(unix_socket, address, address_len);
+		esdm_rpcs_stale_socket(unix_socket, address, address_len);
 	} else if (tcp_port) {
 		protocol_family = PF_INET;
-		memset (&addr_in, 0, sizeof (addr_in));
+		memset (&addr_in, 0, sizeof(addr_in));
 		addr_in.sin_family = AF_INET;
 		addr_in.sin_port = htons(tcp_port);
-		address_len = sizeof (addr_in);
-		address = (struct sockaddr *) (&addr_in);
+		address_len = sizeof(addr_in);
+		address = (struct sockaddr *)(&addr_in);
 	} else {
 		return -EINVAL;
 	}

@@ -518,7 +518,6 @@ esdm_rpcc_get_service(struct esdm_rpc_client_connection *rpc_conn_array,
 		return -ESHUTDOWN;
 
 	*ret_rpc_conn = rpc_conn_p;
-	logger(LOGGER_DEBUG, LOGGER_C_RPC, "Using handle %u for RPC connection\n", esdm_rpcc_curr_node());
 
 out:
 	return ret;
