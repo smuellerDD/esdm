@@ -18,10 +18,18 @@
  * DAMAGE.
  */
 
-#include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "env.h"
+#include "privileges.h"
 
 static int read_complete(int fd, uint8_t *buf, size_t buflen)
 {
@@ -43,14 +51,6 @@ static int read_complete(int fd, uint8_t *buf, size_t buflen)
 	return 1;
 }
 
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "env.h"
-#include "privileges.h"
 
 int read_random(const char *path, uint8_t *buf, size_t buflen)
 {
