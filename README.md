@@ -78,6 +78,16 @@ The following dependencies are required:
 
 Beyond those dependencies, only POSIX support is required.
 
+### Installing via the Arch User Repository
+
+If you are using [Arch Linux](https://www.archlinux.org/) or any of
+its derivatives, you can use your favorite
+[AUR Helper](https://wiki.archlinux.org/index.php/AUR_helpers) and install:
+
+| **Version** | **Maintainer** | **Package**  |
+| :--------- | :------------- | :----------- |
+| the latest changes in the default branch (master currently) | Piotr Górski   | [esdm-git](https://aur.archlinux.org/packages/esdm-git) <sup>AUR</sup> |
+
 ### Configuration
 
 The ESDM build system supports various configuration options which are
