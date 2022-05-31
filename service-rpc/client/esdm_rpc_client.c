@@ -475,7 +475,7 @@ esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 {
 	struct esdm_rpc_client_connection *tmp, *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
-	int ret;
+	int ret = 0;
 
 	tmp = calloc(nodes, sizeof(*tmp));
 	CKNULL(tmp, -ENOMEM);

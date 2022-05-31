@@ -51,7 +51,9 @@ static const char fipscheck_hmackey[] = "orboDeJITITejsirpADONivirpUkvarP";
  * error: 'strncpy' output truncated before terminating nul copying 5 bytes from a string of the same length [-Werror=stringop-truncation]
  */
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
+#ifndef __clang__
+# pragma GCC diagnostic ignored "-Wstringop-truncation"
+#endif
 static char *paste(char *dst, const char *src, size_t size)
 {
 	strncpy(dst, src, size);

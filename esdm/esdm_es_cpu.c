@@ -61,7 +61,14 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 
 	for (i = 0; i < (requested_bits >> 3);
 	     i += sizeof(unsigned long)) {
+		/*
+		 * The cast is appropriate as the thread local heap is aligned
+		 * to ESDM_KCAPI_ALIGN bits
+		 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 		if (!cpu_es_get((unsigned long *)(outbuf + i))) {
+#pragma GCC diagnostic pop
 			esdm_config_es_cpu_entropy_rate_set(0);
 			return 0;
 		}

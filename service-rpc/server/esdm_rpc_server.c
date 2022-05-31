@@ -51,7 +51,6 @@
 struct esdm_rpcs {
 	ProtobufCService *service;
 	int server_listening_fd;
-	int (*rpc_conn_handler)(void *args);
 };
 
 struct esdm_rpcs_connection {
@@ -418,7 +417,6 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 
 	if (proto->server_listening_fd < 0)
 		return -EINVAL;
-	CKNULL(proto->rpc_conn_handler, -EINVAL);
 	CKNULL(proto->service, -EINVAL);
 
 	for(;;) {
@@ -457,7 +455,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		       "Processing new incoming connection\n");
 
 		/* Handle new incoming connection */
-		if (thread_start(proto->rpc_conn_handler, rpc_conn, 0, NULL)) {
+		if (thread_start(esdm_rpcs_handler, rpc_conn, 0, NULL)) {
 			logger(LOGGER_ERR, LOGGER_C_RPC,
 			       "Starting new thread for incoming conneection failed\n");
 			free(rpc_conn);
@@ -543,7 +541,6 @@ static int esdm_rpcs_unpriv_init(void *args)
 
 	thread_set_name(rpc_unpriv_server, 0);
 	memset(&unpriv_proto, 0, sizeof(unpriv_proto));
-	unpriv_proto.rpc_conn_handler = esdm_rpcs_handler;
 
 	unpriv_proto.server_listening_fd = -1;
 
@@ -605,7 +602,6 @@ static int esdm_rpcs_interfaces_init(const char *username)
 
 	thread_set_name(rpc_priv_server, 0);
 	memset(&priv_proto, 0, sizeof(priv_proto));
-	priv_proto.rpc_conn_handler = esdm_rpcs_handler;
 
 	/* Create server handler for privileged interface in main thread */
 	CKINT(esdm_rpcs_start(ESDM_RPC_PRIV_SOCKET, 0, priv_service,

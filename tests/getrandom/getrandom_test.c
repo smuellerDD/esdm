@@ -109,7 +109,15 @@ int main(int argc, char *argv[])
 	hex_random[sizeof(hex_random) - 1] = '\0';
 
 	if (getrandom_random(random, sizeof(random)) < 0) {
-		printf("getrandom call failed\n");
+		printf("getrandom(GRND_RANDOM) call failed\n");
+	} else {
+		bin2hex(random, sizeof(random),
+			hex_random, sizeof(hex_random) - 1, 0);
+		printf("random value %s\n", hex_random);
+	}
+
+	if (getrandom_urandom(random, sizeof(random)) < 0) {
+		printf("getrandom(0) call failed\n");
 	} else {
 		bin2hex(random, sizeof(random),
 			hex_random, sizeof(hex_random) - 1, 0);

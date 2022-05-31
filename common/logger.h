@@ -69,7 +69,12 @@ void _logger_binary(const enum logger_verbosity severity,
  * @param fmt format string as defined by fprintf(3)
  */
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wvariadic-macros"
+#ifdef __clang__
+# pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+# pragma clang diagnostic ignored "-Wvariadic-macros"
+#else
+# pragma GCC diagnostic ignored "-Wvariadic-macros"
+#endif
 #define logger(severity, class, fmt...)                                        \
 	do {                                                                   \
 		_Pragma("GCC diagnostic push")                                 \

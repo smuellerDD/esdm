@@ -77,7 +77,7 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 DSO_PUBLIC
 int __wrap_getentropy(void *buffer, size_t length)
 {
-	ssize_t ret;
+	ssize_t ret = -EFAULT;
 
 	if (length > 256)
 		return -EIO;

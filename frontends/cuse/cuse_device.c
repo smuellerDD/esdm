@@ -492,14 +492,15 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 			      off_t off, struct fuse_file_info *fi,
 			      int fallback_fd)
 {
-	ssize_t ret;
+	size_t written = 0;
+	ssize_t ret = -EFAULT;
 
 	(void)fi;
 	(void)off;
 
 	esdm_invoke(esdm_rpcc_write_data((const uint8_t *)buf, size));
-	if (ret)
-		ret = (ssize_t)size;
+	if (ret == 0)
+		written = size;
 
 	/*
 	 * If call to the ESDM server failed, let us fall back to the
@@ -512,13 +513,16 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 		logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
 			"Use fallback to provide data due to RPC error code %zd\n",
 			ret);
-		ret = write(fallback_fd, buf, size);
+		do {
+			ret = write(fallback_fd, buf, size);
+			written += (size_t)ret;
+		} while (ret > 0 && written < size);
 	}
 
 	if (ret < 0)
 		fuse_reply_err(req, (int)-ret);
 	else
-		fuse_reply_write(req, size);
+		fuse_reply_write(req, written);
 }
 
 void esdm_cuse_ioctl(int backend_fd,
@@ -882,6 +886,11 @@ static const char *usage =
 "    -s                      disable multi-threaded operation\n"
 "\n";
 
+/* The CUSE code seems to have a conversion issue with FUSE_OPT_KEY */
+#pragma GCC diagnostic push
+#ifdef __clang__
+# pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
+#endif
 static const struct fuse_opt esdm_cuse_opts[] = {
 	ESDM_CUSE_OPT("-M %u",		major),
 	ESDM_CUSE_OPT("--maj=%u",	major),
@@ -897,6 +906,7 @@ static const struct fuse_opt esdm_cuse_opts[] = {
 	FUSE_OPT_KEY("--help",		0),
 	FUSE_OPT_END
 };
+#pragma GCC diagnostic pop
 
 static int esdm_cuse_process_arg(void *data, const char *arg, int key,
 				 struct fuse_args *outargs)
