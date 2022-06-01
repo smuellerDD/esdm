@@ -23,9 +23,10 @@
 #include <sys/ipc.h>
 
 #include "atomic_bool.h"
-#include "unpriv_access.pb-c.h"
+#include "esdm_rpc_protocol.h"
 #include "priv_access.pb-c.h"
 #include "test_pertubation.h"
+#include "unpriv_access.pb-c.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -155,6 +156,8 @@ extern PrivAccess_Service priv_access_service;
  * let us pick a value with some more leeway.
  */
 #define ESDM_RPC_MAX_MSG_SIZE 65536
+#define ESDM_RPC_MAX_DATA						\
+	(ESDM_RPC_MAX_MSG_SIZE - sizeof(struct esdm_rpc_proto_sc_header))
 
 #ifdef __cplusplus
 }
