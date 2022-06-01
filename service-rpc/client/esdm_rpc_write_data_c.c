@@ -57,16 +57,25 @@ int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len)
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
 
-	buffer.ret = -ETIMEDOUT;
+	while (data_buf_len) {
+		size_t todo = min_t(size_t, data_buf_len, ESDM_RPC_MAX_DATA);
 
-	//TODO unconstify
-	msg.data.data = (uint8_t *)data_buf;
-	msg.data.len = data_buf_len;
+		buffer.ret = -ETIMEDOUT;
 
-	unpriv_access__rpc_write_data(&rpc_conn->service, &msg,
-				      esdm_rpcc_write_data_cb, &buffer);
+		//TODO unconstify
+		msg.data.data = (uint8_t *)data_buf;
+		msg.data.len = todo;
 
-	ret = buffer.ret;
+		unpriv_access__rpc_write_data(&rpc_conn->service, &msg,
+					      esdm_rpcc_write_data_cb, &buffer);
+
+		ret = buffer.ret;
+		if (ret)
+			goto out;
+
+		data_buf_len -= todo;
+		data_buf += todo;
+	}
 
 out:
 	return ret;
