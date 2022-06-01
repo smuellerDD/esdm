@@ -40,10 +40,10 @@ int buffer_alloc(size_t size, struct buffer *buf);
 
 #define ALIGN_APPLY(x, mask)	(((x) + (mask)) & ~(mask))
 #define ALIGN(x, a)		ALIGN_APPLY((x), (unsigned long)(a))
-#define ALIGN_PTR_64(p, a)	((uint64_t *)ALIGN((unsigned long)(p), (a)))
-#define ALIGN_PTR_32(p, a)	((uint32_t *)ALIGN((unsigned long)(p), (a)))
-#define ALIGN_PTR_16(p, a)	((uint16_t *)ALIGN((unsigned long)(p), (a)))
-#define ALIGN_PTR_8(p, a)	((uint8_t *)ALIGN((unsigned long)(p), (a)))
+#define ALIGN_PTR_64(p, a)	((uint64_t *)ALIGN((unsigned long)(p), (a - 1)))
+#define ALIGN_PTR_32(p, a)	((uint32_t *)ALIGN((unsigned long)(p), (a - 1)))
+#define ALIGN_PTR_16(p, a)	((uint16_t *)ALIGN((unsigned long)(p), (a - 1)))
+#define ALIGN_PTR_8(p, a)	((uint8_t *)ALIGN((unsigned long)(p), (a - 1)))
 
 #ifdef __cplusplus
 }
