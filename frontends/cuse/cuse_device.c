@@ -248,8 +248,8 @@ static void esdm_cuse_term(void)
 	 */
 	thread_release(true, true);
 
-	   esdm_rpcc_fini_priv_service();
-	   esdm_rpcc_fini_unpriv_service();
+	esdm_rpcc_fini_priv_service();
+	esdm_rpcc_fini_unpriv_service();
 
 	esdm_cuse_shm_status_close_shm();
 	esdm_cuse_shm_status_close_sem();
