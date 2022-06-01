@@ -170,6 +170,8 @@ esdm_rpc_client_write_data(struct esdm_rpc_client_connection *rpc_conn,
 		written += (size_t)ret;
 	} while (written < len);
 
+	logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
+
 	return 0;
 }
 
@@ -199,6 +201,11 @@ esdm_rpc_client_pack(const ProtobufCMessage *message,
 	cs_header.method_index = le_bswap32(method_index);
 	cs_header.message_length = le_bswap32(message_length);
 	cs_header.request_id = le_bswap32(0);
+
+	logger(LOGGER_DEBUG, LOGGER_C_RPC,
+	       "Client sending: message length %u, message index %u, request ID %u\n",
+	       cs_header.message_length, cs_header.method_index,
+	       cs_header.request_id);
 
 	CKINT(esdm_rpc_client_write_data(rpc_conn,
 					 (uint8_t *)&cs_header,
@@ -256,6 +263,12 @@ esdm_rpc_client_read_handler(struct esdm_rpc_client_connection *rpc_conn,
 			ret = -errno;
 			logger(LOGGER_DEBUG, LOGGER_C_RPC, "Read failed: %s\n",
 			       strerror(errno));
+			goto out;
+		}
+
+		/* Received EOF */
+		if (received == 0) {
+			ret = 0;
 			goto out;
 		}
 
