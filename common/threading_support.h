@@ -88,15 +88,6 @@ enum esdm_request_type {
 int thread_init(uint32_t groups);
 
 /**
- * @brief - Allocate the thread-local memory
- *
- * @param tlh_size [in] Thread-local heap size - may be 0
- *
- * @return: 0 on success, < 0 on error
- */
-int thread_init_tlh(size_t tlh_size);
-
-/**
  * @brief - Wait for currently executing threads and release threading support
  *
  * @param force Shall the threads being attached and waited for (false) or
@@ -114,17 +105,6 @@ int thread_release(bool force, bool system_threads);
  * @return All return codes of all thread functions ORed together.
  */
 int thread_wait(void);
-
-/**
- * @brief - Obtain thread-local heap buffer
- *
- * @param tlh [out] Pointer receiving the buffer reference - the buffer is
- *		    aligned to 64 bit boundary and can therefore be safely
- *		    casted.
- *
- * @return 0 on success, < 0 on error
- */
-int thread_local_heap(struct buffer *tlh);
 
 /**
  * @brief - Start a function in a separate thread

@@ -63,8 +63,6 @@ struct thread_ctx {
 
 	int (*start_routine)(void *); /* Thread code to be executed */
 	void *data; /* Parameters used by the thread code */
-	void *tlh; /* Thread-local heap */
-	size_t tlh_size;
 
 	atomic_bool_t thread_pending; /* Is thread associated with structure? */
 	mutex_w_t inuse; /* Is thread data structure used? */
@@ -162,31 +160,6 @@ static inline void thread_cleanup_full(struct thread_ctx *tctx)
 	tctx->ret_ancestor = 0;
 	mutex_w_destroy(&tctx->inuse);
 	pthread_mutex_destroy(&tctx->worker_lock);
-	if (tctx->tlh) {
-		memset_secure(tctx->tlh, 0, tctx->tlh_size);
-		free(tctx->tlh);
-		tctx->tlh = NULL;
-		tctx->tlh_size = 0;
-	}
-}
-
-int thread_init_tlh(size_t tlh_size)
-{
-	unsigned int i;
-	int ret;
-
-	if (!tlh_size)
-		return -EINVAL;
-
-	for (i = 0; i < THREADING_MAX_THREADS; i++) {
-		ret = posix_memalign(&threads[i].tlh, sizeof(uint64_t),
-				     tlh_size);
-		if (ret)
-			return -ret;
-		threads[i].tlh_size = tlh_size;
-	}
-
-	return 0;
 }
 
 int thread_init(uint32_t groups)
@@ -234,25 +207,6 @@ int thread_init(uint32_t groups)
 
 out:
 	return 0;
-}
-
-int thread_local_heap(struct buffer *tlh)
-{
-	pthread_t self = pthread_self();
-	unsigned int i;
-
-	for (i = 0; i < THREADING_REALLY_ALL_THREADS; i++) {
-		if (pthread_equal(self, threads[i].thread_id)) {
-			if (!threads[i].tlh)
-				return -ENOMEM;
-
-			tlh->buf = threads[i].tlh;
-			tlh->len = threads[i].tlh_size;
-			return 0;
-		}
-	}
-
-	return -ENOENT;
 }
 
 /* Worker loop of a thread */

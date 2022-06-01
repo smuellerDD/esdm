@@ -42,6 +42,7 @@
 #include "esdm_rpc_protocol.h"
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_service.h"
+#include "helper.c"
 #include "logger.h"
 #include "memset_secure.h"
 #include "privileges.h"
@@ -165,6 +166,11 @@ static int esdm_rpcs_pack(const ProtobufCMessage *message,
 	sc_header.message_length = le_bswap32(message_length);
 	sc_header.request_id = le_bswap32(rpc_conn->request_id);
 
+	logger(LOGGER_DEBUG, LOGGER_C_RPC,
+	       "Server sending: server status %u, message length %u, message index %u, request ID %u\n",
+	       sc_header.status_code, sc_header.message_length,
+	       sc_header.method_index, sc_header.request_id);
+
 	CKINT(esdm_rpcs_write_data(rpc_conn,
 				   (uint8_t *)&sc_header, sizeof(sc_header)));
 
@@ -228,6 +234,7 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 	message = protobuf_c_message_unpack(desc, rpc_conn->rpc_allocator,
 					    header->message_length,
 					    received_data->data);
+
 	CKNULL(message, -ENOMEM);
 
 	rpc_conn->method_index = method_index;
@@ -253,37 +260,31 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		.allocator_data = NULL,
 	};
 	struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
-	BUFFER_INIT(tlh);
+	BUFFER_INIT(tls);
 	struct esdm_rpc_proto_cs *received_data;
+	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)]
+						__aligned(sizeof(uint64_t));
+	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128]
+						__aligned(sizeof(uint64_t));
 	fd_set fds;
-	size_t max_msg_size = ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data);
+	size_t total_received = 0;
 	ssize_t received;
 	uint32_t data_to_fetch = 0;
 	int ret;
-	uint8_t *buf_p;
+	uint8_t *buf_p = buf;
 
 	if (rpc_conn->child_fd < 0)
 		return -EINVAL;
 
 	thread_set_name(rpc_handler, (uint32_t)rpc_conn->child_fd);
 
-	/*
-	 * Get pointer to thread-local storage into which we can write. Note,
-	 * the .consumed value is not filled and thus is set to 0.
-	 */
-	CKINT(thread_local_heap(&tlh));
-	esdm_rpc_allocator.allocator_data = &tlh;
+	tls.buf = unpacked;
+	tls.len = sizeof(unpacked);
+	esdm_rpc_allocator.allocator_data = &tls;
 	rpc_conn->rpc_allocator = &esdm_rpc_allocator;
-	buf_p = tlh.buf;
 
-	/*
-	 * The cast is appropriate as the thread local heap is aligned to 64
-	 * bits
-	 */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-	received_data = (struct esdm_rpc_proto_cs *)tlh.buf;
-#pragma GCC diagnostic pop
+	/* The cast is appropriate as the buffer is aligned to 64 bits. */
+	received_data = (struct esdm_rpc_proto_cs *)buf;
 
 	/* Read the data into the thread-local storage */
 	do {
@@ -311,7 +312,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		}
 
 		received = read(rpc_conn->child_fd, buf_p,
-				max_msg_size - tlh.consumed);
+				sizeof(buf) - total_received);
 		if (received < 0) {
 			ret = -errno;
 			goto out;
@@ -323,14 +324,14 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 			goto out;
 		}
 
-		tlh.consumed += (size_t)received;
+		total_received += (size_t)received;
 		buf_p += (size_t)received;
 
 		logger(LOGGER_DEBUG, LOGGER_C_ANY,
 		       "Reading %zd bytes, already consumed %zu bytes\n",
-		       received, tlh.consumed);
+		       received, total_received);
 
-		if (tlh.consumed < sizeof(*received_data))
+		if (total_received < sizeof(*received_data))
 			continue;
 
 		if (!data_to_fetch) {
@@ -366,15 +367,14 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 			 * To allow comparison with total_received, let us
 			 * add the header length to the data to fetch value.
 			 */
-			data_to_fetch +=
-				sizeof(*received_data);
+			data_to_fetch += sizeof(*received_data);
 		}
 
 		/* Now, we received enough and can stop the reading */
-		if (tlh.consumed >= data_to_fetch)
+		if (total_received >= data_to_fetch)
 			break;
 
-	} while (tlh.consumed < max_msg_size);
+	} while (total_received < sizeof(buf));
 
 	/*
 	 * We now have a filled buffer that has a header and received
@@ -385,7 +385,8 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 out:
 	/* Clear the memory after processing one request. */
-	memset_secure(tlh.buf, 0, tlh.consumed);
+	memset_secure(buf, 0, total_received);
+	memset_secure(tls.buf, 0, tls.consumed);
 	return ret;
 }
 
@@ -598,8 +599,6 @@ static int esdm_rpcs_interfaces_init(const char *username)
 
 	priv_proto.server_listening_fd = -1;
 
-	CKINT(thread_init_tlh(2 * ESDM_RPC_MAX_MSG_SIZE + 128));
-
 	thread_set_name(rpc_priv_server, 0);
 	memset(&priv_proto, 0, sizeof(priv_proto));
 
@@ -766,11 +765,4 @@ void esdm_rpc_server_fini(void)
 
 	atomic_set(&server_exit, 1);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
-
-	/*
-	 * Unfortunately there seems to be no other way to stop the servers
-	 * which are usually waiting in a poll(2) system call of
-	 * protobuf_c_rpc_dispatch_run.
-	 */
-	thread_release(true, false);
 }
