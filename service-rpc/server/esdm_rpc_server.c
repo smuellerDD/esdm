@@ -456,11 +456,19 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		       "Processing new incoming connection\n");
 
 		/* Handle new incoming connection */
+#if DEBUG
+		/*
+		 * If compiled with debug settings, do not spawn a thread
+		 * to allow proper GDB use.
+		 */
+		esdm_rpcs_handler(rpc_conn);
+#else /* DEBUG */
 		if (thread_start(esdm_rpcs_handler, rpc_conn, 0, NULL)) {
 			logger(LOGGER_ERR, LOGGER_C_RPC,
 			       "Starting new thread for incoming conneection failed\n");
 			free(rpc_conn);
 		}
+#endif /* DEBUG */
 		rpc_conn = NULL;
 	}
 
