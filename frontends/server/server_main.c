@@ -283,7 +283,6 @@ int main(int argc, char *argv[])
 
 	CKINT(daemon_init());
 
-	/* NOTREACHED */
 out:
 	daemon_release();
 	dealloc();
