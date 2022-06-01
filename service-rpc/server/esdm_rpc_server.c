@@ -456,7 +456,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		       "Processing new incoming connection\n");
 
 		/* Handle new incoming connection */
-#if DEBUG
+#ifdef DEBUG
 		/*
 		 * If compiled with debug settings, do not spawn a thread
 		 * to allow proper GDB use.
