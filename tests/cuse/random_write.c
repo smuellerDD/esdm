@@ -1,4 +1,3 @@
-
 /*
  * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
  *
@@ -18,11 +17,18 @@
  * DAMAGE.
  */
 
-#include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "env.h"
+#include "privileges.h"
 
 static int write_complete(int fd, uint8_t *buf, size_t buflen)
 {
@@ -46,14 +52,6 @@ static int write_complete(int fd, uint8_t *buf, size_t buflen)
 	return 1;
 }
 
-#include <fcntl.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#include "env.h"
-#include "privileges.h"
-
 int write_random(const char *path, uint8_t *buf, size_t buflen)
 {
 	int fd;
@@ -68,11 +66,9 @@ int write_random(const char *path, uint8_t *buf, size_t buflen)
 	return ret;
 }
 
-
 int main(int argc, char *argv[])
 {
 	uint8_t buf[1024 * 1024];
-	uint8_t zero[sizeof(buf)];
 	size_t len = sizeof(buf);
 	int ret;
 
@@ -85,12 +81,11 @@ int main(int argc, char *argv[])
 
 	drop_privileges();
 
-	memset(zero, 0, sizeof(zero));
+	memset(buf, 1, len);
 
 	while (len) {
 		unsigned short val;
 
-		memset(buf, 0, len);
 		ret = write_random(argv[1], buf, len);
 		if (ret)
 			goto out;
