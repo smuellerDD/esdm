@@ -219,4 +219,4 @@ prepare_gitrepo() {
 	cd $dir
 }
 
-prepare_gitrepo $MESON_SOURCE_ROOT $VERSION
+#prepare_gitrepo $MESON_SOURCE_ROOT $VERSION

@@ -75,7 +75,7 @@ static int env_check_file(const char *path)
 	return 0;
 }
 
-int env_init(void)
+int env_init(int disable_fallback)
 {
 	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
 	const char *random = getenv("ESDM_CUSE_RANDOM");
@@ -125,9 +125,12 @@ int env_init(void)
 	if (pid == 0) {
 		char buf[FILENAME_MAX];
 		char *random_argv[] = { buf,  "-f", "-d", "-v", "5", NULL };
+		char *random_argv_dis[]  = { buf,  "-f", "-d", "-v", "5",
+					     "--disable_fallback=1", NULL };
 
 		snprintf(buf, sizeof(buf), "%s", random);
-		execve(random, random_argv, NULL);
+		execve(random, disable_fallback ? random_argv_dis : random_argv,
+		       NULL);
 
 		/* NOTREACHED */
 		return EFAULT;
@@ -144,9 +147,12 @@ int env_init(void)
 	if (pid == 0) {
 		char buf[FILENAME_MAX];
 		char *urandom_argv[] = { buf,  "-f", "-d", "-v", "5", NULL };
+		char *urandom_argv_dis[]  = { buf,  "-f", "-d", "-v", "5",
+					      "--disable_fallback=1", NULL };
 
 		snprintf(buf, sizeof(buf), "%s", urandom);
-		execve(urandom, urandom_argv, NULL);
+		execve(urandom, disable_fallback ?
+				urandom_argv_dis : urandom_argv, NULL);
 
 		/* NOTREACHED */
 		return EFAULT;

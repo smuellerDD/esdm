@@ -37,11 +37,17 @@ extern uint32_t seed_entropy[];
 extern atomic_t seed_entropy_ptr;
 void esdm_test_seed_entropy(uint32_t ent);
 
+void esdm_test_disable_fallback(int disable);
+int esdm_test_fallback_fd(int fd);
+
 #else /* ESDM_TESTMODE */
 
 #define TESTMODE_STR ""
 
 static inline void esdm_test_seed_entropy(uint32_t ent) { (void)ent; }
+
+static inline void esdm_test_disable_fallback(int disable) { (void)disable; }
+static inline int esdm_test_fallback_fd(int fd) { return fd; }
 
 #endif /* ESDM_TESTMODE */
 

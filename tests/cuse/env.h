@@ -26,7 +26,7 @@ extern "C"
 #endif
 
 void env_fini(void);
-int env_init(void);
+int env_init(int disable_fallback);
 void env_kill_server(void);
 
 #ifdef __cplusplus

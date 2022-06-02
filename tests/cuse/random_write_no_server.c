@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
 
 	memset(buf, 0, sizeof(buf));
 
-	ret = env_init();
+	ret = env_init(0);
 	if (ret)
 		return ret;
 

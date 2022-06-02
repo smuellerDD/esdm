@@ -428,6 +428,8 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	(void)off;
 	(void)fi;
 
+	fallback_fd = esdm_test_fallback_fd(fallback_fd);
+
 	if (size > sizeof(tmpbuf)) {
 		logger(LOGGER_ERR, LOGGER_C_CUSE,
 		       "Due to FUSE limitation, the maximum request size is %u\n",
@@ -498,6 +500,8 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 	(void)fi;
 	(void)off;
 
+	fallback_fd = esdm_test_fallback_fd(fallback_fd);
+
 	esdm_invoke(esdm_rpcc_write_data((const uint8_t *)buf, size));
 	if (ret == 0)
 		written = size;
@@ -536,6 +540,8 @@ void esdm_cuse_ioctl(int backend_fd,
 	int ret;
 
 	(void)fi;
+
+	backend_fd = esdm_test_fallback_fd(backend_fd);
 
 	if (flags & FUSE_IOCTL_COMPAT) {
 		fuse_reply_err(req, ENOSYS);
@@ -576,7 +582,8 @@ void esdm_cuse_ioctl(int backend_fd,
 			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt(
 				ent_count_bits));
 			if (!ret) {
-				if (ioctl(backend_fd, RNDADDTOENTCNT,
+				if (backend_fd >= 0 &&
+				    ioctl(backend_fd, RNDADDTOENTCNT,
 					  &ent_count_bits) == -1)
 					ret = -errno;
 			}
@@ -628,7 +635,8 @@ void esdm_cuse_ioctl(int backend_fd,
 						(uint32_t)rpi->entropy_count :
 						0));
 			if (!ret) {
-				if (ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
+				if (backend_fd >= 0 &&
+				    ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
 					ret = -errno;
 			}
 			drop_privileges_transient(esdm_cuse_unprivileged_user);
@@ -651,7 +659,8 @@ void esdm_cuse_ioctl(int backend_fd,
 		esdm_cuse_raise_privilege(req);
 		esdm_invoke(esdm_rpcc_rnd_clear_pool());
 		if (!ret) {
-			if (ioctl(backend_fd, RNDCLEARPOOL) == -1)
+			if (backend_fd >= 0 &&
+			    ioctl(backend_fd, RNDCLEARPOOL) == -1)
 				ret = -errno;
 		}
 		drop_privileges_transient(esdm_cuse_unprivileged_user);
@@ -672,7 +681,8 @@ void esdm_cuse_ioctl(int backend_fd,
 		esdm_cuse_raise_privilege(req);
 		esdm_invoke(esdm_rpcc_rnd_reseed_crng());
 		if (!ret) {
-			if (ioctl(backend_fd, RNDRESEEDCRNG) == -1)
+			if (backend_fd >= 0 &&
+			    ioctl(backend_fd, RNDRESEEDCRNG) == -1)
 				ret = -errno;
 		}
 		drop_privileges_transient(esdm_cuse_unprivileged_user);
@@ -867,6 +877,7 @@ struct esdm_cuse_param {
 	char		*username;
 	unsigned int	verbosity;
 	int		is_help;
+	int		disable_fallback;
 };
 
 #define ESDM_CUSE_OPT(t, p) { t, offsetof(struct esdm_cuse_param, p), 1 }
@@ -892,16 +903,19 @@ static const char *usage =
 # pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
 #endif
 static const struct fuse_opt esdm_cuse_opts[] = {
-	ESDM_CUSE_OPT("-M %u",		major),
-	ESDM_CUSE_OPT("--maj=%u",	major),
-	ESDM_CUSE_OPT("-m %u",		minor),
-	ESDM_CUSE_OPT("--min=%u",	minor),
-	ESDM_CUSE_OPT("-n %s",		dev_name),
-	ESDM_CUSE_OPT("--name=%s",	dev_name),
-	ESDM_CUSE_OPT("-v %u",		verbosity),
-	ESDM_CUSE_OPT("--verbosity=%u",	verbosity),
-	ESDM_CUSE_OPT("-u %s",		username),
-	ESDM_CUSE_OPT("-username %s",	username),
+	ESDM_CUSE_OPT("-M %u",			major),
+	ESDM_CUSE_OPT("--maj=%u",		major),
+	ESDM_CUSE_OPT("-m %u",			minor),
+	ESDM_CUSE_OPT("--min=%u",		minor),
+	ESDM_CUSE_OPT("-n %s",			dev_name),
+	ESDM_CUSE_OPT("--name=%s",		dev_name),
+	ESDM_CUSE_OPT("-v %u",			verbosity),
+	ESDM_CUSE_OPT("--verbosity=%u"	,	verbosity),
+	ESDM_CUSE_OPT("-u %s",			username),
+	ESDM_CUSE_OPT("--username %s",		username),
+#ifdef ESDM_TESTMODE
+	ESDM_CUSE_OPT("--disable_fallback=%d",	disable_fallback),
+#endif
 	FUSE_OPT_KEY("-h",		0),
 	FUSE_OPT_KEY("--help",		0),
 	FUSE_OPT_END
@@ -931,7 +945,7 @@ int main_common(const char *devname, const char *target,
 		int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0 };
+	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0 };
 	char dev_name[128] = "DEVNAME=";
 	const char *dev_info_argv[] = { dev_name };
 	struct cuse_info ci;
@@ -945,6 +959,8 @@ int main_common(const char *devname, const char *target,
 	}
 
 	logger_set_verbosity(param.verbosity);
+
+	esdm_test_disable_fallback(param.disable_fallback);
 
 	if (!param.is_help) {
 		const char *dev_name_p = param.dev_name;

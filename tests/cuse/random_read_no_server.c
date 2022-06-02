@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
 	if (!argc)
 		return 1;
 
-	ret = env_init();
+	ret = env_init(0);
 	if (ret)
 		return ret;
 

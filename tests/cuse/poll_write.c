@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
 	(void)argc;
 	(void)argv;
 
-	ret = env_init();
+	ret = env_init(1);
 	if (ret)
 		return ret;
 

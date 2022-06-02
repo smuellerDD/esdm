@@ -18,6 +18,7 @@
  */
 
 #include <stdint.h>
+#include <unistd.h>
 
 #include "helper.h"
 #include "test_pertubation.h"
@@ -31,4 +32,21 @@ void esdm_test_seed_entropy(uint32_t ent)
 		return;
 
 	seed_entropy[atomic_inc(&seed_entropy_ptr)] = ent;
+}
+
+/******************************************************************************/
+
+static int disable_fallback = 0;
+
+void esdm_test_disable_fallback(int disable)
+{
+	disable_fallback = disable;
+}
+
+int esdm_test_fallback_fd(int fd)
+{
+	if (fd < 0 || !disable_fallback)
+		return fd;
+
+	return -1;
 }
