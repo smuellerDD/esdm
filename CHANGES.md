@@ -4,5 +4,8 @@ Changes 0.3.0:
 
 * Testing: disable /dev/random fallbacks for verifying RPC operation
 
+* RNDGETENTCNT returns the seed state of the auxiliary entropy pool only. This
+  makes it 100% ABI compliant to random.c
+
 Changes 0.2.0:
 * Initial public version

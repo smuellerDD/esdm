@@ -128,6 +128,13 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 uint32_t esdm_avail_entropy(void);
 
 /**
+ * @brief Obtain the available entropy in the aux ESDM entropy pool in bits
+ *
+ * @return available entropy in bits
+ */
+uint32_t lrng_avail_entropy_aux(void);
+
+/**
  * @brief Obtain the available entropy of the auxiliary pool in bits
  *
  * @return available entropy in bits

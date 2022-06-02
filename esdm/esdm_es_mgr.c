@@ -278,6 +278,14 @@ uint32_t esdm_avail_entropy(void)
 	return ent;
 }
 
+DSO_PUBLIC
+uint32_t lrng_avail_entropy_aux(void)
+{
+	u32 ent_thresh = lrng_avail_entropy_thresh();
+
+	return lrng_es[lrng_ext_es_aux]->curr_entropy(ent_thresh);
+}
+
 /*
  * esdm_init_ops() - Set seed stages of ESDM
  *

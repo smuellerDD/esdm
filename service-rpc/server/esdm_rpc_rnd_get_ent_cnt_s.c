@@ -31,7 +31,7 @@ void esdm_rpc_rnd_get_ent_cnt(UnprivAccess_Service *service,
 	(void)request;
 	(void)service;
 
-	response.entcnt = esdm_avail_entropy();
+	response.entcnt = esdm_avail_entropy_aux();
 	response.ret = 0;
 	closure (&response, closure_data);
 }
