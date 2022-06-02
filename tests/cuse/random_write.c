@@ -29,6 +29,7 @@
 
 #include "env.h"
 #include "privileges.h"
+#include "test_pertubation.h"
 
 static int write_complete(int fd, uint8_t *buf, size_t buflen)
 {
@@ -89,6 +90,29 @@ int main(int argc, char *argv[])
 		ret = write_random(argv[1], buf, len);
 		if (ret)
 			goto out;
+
+#ifdef ESDM_TESTMODE
+		if (len != esdm_test_shm_status_get_rpc_client_written()) {
+			printf("ERROR: amount of client data written (%zu) does not match written data (%zu)\n",
+			       len,
+			       esdm_test_shm_status_get_rpc_client_written());
+			ret = 1;
+			goto out;
+		} else {
+			printf("PASS: amount of client data written matches written data (%zu)\n", len);
+		}
+
+		if (len != esdm_test_shm_status_get_rpc_server_written()) {
+			printf("ERROR: amount of server data written (%zu) does not match written data (%zu)\n",
+			       len,
+			       esdm_test_shm_status_get_rpc_server_written());
+			ret = 1;
+			goto out;
+		} else {
+			printf("PASS: amount of server data written matches written data (%zu)\n", len);
+		}
+		esdm_test_shm_status_reset();
+#endif
 
 		val = 7777;
 		len = (len > val) ? len - val : 0;

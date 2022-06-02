@@ -24,7 +24,6 @@
 #include "esdm_node.h"
 #include "esdm_shm_status.h"
 #include "ret_checkers.h"
-#include "threading_support.h"
 #include "visibility.h"
 
 DSO_PUBLIC

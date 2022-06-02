@@ -37,6 +37,7 @@
 #include "logger.h"
 #include "memset_secure.h"
 #include "ret_checkers.h"
+#include "test_pertubation.h"
 #include "visibility.h"
 
 struct esdm_rpcc_write_buf {
@@ -462,6 +463,8 @@ esdm_rpcc_fini_service(struct esdm_rpc_client_connection **rpc_conn)
 	if (!rpc_conn_array)
 		return;
 
+	esdm_test_shm_status_fini();
+
 	/* Tell everybody that the connection is about to terminate */
 	for (i = 0; i < num_conn; i++, rpc_conn_p++)
 		atomic_set(&rpc_conn_p->state, esdm_rpcc_in_termination);
@@ -502,6 +505,8 @@ esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 	logger(LOGGER_DEBUG, LOGGER_C_ANY,
 	       "Service supporting %u parallel requests for socket %s enabled\n",
 	       nodes, socketname);
+
+	CKINT(esdm_test_shm_status_init());
 
 out:
 	if (ret) {

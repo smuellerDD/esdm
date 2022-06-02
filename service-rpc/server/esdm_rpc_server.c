@@ -724,6 +724,9 @@ int esdm_rpc_server_init(const char *username)
 	pid_t pid;
 	int ret = 0;
 
+	/* Initialize test pertubation support */
+	CKINT(esdm_test_shm_status_init());
+
 	/* One thread group */
 	CKINT(thread_init(1));
 
@@ -773,4 +776,7 @@ void esdm_rpc_server_fini(void)
 
 	atomic_set(&server_exit, 1);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
+
+	/* Terminate test pertubation support */
+	esdm_test_shm_status_fini();
 }

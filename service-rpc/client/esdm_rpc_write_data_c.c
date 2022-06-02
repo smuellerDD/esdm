@@ -73,6 +73,7 @@ int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len)
 		if (ret)
 			goto out;
 
+		esdm_test_shm_status_add_rpc_client_written(todo);
 		data_buf_len -= todo;
 		data_buf += todo;
 	}

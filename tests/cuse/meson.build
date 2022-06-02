@@ -5,62 +5,86 @@ if get_option('linux-devfiles').enabled()
 
 	ioctl_addent_tester = executable(
 		'ioctl_addent_tester',
-		[ cuse_tester_common, 'ioctl_addent.c' ]
+		[ cuse_tester_common, 'ioctl_addent.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	ioctl_clear_tester = executable(
 		'ioctl_clear_tester',
-		[ cuse_tester_common, 'ioctl_clear.c' ]
+		[ cuse_tester_common, 'ioctl_clear.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	ioctl_getent_tester = executable(
 		'ioctl_getent_tester',
-		[ cuse_tester_common, 'ioctl_getent.c' ]
+		[ cuse_tester_common, 'ioctl_getent.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	ioctl_reseed_tester = executable(
 		'ioctl_reseed_tester',
-		[ cuse_tester_common, 'ioctl_reseed.c' ]
+		[ cuse_tester_common, 'ioctl_reseed.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	ioctl_setent_tester = executable(
 		'ioctl_setent_tester',
-		[ cuse_tester_common, 'ioctl_setent.c' ]
+		[ cuse_tester_common, 'ioctl_setent.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	ioctl_getinfo_tester = executable(
 		'ioctl_getinfo_tester',
-		[ cuse_tester_common, 'ioctl_getinfo.c' ]
+		[ cuse_tester_common, 'ioctl_getinfo.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	poll_read_tester = executable(
 		'poll_read_tester',
-		[ cuse_tester_common, 'poll_read.c' ]
+		[ cuse_tester_common, 'poll_read.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	poll_write_tester = executable(
 		'poll_write_tester',
-		[ cuse_tester_common, 'poll_write.c' ]
+		[ cuse_tester_common, 'poll_write.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	random_read_tester = executable(
 		'random_read_tester',
-		[ cuse_tester_common, 'random_read.c' ]
+		[ cuse_tester_common, 'random_read.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	random_write_tester = executable(
 		'random_write_tester',
-		[ cuse_tester_common, 'random_write.c' ]
+		[ cuse_tester_common, 'random_write.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	random_read_no_server_tester = executable(
 		'random_read_no_server_tester',
-		[ cuse_tester_common, 'random_read_no_server.c' ]
+		[ cuse_tester_common, 'random_read_no_server.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	random_write_no_server_tester = executable(
 		'random_write_no_server_tester',
-		[ cuse_tester_common, 'random_write_no_server.c' ]
+		[ cuse_tester_common, 'random_write_no_server.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
 		)
 
 	# Available test targets:

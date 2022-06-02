@@ -27,6 +27,8 @@
 
 #include "env.h"
 #include "privileges.h"
+#include "ret_checkers.h"
+#include "test_pertubation.h"
 
 static pid_t server_pid = 0;
 static pid_t random_pid = 0;
@@ -35,6 +37,7 @@ static pid_t urandom_pid = 0;
 void env_fini(void)
 {
 	raise_privilege();
+	esdm_test_shm_status_fini();
 
 	if (random_pid > 0) {
 		printf("Killing random PID %u\n", random_pid);
@@ -89,15 +92,10 @@ int env_init(int disable_fallback)
 		return 77;
 	}
 
-	ret = env_check_file(random);
-	if (ret)
-		goto out;
-	ret = env_check_file(urandom);
-	if (ret)
-		goto out;
-	ret = env_check_file(server);
-	if (ret)
-		goto out;
+	CKINT(env_check_file(random));
+	CKINT(env_check_file(urandom));
+	CKINT(env_check_file(server));
+	CKINT(esdm_test_shm_status_init());
 
 	/* Server forking */
 	pid = fork();
