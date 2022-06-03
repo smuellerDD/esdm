@@ -87,7 +87,17 @@ compile_test()
 	meson compile -C build
 	if [ $? -ne 0 ]
 	then
-		cho "Compile error"
+		echo "Compile error"
+		meson configure build
+		exit 1
+	fi
+
+	meson configure build -Dhash_sha512=disabled
+	meson configure build -Dhash_sha3_512=enabled
+	meson compile -C build
+	if [ $? -ne 0 ]
+	then
+		echo "Compile error"
 		meson configure build
 		exit 1
 	fi

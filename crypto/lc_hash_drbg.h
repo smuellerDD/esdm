@@ -44,10 +44,10 @@ struct lc_drbg_hash_state {
 	size_t reseed_ctr;
 };
 
-#define LC_DRBG_HASH_MAX_STATE_SIZE	(3 * LC_DRBG_HASH_STATELEN +	       \
+#define LC_DRBG_HASH_STATE_SIZE(x)	(3 * LC_DRBG_HASH_STATELEN +	       \
 					 LC_DRBG_HASH_BLOCKLEN +	       \
-					 LC_HASH_MAX_STATE_SIZE)
-#define LC_DRBG_HASH_MAX_CTX_SIZE	(LC_DRBG_HASH_MAX_STATE_SIZE +	       \
+					 LC_HASH_STATE_SIZE(x))
+#define LC_DRBG_HASH_CTX_SIZE(x)	(LC_DRBG_HASH_STATE_SIZE(x) +	       \
 					 sizeof(struct lc_drbg_hash_state))
 
 void lc_drbg_hash_seed(struct lc_drbg_state *drbg, struct lc_drbg_string *seed);
@@ -61,11 +61,13 @@ void lc_drbg_hash_zero(struct lc_drbg_state *drbg);
 			 lc_drbg_hash_generate, lc_drbg_hash_zero);	       \
 	_LC_HASH_SET_CTX((&name->hash_ctx), LC_DRBG_HASH_CORE, ctx, offset);   \
 	name->V = (uint8_t *)((uint8_t *)ctx + offset +			       \
-			      LC_HASH_MAX_STATE_SIZE);			       \
+			      LC_HASH_STATE_SIZE(LC_DRBG_HASH_CORE));	       \
         name->C = (uint8_t *)((uint8_t *)ctx + offset +			       \
-		  LC_HASH_MAX_STATE_SIZE + LC_DRBG_HASH_STATELEN);	       \
+		  LC_HASH_STATE_SIZE(LC_DRBG_HASH_CORE) +		       \
+		  LC_DRBG_HASH_STATELEN);				       \
 	name->scratchpad = (uint8_t *)((uint8_t *)ctx +	offset +	       \
-			   LC_HASH_MAX_STATE_SIZE + 2 * LC_DRBG_HASH_STATELEN);\
+			   LC_HASH_STATE_SIZE(LC_DRBG_HASH_CORE) +	       \
+			   2 * LC_DRBG_HASH_STATELEN);			       \
 	name->reseed_ctr = 0
 
 #define LC_DRBG_HASH_SET_CTX(name) _LC_DRBG_HASH_SET_CTX(name, name,	       \
@@ -78,7 +80,7 @@ void lc_drbg_hash_zero(struct lc_drbg_state *drbg);
  */
 #define LC_DRBG_HASH_CTX_ON_STACK(name)			      		       \
 	LC_ALIGNED_BUFFER(name ## _ctx_buf,				       \
-			  LC_DRBG_HASH_MAX_CTX_SIZE, uint64_t);		       \
+			  LC_DRBG_HASH_CTX_SIZE(LC_DRBG_HASH_CORE), uint64_t); \
 	struct lc_drbg_hash_state *name ## _hash =			       \
 				(struct lc_drbg_hash_state *) name ## _ctx_buf;\
 	LC_DRBG_HASH_SET_CTX(name ## _hash);				       \

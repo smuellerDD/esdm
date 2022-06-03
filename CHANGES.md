@@ -7,5 +7,9 @@ Changes 0.3.0:
 * RNDGETENTCNT returns the seed state of the auxiliary entropy pool only. This
   makes it 100% ABI compliant to random.c
 
+* Add ChaCha20 DRNG to regular code base
+
+* Add SHA-3 conditioning hash to regular code base
+
 Changes 0.2.0:
 * Initial public version

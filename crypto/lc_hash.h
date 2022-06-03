@@ -38,7 +38,7 @@ struct lc_hash {
 	void (*set_digestsize)(struct lc_hash_state *ctx, size_t digestsize);
 	size_t (*get_digestsize)(struct lc_hash_state *ctx);
 	unsigned int blocksize;
-	unsigned int ctxsize;
+	unsigned int statesize;
 };
 
 struct lc_hash_ctx {
@@ -51,9 +51,9 @@ struct lc_hash_ctx {
 					__attribute__((aligned(sizeof(type))))
 
 #define LC_SHA_MAX_SIZE_DIGEST	64
-#define LC_HASH_MAX_STATE_SIZE	376
-#define LC_HASH_MAX_CTX_SIZE	(LC_HASH_MAX_STATE_SIZE +		       \
-				 sizeof(struct lc_hash_ctx))
+#define LC_HASH_STATE_SIZE(x)	(x->statesize)
+#define LC_HASH_CTX_SIZE(x)	(sizeof(struct lc_hash_ctx) +		       \
+				 LC_HASH_STATE_SIZE(x))
 
 #define _LC_HASH_SET_CTX(name, hashname, ctx, offset)			       \
 	name->hash_state = (struct lc_hash_state *)((uint8_t *)ctx + offset);  \
@@ -69,7 +69,7 @@ struct lc_hash_ctx {
  *			perform hash calculation with.
  *
  * The caller must provide an allocated hash_ctx. This can be achieved by
- * using HASH_CTX_ON_STACK or by using hash_alloc.
+ * using LC_HASH_CTX_ON_STACK or by using hash_alloc.
  */
 static inline void lc_hash_init(struct lc_hash_ctx *hash_ctx)
 {
@@ -165,7 +165,7 @@ static inline unsigned int lc_hash_ctxsize(struct lc_hash_ctx *hash_ctx)
 {
 	const struct lc_hash *hash = hash_ctx->hash;
 
-	return hash->ctxsize;
+	return hash->statesize;
 }
 
 /**
@@ -176,8 +176,10 @@ static inline unsigned int lc_hash_ctxsize(struct lc_hash_ctx *hash_ctx)
  */
 static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
 {
+	const struct lc_hash *hash = hash_ctx->hash;
+
 	memset_secure((uint8_t *)hash_ctx + sizeof(struct lc_hash_ctx), 0,
-		      LC_HASH_MAX_STATE_SIZE);
+		      hash->statesize);
 }
 
 /**
@@ -188,7 +190,8 @@ static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
  *			 implementation to be used
  */
 #define LC_HASH_CTX_ON_STACK(name, hashname)				       \
-	LC_ALIGNED_BUFFER(name ## _ctx_buf, LC_HASH_MAX_CTX_SIZE , uint64_t);  \
+	LC_ALIGNED_BUFFER(name ## _ctx_buf, LC_HASH_CTX_SIZE(hashname),        \
+			  uint64_t);					       \
 	struct lc_hash_ctx *name = (struct lc_hash_ctx *) name ## _ctx_buf;    \
 	LC_HASH_SET_CTX(name, hashname);				       \
 	lc_hash_zero(name)

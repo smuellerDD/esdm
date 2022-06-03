@@ -45,17 +45,17 @@ struct lc_hmac_ctx {
 	struct lc_hash_ctx hash_ctx;
 };
 
-#define LC_HMAC_MAX_STATE_SIZE	(LC_HASH_MAX_STATE_SIZE +		       \
-				 2 * LC_SHA_MAX_SIZE_BLOCK)
-#define LC_HMAC_MAX_CTX_SIZE	(LC_HMAC_MAX_STATE_SIZE +		       \
-				 sizeof(struct lc_hmac_ctx))
+#define LC_HMAC_STATE_SIZE(x)		(LC_HASH_STATE_SIZE(x) +	       \
+					 2 * LC_SHA_MAX_SIZE_BLOCK)
+#define LC_HMAC_CTX_SIZE(x)		(LC_HMAC_STATE_SIZE(x) +	       \
+					 sizeof(struct lc_hmac_ctx))
 
 #define _LC_HMAC_SET_CTX(name, hashname, ctx, offset)			       \
 	_LC_HASH_SET_CTX((&name->hash_ctx), hashname, ctx, offset);	       \
         name->k_opad = (uint8_t *)((uint8_t *)ctx + offset +		       \
-				   LC_HASH_MAX_STATE_SIZE);		       \
+				   LC_HASH_STATE_SIZE(hashname));	       \
 	name->k_ipad = (uint8_t *)((uint8_t *)ctx + offset +		       \
-				   LC_HASH_MAX_STATE_SIZE +		       \
+				   LC_HASH_STATE_SIZE(hashname) +	       \
 				   LC_SHA_MAX_SIZE_BLOCK)
 
 
@@ -137,8 +137,11 @@ void lc_hmac_zero_free(struct lc_hmac_ctx *hmac_ctx);
  */
 static inline void lc_hmac_zero(struct lc_hmac_ctx *hmac_ctx)
 {
+	struct lc_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
+	const struct lc_hash *hash = hash_ctx->hash;
+
 	memset_secure((uint8_t *)hmac_ctx + sizeof(struct lc_hmac_ctx), 0,
-		      LC_HMAC_MAX_STATE_SIZE);
+		      LC_HMAC_STATE_SIZE(hash));
 }
 
 /**
@@ -149,7 +152,8 @@ static inline void lc_hmac_zero(struct lc_hmac_ctx *hmac_ctx)
  *			 implementation to be used
  */
 #define LC_HMAC_CTX_ON_STACK(name, hashname)				       \
-	LC_ALIGNED_BUFFER(name ## _ctx_buf, LC_HMAC_MAX_CTX_SIZE, uint64_t);   \
+	LC_ALIGNED_BUFFER(name ## _ctx_buf, LC_HMAC_CTX_SIZE(hashname),	       \
+			  uint64_t);					       \
 	struct lc_hmac_ctx *name = (struct lc_hmac_ctx *)name ## _ctx_buf;     \
 	LC_HMAC_SET_CTX(name, hashname);				       \
 	lc_hmac_zero(name)

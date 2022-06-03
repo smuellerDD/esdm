@@ -42,10 +42,11 @@ DSO_PUBLIC
 void lc_hmac_init(struct lc_hmac_ctx *hmac_ctx, const uint8_t *key, size_t keylen)
 {
 	struct lc_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
+	const struct lc_hash *hash = hash_ctx->hash;
 	uint8_t *k_opad, *k_ipad;
 	unsigned int i;
 
-	if (lc_hash_ctxsize(hash_ctx) > LC_HASH_MAX_STATE_SIZE ||
+	if (lc_hash_ctxsize(hash_ctx) > LC_HASH_STATE_SIZE(hash) ||
 	    lc_hash_blocksize(hash_ctx) > LC_SHA_MAX_SIZE_BLOCK ||
 	    lc_hash_digestsize(hash_ctx) > LC_SHA_MAX_SIZE_DIGEST)
 		return;
@@ -102,7 +103,7 @@ int lc_hmac_alloc(const struct lc_hash *hash, struct lc_hmac_ctx **hmac_ctx)
 {
 	struct lc_hmac_ctx *out_ctx;
 	int ret = posix_memalign((void *)&out_ctx, sizeof(uint64_t),
-				 LC_HMAC_MAX_CTX_SIZE);
+				 LC_HMAC_CTX_SIZE(hash));
 
 	if (ret)
 		return -ret;

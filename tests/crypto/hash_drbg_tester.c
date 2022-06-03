@@ -93,7 +93,8 @@ static int hash_drbg_tester(void)
 	struct lc_drbg_state *drbg = NULL;
 	int ret = 0;
 
-	printf("hash DRBG ctx len %lu\n", LC_DRBG_HASH_MAX_CTX_SIZE);
+	printf("hash DRBG ctx len %lu\n",
+	       LC_DRBG_HASH_CTX_SIZE(LC_DRBG_HASH_CORE));
 	if (lc_drbg_healthcheck_sanity(drbg_stack))
 		return 1;
 

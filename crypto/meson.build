@@ -19,3 +19,7 @@ if get_option('drng_chacha20').enabled()
 		'chacha20_drng.c',
 	])
 endif
+
+if get_option('hash_sha3_512').enabled()
+	crypto_src += files([ 'sha3.c' ])
+endif

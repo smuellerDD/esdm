@@ -286,10 +286,12 @@ DSO_PUBLIC
 void lc_drbg_hash_zero(struct lc_drbg_state *drbg)
 {
 	struct lc_drbg_hash_state *drbg_hash = (struct lc_drbg_hash_state *)drbg;
+	struct lc_hash_ctx *hash_ctx = &drbg_hash->hash_ctx;
+	const struct lc_hash *hash = hash_ctx->hash;
 
 	drbg_hash->reseed_ctr = 0;
 	memset_secure((uint8_t *)drbg_hash + sizeof(struct lc_drbg_hash_state),
-				 0, LC_DRBG_HASH_MAX_STATE_SIZE);
+				 0, LC_DRBG_HASH_STATE_SIZE(hash));
 }
 
 DSO_PUBLIC
@@ -297,11 +299,11 @@ int lc_drbg_hash_alloc(struct lc_drbg_state **drbg)
 {
 	struct lc_drbg_hash_state *tmp;
 	int ret = posix_memalign((void *)&tmp, sizeof(uint64_t),
-				 LC_DRBG_HASH_MAX_CTX_SIZE);
+				 LC_DRBG_HASH_CTX_SIZE(LC_DRBG_HASH_CORE));
 
 	if (ret)
 		return -ret;
-	memset(tmp, 0, LC_DRBG_HASH_MAX_CTX_SIZE);
+	memset(tmp, 0, LC_DRBG_HASH_CTX_SIZE(LC_DRBG_HASH_CORE));
 
 	LC_DRBG_HASH_SET_CTX(tmp);
 

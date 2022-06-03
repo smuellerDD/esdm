@@ -29,6 +29,8 @@
 #include "esdm_es_mgr.h"
 #include "esdm_shm_status.h"
 #include "helper.h"
+#include "lc_sha512.h"
+#include "lc_sha3.h"
 #include "mutex_w.h"
 #include "ret_checkers.h"
 #include "visibility.h"
@@ -112,6 +114,14 @@ static void esdm_init_wakeup_bits(void)
 
 static int esdm_aux_init(void)
 {
+#if defined(ESDM_HASH_SHA512)
+	if (sizeof(esdm_pool.aux_pool) != LC_HASH_CTX_SIZE(lc_sha512))
+#elif defined(ESDM_HASH_SHA3_512)
+	if (sizeof(esdm_pool.aux_pool) != LC_HASH_CTX_SIZE(lc_sha3_512))
+#else
+#error "Unknown hash size"
+#endif
+		return -EFAULT;
 	esdm_init_wakeup_bits();
 	return 0;
 }

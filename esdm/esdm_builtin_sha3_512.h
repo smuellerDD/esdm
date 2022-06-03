@@ -1,5 +1,5 @@
 /*
- * ESDM SHA definition.
+ * ESDM SHA definition
  *
  * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
  *
@@ -19,24 +19,9 @@
  * DAMAGE.
  */
 
-#ifndef _ESDM_HASH_COMMON_H
-#define _ESDM_HASH_COMMON_H
+#ifndef _ESDM_BUILTIN_SHA3_512_H
+#define _ESDM_BUILTIN_SHA3_512_H
 
-#include "lc_hash.h"
-#include "lc_sha512.h"
-#include "lc_sha3.h"
+extern const struct esdm_hash_cb esdm_builtin_sha3_512_cb;
 
-#define SHA512_DIGEST_SIZE LC_SHA512_SIZE_DIGEST
-
-#if defined(ESDM_HASH_SHA512)
-#define LC_HASH_STATE_SIZE_CONST	200
-#elif defined(ESDM_HASH_SHA3_512)
-#define LC_HASH_STATE_SIZE_CONST	376
-#else
-#error "Unknown hash size"
-#endif
-
-#define LC_HASH_CTX_SIZE_ESDM(x)	(sizeof(struct lc_hash_ctx) + x)
-#define HASH_MAX_DESCSIZE	LC_HASH_CTX_SIZE_ESDM(LC_HASH_STATE_SIZE_CONST)
-
-#endif /* _ESDM_HASH_COMMON_H */
+#endif /* _ESDM_BUILTIN_SHA3_512_H */

@@ -215,7 +215,7 @@ static const struct lc_hash _sha512 = {
 	.set_digestsize	= NULL,
 	.get_digestsize = sha512_get_digestsize,
 	.blocksize	= LC_SHA512_SIZE_BLOCK,
-	.ctxsize	= sizeof(struct lc_hash_state),
+	.statesize	= sizeof(struct lc_hash_state),
 };
 
 DSO_PUBLIC const struct lc_hash *lc_sha512 = &_sha512;

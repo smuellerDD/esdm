@@ -103,6 +103,10 @@ if get_option('drng_hash_drbg').enabled() and get_option('drng_chacha20').enable
 	error('Only one DRNG can be enabled')
 endif
 
+if get_option('hash_sha512').enabled() and get_option('hash_sha3_512').enabled()
+	error('Only one conditioning hash can be enabled')
+endif
+
 if get_option('esdm-server').enabled()
 	subdirs += [ 'frontends/server' ]
 endif
