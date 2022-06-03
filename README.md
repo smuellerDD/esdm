@@ -28,7 +28,8 @@ It is extensible as follows:
 * The cryptographic primitives can be altered by simply providing a new
   backend for hash algorithms or DRNG algorithms. See the `drng_chacha20`
   configuration option replacing the SP800-90A DRBG with a ChaCha20-based
-  DRNG.
+  DRNG, or the `hash_sha3_512` configuration option replacing the SHA2-512
+  conditioning hash with SHA3-512.
 
 * Different DRNG Seeding strategies can be defined, by modifying one location
   in the code that governs the initial and reseeding operation of the DRNGs.
