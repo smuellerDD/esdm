@@ -132,7 +132,7 @@ uint32_t esdm_avail_entropy(void);
  *
  * @return available entropy in bits
  */
-uint32_t lrng_avail_entropy_aux(void);
+uint32_t esdm_avail_entropy_aux(void);
 
 /**
  * @brief Obtain the available entropy of the auxiliary pool in bits
