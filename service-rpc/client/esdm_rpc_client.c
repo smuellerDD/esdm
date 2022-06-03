@@ -114,7 +114,7 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 			nanosleep(&ts, NULL);
 
 		if (connect(rpc_conn->fd, (struct sockaddr *)&addr,
-				sizeof(addr)) < 0) {
+			    sizeof(addr)) < 0) {
 			errsv = errno;
 
 			logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -389,8 +389,7 @@ out:
 	thread_wake_all(&rpc_conn->completion);
 }
 
-static void
-esdm_client_destroy (ProtobufCService *service)
+static void esdm_client_destroy(ProtobufCService *service)
 {
 	struct esdm_rpc_client_connection *rpc_conn =
 		(struct esdm_rpc_client_connection *)service;
