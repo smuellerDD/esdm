@@ -69,7 +69,13 @@ static int esdm_sha512_hash_final(void *hash, uint8_t *digest)
 
 static const char *esdm_sha512_hash_name(void)
 {
+#if defined(ESDM_HASH_SHA512)
 	return "builtin SHA-512";
+#elif defined(ESDM_HASH_SHA3_512)
+	return "builtin SHA3-512";
+#else
+#error "Unknown default hash selected"
+#endif
 }
 
 static void esdm_sha512_hash_desc_zero(void *hash)
