@@ -35,7 +35,8 @@ atomic_t seed_entropy_ptr = ATOMIC_INIT(-1);
 
 void esdm_test_seed_entropy(uint32_t ent)
 {
-	if (atomic_read(&seed_entropy_ptr) >= (int)ARRAY_SIZE(seed_entropy))
+	if (atomic_read(&seed_entropy_ptr) >=
+	    ((int)ARRAY_SIZE(seed_entropy) - 1))
 		return;
 
 	seed_entropy[atomic_inc(&seed_entropy_ptr)] = ent;

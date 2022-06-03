@@ -57,7 +57,7 @@ uint32_t esdm_online_nodes(void)
 uint32_t esdm_curr_node(void)
 {
 	uint32_t cpu = esdm_arch_curr_node();
-;
+
 	/*
 	 * Limit the CPU selection by number of available threads - this is the
 	 * counterpart to esdm_config_online_nodes.
