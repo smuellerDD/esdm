@@ -67,6 +67,14 @@ struct esdm_rpcs_write_buf {
 	struct esdm_rpcs_connection *rpc_conn;
 };
 
+enum esdm_rpcs_init_state {
+	esdm_rpcs_state_uninitialized,
+	esdm_rpcs_state_unpriv_init,
+	esdm_rpcs_state_perm_dropped,
+};
+
+static atomic_t
+esdm_rpc_init_state = ATOMIC_INIT(esdm_rpcs_state_uninitialized);
 static DECLARE_WAIT_QUEUE(esdm_rpc_thread_init_wait);
 
 static pid_t server_pid = -1;
@@ -485,8 +493,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	struct sockaddr_un addr_un;
 	struct sockaddr_in addr_in;
 	struct sockaddr *address;
-	int fd = -1;
-	int protocol_family;
+	int errsv, fd = -1, protocol_family;
 	socklen_t address_len;
 
 	if (unix_socket) {
@@ -511,17 +518,30 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	}
 
 	fd = socket(protocol_family, SOCK_STREAM, 0);
-	if (fd < 0)
-		return -errno;
+	if (fd < 0) {
+		errsv = -errno;
+		logger(LOGGER_ERR, LOGGER_C_RPC,
+		       "RPC Server: cannot create socket: %s\n",
+		       strerror(errsv));
+		return -errsv;
+	}
 
 	if (bind(fd, address, address_len) < 0) {
+		errsv = -errno;
+		logger(LOGGER_ERR, LOGGER_C_RPC,
+		       "RPC Server: cannot bind to socket: %s\n",
+		       strerror(errsv));
 		close(fd);
-		return -errno;
+		return -errsv;
 	}
 
 	if (listen(fd, 255) < 0) {
+		errsv = -errno;
+		logger(LOGGER_ERR, LOGGER_C_RPC,
+		       "RPC Server: cannot listen on socket: %s\n",
+		       strerror(errsv));
 		close(fd);
-		return -errno;
+		return -errsv;
 	}
 
 	proto->server_listening_fd = fd;
@@ -567,11 +587,18 @@ static int esdm_rpcs_unpriv_init(void *args)
 		logger(LOGGER_ERR, LOGGER_C_ANY,
 		       "Failed to set permissions for Unix domain socket %s: %s\n",
 		       ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
+
 		goto out;
 	}
 
+	/* Notify the mother that the unprivileged thread is initialized. */
+	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_unpriv_init);
+	thread_wake_all(&esdm_rpc_thread_init_wait);
+
 	/* Wait for the mother to drop the privileges. */
-	thread_wait_event(&esdm_rpc_thread_init_wait, getuid());
+	thread_wait_event(&esdm_rpc_thread_init_wait,
+			  (atomic_read(&esdm_rpc_init_state) ==
+			   esdm_rpcs_state_perm_dropped));
 	logger(LOGGER_DEBUG, LOGGER_C_RPC,
 	       "Unprivileged server thread for %s available\n",
 	       ESDM_RPC_UNPRIV_SOCKET);
@@ -628,10 +655,16 @@ static int esdm_rpcs_interfaces_init(const char *username)
 	/* Spawn all threads handling the unprivileged interface */
 	CKINT(esdm_rpcs_unpriv_init_threads());
 
+	/* Wait for the unprivileged thread to complete initialization. */
+	thread_wait_event(&esdm_rpc_thread_init_wait,
+			  (atomic_read(&esdm_rpc_init_state) ==
+			   esdm_rpcs_state_unpriv_init));
+
 	/* Permanently drop all privileges */
 	CKINT(drop_privileges_permanent(username ? username : "nobody"));
 
 	/* Notify all unpriv handler threads that they can become active */
+	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_perm_dropped);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 	logger(LOGGER_DEBUG, LOGGER_C_RPC,
 	       "Privileged server thread for %s available\n",
