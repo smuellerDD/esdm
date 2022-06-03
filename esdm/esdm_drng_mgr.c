@@ -28,7 +28,6 @@
 #include "esdm_builtin_hash_drbg.h"
 #include "esdm_builtin_chacha20.h"
 #include "esdm_builtin_sha512.h"
-#include "esdm_builtin_sha3_512.h"
 #include "esdm_config.h"
 #include "esdm_crypto.h"
 #include "esdm_drng_atomic.h"
@@ -63,14 +62,7 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
  * kernel start. It must not perform any memory allocation operation, but
  * simply perform the hash calculation.
  */
-const struct esdm_hash_cb *esdm_default_hash_cb =
-#if defined(ESDM_HASH_SHA512)
-	&esdm_builtin_sha512_cb;
-#elif defined(ESDM_HASH_SHA3_512)
-	&esdm_builtin_sha3_512_cb;
-#else
-#error "Unknown default hash selected"
-#endif
+const struct esdm_hash_cb *esdm_default_hash_cb = &esdm_builtin_sha512_cb;
 
 /*
  * Default DRNG callback that provides the crypto primitive which is
@@ -88,16 +80,8 @@ const struct esdm_drng_cb *esdm_default_drng_cb =
 
 /* DRNG for non-atomic use cases */
 static struct esdm_drng esdm_drng_init = {
-#if defined(ESDM_HASH_SHA512)
 	ESDM_DRNG_STATE_INIT(esdm_drng_init, NULL, NULL,
 			     &esdm_builtin_sha512_cb),
-#elif defined(ESDM_HASH_SHA3_512)
-	ESDM_DRNG_STATE_INIT(esdm_drng_init, NULL, NULL,
-			     &esdm_builtin_sha3_512_cb),
-#else
-#error "Unknown default hash selected"
-#endif
-
 	.lock = MUTEX_W_UNLOCKED,
 };
 

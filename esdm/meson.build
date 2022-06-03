@@ -45,12 +45,8 @@ if get_option('drng_chacha20').enabled()
 	esdm_src += files([ 'esdm_builtin_chacha20.c' ])
 endif
 
-if get_option('hash_sha512').enabled()
+if get_option('hash_sha512').enabled() or get_option('hash_sha3_512').enabled()
 	esdm_src += files([ 'esdm_builtin_sha512.c' ])
-endif
-
-if get_option('hash_sha3_512').enabled()
-	esdm_src += files([ 'esdm_builtin_sha3_512.c' ])
 endif
 
 esdm_common_static_lib = static_library('esdm_common_static',
