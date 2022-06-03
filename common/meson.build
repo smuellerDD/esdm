@@ -23,7 +23,8 @@ else
 	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 0)
 endif
 
-conf_data.set('ESDM_DRNG_HASH_DRBG', get_option('drng_hash_drbg'))
+conf_data.set('ESDM_DRNG_HASH_DRBG', get_option('drng_hash_drbg').enabled())
+conf_data.set('ESDM_DRNG_CHACHA20', get_option('drng_chacha20').enabled())
 # This option currently is not configurable!
 conf_data.set('CONFIG_ESDM_USE_PTHREAD', true)
 conf_data.set('THREADING_MAX_THREADS', get_option('threading_max_threads'))

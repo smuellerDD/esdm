@@ -35,7 +35,7 @@ static int esdm_hash_drbg_seed(void *drng, const uint8_t *inbuf,
 }
 
 static ssize_t esdm_hash_drbg_generate(void *drng, uint8_t *outbuf,
-				   size_t outbuflen)
+				       size_t outbuflen)
 {
 	struct lc_drbg_state *drbg = (struct lc_drbg_state *)drng;
 
@@ -71,7 +71,7 @@ static const char *esdm_hash_drbg_name(void)
 	return "builtin SP800-90A Hash DRBG";
 }
 
-int esdm_hash_drbg_selftest(void)
+static int esdm_hash_drbg_selftest(void)
 {
 	static const uint8_t ent_nonce[] = {
 		0x9E, 0x28, 0x52, 0xF1, 0xD8, 0xB2, 0x3C, 0x1A,

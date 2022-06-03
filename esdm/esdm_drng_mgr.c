@@ -26,6 +26,7 @@
 #include "config.h"
 #include "esdm.h"
 #include "esdm_builtin_hash_drbg.h"
+#include "esdm_builtin_chacha20.h"
 #include "esdm_builtin_sha512.h"
 #include "esdm_config.h"
 #include "esdm_crypto.h"
@@ -71,6 +72,8 @@ const struct esdm_hash_cb *esdm_default_hash_cb = &esdm_builtin_sha512_cb;
 const struct esdm_drng_cb *esdm_default_drng_cb =
 #if defined(ESDM_DRNG_HASH_DRBG)
 	&esdm_builtin_hash_drbg_cb;
+#elif defined(ESDM_DRNG_CHACHA20)
+	&esdm_builtin_chacha20_cb;
 #else
 #error "Unknown default DRNG selected"
 #endif

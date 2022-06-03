@@ -99,6 +99,10 @@ if get_option('esdm-server').disabled() and get_option('linux-getrandom').enable
 	error('Linux getrandom support requires the ESDM server')
 endif
 
+if get_option('drng_hash_drbg').enabled() and get_option('drng_chacha20').enabled()
+	error('Only one DRNG can be enabled')
+endif
+
 if get_option('esdm-server').enabled()
 	subdirs += [ 'frontends/server' ]
 endif

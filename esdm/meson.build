@@ -1,6 +1,5 @@
 # for i in $(ls *.c | sort); do echo "'$i',"; done
 esdm_src = files([
-	'esdm_builtin_hash_drbg.c',
 	'esdm_builtin_sha512.c',
 	'esdm_config.c',
 	'esdm_drng_mgr.c',
@@ -37,6 +36,14 @@ endif
 
 if get_option('fips140').enabled()
 	esdm_src += files([ 'fips.c', 'fips_integrity.c' ])
+endif
+
+if get_option('drng_hash_drbg').enabled()
+	esdm_src += files([ 'esdm_builtin_hash_drbg.c' ])
+endif
+
+if get_option('drng_chacha20').enabled()
+	esdm_src += files([ 'esdm_builtin_chacha20.c' ])
 endif
 
 esdm_common_static_lib = static_library('esdm_common_static',

@@ -179,12 +179,15 @@ The value must not be lower than 1.
 ################################################################################
 
 # Option for: ESDM_DRNG_HASH_DRBG
-option('drng_hash_drbg', type: 'boolean', value: 'true',
+option('drng_hash_drbg', type: 'feature', value: 'enabled',
        description:'''SP800-90A Hash Deterministic Random Number Generator.
 
 This configuration enables an SP800-90A Hash DRBG with SHA-512 core
 without prediction resistance.
 ''')
+
+option('drng_chacha20', type: 'feature', value: 'disabled',
+       description: 'ChaCha20-based Deterministic Random Number Generator.')
 
 ################################################################################
 # Linux Interface Configuration

@@ -279,11 +279,11 @@ uint32_t esdm_avail_entropy(void)
 }
 
 DSO_PUBLIC
-uint32_t lrng_avail_entropy_aux(void)
+uint32_t esdm_avail_entropy_aux(void)
 {
-	u32 ent_thresh = lrng_avail_entropy_thresh();
+	uint32_t ent_thresh = esdm_avail_entropy_thresh();
 
-	return lrng_es[lrng_ext_es_aux]->curr_entropy(ent_thresh);
+	return esdm_es[esdm_ext_es_aux]->curr_entropy(ent_thresh);
 }
 
 /*
