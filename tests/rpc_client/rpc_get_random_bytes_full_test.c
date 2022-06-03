@@ -22,6 +22,7 @@
 
 #include "env.h"
 #include "esdm_rpc_client.h"
+#include "test_pertubation.h"
 
 int main(int argc, char *argv[])
 {
@@ -62,6 +63,29 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		}
+
+#ifdef ESDM_TESTMODE
+		if (len != esdm_test_shm_status_get_rpc_client_written()) {
+			printf("ERROR: amount of client data requested (%zu) does not match received data (%zu)\n",
+			       len,
+			       esdm_test_shm_status_get_rpc_client_written());
+			ret = 1;
+			goto out;
+		} else {
+			printf("PASS: amount of client data requested matches received data (%zu)\n", len);
+		}
+
+		if (len != esdm_test_shm_status_get_rpc_server_written()) {
+			printf("ERROR: amount of generated server data (%zu) does not match received data (%zu)\n",
+			       esdm_test_shm_status_get_rpc_server_written(),
+			       len);
+			ret = 1;
+			goto out;
+		} else {
+			printf("PASS: amount of generated server data matches written data (%zu)\n", len);
+		}
+		esdm_test_shm_status_reset();
+#endif
 
 		val = (unsigned short)buf[0];
 		val |= (unsigned short)(buf[1] << 8);

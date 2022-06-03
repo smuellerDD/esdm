@@ -26,6 +26,8 @@
 #include <unistd.h>
 
 #include "env.h"
+#include "ret_checkers.h"
+#include "test_pertubation.h"
 
 static pid_t server_pid = 0;
 
@@ -72,9 +74,8 @@ int env_init(void)
 		return 77;
 	}
 
-	ret = env_check_file(server);
-	if (ret)
-		goto out;
+	CKINT(env_check_file(server));
+	CKINT(esdm_test_shm_status_init());
 
 	/* Server forking */
 	pid = fork();
@@ -100,6 +101,8 @@ out:
 void env_kill_server(void)
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1<<29 };
+
+	esdm_test_shm_status_fini();
 
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);

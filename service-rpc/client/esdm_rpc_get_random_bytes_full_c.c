@@ -74,7 +74,7 @@ ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen)
 		buffer.buf = buf;
 		buffer.buflen = buflen;
 
-		msg.len = maxbuflen;
+		msg.len = min_t(size_t, maxbuflen, buflen);
 
 		unpriv_access__rpc_get_random_bytes_full(
 			&rpc_conn->service, &msg,
@@ -88,6 +88,7 @@ ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen)
 			goto out;
 		}
 
+		esdm_test_shm_status_add_rpc_client_written((size_t)buffer.ret);
 		buflen -= (size_t)buffer.ret;
 		buf += buffer.ret;
 	}
