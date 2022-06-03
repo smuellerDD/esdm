@@ -36,6 +36,12 @@
 #error "Unknown hash size"
 #endif
 
+/*
+ * Replace the leancrypto LC_HASH_CTX_SIZE definition as it is not a
+ * compile-time constant. NOTE: The caller should implement a check
+ * verifying that this result equals to LC_HASH_CTX_SIZE(lc_sha512) to ensure
+ * code consistency.
+ */
 #define LC_HASH_CTX_SIZE_ESDM(x)	(sizeof(struct lc_hash_ctx) + x)
 #define HASH_MAX_DESCSIZE	LC_HASH_CTX_SIZE_ESDM(LC_HASH_STATE_SIZE_CONST)
 
