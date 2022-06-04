@@ -13,6 +13,7 @@ Before=sysinit.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
 Requires=esdm-server.service
+After=esdm-server.service
 
 [Service]
 Restart=on-failure
@@ -21,4 +22,3 @@ ExecStart=@PATH@/esdm-cuse-urandom -f
 
 [Install]
 WantedBy=basic.target
-Alias=esdm-server.service
