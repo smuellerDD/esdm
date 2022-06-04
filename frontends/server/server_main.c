@@ -33,6 +33,7 @@
 #include "ret_checkers.h"
 
 static unsigned int verbosity = 0;
+static unsigned int foreground = 0;
 /* "/var/run/esdm-rpc-server.pid" */
 static char *pidfile = NULL;
 static int pidfile_fd = -1;
@@ -58,6 +59,7 @@ static void usage(void)
 	fprintf(stderr, "\t\t\tVerbose logging implies running in foreground\n");
 	fprintf(stderr, "\t-p --pid\tWrite daemon PID to file\n");
 	fprintf(stderr, "\t-u --username\tUnprivileged user name to switch to (default: \"nobody\")\n");
+	fprintf(stderr, "\t-f --foreground\tExecute in foreground\n");
 	exit(1);
 }
 
@@ -74,9 +76,10 @@ static void parse_opts(int argc, char *argv[])
 			{"help", 0, 0, 0},
 			{"version", 0, 0, 0},
 			{"username", 0, 0, 0},
+			{"foreground", 0, 0, 0},
 			{0, 0, 0, 0}
 		};
-		c = getopt_long(argc, argv, "hvp:u:", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:f", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -99,7 +102,9 @@ static void parse_opts(int argc, char *argv[])
 			case 4:
 				username = optarg;
 				break;
-
+			case 5:
+				foreground = 1;
+				break;
 			default:
 				usage();
 			}
@@ -115,6 +120,9 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'u':
 			username = optarg;
+			break;
+		case 'f':
+			foreground = 1;
 			break;
 
 		default:
@@ -276,7 +284,7 @@ int main(int argc, char *argv[])
 
 	logger_set_verbosity(verbosity);
 
-	if (verbosity == 0)
+	if (verbosity == 0 && !foreground)
 		daemonize();
 
 	install_term();
