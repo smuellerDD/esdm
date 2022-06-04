@@ -261,6 +261,7 @@ static void esdm_cuse_term(void)
 /* terminate the daemon cleanly */
 static void esdm_cuse_sig_handler(int sig)
 {
+	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Received signal %d\n", sig);
 	esdm_cuse_term();
 
 	signal(SIGABRT, SIG_DFL);
@@ -287,7 +288,7 @@ static void esdm_cuse_sig_handler(int sig)
 	signal(SIGXCPU, SIG_DFL);
 	signal(SIGXFSZ, SIG_DFL);
 
-	exit(sig);
+	exit(0);
 }
 
 static int esdm_cuse_install_sig_handler(void)
@@ -862,6 +863,10 @@ void esdm_cuse_init_done(void *userdata)
 	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL,
 			       ESDM_THREAD_CUSE_POLL_GROUP, NULL),
 		  "Starting poll-in-reset thread failed: %d\n", ret);
+
+	logger_status(LOGGER_C_CUSE,
+		      "CUSE client started with ESDM server properties:\n%s\n",
+		      esdm_cuse_shm_status->info);
 
 	return;
 
