@@ -33,7 +33,6 @@
 #include "threading_support.h"
 
 extern struct thread_wait_queue esdm_init_wait;
-extern int esdm_drng_reseed_max_time;
 extern mutex_w_t esdm_crypto_cb_update;
 extern const struct esdm_drng_cb *esdm_default_drng_cb;
 extern const struct esdm_hash_cb *esdm_default_hash_cb;

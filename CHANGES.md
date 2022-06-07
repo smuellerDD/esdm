@@ -1,4 +1,4 @@
-Changes 0.3.0:
+Changes 0.3.0-pre:
 * Replace protobuf-c-rpc with built-in RPC mechanism reducing amount of mallocs,
   performing proper zeroization and being fully thread-aware
 
@@ -10,6 +10,8 @@ Changes 0.3.0:
 * Add ChaCha20 DRNG to regular code base
 
 * Add SHA-3 conditioning hash to regular code base
+
+* Add /proc/sys/kernel/random files handler
 
 Changes 0.2.0:
 * Initial public version

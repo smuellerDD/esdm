@@ -30,6 +30,7 @@
 
 #include "bool.h"
 #include "cuse_device.h"
+#include "cuse_helper.h"
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
@@ -37,7 +38,6 @@
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "privileges.h"
-#include "selinux.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
 
@@ -48,85 +48,6 @@
 static char *mount_src = NULL;
 static char *mount_dst = NULL;
 
-static int esdm_cuse_bind_mount(void)
-{
-	/* This is only to shut up valgrind */
-	static const char type[] = "bind";
-
-	if (!mount_dst || !mount_src)
-		return -EFAULT;
-
-	if (mount(mount_src, mount_dst, type, MS_BIND, NULL) < 0) {
-		int errsv = errno;
-
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Failed to created bind mount from %s to %s\n",
-		       mount_src, mount_dst);
-		return -errsv;
-	}
-
-	if (esdm_cuse_restore_label(mount_dst) < 0) {
-		int errsv = errno;
-
-		umount(mount_dst);
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "Failed properly relabel %s\n",
-		       mount_dst);
-		return -errsv;
-	}
-
-	logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-	       "Successfully created bind mount from %s to %s\n",
-	       mount_src, mount_dst);
-	return 0;
-}
-
-static int esdm_cuse_bind_unmount(void)
-{
-#define MAX_WAIT_SEC (8 * 5)
-	struct timespec sleep = { 0, 1 << 27 };
-	unsigned int ctr = 0;
-	int ret, errsv;
-
-	if (!mount_dst)
-		return 0;
-
-	ret = raise_privilege_transient(0, 0);
-	if (ret < 0) {
-		logger(LOGGER_WARN, LOGGER_C_CUSE,
-		       "Failed to raise privilege for unmount bind mount\n");
-		return ret;
-	}
-
-	do {
-		errsv = 0;
-		ret = umount(mount_dst);
-		if (ret < 0 && errno == EBUSY) {
-			errsv = errno;
-			nanosleep(&sleep, NULL);
-			ctr++;
-		}
-	} while (ret < 0 && errsv == EBUSY && ctr < MAX_WAIT_SEC);
-
-	if (ret < 0) {
-		errsv = errno;
-		logger(LOGGER_WARN, LOGGER_C_CUSE,
-		       "Failed to remove bind mount from %s\n", mount_dst);
-		ret = -errsv;
-	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-		       "Successfully removed bind mount from %s\n", mount_dst);
-	}
-
-	if (mount_src)
-		free(mount_src);
-	mount_src = NULL;
-	if (mount_dst)
-		free(mount_dst);
-	mount_dst = NULL;
-
-	return ret;
-}
-
 /******************************************************************************
  * Semaphore for shared memory segment
  ******************************************************************************/
@@ -135,8 +56,10 @@ static sem_t *esdm_cuse_semid = SEM_FAILED;
 
 static void esdm_cuse_shm_status_down(void)
 {
-	if (esdm_cuse_semid == SEM_FAILED)
+	if (esdm_cuse_semid == SEM_FAILED) {
+		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
 		return;
+	}
 
 	if (sem_wait(esdm_cuse_semid))
 		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
@@ -255,7 +178,7 @@ static void esdm_cuse_term(void)
 	esdm_cuse_shm_status_close_sem();
 
 	/* Return code is irrelevant here */
-	esdm_cuse_bind_unmount();
+	esdm_cuse_bind_unmount(&mount_src, &mount_dst);
 }
 
 /* terminate the daemon cleanly */
@@ -329,6 +252,7 @@ static int esdm_cuse_install_sig_handler(void)
  * CUSE helper
  ******************************************************************************/
 
+#if 0
 static bool esdm_cuse_fips_enabled(void)
 {
 	static char fipsflag[1] = { 'A' };
@@ -369,6 +293,7 @@ static bool esdm_cuse_fips_enabled(void)
 
 	return (fipsflag[0] == '1');
 }
+#endif
 
 static const char *esdm_cuse_unprivileged_user = "nobody";
 static void esdm_cuse_drop_privileges(void)
@@ -582,11 +507,14 @@ void esdm_cuse_ioctl(int backend_fd,
 			esdm_cuse_raise_privilege(req);
 			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt(
 				ent_count_bits));
-			if (!ret) {
+			/* In case of an error, update the kernel */
+			if (ret) {
 				if (backend_fd >= 0 &&
 				    ioctl(backend_fd, RNDADDTOENTCNT,
 					  &ent_count_bits) == -1)
 					ret = -errno;
+				else
+					ret = 0;
 			}
 			drop_privileges_transient(esdm_cuse_unprivileged_user);
 			if (ret)
@@ -622,23 +550,18 @@ void esdm_cuse_ioctl(int backend_fd,
 			}
 			esdm_cuse_raise_privilege(req);
 
-			/*
-			 * If in FIPS mode, the ESDM treats the kernel RNG
-			 * to deliver zero bits of entropy. Thus, we can claim
-			 * all entropy ourselves, even though we re-insert
-			 * the same entropy value into the kernel. For the
-			 * ESDM, there is no double accounting of entropy.
-			 */
 			esdm_invoke(esdm_rpcc_rnd_add_entropy(
 						(const uint8_t *)rpi->buf,
 						(size_t)rpi->buf_size,
-						esdm_cuse_fips_enabled() ?
-						(uint32_t)rpi->entropy_count :
-						0));
-			if (!ret) {
+						(uint32_t)rpi->entropy_count));
+
+			/* In case of an error, update the kernel */
+			if (ret) {
 				if (backend_fd >= 0 &&
 				    ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
 					ret = -errno;
+				else
+					ret = 0;
 			}
 			drop_privileges_transient(esdm_cuse_unprivileged_user);
 			if (ret)
@@ -848,12 +771,7 @@ void esdm_cuse_init_done(void *userdata)
 		}
 	}
 
-	/*
-	 * Return code checking is of no help here, because we do not
-	 * know what do do with the error.
-	 */
-	CKINT(esdm_cuse_bind_mount());
-	/* error not handled here */
+	CKINT(esdm_cuse_bind_mount(mount_src, mount_dst));
 
 	CKINT(esdm_cuse_shm_status_create_sem());
 

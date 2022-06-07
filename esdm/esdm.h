@@ -135,6 +135,13 @@ uint32_t esdm_avail_entropy(void);
 uint32_t esdm_avail_entropy_aux(void);
 
 /**
+ * @brief Obtain the poolsize of the aux ESDM entropy pool in bits
+ *
+ * @return poolsize in bits
+ */
+uint32_t esdm_avail_poolsize_aux(void);
+
+/**
  * @brief Obtain the available entropy of the auxiliary pool in bits
  *
  * @return available entropy in bits
@@ -188,5 +195,29 @@ int esdm_sp80090c_compliant(void);
  * @return 1 if fully seeded, 0 if not fully seeded
  */
 int esdm_state_fully_seeded(void);
+
+/**
+ * @brief Get write wakeup in bits
+ *
+ * @return write wakeup in bits
+ */
+uint32_t esdm_get_write_wakeup_bits(void);
+
+/**
+ * @brief Set write wakeup in bits
+ */
+void esdm_set_write_wakeup_bits(uint32_t val);
+
+/**
+ * @brief Get maximum reseed interval in seconds
+ *
+ * @return maximum reseed interval in seconds
+ */
+uint32_t esdm_get_reseed_max_time(void);
+
+/**
+ * @brief Set maximum reseed interval in seconds
+ */
+void esdm_set_reseed_max_time(uint32_t seconds);
 
 #endif /* _ESDM_H */

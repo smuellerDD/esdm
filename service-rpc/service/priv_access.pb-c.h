@@ -23,6 +23,10 @@ typedef struct RndClearPoolRequest RndClearPoolRequest;
 typedef struct RndClearPoolResponse RndClearPoolResponse;
 typedef struct RndReseedCRNGRequest RndReseedCRNGRequest;
 typedef struct RndReseedCRNGResponse RndReseedCRNGResponse;
+typedef struct SetWriteWakeupThreshRequest SetWriteWakeupThreshRequest;
+typedef struct SetWriteWakeupThreshResponse SetWriteWakeupThreshResponse;
+typedef struct SetMinReseedSecsRequest SetMinReseedSecsRequest;
+typedef struct SetMinReseedSecsResponse SetMinReseedSecsResponse;
 
 
 /* --- enums --- */
@@ -30,6 +34,12 @@ typedef struct RndReseedCRNGResponse RndReseedCRNGResponse;
 
 /* --- messages --- */
 
+/*
+ **
+ * @brief Request to change the entropy estimator of the ES manager
+ * @param entcnt Entropy value in bits to set to (value is capped to maximum
+ *		 possible entropy value)
+ */
 struct  RndAddToEntCntRequest
 {
   ProtobufCMessage base;
@@ -40,6 +50,11 @@ struct  RndAddToEntCntRequest
     , 0 }
 
 
+/*
+ **
+ * @brief Response of the change of the entropy estimator operation
+ * @param ret Return code (0 on success, < 0 on error)
+ */
 struct  RndAddToEntCntResponse
 {
   ProtobufCMessage base;
@@ -50,6 +65,14 @@ struct  RndAddToEntCntResponse
     , 0 }
 
 
+/*
+ **
+ * @brief Request to add data to the auxiliary entropy pool and increase the
+ *	  pool's entropy estimate accordingly
+ * @param randval Buffer with the entropy data
+ * @param entcnt Entropy value in bits to set to (value is capped to maximum
+ *		 possible entropy value)
+ */
 struct  RndAddEntropyRequest
 {
   ProtobufCMessage base;
@@ -61,6 +84,11 @@ struct  RndAddEntropyRequest
     , {0,NULL}, 0 }
 
 
+/*
+ **
+ * @brief Response of the addition of entropy data operation
+ * @param ret Return code (0 on success, < 0 on error)
+ */
 struct  RndAddEntropyResponse
 {
   ProtobufCMessage base;
@@ -71,6 +99,10 @@ struct  RndAddEntropyResponse
     , 0 }
 
 
+/*
+ **
+ * @brief Request to clear the auxiliary entropy pool
+ */
 struct  RndClearPoolRequest
 {
   ProtobufCMessage base;
@@ -80,6 +112,11 @@ struct  RndClearPoolRequest
      }
 
 
+/*
+ **
+ * @brief Response of clearing the auxiliary entropy pool
+ * @param ret Return code (0 on success, < 0 on error)
+ */
 struct  RndClearPoolResponse
 {
   ProtobufCMessage base;
@@ -90,6 +127,10 @@ struct  RndClearPoolResponse
     , 0 }
 
 
+/*
+ **
+ * @brief Request the reseeding of the DRNGs
+ */
 struct  RndReseedCRNGRequest
 {
   ProtobufCMessage base;
@@ -99,6 +140,11 @@ struct  RndReseedCRNGRequest
      }
 
 
+/*
+ **
+ * @brief Response of requesting the reseed of the DRNGs
+ * @param ret Return code (0 on success, < 0 on error)
+ */
 struct  RndReseedCRNGResponse
 {
   ProtobufCMessage base;
@@ -106,6 +152,64 @@ struct  RndReseedCRNGResponse
 };
 #define RND_RESEED_CRNGRESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&rnd_reseed_crngresponse__descriptor) \
+    , 0 }
+
+
+/*
+ **
+ * @brief Request to set the available write wakeup threshold
+ */
+struct  SetWriteWakeupThreshRequest
+{
+  ProtobufCMessage base;
+  uint32_t wakeup;
+};
+#define SET_WRITE_WAKEUP_THRESH_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_write_wakeup_thresh_request__descriptor) \
+    , 0 }
+
+
+/*
+ **
+ * @brief Response returning the result of write wakeup threshold
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+struct  SetWriteWakeupThreshResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+};
+#define SET_WRITE_WAKEUP_THRESH_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_write_wakeup_thresh_response__descriptor) \
+    , 0 }
+
+
+/*
+ **
+ * @brief Request to set the available write wakeup threshold
+ */
+struct  SetMinReseedSecsRequest
+{
+  ProtobufCMessage base;
+  uint32_t seconds;
+};
+#define SET_MIN_RESEED_SECS_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_min_reseed_secs_request__descriptor) \
+    , 0 }
+
+
+/*
+ **
+ * @brief Response returning the result of write min reseed secs
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+struct  SetMinReseedSecsResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+};
+#define SET_MIN_RESEED_SECS_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_min_reseed_secs_response__descriptor) \
     , 0 }
 
 
@@ -261,6 +365,82 @@ RndReseedCRNGResponse *
 void   rnd_reseed_crngresponse__free_unpacked
                      (RndReseedCRNGResponse *message,
                       ProtobufCAllocator *allocator);
+/* SetWriteWakeupThreshRequest methods */
+void   set_write_wakeup_thresh_request__init
+                     (SetWriteWakeupThreshRequest         *message);
+size_t set_write_wakeup_thresh_request__get_packed_size
+                     (const SetWriteWakeupThreshRequest   *message);
+size_t set_write_wakeup_thresh_request__pack
+                     (const SetWriteWakeupThreshRequest   *message,
+                      uint8_t             *out);
+size_t set_write_wakeup_thresh_request__pack_to_buffer
+                     (const SetWriteWakeupThreshRequest   *message,
+                      ProtobufCBuffer     *buffer);
+SetWriteWakeupThreshRequest *
+       set_write_wakeup_thresh_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_write_wakeup_thresh_request__free_unpacked
+                     (SetWriteWakeupThreshRequest *message,
+                      ProtobufCAllocator *allocator);
+/* SetWriteWakeupThreshResponse methods */
+void   set_write_wakeup_thresh_response__init
+                     (SetWriteWakeupThreshResponse         *message);
+size_t set_write_wakeup_thresh_response__get_packed_size
+                     (const SetWriteWakeupThreshResponse   *message);
+size_t set_write_wakeup_thresh_response__pack
+                     (const SetWriteWakeupThreshResponse   *message,
+                      uint8_t             *out);
+size_t set_write_wakeup_thresh_response__pack_to_buffer
+                     (const SetWriteWakeupThreshResponse   *message,
+                      ProtobufCBuffer     *buffer);
+SetWriteWakeupThreshResponse *
+       set_write_wakeup_thresh_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_write_wakeup_thresh_response__free_unpacked
+                     (SetWriteWakeupThreshResponse *message,
+                      ProtobufCAllocator *allocator);
+/* SetMinReseedSecsRequest methods */
+void   set_min_reseed_secs_request__init
+                     (SetMinReseedSecsRequest         *message);
+size_t set_min_reseed_secs_request__get_packed_size
+                     (const SetMinReseedSecsRequest   *message);
+size_t set_min_reseed_secs_request__pack
+                     (const SetMinReseedSecsRequest   *message,
+                      uint8_t             *out);
+size_t set_min_reseed_secs_request__pack_to_buffer
+                     (const SetMinReseedSecsRequest   *message,
+                      ProtobufCBuffer     *buffer);
+SetMinReseedSecsRequest *
+       set_min_reseed_secs_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_min_reseed_secs_request__free_unpacked
+                     (SetMinReseedSecsRequest *message,
+                      ProtobufCAllocator *allocator);
+/* SetMinReseedSecsResponse methods */
+void   set_min_reseed_secs_response__init
+                     (SetMinReseedSecsResponse         *message);
+size_t set_min_reseed_secs_response__get_packed_size
+                     (const SetMinReseedSecsResponse   *message);
+size_t set_min_reseed_secs_response__pack
+                     (const SetMinReseedSecsResponse   *message,
+                      uint8_t             *out);
+size_t set_min_reseed_secs_response__pack_to_buffer
+                     (const SetMinReseedSecsResponse   *message,
+                      ProtobufCBuffer     *buffer);
+SetMinReseedSecsResponse *
+       set_min_reseed_secs_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_min_reseed_secs_response__free_unpacked
+                     (SetMinReseedSecsResponse *message,
+                      ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
 typedef void (*RndAddToEntCntRequest_Closure)
@@ -287,6 +467,18 @@ typedef void (*RndReseedCRNGRequest_Closure)
 typedef void (*RndReseedCRNGResponse_Closure)
                  (const RndReseedCRNGResponse *message,
                   void *closure_data);
+typedef void (*SetWriteWakeupThreshRequest_Closure)
+                 (const SetWriteWakeupThreshRequest *message,
+                  void *closure_data);
+typedef void (*SetWriteWakeupThreshResponse_Closure)
+                 (const SetWriteWakeupThreshResponse *message,
+                  void *closure_data);
+typedef void (*SetMinReseedSecsRequest_Closure)
+                 (const SetMinReseedSecsRequest *message,
+                  void *closure_data);
+typedef void (*SetMinReseedSecsResponse_Closure)
+                 (const SetMinReseedSecsResponse *message,
+                  void *closure_data);
 
 /* --- services --- */
 
@@ -310,6 +502,14 @@ struct PrivAccess_Service
                               const RndReseedCRNGRequest *input,
                               RndReseedCRNGResponse_Closure closure,
                               void *closure_data);
+  void (*rpc_set_write_wakeup_thresh)(PrivAccess_Service *service,
+                                      const SetWriteWakeupThreshRequest *input,
+                                      SetWriteWakeupThreshResponse_Closure closure,
+                                      void *closure_data);
+  void (*rpc_set_min_reseed_secs)(PrivAccess_Service *service,
+                                  const SetMinReseedSecsRequest *input,
+                                  SetMinReseedSecsResponse_Closure closure,
+                                  void *closure_data);
 };
 typedef void (*PrivAccess_ServiceDestroy)(PrivAccess_Service *);
 void priv_access__init (PrivAccess_Service *service,
@@ -321,7 +521,9 @@ void priv_access__init (PrivAccess_Service *service,
       function_prefix__ ## rpc_rnd_add_to_ent_cnt,\
       function_prefix__ ## rpc_rnd_add_entropy,\
       function_prefix__ ## rpc_rnd_clear_pool,\
-      function_prefix__ ## rpc_rnd_reseed_crng  }
+      function_prefix__ ## rpc_rnd_reseed_crng,\
+      function_prefix__ ## rpc_set_write_wakeup_thresh,\
+      function_prefix__ ## rpc_set_min_reseed_secs  }
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
                                          const RndAddToEntCntRequest *input,
                                          RndAddToEntCntResponse_Closure closure,
@@ -338,6 +540,14 @@ void priv_access__rpc_rnd_reseed_crng(ProtobufCService *service,
                                       const RndReseedCRNGRequest *input,
                                       RndReseedCRNGResponse_Closure closure,
                                       void *closure_data);
+void priv_access__rpc_set_write_wakeup_thresh(ProtobufCService *service,
+                                              const SetWriteWakeupThreshRequest *input,
+                                              SetWriteWakeupThreshResponse_Closure closure,
+                                              void *closure_data);
+void priv_access__rpc_set_min_reseed_secs(ProtobufCService *service,
+                                          const SetMinReseedSecsRequest *input,
+                                          SetMinReseedSecsResponse_Closure closure,
+                                          void *closure_data);
 
 /* --- descriptors --- */
 
@@ -349,6 +559,10 @@ extern const ProtobufCMessageDescriptor rnd_clear_pool_request__descriptor;
 extern const ProtobufCMessageDescriptor rnd_clear_pool_response__descriptor;
 extern const ProtobufCMessageDescriptor rnd_reseed_crngrequest__descriptor;
 extern const ProtobufCMessageDescriptor rnd_reseed_crngresponse__descriptor;
+extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_request__descriptor;
+extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_response__descriptor;
+extern const ProtobufCMessageDescriptor set_min_reseed_secs_request__descriptor;
+extern const ProtobufCMessageDescriptor set_min_reseed_secs_response__descriptor;
 extern const ProtobufCServiceDescriptor priv_access__descriptor;
 
 PROTOBUF_C__END_DECLS

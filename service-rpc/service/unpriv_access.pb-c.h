@@ -22,11 +22,17 @@ typedef struct GetRandomBytesFullResponse GetRandomBytesFullResponse;
 typedef struct GetRandomBytesMinRequest GetRandomBytesMinRequest;
 typedef struct GetRandomBytesMinResponse GetRandomBytesMinResponse;
 typedef struct GetRandomBytesRequest GetRandomBytesRequest;
+typedef struct GetRandomBytesResponse GetRandomBytesResponse;
 typedef struct WriteDataRequest WriteDataRequest;
 typedef struct WriteDataResponse WriteDataResponse;
-typedef struct GetRandomBytesResponse GetRandomBytesResponse;
 typedef struct RndGetEntCntRequest RndGetEntCntRequest;
 typedef struct RndGetEntCntResponse RndGetEntCntResponse;
+typedef struct GetPoolsizeRequest GetPoolsizeRequest;
+typedef struct GetPoolsizeResponse GetPoolsizeResponse;
+typedef struct GetWriteWakeupThreshRequest GetWriteWakeupThreshRequest;
+typedef struct GetWriteWakeupThreshResponse GetWriteWakeupThreshResponse;
+typedef struct GetMinReseedSecsRequest GetMinReseedSecsRequest;
+typedef struct GetMinReseedSecsResponse GetMinReseedSecsResponse;
 
 
 /* --- enums --- */
@@ -154,26 +160,6 @@ struct  GetRandomBytesRequest
     , 0 }
 
 
-struct  WriteDataRequest
-{
-  ProtobufCMessage base;
-  ProtobufCBinaryData data;
-};
-#define WRITE_DATA_REQUEST__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&write_data_request__descriptor) \
-    , {0,NULL} }
-
-
-struct  WriteDataResponse
-{
-  ProtobufCMessage base;
-  int32_t ret;
-};
-#define WRITE_DATA_RESPONSE__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&write_data_response__descriptor) \
-    , 0 }
-
-
 /*
  **
  * @brief Response providing random bytes from DRNG that has no guarantee of
@@ -195,6 +181,42 @@ struct  GetRandomBytesResponse
     , 0, {0,NULL} }
 
 
+/*
+ **
+ * @brief Request to write data into the auxiliary entropy pool and perform an
+ *	  immediate reseed.
+ * @param data Buffer with the data to write into the DRNG - the entropy
+ *	       estimator will remain unchanged.
+ */
+struct  WriteDataRequest
+{
+  ProtobufCMessage base;
+  ProtobufCBinaryData data;
+};
+#define WRITE_DATA_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&write_data_request__descriptor) \
+    , {0,NULL} }
+
+
+/*
+ **
+ * @brief Response providing the result of the write operation
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+struct  WriteDataResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+};
+#define WRITE_DATA_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&write_data_response__descriptor) \
+    , 0 }
+
+
+/*
+ **
+ * @brief Request to obtain the available entropy
+ */
 struct  RndGetEntCntRequest
 {
   ProtobufCMessage base;
@@ -204,6 +226,12 @@ struct  RndGetEntCntRequest
      }
 
 
+/*
+ **
+ * @brief Response returning the available entropy
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param entcnt Available entropy in bits
+ */
 struct  RndGetEntCntResponse
 {
   ProtobufCMessage base;
@@ -212,6 +240,96 @@ struct  RndGetEntCntResponse
 };
 #define RND_GET_ENT_CNT_RESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&rnd_get_ent_cnt_response__descriptor) \
+    , 0, 0 }
+
+
+/*
+ **
+ * @brief Request to obtain the available poolsize
+ */
+struct  GetPoolsizeRequest
+{
+  ProtobufCMessage base;
+};
+#define GET_POOLSIZE_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_poolsize_request__descriptor) \
+     }
+
+
+/*
+ **
+ * @brief Response returning the available poolsize
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param poolsize Available poolsize in bits
+ */
+struct  GetPoolsizeResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+  uint32_t poolsize;
+};
+#define GET_POOLSIZE_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_poolsize_response__descriptor) \
+    , 0, 0 }
+
+
+/*
+ **
+ * @brief Request to obtain the available write wakeup threshold
+ */
+struct  GetWriteWakeupThreshRequest
+{
+  ProtobufCMessage base;
+};
+#define GET_WRITE_WAKEUP_THRESH_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_write_wakeup_thresh_request__descriptor) \
+     }
+
+
+/*
+ **
+ * @brief Response returning the available write wakeup threshold
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param wakeup Available write wakeup threshold in bits
+ */
+struct  GetWriteWakeupThreshResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+  uint32_t wakeup;
+};
+#define GET_WRITE_WAKEUP_THRESH_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_write_wakeup_thresh_response__descriptor) \
+    , 0, 0 }
+
+
+/*
+ **
+ * @brief Request to obtain the available write wakeup threshold
+ */
+struct  GetMinReseedSecsRequest
+{
+  ProtobufCMessage base;
+};
+#define GET_MIN_RESEED_SECS_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_min_reseed_secs_request__descriptor) \
+     }
+
+
+/*
+ **
+ * @brief Response returning the min reseed secs
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param seconds Read time in seconds
+ */
+struct  GetMinReseedSecsResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+  uint32_t seconds;
+};
+#define GET_MIN_RESEED_SECS_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_min_reseed_secs_response__descriptor) \
     , 0, 0 }
 
 
@@ -348,6 +466,25 @@ GetRandomBytesRequest *
 void   get_random_bytes_request__free_unpacked
                      (GetRandomBytesRequest *message,
                       ProtobufCAllocator *allocator);
+/* GetRandomBytesResponse methods */
+void   get_random_bytes_response__init
+                     (GetRandomBytesResponse         *message);
+size_t get_random_bytes_response__get_packed_size
+                     (const GetRandomBytesResponse   *message);
+size_t get_random_bytes_response__pack
+                     (const GetRandomBytesResponse   *message,
+                      uint8_t             *out);
+size_t get_random_bytes_response__pack_to_buffer
+                     (const GetRandomBytesResponse   *message,
+                      ProtobufCBuffer     *buffer);
+GetRandomBytesResponse *
+       get_random_bytes_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_random_bytes_response__free_unpacked
+                     (GetRandomBytesResponse *message,
+                      ProtobufCAllocator *allocator);
 /* WriteDataRequest methods */
 void   write_data_request__init
                      (WriteDataRequest         *message);
@@ -385,25 +522,6 @@ WriteDataResponse *
                       const uint8_t       *data);
 void   write_data_response__free_unpacked
                      (WriteDataResponse *message,
-                      ProtobufCAllocator *allocator);
-/* GetRandomBytesResponse methods */
-void   get_random_bytes_response__init
-                     (GetRandomBytesResponse         *message);
-size_t get_random_bytes_response__get_packed_size
-                     (const GetRandomBytesResponse   *message);
-size_t get_random_bytes_response__pack
-                     (const GetRandomBytesResponse   *message,
-                      uint8_t             *out);
-size_t get_random_bytes_response__pack_to_buffer
-                     (const GetRandomBytesResponse   *message,
-                      ProtobufCBuffer     *buffer);
-GetRandomBytesResponse *
-       get_random_bytes_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   get_random_bytes_response__free_unpacked
-                     (GetRandomBytesResponse *message,
                       ProtobufCAllocator *allocator);
 /* RndGetEntCntRequest methods */
 void   rnd_get_ent_cnt_request__init
@@ -443,6 +561,120 @@ RndGetEntCntResponse *
 void   rnd_get_ent_cnt_response__free_unpacked
                      (RndGetEntCntResponse *message,
                       ProtobufCAllocator *allocator);
+/* GetPoolsizeRequest methods */
+void   get_poolsize_request__init
+                     (GetPoolsizeRequest         *message);
+size_t get_poolsize_request__get_packed_size
+                     (const GetPoolsizeRequest   *message);
+size_t get_poolsize_request__pack
+                     (const GetPoolsizeRequest   *message,
+                      uint8_t             *out);
+size_t get_poolsize_request__pack_to_buffer
+                     (const GetPoolsizeRequest   *message,
+                      ProtobufCBuffer     *buffer);
+GetPoolsizeRequest *
+       get_poolsize_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_poolsize_request__free_unpacked
+                     (GetPoolsizeRequest *message,
+                      ProtobufCAllocator *allocator);
+/* GetPoolsizeResponse methods */
+void   get_poolsize_response__init
+                     (GetPoolsizeResponse         *message);
+size_t get_poolsize_response__get_packed_size
+                     (const GetPoolsizeResponse   *message);
+size_t get_poolsize_response__pack
+                     (const GetPoolsizeResponse   *message,
+                      uint8_t             *out);
+size_t get_poolsize_response__pack_to_buffer
+                     (const GetPoolsizeResponse   *message,
+                      ProtobufCBuffer     *buffer);
+GetPoolsizeResponse *
+       get_poolsize_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_poolsize_response__free_unpacked
+                     (GetPoolsizeResponse *message,
+                      ProtobufCAllocator *allocator);
+/* GetWriteWakeupThreshRequest methods */
+void   get_write_wakeup_thresh_request__init
+                     (GetWriteWakeupThreshRequest         *message);
+size_t get_write_wakeup_thresh_request__get_packed_size
+                     (const GetWriteWakeupThreshRequest   *message);
+size_t get_write_wakeup_thresh_request__pack
+                     (const GetWriteWakeupThreshRequest   *message,
+                      uint8_t             *out);
+size_t get_write_wakeup_thresh_request__pack_to_buffer
+                     (const GetWriteWakeupThreshRequest   *message,
+                      ProtobufCBuffer     *buffer);
+GetWriteWakeupThreshRequest *
+       get_write_wakeup_thresh_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_write_wakeup_thresh_request__free_unpacked
+                     (GetWriteWakeupThreshRequest *message,
+                      ProtobufCAllocator *allocator);
+/* GetWriteWakeupThreshResponse methods */
+void   get_write_wakeup_thresh_response__init
+                     (GetWriteWakeupThreshResponse         *message);
+size_t get_write_wakeup_thresh_response__get_packed_size
+                     (const GetWriteWakeupThreshResponse   *message);
+size_t get_write_wakeup_thresh_response__pack
+                     (const GetWriteWakeupThreshResponse   *message,
+                      uint8_t             *out);
+size_t get_write_wakeup_thresh_response__pack_to_buffer
+                     (const GetWriteWakeupThreshResponse   *message,
+                      ProtobufCBuffer     *buffer);
+GetWriteWakeupThreshResponse *
+       get_write_wakeup_thresh_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_write_wakeup_thresh_response__free_unpacked
+                     (GetWriteWakeupThreshResponse *message,
+                      ProtobufCAllocator *allocator);
+/* GetMinReseedSecsRequest methods */
+void   get_min_reseed_secs_request__init
+                     (GetMinReseedSecsRequest         *message);
+size_t get_min_reseed_secs_request__get_packed_size
+                     (const GetMinReseedSecsRequest   *message);
+size_t get_min_reseed_secs_request__pack
+                     (const GetMinReseedSecsRequest   *message,
+                      uint8_t             *out);
+size_t get_min_reseed_secs_request__pack_to_buffer
+                     (const GetMinReseedSecsRequest   *message,
+                      ProtobufCBuffer     *buffer);
+GetMinReseedSecsRequest *
+       get_min_reseed_secs_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_min_reseed_secs_request__free_unpacked
+                     (GetMinReseedSecsRequest *message,
+                      ProtobufCAllocator *allocator);
+/* GetMinReseedSecsResponse methods */
+void   get_min_reseed_secs_response__init
+                     (GetMinReseedSecsResponse         *message);
+size_t get_min_reseed_secs_response__get_packed_size
+                     (const GetMinReseedSecsResponse   *message);
+size_t get_min_reseed_secs_response__pack
+                     (const GetMinReseedSecsResponse   *message,
+                      uint8_t             *out);
+size_t get_min_reseed_secs_response__pack_to_buffer
+                     (const GetMinReseedSecsResponse   *message,
+                      ProtobufCBuffer     *buffer);
+GetMinReseedSecsResponse *
+       get_min_reseed_secs_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_min_reseed_secs_response__free_unpacked
+                     (GetMinReseedSecsResponse *message,
+                      ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
 typedef void (*StatusRequest_Closure)
@@ -466,20 +698,38 @@ typedef void (*GetRandomBytesMinResponse_Closure)
 typedef void (*GetRandomBytesRequest_Closure)
                  (const GetRandomBytesRequest *message,
                   void *closure_data);
+typedef void (*GetRandomBytesResponse_Closure)
+                 (const GetRandomBytesResponse *message,
+                  void *closure_data);
 typedef void (*WriteDataRequest_Closure)
                  (const WriteDataRequest *message,
                   void *closure_data);
 typedef void (*WriteDataResponse_Closure)
                  (const WriteDataResponse *message,
                   void *closure_data);
-typedef void (*GetRandomBytesResponse_Closure)
-                 (const GetRandomBytesResponse *message,
-                  void *closure_data);
 typedef void (*RndGetEntCntRequest_Closure)
                  (const RndGetEntCntRequest *message,
                   void *closure_data);
 typedef void (*RndGetEntCntResponse_Closure)
                  (const RndGetEntCntResponse *message,
+                  void *closure_data);
+typedef void (*GetPoolsizeRequest_Closure)
+                 (const GetPoolsizeRequest *message,
+                  void *closure_data);
+typedef void (*GetPoolsizeResponse_Closure)
+                 (const GetPoolsizeResponse *message,
+                  void *closure_data);
+typedef void (*GetWriteWakeupThreshRequest_Closure)
+                 (const GetWriteWakeupThreshRequest *message,
+                  void *closure_data);
+typedef void (*GetWriteWakeupThreshResponse_Closure)
+                 (const GetWriteWakeupThreshResponse *message,
+                  void *closure_data);
+typedef void (*GetMinReseedSecsRequest_Closure)
+                 (const GetMinReseedSecsRequest *message,
+                  void *closure_data);
+typedef void (*GetMinReseedSecsResponse_Closure)
+                 (const GetMinReseedSecsResponse *message,
                   void *closure_data);
 
 /* --- services --- */
@@ -512,6 +762,18 @@ struct UnprivAccess_Service
                               const RndGetEntCntRequest *input,
                               RndGetEntCntResponse_Closure closure,
                               void *closure_data);
+  void (*rpc_get_poolsize)(UnprivAccess_Service *service,
+                           const GetPoolsizeRequest *input,
+                           GetPoolsizeResponse_Closure closure,
+                           void *closure_data);
+  void (*rpc_get_write_wakeup_thresh)(UnprivAccess_Service *service,
+                                      const GetWriteWakeupThreshRequest *input,
+                                      GetWriteWakeupThreshResponse_Closure closure,
+                                      void *closure_data);
+  void (*rpc_get_min_reseed_secs)(UnprivAccess_Service *service,
+                                  const GetMinReseedSecsRequest *input,
+                                  GetMinReseedSecsResponse_Closure closure,
+                                  void *closure_data);
 };
 typedef void (*UnprivAccess_ServiceDestroy)(UnprivAccess_Service *);
 void unpriv_access__init (UnprivAccess_Service *service,
@@ -525,7 +787,10 @@ void unpriv_access__init (UnprivAccess_Service *service,
       function_prefix__ ## rpc_get_random_bytes_min,\
       function_prefix__ ## rpc_get_random_bytes,\
       function_prefix__ ## rpc_write_data,\
-      function_prefix__ ## rpc_rnd_get_ent_cnt  }
+      function_prefix__ ## rpc_rnd_get_ent_cnt,\
+      function_prefix__ ## rpc_get_poolsize,\
+      function_prefix__ ## rpc_get_write_wakeup_thresh,\
+      function_prefix__ ## rpc_get_min_reseed_secs  }
 void unpriv_access__rpc_status(ProtobufCService *service,
                                const StatusRequest *input,
                                StatusResponse_Closure closure,
@@ -550,6 +815,18 @@ void unpriv_access__rpc_rnd_get_ent_cnt(ProtobufCService *service,
                                         const RndGetEntCntRequest *input,
                                         RndGetEntCntResponse_Closure closure,
                                         void *closure_data);
+void unpriv_access__rpc_get_poolsize(ProtobufCService *service,
+                                     const GetPoolsizeRequest *input,
+                                     GetPoolsizeResponse_Closure closure,
+                                     void *closure_data);
+void unpriv_access__rpc_get_write_wakeup_thresh(ProtobufCService *service,
+                                                const GetWriteWakeupThreshRequest *input,
+                                                GetWriteWakeupThreshResponse_Closure closure,
+                                                void *closure_data);
+void unpriv_access__rpc_get_min_reseed_secs(ProtobufCService *service,
+                                            const GetMinReseedSecsRequest *input,
+                                            GetMinReseedSecsResponse_Closure closure,
+                                            void *closure_data);
 
 /* --- descriptors --- */
 
@@ -560,11 +837,17 @@ extern const ProtobufCMessageDescriptor get_random_bytes_full_response__descript
 extern const ProtobufCMessageDescriptor get_random_bytes_min_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_min_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_request__descriptor;
+extern const ProtobufCMessageDescriptor get_random_bytes_response__descriptor;
 extern const ProtobufCMessageDescriptor write_data_request__descriptor;
 extern const ProtobufCMessageDescriptor write_data_response__descriptor;
-extern const ProtobufCMessageDescriptor get_random_bytes_response__descriptor;
 extern const ProtobufCMessageDescriptor rnd_get_ent_cnt_request__descriptor;
 extern const ProtobufCMessageDescriptor rnd_get_ent_cnt_response__descriptor;
+extern const ProtobufCMessageDescriptor get_poolsize_request__descriptor;
+extern const ProtobufCMessageDescriptor get_poolsize_response__descriptor;
+extern const ProtobufCMessageDescriptor get_write_wakeup_thresh_request__descriptor;
+extern const ProtobufCMessageDescriptor get_write_wakeup_thresh_response__descriptor;
+extern const ProtobufCMessageDescriptor get_min_reseed_secs_request__descriptor;
+extern const ProtobufCMessageDescriptor get_min_reseed_secs_response__descriptor;
 extern const ProtobufCServiceDescriptor unpriv_access__descriptor;
 
 PROTOBUF_C__END_DECLS

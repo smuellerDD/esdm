@@ -46,7 +46,7 @@
  * DRNG. Setting this value to zero implies a reseeding attempt before every
  * generated random number.
  */
-int esdm_drng_reseed_max_time = 600;
+static uint32_t esdm_drng_reseed_max_time = 600;
 
 /*
  * Is ESDM for general-purpose use (i.e. is at least the esdm_drng_init
@@ -232,6 +232,22 @@ int esdm_sp80090c_compliant(void)
 
 	/* SP800-90C only requested in FIPS mode */
 	return esdm_config_fips_enabled();
+}
+
+DSO_PUBLIC
+uint32_t esdm_get_reseed_max_time(void)
+{
+	return esdm_drng_reseed_max_time;
+}
+
+DSO_PUBLIC
+void esdm_set_reseed_max_time(uint32_t seconds)
+{
+	if (!seconds)
+		return;
+
+	/* We allow at most 1h reseed time */
+	esdm_drng_reseed_max_time = min_t(uint32_t, seconds, 60 * 60);
 }
 
 /************************* Random Number Generation ***************************/

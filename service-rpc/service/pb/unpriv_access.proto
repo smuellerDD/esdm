@@ -161,6 +161,72 @@ message RndGetEntCntResponse {
 }
 
 /******************************************************************************
+ * Poolsize /proc file
+ ******************************************************************************/
+
+/**
+ * @brief Request to obtain the available poolsize
+ */
+message GetPoolsizeRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response returning the available poolsize
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param poolsize Available poolsize in bits
+ */
+message GetPoolsizeResponse {
+	int32 ret = 1;
+	uint32 poolsize = 2;
+}
+
+/******************************************************************************
+ * read of write_wakeup_threshold /proc file
+ ******************************************************************************/
+
+/**
+ * @brief Request to obtain the available write wakeup threshold
+ */
+message GetWriteWakeupThreshRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response returning the available write wakeup threshold
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param wakeup Available write wakeup threshold in bits
+ */
+message GetWriteWakeupThreshResponse {
+	int32 ret = 1;
+	uint32 wakeup = 2;
+}
+
+/******************************************************************************
+ * read of urandom_min_reseed_secs /proc file
+ ******************************************************************************/
+
+/**
+ * @brief Request to obtain the available write wakeup threshold
+ */
+message GetMinReseedSecsRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response returning the min reseed secs
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param seconds Read time in seconds
+ */
+message GetMinReseedSecsResponse {
+	int32 ret = 1;
+	uint32 seconds = 2;
+}
+
+/******************************************************************************
  * Protocol handler
  ******************************************************************************/
 service UnprivAccess {
@@ -176,4 +242,11 @@ service UnprivAccess {
 	/* IOCTLs */
 	rpc RpcRndGetEntCnt (RndGetEntCntRequest) returns
 			    (RndGetEntCntResponse);
+	/* /proc entry */
+	rpc RpcGetPoolsize (GetPoolsizeRequest) returns
+			      (GetPoolsizeResponse);
+	rpc RpcGetWriteWakeupThresh (GetWriteWakeupThreshRequest) returns
+				    (GetWriteWakeupThreshResponse);
+	rpc RpcGetMinReseedSecs (GetMinReseedSecsRequest) returns
+				(GetMinReseedSecsResponse);
 }

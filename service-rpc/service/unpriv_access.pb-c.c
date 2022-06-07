@@ -322,6 +322,51 @@ void   get_random_bytes_request__free_unpacked
   assert(message->base.descriptor == &get_random_bytes_request__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   get_random_bytes_response__init
+                     (GetRandomBytesResponse         *message)
+{
+  static const GetRandomBytesResponse init_value = GET_RANDOM_BYTES_RESPONSE__INIT;
+  *message = init_value;
+}
+size_t get_random_bytes_response__get_packed_size
+                     (const GetRandomBytesResponse *message)
+{
+  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_random_bytes_response__pack
+                     (const GetRandomBytesResponse *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_random_bytes_response__pack_to_buffer
+                     (const GetRandomBytesResponse *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetRandomBytesResponse *
+       get_random_bytes_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetRandomBytesResponse *)
+     protobuf_c_message_unpack (&get_random_bytes_response__descriptor,
+                                allocator, len, data);
+}
+void   get_random_bytes_response__free_unpacked
+                     (GetRandomBytesResponse *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   write_data_request__init
                      (WriteDataRequest         *message)
 {
@@ -412,51 +457,6 @@ void   write_data_response__free_unpacked
   assert(message->base.descriptor == &write_data_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-void   get_random_bytes_response__init
-                     (GetRandomBytesResponse         *message)
-{
-  static const GetRandomBytesResponse init_value = GET_RANDOM_BYTES_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t get_random_bytes_response__get_packed_size
-                     (const GetRandomBytesResponse *message)
-{
-  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t get_random_bytes_response__pack
-                     (const GetRandomBytesResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t get_random_bytes_response__pack_to_buffer
-                     (const GetRandomBytesResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-GetRandomBytesResponse *
-       get_random_bytes_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (GetRandomBytesResponse *)
-     protobuf_c_message_unpack (&get_random_bytes_response__descriptor,
-                                allocator, len, data);
-}
-void   get_random_bytes_response__free_unpacked
-                     (GetRandomBytesResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &get_random_bytes_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
 void   rnd_get_ent_cnt_request__init
                      (RndGetEntCntRequest         *message)
 {
@@ -545,6 +545,276 @@ void   rnd_get_ent_cnt_response__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &rnd_get_ent_cnt_response__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   get_poolsize_request__init
+                     (GetPoolsizeRequest         *message)
+{
+  static const GetPoolsizeRequest init_value = GET_POOLSIZE_REQUEST__INIT;
+  *message = init_value;
+}
+size_t get_poolsize_request__get_packed_size
+                     (const GetPoolsizeRequest *message)
+{
+  assert(message->base.descriptor == &get_poolsize_request__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_poolsize_request__pack
+                     (const GetPoolsizeRequest *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_poolsize_request__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_poolsize_request__pack_to_buffer
+                     (const GetPoolsizeRequest *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_poolsize_request__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetPoolsizeRequest *
+       get_poolsize_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetPoolsizeRequest *)
+     protobuf_c_message_unpack (&get_poolsize_request__descriptor,
+                                allocator, len, data);
+}
+void   get_poolsize_request__free_unpacked
+                     (GetPoolsizeRequest *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_poolsize_request__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   get_poolsize_response__init
+                     (GetPoolsizeResponse         *message)
+{
+  static const GetPoolsizeResponse init_value = GET_POOLSIZE_RESPONSE__INIT;
+  *message = init_value;
+}
+size_t get_poolsize_response__get_packed_size
+                     (const GetPoolsizeResponse *message)
+{
+  assert(message->base.descriptor == &get_poolsize_response__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_poolsize_response__pack
+                     (const GetPoolsizeResponse *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_poolsize_response__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_poolsize_response__pack_to_buffer
+                     (const GetPoolsizeResponse *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_poolsize_response__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetPoolsizeResponse *
+       get_poolsize_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetPoolsizeResponse *)
+     protobuf_c_message_unpack (&get_poolsize_response__descriptor,
+                                allocator, len, data);
+}
+void   get_poolsize_response__free_unpacked
+                     (GetPoolsizeResponse *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_poolsize_response__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   get_write_wakeup_thresh_request__init
+                     (GetWriteWakeupThreshRequest         *message)
+{
+  static const GetWriteWakeupThreshRequest init_value = GET_WRITE_WAKEUP_THRESH_REQUEST__INIT;
+  *message = init_value;
+}
+size_t get_write_wakeup_thresh_request__get_packed_size
+                     (const GetWriteWakeupThreshRequest *message)
+{
+  assert(message->base.descriptor == &get_write_wakeup_thresh_request__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_write_wakeup_thresh_request__pack
+                     (const GetWriteWakeupThreshRequest *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_write_wakeup_thresh_request__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_write_wakeup_thresh_request__pack_to_buffer
+                     (const GetWriteWakeupThreshRequest *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_write_wakeup_thresh_request__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetWriteWakeupThreshRequest *
+       get_write_wakeup_thresh_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetWriteWakeupThreshRequest *)
+     protobuf_c_message_unpack (&get_write_wakeup_thresh_request__descriptor,
+                                allocator, len, data);
+}
+void   get_write_wakeup_thresh_request__free_unpacked
+                     (GetWriteWakeupThreshRequest *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_write_wakeup_thresh_request__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   get_write_wakeup_thresh_response__init
+                     (GetWriteWakeupThreshResponse         *message)
+{
+  static const GetWriteWakeupThreshResponse init_value = GET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
+  *message = init_value;
+}
+size_t get_write_wakeup_thresh_response__get_packed_size
+                     (const GetWriteWakeupThreshResponse *message)
+{
+  assert(message->base.descriptor == &get_write_wakeup_thresh_response__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_write_wakeup_thresh_response__pack
+                     (const GetWriteWakeupThreshResponse *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_write_wakeup_thresh_response__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_write_wakeup_thresh_response__pack_to_buffer
+                     (const GetWriteWakeupThreshResponse *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_write_wakeup_thresh_response__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetWriteWakeupThreshResponse *
+       get_write_wakeup_thresh_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetWriteWakeupThreshResponse *)
+     protobuf_c_message_unpack (&get_write_wakeup_thresh_response__descriptor,
+                                allocator, len, data);
+}
+void   get_write_wakeup_thresh_response__free_unpacked
+                     (GetWriteWakeupThreshResponse *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_write_wakeup_thresh_response__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   get_min_reseed_secs_request__init
+                     (GetMinReseedSecsRequest         *message)
+{
+  static const GetMinReseedSecsRequest init_value = GET_MIN_RESEED_SECS_REQUEST__INIT;
+  *message = init_value;
+}
+size_t get_min_reseed_secs_request__get_packed_size
+                     (const GetMinReseedSecsRequest *message)
+{
+  assert(message->base.descriptor == &get_min_reseed_secs_request__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_min_reseed_secs_request__pack
+                     (const GetMinReseedSecsRequest *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_min_reseed_secs_request__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_min_reseed_secs_request__pack_to_buffer
+                     (const GetMinReseedSecsRequest *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_min_reseed_secs_request__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetMinReseedSecsRequest *
+       get_min_reseed_secs_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetMinReseedSecsRequest *)
+     protobuf_c_message_unpack (&get_min_reseed_secs_request__descriptor,
+                                allocator, len, data);
+}
+void   get_min_reseed_secs_request__free_unpacked
+                     (GetMinReseedSecsRequest *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_min_reseed_secs_request__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   get_min_reseed_secs_response__init
+                     (GetMinReseedSecsResponse         *message)
+{
+  static const GetMinReseedSecsResponse init_value = GET_MIN_RESEED_SECS_RESPONSE__INIT;
+  *message = init_value;
+}
+size_t get_min_reseed_secs_response__get_packed_size
+                     (const GetMinReseedSecsResponse *message)
+{
+  assert(message->base.descriptor == &get_min_reseed_secs_response__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t get_min_reseed_secs_response__pack
+                     (const GetMinReseedSecsResponse *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &get_min_reseed_secs_response__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t get_min_reseed_secs_response__pack_to_buffer
+                     (const GetMinReseedSecsResponse *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &get_min_reseed_secs_response__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+GetMinReseedSecsResponse *
+       get_min_reseed_secs_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (GetMinReseedSecsResponse *)
+     protobuf_c_message_unpack (&get_min_reseed_secs_response__descriptor,
+                                allocator, len, data);
+}
+void   get_min_reseed_secs_response__free_unpacked
+                     (GetMinReseedSecsResponse *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &get_min_reseed_secs_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 static const ProtobufCFieldDescriptor status_request__field_descriptors[1] =
@@ -852,6 +1122,57 @@ const ProtobufCMessageDescriptor get_random_bytes_request__descriptor =
   (ProtobufCMessageInit) get_random_bytes_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+static const ProtobufCFieldDescriptor get_random_bytes_response__field_descriptors[2] =
+{
+  {
+    "ret",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT64,
+    0,   /* quantifier_offset */
+    offsetof(GetRandomBytesResponse, ret),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "randval",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BYTES,
+    0,   /* quantifier_offset */
+    offsetof(GetRandomBytesResponse, randval),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned get_random_bytes_response__field_indices_by_name[] = {
+  1,   /* field[1] = randval */
+  0,   /* field[0] = ret */
+};
+static const ProtobufCIntRange get_random_bytes_response__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor get_random_bytes_response__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetRandomBytesResponse",
+  "GetRandomBytesResponse",
+  "GetRandomBytesResponse",
+  "",
+  sizeof(GetRandomBytesResponse),
+  2,
+  get_random_bytes_response__field_descriptors,
+  get_random_bytes_response__field_indices_by_name,
+  1,  get_random_bytes_response__number_ranges,
+  (ProtobufCMessageInit) get_random_bytes_response__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCFieldDescriptor write_data_request__field_descriptors[1] =
 {
   {
@@ -928,57 +1249,6 @@ const ProtobufCMessageDescriptor write_data_response__descriptor =
   (ProtobufCMessageInit) write_data_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor get_random_bytes_response__field_descriptors[2] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT64,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "randval",
-    2,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_BYTES,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesResponse, randval),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned get_random_bytes_response__field_indices_by_name[] = {
-  1,   /* field[1] = randval */
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange get_random_bytes_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 2 }
-};
-const ProtobufCMessageDescriptor get_random_bytes_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "GetRandomBytesResponse",
-  "GetRandomBytesResponse",
-  "GetRandomBytesResponse",
-  "",
-  sizeof(GetRandomBytesResponse),
-  2,
-  get_random_bytes_response__field_descriptors,
-  get_random_bytes_response__field_indices_by_name,
-  1,  get_random_bytes_response__number_ranges,
-  (ProtobufCMessageInit) get_random_bytes_response__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
 #define rnd_get_ent_cnt_request__field_descriptors NULL
 #define rnd_get_ent_cnt_request__field_indices_by_name NULL
 #define rnd_get_ent_cnt_request__number_ranges NULL
@@ -1048,7 +1318,214 @@ const ProtobufCMessageDescriptor rnd_get_ent_cnt_response__descriptor =
   (ProtobufCMessageInit) rnd_get_ent_cnt_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[6] =
+#define get_poolsize_request__field_descriptors NULL
+#define get_poolsize_request__field_indices_by_name NULL
+#define get_poolsize_request__number_ranges NULL
+const ProtobufCMessageDescriptor get_poolsize_request__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetPoolsizeRequest",
+  "GetPoolsizeRequest",
+  "GetPoolsizeRequest",
+  "",
+  sizeof(GetPoolsizeRequest),
+  0,
+  get_poolsize_request__field_descriptors,
+  get_poolsize_request__field_indices_by_name,
+  0,  get_poolsize_request__number_ranges,
+  (ProtobufCMessageInit) get_poolsize_request__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor get_poolsize_response__field_descriptors[2] =
+{
+  {
+    "ret",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(GetPoolsizeResponse, ret),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "poolsize",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(GetPoolsizeResponse, poolsize),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned get_poolsize_response__field_indices_by_name[] = {
+  1,   /* field[1] = poolsize */
+  0,   /* field[0] = ret */
+};
+static const ProtobufCIntRange get_poolsize_response__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor get_poolsize_response__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetPoolsizeResponse",
+  "GetPoolsizeResponse",
+  "GetPoolsizeResponse",
+  "",
+  sizeof(GetPoolsizeResponse),
+  2,
+  get_poolsize_response__field_descriptors,
+  get_poolsize_response__field_indices_by_name,
+  1,  get_poolsize_response__number_ranges,
+  (ProtobufCMessageInit) get_poolsize_response__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define get_write_wakeup_thresh_request__field_descriptors NULL
+#define get_write_wakeup_thresh_request__field_indices_by_name NULL
+#define get_write_wakeup_thresh_request__number_ranges NULL
+const ProtobufCMessageDescriptor get_write_wakeup_thresh_request__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetWriteWakeupThreshRequest",
+  "GetWriteWakeupThreshRequest",
+  "GetWriteWakeupThreshRequest",
+  "",
+  sizeof(GetWriteWakeupThreshRequest),
+  0,
+  get_write_wakeup_thresh_request__field_descriptors,
+  get_write_wakeup_thresh_request__field_indices_by_name,
+  0,  get_write_wakeup_thresh_request__number_ranges,
+  (ProtobufCMessageInit) get_write_wakeup_thresh_request__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor get_write_wakeup_thresh_response__field_descriptors[2] =
+{
+  {
+    "ret",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(GetWriteWakeupThreshResponse, ret),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "wakeup",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(GetWriteWakeupThreshResponse, wakeup),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned get_write_wakeup_thresh_response__field_indices_by_name[] = {
+  0,   /* field[0] = ret */
+  1,   /* field[1] = wakeup */
+};
+static const ProtobufCIntRange get_write_wakeup_thresh_response__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor get_write_wakeup_thresh_response__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetWriteWakeupThreshResponse",
+  "GetWriteWakeupThreshResponse",
+  "GetWriteWakeupThreshResponse",
+  "",
+  sizeof(GetWriteWakeupThreshResponse),
+  2,
+  get_write_wakeup_thresh_response__field_descriptors,
+  get_write_wakeup_thresh_response__field_indices_by_name,
+  1,  get_write_wakeup_thresh_response__number_ranges,
+  (ProtobufCMessageInit) get_write_wakeup_thresh_response__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+#define get_min_reseed_secs_request__field_descriptors NULL
+#define get_min_reseed_secs_request__field_indices_by_name NULL
+#define get_min_reseed_secs_request__number_ranges NULL
+const ProtobufCMessageDescriptor get_min_reseed_secs_request__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetMinReseedSecsRequest",
+  "GetMinReseedSecsRequest",
+  "GetMinReseedSecsRequest",
+  "",
+  sizeof(GetMinReseedSecsRequest),
+  0,
+  get_min_reseed_secs_request__field_descriptors,
+  get_min_reseed_secs_request__field_indices_by_name,
+  0,  get_min_reseed_secs_request__number_ranges,
+  (ProtobufCMessageInit) get_min_reseed_secs_request__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor get_min_reseed_secs_response__field_descriptors[2] =
+{
+  {
+    "ret",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(GetMinReseedSecsResponse, ret),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "seconds",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(GetMinReseedSecsResponse, seconds),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned get_min_reseed_secs_response__field_indices_by_name[] = {
+  0,   /* field[0] = ret */
+  1,   /* field[1] = seconds */
+};
+static const ProtobufCIntRange get_min_reseed_secs_response__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor get_min_reseed_secs_response__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "GetMinReseedSecsResponse",
+  "GetMinReseedSecsResponse",
+  "GetMinReseedSecsResponse",
+  "",
+  sizeof(GetMinReseedSecsResponse),
+  2,
+  get_min_reseed_secs_response__field_descriptors,
+  get_min_reseed_secs_response__field_indices_by_name,
+  1,  get_min_reseed_secs_response__number_ranges,
+  (ProtobufCMessageInit) get_min_reseed_secs_response__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[9] =
 {
   { "RpcStatus", &status_request__descriptor, &status_response__descriptor },
   { "RpcGetRandomBytesFull", &get_random_bytes_full_request__descriptor, &get_random_bytes_full_response__descriptor },
@@ -1056,11 +1533,17 @@ static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[6] =
   { "RpcGetRandomBytes", &get_random_bytes_request__descriptor, &get_random_bytes_response__descriptor },
   { "RpcWriteData", &write_data_request__descriptor, &write_data_response__descriptor },
   { "RpcRndGetEntCnt", &rnd_get_ent_cnt_request__descriptor, &rnd_get_ent_cnt_response__descriptor },
+  { "RpcGetPoolsize", &get_poolsize_request__descriptor, &get_poolsize_response__descriptor },
+  { "RpcGetWriteWakeupThresh", &get_write_wakeup_thresh_request__descriptor, &get_write_wakeup_thresh_response__descriptor },
+  { "RpcGetMinReseedSecs", &get_min_reseed_secs_request__descriptor, &get_min_reseed_secs_response__descriptor },
 };
 const unsigned unpriv_access__method_indices_by_name[] = {
+  8,        /* RpcGetMinReseedSecs */
+  6,        /* RpcGetPoolsize */
   3,        /* RpcGetRandomBytes */
   1,        /* RpcGetRandomBytesFull */
   2,        /* RpcGetRandomBytesMin */
+  7,        /* RpcGetWriteWakeupThresh */
   5,        /* RpcRndGetEntCnt */
   0,        /* RpcStatus */
   4         /* RpcWriteData */
@@ -1072,7 +1555,7 @@ const ProtobufCServiceDescriptor unpriv_access__descriptor =
   "UnprivAccess",
   "UnprivAccess",
   "",
-  6,
+  9,
   unpriv_access__method_descriptors,
   unpriv_access__method_indices_by_name
 };
@@ -1123,6 +1606,30 @@ void unpriv_access__rpc_rnd_get_ent_cnt(ProtobufCService *service,
 {
   assert(service->descriptor == &unpriv_access__descriptor);
   service->invoke(service, 5, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void unpriv_access__rpc_get_poolsize(ProtobufCService *service,
+                                     const GetPoolsizeRequest *input,
+                                     GetPoolsizeResponse_Closure closure,
+                                     void *closure_data)
+{
+  assert(service->descriptor == &unpriv_access__descriptor);
+  service->invoke(service, 6, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void unpriv_access__rpc_get_write_wakeup_thresh(ProtobufCService *service,
+                                                const GetWriteWakeupThreshRequest *input,
+                                                GetWriteWakeupThreshResponse_Closure closure,
+                                                void *closure_data)
+{
+  assert(service->descriptor == &unpriv_access__descriptor);
+  service->invoke(service, 7, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void unpriv_access__rpc_get_min_reseed_secs(ProtobufCService *service,
+                                            const GetMinReseedSecsRequest *input,
+                                            GetMinReseedSecsResponse_Closure closure,
+                                            void *closure_data)
+{
+  assert(service->descriptor == &unpriv_access__descriptor);
+  service->invoke(service, 8, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__init (UnprivAccess_Service *service,
                           UnprivAccess_ServiceDestroy destroy)

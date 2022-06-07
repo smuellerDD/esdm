@@ -138,6 +138,30 @@ void esdm_rpc_rnd_reseed_crng(PrivAccess_Service *service,
 			      RndReseedCRNGResponse_Closure closure,
 			      void *closure_data);
 
+/* /proc implementations */
+void esdm_rpc_get_poolsize(UnprivAccess_Service *service,
+			   const GetPoolsizeRequest *request,
+			   GetPoolsizeResponse_Closure closure,
+			   void *closure_data);
+void esdm_rpc_get_write_wakeup_thresh(
+				UnprivAccess_Service *service,
+				const GetWriteWakeupThreshRequest *request,
+				GetWriteWakeupThreshResponse_Closure closure,
+				void *closure_data);
+void esdm_rpc_set_write_wakeup_thresh(
+				PrivAccess_Service *service,
+				const SetWriteWakeupThreshRequest *request,
+				SetWriteWakeupThreshResponse_Closure closure,
+				void *closure_data);
+void esdm_rpc_get_min_reseed_secs(UnprivAccess_Service *service,
+				  const GetMinReseedSecsRequest *request,
+				  GetMinReseedSecsResponse_Closure closure,
+				  void *closure_data);
+void esdm_rpc_set_min_reseed_secs(PrivAccess_Service *service,
+				  const SetMinReseedSecsRequest *request,
+				  SetMinReseedSecsResponse_Closure closure,
+				  void *closure_data);
+
 /******************************************************************************
  * Definition of Protobuf-C service
  ******************************************************************************/

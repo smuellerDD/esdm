@@ -285,6 +285,70 @@ int esdm_rpcc_rnd_clear_pool(void);
  */
 int esdm_rpcc_rnd_reseed_crng(void);
 
+/******************************************************************************
+ * /proc handlers
+ ******************************************************************************/
+
+/**
+ * @brief poolsize /proc handler
+ *
+ * The call returns the poolsize of the ESDM that can be filled by callers
+ *
+ * See random(4) for documentation.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_get_poolsize(unsigned int *poolsize);
+
+/**
+ * @brief write_wakeup_thresh /proc read handler
+ *
+ * The call returns the write_wakeup_thresh of the ESDM
+ *
+ * See random(4) for documentation.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_get_write_wakeup_thresh(unsigned int *write_wakeup_thresh);
+
+/**
+ * @brief write_wakeup_thresh /proc write handler
+ *
+ * The call sets the write_wakeup_thresh of the ESDM to the given bit value
+ *
+ * See random(4) for documentation.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh);
+
+/**
+ * @brief urandom_min_reseed_secs /proc read handler
+ *
+ * The call returns the urandom_min_reseed_secs of the ESDM
+ *
+ * See random(4) for documentation.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_get_min_reseed_secs(unsigned int *seconds);
+
+/**
+ * @brief urandom_min_reseed_secs /proc write handler
+ *
+ * The call sets the urandom_min_reseed_secs of the ESDM to the given bit value
+ *
+ * See random(4) for documentation.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_set_min_reseed_secs(unsigned int seconds);
+
 /**
  * @brief Invoke a function up to 5 times if EINTR was returned
  *

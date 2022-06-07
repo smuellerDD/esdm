@@ -286,6 +286,28 @@ uint32_t esdm_avail_entropy_aux(void)
 	return esdm_es[esdm_ext_es_aux]->curr_entropy(ent_thresh);
 }
 
+DSO_PUBLIC
+uint32_t esdm_avail_poolsize_aux(void)
+{
+	return esdm_es[esdm_ext_es_aux]->max_entropy();
+}
+
+DSO_PUBLIC
+uint32_t esdm_get_write_wakeup_bits(void)
+{
+	return esdm_write_wakeup_bits;
+}
+
+DSO_PUBLIC
+void esdm_set_write_wakeup_bits(uint32_t val)
+{
+	if (!val)
+		return;
+
+	esdm_write_wakeup_bits =
+		min_t(uint32_t, val, esdm_reduce_by_osr(esdm_get_digestsize()));
+}
+
 /*
  * esdm_init_ops() - Set seed stages of ESDM
  *

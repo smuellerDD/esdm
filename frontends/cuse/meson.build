@@ -1,5 +1,6 @@
 cuse_src = [
 	'cuse_device.c',
+	'cuse_helper.c',
 	'privileges.c'
 ]
 
@@ -22,6 +23,15 @@ esdm_cuse_random = executable(
 esdm_cuse_urandom = executable(
 		'esdm-cuse-urandom',
 		[ cuse_src,  'cuse_urandom.c' ],
+		include_directories: include_dirs_client,
+		dependencies: [ dependencies_client, cuse_deps ],
+		link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ],
+		install: true
+		)
+
+esdm_cuse_random = executable(
+		'esdm-proc',
+		[ cuse_src, 'proc_files.c' ],
 		include_directories: include_dirs_client,
 		dependencies: [ dependencies_client, cuse_deps ],
 		link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ],

@@ -97,6 +97,46 @@ message RndReseedCRNGResponse {
 }
 
 /******************************************************************************
+ * write of write_wakeup_threshold /proc file
+ ******************************************************************************/
+
+/**
+ * @brief Request to set the available write wakeup threshold
+ */
+message SetWriteWakeupThreshRequest {
+	uint32 wakeup = 1;
+}
+
+/**
+ * @brief Response returning the result of write wakeup threshold
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message SetWriteWakeupThreshResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
+ * write of urandom_min_reseed_secs /proc file
+ ******************************************************************************/
+
+/**
+ * @brief Request to set the available write wakeup threshold
+ */
+message SetMinReseedSecsRequest {
+	uint32 seconds = 1;
+}
+
+/**
+ * @brief Response returning the result of write min reseed secs
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message SetMinReseedSecsResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
  * Protocol handler
  ******************************************************************************/
 service PrivAccess {
@@ -108,4 +148,10 @@ service PrivAccess {
 			    (RndClearPoolResponse);
 	rpc RpcRndReseedCRNG (RndReseedCRNGRequest) returns
 			     (RndReseedCRNGResponse);
+
+	/* /proc entry */
+	rpc RpcSetWriteWakeupThresh (SetWriteWakeupThreshRequest) returns
+				    (SetWriteWakeupThreshResponse);
+	rpc RpcSetMinReseedSecs (SetMinReseedSecsRequest) returns
+				(SetMinReseedSecsResponse);
 }

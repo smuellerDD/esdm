@@ -19,6 +19,7 @@ After=esdm-server.service
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-cuse-random -f
+ExecStart=@PATH@/esdm-proc -f -o allow_other /proc/sys/kernel/random
 
 [Install]
 WantedBy=basic.target
