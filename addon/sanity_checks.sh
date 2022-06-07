@@ -134,11 +134,17 @@ check_reposanity() {
 
 	check_existence ${CHANGESFILE}
 	check_existence README.md
-	if ! $(grep -q "$version" ${CHANGESFILE})
+	if ! $(head -n1 ${CHANGESFILE} | grep -q "$version" )
 	then
 		#git log --pretty=format"%h %an %s" ${OLDVER}..HEAD
 		echo "Forgot to add $version changes to ${CHANGESFILE}" >&2
 		exit 1
+	fi
+
+	if ! $(head -n1 ${CHANGESFILE} | grep -q "-pre" )
+	then
+		echo "Preliminary release - skipping full release validation" >&2
+		exit 0
 	fi
 }
 
