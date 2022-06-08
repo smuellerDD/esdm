@@ -62,7 +62,8 @@ void esdm_status(char *buf, size_t buflen)
 		return;
 	}
 
-	snprintf(buf, buflen, "%slibrary version: %s\n", TESTMODE_STR, VERSION);
+	snprintf(buf, buflen, "ESDM %slibrary version: %s\n", TESTMODE_STR,
+		VERSION);
 	len = esdm_remaining_buf_len(buf, buflen);
 
 	snprintf(buf + len, buflen - len,
