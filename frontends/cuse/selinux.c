@@ -17,11 +17,34 @@
  * DAMAGE.
  */
 
+#include <selinux/selinux.h>
 #include <selinux/restorecon.h>
+#include <stdio.h>
 
+#include "logger.h"
+#include "ret_checkers.h"
 #include "selinux.h"
 
 int esdm_cuse_restore_label(const char *pathname)
 {
 	return selinux_restorecon(pathname, 0);
+}
+
+int esdm_cuse_add_label(const char *pathname, struct fuse_args *fuse_args)
+{
+	char tmp[128];
+	char *con = NULL;
+	int ret;
+
+	CKINT_LOG(getfilecon(pathname, &con),
+		  "Cannot obtain label for file %s\n", pathname);
+	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Obtained SELinux label %s\n", con);
+	snprintf(tmp, sizeof(tmp), "-ocontext=%s", con);
+	CKINT_LOG(fuse_opt_add_arg(fuse_args, tmp),
+		  "Cannot add FUSE argument\n");
+
+out:
+	if (con)
+		freecon(con);
+	return ret;
 }

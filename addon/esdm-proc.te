@@ -1,0 +1,22 @@
+
+module esdm-proc 1.0;
+
+require {
+	type unconfined_service_t;
+	type unconfined_t;
+	type sysctl_kernel_t;
+	class filesystem { associate relabelfrom relabelto };
+}
+
+#============= sysctl_kernel_t ==============
+allow sysctl_kernel_t self:filesystem associate;
+
+#============= unconfined_service_t ==============
+
+#!!!! This avc is allowed in the current policy
+allow unconfined_service_t sysctl_kernel_t:filesystem { relabelfrom relabelto };
+
+#============= unconfined_t ==============
+
+#!!!! This avc is allowed in the current policy
+allow unconfined_t sysctl_kernel_t:filesystem { relabelfrom relabelto };

@@ -37,6 +37,7 @@
 #include "helper.h"
 #include "privileges.h"
 #include "ret_checkers.h"
+#include "selinux.h"
 
 #define ESDM_PROC_UUID_LEN		38
 struct esdm_proc_file {
@@ -528,6 +529,7 @@ static const struct fuse_operations esdm_proc_oper = {
 
 static struct esdm_proc_options {
 	int show_help;
+	int relabel;
 	unsigned int verbosity;
 } esdm_proc_options;
 
@@ -536,6 +538,7 @@ static struct esdm_proc_options {
 static const struct fuse_opt esdm_proc_options_spec[] = {
 	OPTION("-v %u", verbosity),
 	OPTION("--verbosity=%u", verbosity),
+	OPTION("--relabel", relabel),
 	OPTION("-h", show_help),
 	OPTION("--help", show_help),
 	FUSE_OPT_END
@@ -546,6 +549,7 @@ static void show_help(const char *progname)
 	printf("usage: %s [options] <mountpoint>\n\n", progname);
 	printf("File-system specific options:\n"
 	       "    --verbosity=<u>     Verbosity level\n"
+	       "    --relabel           Perform automatic SELinux relabeling"
 	       "\n");
 }
 
@@ -561,6 +565,8 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
+	logger_set_verbosity(esdm_proc_options.verbosity);
+
 	/*
 	 * When --help is specified, first print our own file-system
 	 * specific *help text, then signal fuse_main to show
@@ -574,7 +580,10 @@ int main(int argc, char *argv[])
 		args.argv[0][0] = '\0';
 	}
 
-	logger_set_verbosity(esdm_proc_options.verbosity);
+	if (esdm_proc_options.relabel) {
+		CKINT(esdm_cuse_add_label("/proc/sys/kernel/random/poolsize",
+					  &args));
+	}
 
 	CKINT_LOG(esdm_rpcc_init_unpriv_service(),
                   "Initialization of dispatcher failed\n");

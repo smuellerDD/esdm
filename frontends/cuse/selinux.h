@@ -20,6 +20,8 @@
 #ifndef SELINUX_H
 #define SELINUX_H
 
+#include <fuse3/fuse_opt.h>
+
 #include "config.h"
 
 #ifdef __cplusplus
@@ -30,12 +32,21 @@ extern "C"
 #ifdef ESDM_SELINUX_ENABLED
 
 int esdm_cuse_restore_label(const char *pathname);
+int esdm_cuse_add_label(const char *pathname, struct fuse_args *fuse_args);
 
 #else /* ESDM_SELINUX_ENABLED */
 
 static inline int esdm_cuse_restore_label(const char *pathname)
 {
 	(void)pathname;
+	return 0;
+}
+
+static inline int esdm_cuse_add_label(const char *pathname,
+				      struct fuse_args *fuse_args)
+{
+	(void)pathname;
+	(void)fuse_args;
 	return 0;
 }
 

@@ -1,24 +1,24 @@
 # Systemd configuration file
 #
-# The ESDM /dev/random provider does not depend on any other system
+# The ESDM /proc/sys/kernel/random provider does not depend on any other system
 # service except the ESDM server. Furthermore, we want to start it as early as
-# possible in the boot cycle so that other services requiring
-# random numbers (like SSHD, TLS-based services) benefit from it
+# possible in the boot cycle so that other services requiring the proc file
+# system (e.g. entropy gathering daemons) can rely on it.
 
 [Unit]
-Description=Entropy Source and DRNG Manager /dev/random
+Description=Entropy Source and DRNG Manager /proc/sys/kernel/random
 DefaultDependencies=no
 After=local-fs.target
 Before=sysinit.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
-Requires=esdm-cuse-random.service
-After=esdm-cuse-random.service
+Requires=esdm-server.service
+After=esdm-server.service
 
 [Service]
 Restart=on-failure
 RestartSec=5s
-ExecStart=@PATH@/esdm-proc -f -o allow_other /proc/sys/kernel/random
+ExecStart=@PATH@/esdm-proc --relabel -f -o allow_other /proc/sys/kernel/random
 
 [Install]
 WantedBy=basic.target

@@ -14,8 +14,6 @@ StartLimitIntervalSec=500
 StartLimitBurst=5
 Requires=esdm-server.service
 After=esdm-server.service
-Requires=esdm-proc.service
-Before=esdm-proc.service
 
 [Service]
 Restart=on-failure
