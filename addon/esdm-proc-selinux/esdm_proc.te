@@ -30,6 +30,7 @@ miscfiles_read_localization(esdm_proc_t)
 require {
 	type fusefs_t;
 	type fuse_device_t;
+	type fusermount_exec_t;
 	type user_tmp_t;
 	type esdm_proc_t;
 	type unconfined_t;
@@ -49,6 +50,7 @@ require {
 allow esdm_proc_t bin_t:file { execute execute_no_trans };
 allow esdm_proc_t fuse_device_t:chr_file { open read write };
 allow esdm_proc_t fusefs_t:filesystem relabelfrom;
+allow esdm_proc_t fusermount_exec_t:file { execute execute_no_trans open read };
 allow esdm_proc_t sysctl_kernel_t:dir mounton;
 allow esdm_proc_t sysctl_kernel_t:filesystem { mount relabelfrom relabelto };
 allow esdm_proc_t unconfined_service_t:unix_stream_socket connectto;
