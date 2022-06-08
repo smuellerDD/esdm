@@ -184,6 +184,11 @@ The ESDM consists of the following components:
 * `esdm-cuse-urandom`: Same as `esdm-cuse-random` but behaving like
   /dev/urandom.
 
+* `esdm-proc`: This FUSE file system implements all files found on a Linux
+  system under `/proc/sys/kernel/random` but pointing to the ESDM server. This
+  process is required to ensure that all interfaces are provided by ESDM. For
+  details about the provided files, see the `random(4)` man page.
+
 * `libesdm-getrandom.so`: The library provides a wrapper to the `getrandom` and
   `getentropy` libc library calls. To use the library for other consumers, use
   one of the following  considerations:

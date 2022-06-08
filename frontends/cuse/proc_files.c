@@ -33,6 +33,7 @@
 
 #include "binhexbin.h"
 #include "esdm_rpc_client.h"
+#include "esdm_rpc_service.h"
 #include "helper.h"
 #include "privileges.h"
 #include "ret_checkers.h"
@@ -71,7 +72,7 @@ static bool esdm_proc_client_privileged(void)
 	 * We are not checking the GID as we expect a root user to use any
 	 * GID.
 	 *
-	 * WARNING: as documented for struct fuse_ctx, the CUSE daemon
+	 * WARNING: as documented for struct fuse_ctx, the FUSE daemon
 	 * MUST NOT run in a PID or user namespace.
 	 */
 	if (fuse_get_context()->uid == 0) {
@@ -116,7 +117,7 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	uint8_t uuid[16];
 	ssize_t ret;
 
-	esdm_invoke(esdm_rpcc_get_random_bytes_min(uuid, sizeof(uuid)));
+	esdm_invoke(esdm_rpcc_get_random_bytes_full(uuid, sizeof(uuid)));
 	if (ret < 0)
 		return (int)ret;
 	if (ret != sizeof(uuid))
@@ -280,9 +281,10 @@ static void esdm_proc_term(void)
 static int esdm_proc_pre_init(void)
 {
 	struct esdm_proc_file *file = &esdm_proc_files[0];
+	char buf[ESDM_RPC_MAX_MSG_SIZE];
 	size_t data_read = 0;
 	ssize_t rc;
-	int fd;
+	int ret, fd;
 
 	fd = open("/proc/sys/kernel/random/boot_id", O_RDONLY);
 	if (fd < 0) {
@@ -303,7 +305,13 @@ static int esdm_proc_pre_init(void)
 
 	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "boot_id: %s\n", file->valdata);
 
-	return 0;
+	CKINT(esdm_rpcc_status(buf, sizeof(buf)));
+	logger_status(LOGGER_C_CUSE,
+		      "PROC client started with ESDM server properties:\n%s\n",
+		      buf);
+
+out:
+	return ret;
 }
 
 static void *esdm_proc_init(struct fuse_conn_info *conn,
@@ -409,13 +417,22 @@ static int esdm_proc_open(const char *path, struct fuse_file_info *fi)
 		/* pathlen is one longer than file name due to / */
 		if (pathlen == file->filename_len &&
 		    !strncmp(path + 1, file->filename, file->filename_len)) {
+
+			/* Read-access is always granted */
 			if ((fi->flags & O_ACCMODE) == O_RDONLY)
 				goto out;
+
+			/*
+			 * Write access is only granted for root and then only
+			 * for the files that are marked with 0644.
+			 */
 			if ((((fi->flags & O_ACCMODE) == O_WRONLY) ||
 			     ((fi->flags & O_ACCMODE) == O_RDWR)) &&
 			    (file->perm & S_IWUSR) &&
 			    (fuse_get_context()->uid == 0))
 				goto out;
+
+			/* All other access requests are denied. */
 			return -EACCES;
 		}
 	}
@@ -528,7 +545,6 @@ static void show_help(const char *progname)
 {
 	printf("usage: %s [options] <mountpoint>\n\n", progname);
 	printf("File-system specific options:\n"
-	       "    --mountpoint=<s>    Mountpoint of file system\n"
 	       "    --verbosity=<u>     Verbosity level\n"
 	       "\n");
 }
@@ -560,12 +576,12 @@ int main(int argc, char *argv[])
 
 	logger_set_verbosity(esdm_proc_options.verbosity);
 
-	CKINT(esdm_proc_pre_init());
-
 	CKINT_LOG(esdm_rpcc_init_unpriv_service(),
                   "Initialization of dispatcher failed\n");
 	CKINT_LOG(esdm_rpcc_init_priv_service(),
                   "Initialization of dispatcher failed\n");
+
+	CKINT(esdm_proc_pre_init());
 
 	ret = fuse_main(args.argc, args.argv, &esdm_proc_oper, NULL);
 
