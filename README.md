@@ -187,7 +187,14 @@ The ESDM consists of the following components:
 * `esdm-proc`: This FUSE file system implements all files found on a Linux
   system under `/proc/sys/kernel/random` but pointing to the ESDM server. This
   process is required to ensure that all interfaces are provided by ESDM. For
-  details about the provided files, see the `random(4)` man page.
+  details about the provided files, see the `random(4)` man page. Note,
+  the kernel exports the `/proc/sys/kernel/random` information also as
+  `sysctl(8)`. This interface is not covered by `esdm-proc`.
+
+  NOTE: If you run the `esdm-proc` tool on a system with SELinux in enforcing
+  mode using the targeted policy, you need to create a new policy. A template
+  is provided in the `addons/esdm-proc-selinux` directory. Compile the policy
+  with the provided `esdm_proc.sh` script.
 
 * `libesdm-getrandom.so`: The library provides a wrapper to the `getrandom` and
   `getentropy` libc library calls. To use the library for other consumers, use

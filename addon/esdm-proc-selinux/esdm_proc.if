@@ -1,0 +1,40 @@
+
+## <summary>policy for esdm_proc</summary>
+
+########################################
+## <summary>
+##	Execute esdm_proc_exec_t in the esdm_proc domain.
+## </summary>
+## <param name="domain">
+## <summary>
+##	Domain allowed to transition.
+## </summary>
+## </param>
+#
+interface(`esdm_proc_domtrans',`
+	gen_require(`
+		type esdm_proc_t, esdm_proc_exec_t;
+	')
+
+	corecmd_search_bin($1)
+	domtrans_pattern($1, esdm_proc_exec_t, esdm_proc_t)
+')
+
+######################################
+## <summary>
+##	Execute esdm_proc in the caller domain.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`esdm_proc_exec',`
+	gen_require(`
+		type esdm_proc_exec_t;
+	')
+
+	corecmd_search_bin($1)
+	can_exec($1, esdm_proc_exec_t)
+')

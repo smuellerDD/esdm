@@ -1,0 +1,1 @@
+/usr/local/bin/esdm-proc		--	gen_context(system_u:object_r:esdm_proc_exec_t,s0)
