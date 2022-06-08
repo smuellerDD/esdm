@@ -12,15 +12,13 @@ After=local-fs.target
 Before=sysinit.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
-Requires=esdm-server.service
-After=esdm-server.service
-Requires=esdm-proc.service
-Before=esdm-proc.service
+Requires=esdm-cuse-random.service
+After=esdm-cuse-random.service
 
 [Service]
 Restart=on-failure
 RestartSec=5s
-ExecStart=@PATH@/esdm-cuse-random -f
+ExecStart=@PATH@/esdm-proc -f -o allow_other /proc/sys/kernel/random
 
 [Install]
 WantedBy=basic.target

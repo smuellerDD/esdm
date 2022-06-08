@@ -48,7 +48,13 @@ esdm_cuse_urandom_service = configure_file(
 	input : 'esdm-cuse-urandom.service.in',
 	output : 'esdm-cuse-urandom.service',
 	configuration : cuse_conf_data)
+esdm_cuse_proc_service = configure_file(
+	input : 'esdm-proc.service.in',
+	output : 'esdm-proc.service',
+	configuration : cuse_conf_data)
 install_data(esdm_cuse_random_service,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')
 install_data(esdm_cuse_urandom_service,
+	     install_dir: get_option('prefix') / 'lib/systemd/system')
+install_data(esdm_cuse_proc_service,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')

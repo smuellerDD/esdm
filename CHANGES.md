@@ -11,7 +11,10 @@ Changes 0.3.0-pre:
 
 * Add SHA-3 conditioning hash to regular code base
 
-* Add /proc/sys/kernel/random files handler
+* Add /proc/sys/kernel/random files handler, tested with:
+	- rng-tools
+	- jitterentropy-rngd
+	- haveged
 
 Changes 0.2.0:
 * Initial public version
