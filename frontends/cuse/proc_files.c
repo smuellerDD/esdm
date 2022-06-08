@@ -40,6 +40,7 @@
 #include "selinux.h"
 
 #define ESDM_PROC_UUID_LEN		38
+#define ESDM_PROC_BUF_LEN		1024
 struct esdm_proc_file {
 	const char *filename;
 	size_t filename_len;
@@ -47,9 +48,8 @@ struct esdm_proc_file {
 	int (*fill_data)(struct esdm_proc_file *file);
 	int (*write_data)(struct esdm_proc_file *file,
 			  const char *buf, size_t buflen);
-	unsigned int val;
 	size_t vallen;
-	char valdata[ESDM_PROC_UUID_LEN];
+	char valdata[ESDM_PROC_BUF_LEN];
 };
 
 /******************************************************************************
@@ -140,11 +140,12 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 static int esdm_proc_data(struct esdm_proc_file *file,
 			  int (*content)(unsigned int *entcnt))
 {
+	unsigned int val = 0;
 	int ret;
 
-	esdm_invoke(content(&file->val));
+	esdm_invoke(content(&val));
 	if (!ret) {
-		snprintf(file->valdata, ESDM_PROC_UUID_LEN, "%u\n", file->val);
+		snprintf(file->valdata, ESDM_PROC_BUF_LEN, "%u\n", val);
 		file->vallen = strlen(file->valdata);
 	}
 
@@ -209,6 +210,17 @@ static int esdm_proc_set_min_reseed_secs(struct esdm_proc_file *file,
 	return ret;
 }
 
+static int esdm_proc_get_status(struct esdm_proc_file *file)
+{
+	int ret;
+
+	esdm_invoke(esdm_rpcc_status(file->valdata, ESDM_PROC_BUF_LEN));
+	if (!ret)
+		file->vallen = strlen(file->valdata);
+
+	return ret;
+}
+
 static struct esdm_proc_file esdm_proc_files[] = {
 	{
 		/* Must be first entry! */
@@ -217,7 +229,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = NULL,
 		.write_data = NULL,
-		.val = 0,
 		.vallen = 0,
 		.valdata[0] = '\0',
 	}, {
@@ -226,7 +237,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = esdm_proc_uuid,
 		.write_data = NULL,
-		.val = 0,
 		.vallen = 0,
 		.valdata[0] = '\0',
 	}, {
@@ -243,7 +253,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = esdm_proc_poolsize,
 		.write_data = NULL,
-		.val = 0,
 		.vallen = 0,
 		.valdata[0] = '\0',
 	}, {
@@ -252,7 +261,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0644,
 		.fill_data = esdm_proc_get_write_wakeup_thresh,
 		.write_data = esdm_proc_set_write_wakeup_thresh,
-		.val = 0,
 		.vallen = 0,
 		.valdata[0] = '\0',
 	}, {
@@ -261,7 +269,14 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0644,
 		.fill_data = esdm_proc_get_min_reseed_secs,
 		.write_data = esdm_proc_set_min_reseed_secs,
-		.val = 0,
+		.vallen = 0,
+		.valdata[0] = '\0',
+	}, {
+		.filename = "esdm_type",
+		.filename_len = 9,
+		.perm = 0444,
+		.fill_data = esdm_proc_get_status,
+		.write_data = NULL,
 		.vallen = 0,
 		.valdata[0] = '\0',
 	},
