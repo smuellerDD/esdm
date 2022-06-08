@@ -682,9 +682,6 @@ out:
 
 static void esdm_rpcs_cleanup(void)
 {
-	int esdm_shmid;
-	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
-
 	/* Clean up all unprivileged Unix domain socket */
 	if (unlink(ESDM_RPC_UNPRIV_SOCKET) < 0) {
 		logger(LOGGER_ERR, LOGGER_C_SERVER,
@@ -706,6 +703,16 @@ static void esdm_rpcs_cleanup(void)
 		       "ESDM Unix domain socket %s deleted\n",
 		       ESDM_RPC_PRIV_SOCKET);
 	}
+
+	/*
+	 * TODO: we do not clean up the SEM/SHM as there could be a CUSE client
+	 * that looks at it. IF the server starts again, we want to attach to
+	 * the existing shared memory segment to ensure the client does not need
+	 * to be restarted too.
+	 */
+#if 0
+	int esdm_shmid;
+	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
 
 	/* Clean up the status shared memory segment */
 	esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
@@ -730,8 +737,10 @@ static void esdm_rpcs_cleanup(void)
 		logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
 		       "Cannot unlink semaphore: %s\n", strerror(errno));
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_SERVER, "ESDM semaphore deleted\n");
+		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		       "ESDM semaphore deleted\n");
 	}
+#endif
 }
 
 static void esdm_rpcs_cleanup_signals(void (*sighandler)(int))

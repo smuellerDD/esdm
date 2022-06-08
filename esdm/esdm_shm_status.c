@@ -100,6 +100,13 @@ static void esdm_shm_status_delete_sem(void)
 		sem_close(tmp);
 	}
 
+	/*
+	 * TODO: we do not clean up the SEM as there could be a CUSE client that
+	 * looks at it. IF the server starts again, we want to attach to the
+	 * existing shared memory segment to ensure the client does not need
+	 * to be restarted too.
+	 */
+#if 0
 	if (sem_unlink(ESDM_SEM_NAME)) {
 		if (errno != ENOENT) {
 			logger(LOGGER_VERBOSE, LOGGER_C_ANY,
@@ -107,6 +114,7 @@ static void esdm_shm_status_delete_sem(void)
 			       strerror(errno));
 		}
 	}
+#endif
 }
 
 static int esdm_shm_status_create_sem(void)
@@ -115,11 +123,16 @@ static int esdm_shm_status_create_sem(void)
 
 	esdm_semid = sem_open(ESDM_SEM_NAME, O_CREAT, 0644, 0);
 	if (esdm_semid == SEM_FAILED) {
-		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "ESDM change indicator semaphore creation failed: %s\n",
-		       strerror(errsv));
-		return -errsv;
+		if (errno == EEXIST) {
+			esdm_semid = sem_open(ESDM_SEM_NAME, 0, 0644, 0);
+			if (esdm_semid == SEM_FAILED) {
+				errsv = errno;
+				logger(LOGGER_ERR, LOGGER_C_ANY,
+				       "ESDM change indicator semaphore creation failed: %s\n",
+				       strerror(errsv));
+				return -errsv;
+			}
+		}
 	}
 
 	logger(LOGGER_DEBUG, LOGGER_C_ANY,
@@ -135,10 +148,18 @@ static void esdm_shm_status_delete_shm(void)
 		esdm_shm_status = NULL;
 	}
 
+	/*
+	 * TODO: we do not clean up the SHM as there could be a CUSE client that
+	 * looks at it. IF the server starts again, we want to attach to the
+	 * existing shared memory segment to ensure the client does not need
+	 * to be restarted too.
+	 */
+#if 0
 	if (esdm_shmid >= 0) {
 		shmctl(esdm_shmid, IPC_RMID, NULL);
 		esdm_shmid = -1;
 	}
+#endif
 }
 
 static int esdm_shm_status_create_shm(void)
@@ -148,14 +169,21 @@ static int esdm_shm_status_create_shm(void)
 	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
 
 	esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
-			    IPC_CREAT |
 			    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if (esdm_shmid < 0) {
-		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "ESDM shared memory segment creation failed: %s\n",
-		       strerror(errsv));
-		return -errsv;
+		if (errno == ENOENT) {
+			esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
+					    IPC_CREAT |
+					    S_IRUSR | S_IWUSR |
+					    S_IRGRP | S_IROTH);
+			if (esdm_shmid < 0) {
+				errsv = errno;
+				logger(LOGGER_ERR, LOGGER_C_ANY,
+				       "ESDM shared memory segment creation failed: %s\n",
+				       strerror(errsv));
+				return -errsv;
+			}
+		}
 	}
 
 	tmp = shmat(esdm_shmid, NULL, 0);
