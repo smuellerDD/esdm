@@ -92,6 +92,11 @@ int env_init(int disable_fallback)
 		return 77;
 	}
 
+#ifndef ESDM_TESTMODE
+	if (disable_fallback)
+		return 77;
+#endif
+
 	CKINT(env_check_file(random));
 	CKINT(env_check_file(urandom));
 	CKINT(env_check_file(server));

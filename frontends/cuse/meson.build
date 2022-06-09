@@ -29,7 +29,7 @@ esdm_cuse_urandom = executable(
 		install: true
 		)
 
-esdm_cuse_random = executable(
+esdm_proc = executable(
 		'esdm-proc',
 		[ cuse_src, 'proc_files.c' ],
 		include_directories: include_dirs_client,
