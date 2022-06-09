@@ -91,7 +91,8 @@ static int addent_ioctl(int fd, int exp)
 
 	ret = ioctl(fd, RNDADDENTROPY, rpi);
 	if (ret != exp) {
-		printf("RNDADDENTROPY IOCTL failed: expected result %d, returned result %d\n", exp, ret);
+		printf("RNDADDENTROPY IOCTL failed: expected result %d, returned result %d\n",
+		       exp, ret);
 		ret = 1;
 		goto out;
 	}
@@ -132,14 +133,16 @@ static int addent_ioctl(int fd, int exp)
 		/* Note, we have to account for oversampling of entropy */
 		if (ent_count_bits2 - ent_count_bits < 10) {
 			printf("RNDADDENTROPY failed to add entropy: %u %u\n",
-			ent_count_bits2, ent_count_bits);
+			       ent_count_bits2, ent_count_bits);
 			ret = 1;
 			goto out;
 		}
 	} else {
-		if (ent_count_bits2 != ent_count_bits) {
-			printf("RNDADDENTROPY failed: added in normal mode: %u %u\n",
-			ent_count_bits2, ent_count_bits);
+		if ((ent_count_bits2 - ent_count_bits) !=
+		    (uint32_t)rpi->entropy_count) {
+			printf("RNDADDENTROPY failed: added in normal mode: 2nd bit count %u - 1st bit count %u - expected difference %u\n",
+			       ent_count_bits2, ent_count_bits,
+			       (uint32_t)rpi->entropy_count);
 			ret = 1;
 			goto out;
 		}
