@@ -85,6 +85,7 @@ int env_init(void)
 		char buf[FILENAME_MAX];
 		char *server_argv[] = { buf, "-vvvvv", NULL };
 
+		CKNULL(server, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", server);
 		execve(server, server_argv, NULL);
 

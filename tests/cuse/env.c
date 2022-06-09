@@ -105,6 +105,7 @@ int env_init(int disable_fallback)
 		char buf[FILENAME_MAX];
 		char *server_argv[] = { buf, "-vvvvv", NULL };
 
+		CKNULL(server, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", server);
 		execve(server, server_argv, NULL);
 
@@ -126,6 +127,7 @@ int env_init(int disable_fallback)
 		char *random_argv_dis[]  = { buf,  "-f", "-d", "-v", "5",
 					     "--disable_fallback=1", NULL };
 
+		CKNULL(random, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", random);
 		execve(random, disable_fallback ? random_argv_dis : random_argv,
 		       NULL);
@@ -148,6 +150,7 @@ int env_init(int disable_fallback)
 		char *urandom_argv_dis[]  = { buf,  "-f", "-d", "-v", "5",
 					      "--disable_fallback=1", NULL };
 
+		CKNULL(urandom, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", urandom);
 		execve(urandom, disable_fallback ?
 				urandom_argv_dis : urandom_argv, NULL);
