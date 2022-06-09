@@ -44,7 +44,7 @@ extern "C"
 # define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv-testmode.socket"
 
 # define ESDM_SHM_NAME "/"
-# define ESDM_SHM_STATUS 1122334456
+# define ESDM_SHM_STATUS 0x6573646d
 
 # define ESDM_SEM_NAME "esdm-shm-status-semaphore-testmode"
 
@@ -55,7 +55,7 @@ extern "C"
 # define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv.socket"
 
 # define ESDM_SHM_NAME "/"
-# define ESDM_SHM_STATUS 1122334455
+# define ESDM_SHM_STATUS 0x6d647365
 
 # define ESDM_SEM_NAME "esdm-shm-status-semaphore"
 
