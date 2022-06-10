@@ -141,7 +141,7 @@ check_reposanity() {
 		exit 1
 	fi
 
-	if ! $(head -n1 ${CHANGESFILE} | grep -q "pre" )
+	if $(head -n1 ${CHANGESFILE} | grep -q "prerelease" )
 	then
 		echo "Preliminary release - skipping full release validation" >&2
 		exit 0
