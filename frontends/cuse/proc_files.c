@@ -125,8 +125,8 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 		return -EFAULT;
 
 	/* UUID version is set to 4 denominating a random generation */
-	uuid[6] = (uuid[6] & 0x0F) | 0x40;
-	uuid[8] = (uuid[8] & 0x3F) | 0x80;
+	uuid[6] = (uint8_t)((uuid[6] & 0x0F) | 0x40);
+	uuid[8] = (uint8_t)((uuid[8] & 0x3F) | 0x80);
 
 	esdm_proc_uuid_bin2hex(uuid, file->valdata);
 	file->valdata[ESDM_PROC_UUID_LEN - 2] = '\n';
