@@ -194,7 +194,8 @@ The ESDM consists of the following components:
   NOTE: If you run the `esdm-proc` tool on a system with SELinux in enforcing
   mode using the targeted policy, you need to create a new policy. A template
   is provided in the `addons/esdm-proc-selinux` directory. Compile the policy
-  with the provided `esdm_proc.sh` script.
+  with the provided `esdm_proc.sh` script. For details, see
+  `addons/esdm-proc-selinux/README.md`.
 
 * `libesdm-getrandom.so`: The library provides a wrapper to the `getrandom` and
   `getentropy` libc library calls. To use the library for other consumers, use
