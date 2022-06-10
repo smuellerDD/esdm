@@ -59,3 +59,19 @@ allow esdm_proc_t user_tmp_t:file { execute open };
 #!!!! This avc can be allowed using the boolean 'domain_can_mmap_files'
 allow esdm_proc_t user_tmp_t:file map;
 allow esdm_proc_t var_run_t:sock_file { getattr write };
+
+#============= init_t ==============
+allow init_t fuse_device_t:chr_file { open read write };
+allow init_t fusefs_t:filesystem relabelfrom;
+allow init_t fusermount_exec_t:file { execute execute_no_trans open read };
+allow init_t sysctl_kernel_t:filesystem { mount relabelfrom relabelto };
+
+#============= sysctl_kernel_t ==============
+allow sysctl_kernel_t self:filesystem associate;
+
+#============= unconfined_service_t ==============
+allow unconfined_service_t sysctl_kernel_t:filesystem { relabelfrom relabelto };
+
+#============= unconfined_t ==============
+allow unconfined_t sysctl_kernel_t:filesystem { relabelfrom relabelto };
+allow unconfined_t sysctl_kernel_t:filesystem mount;
