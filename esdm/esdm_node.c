@@ -72,7 +72,7 @@ static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
 	free(drngs);
 }
 
-/* Allocate the data structures for the per-NUMA node DRNGs */
+/* Allocate the data structures for the per-node DRNGs */
 void esdm_drngs_node_alloc(void)
 {
 	struct esdm_drng **drngs;
@@ -116,7 +116,7 @@ void esdm_drngs_node_alloc(void)
 		mutex_init(&drng->hash_lock, 0);
 
 		/*
-		 * No reseeding of NUMA DRNGs from previous DRNGs as this
+		 * No reseeding of node DRNGs from previous DRNGs as this
 		 * would complicate the code. Let it simply reseed.
 		 */
 		drngs[node] = drng;

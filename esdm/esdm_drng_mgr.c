@@ -357,7 +357,7 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 {
 	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "reseed triggered by system events for DRNG on NUMA node %d\n",
+	       "reseed triggered by system events for DRNG on node %d\n",
 	       node);
 	esdm_drng_seed(drng);
 	if (drng->fully_seeded) {

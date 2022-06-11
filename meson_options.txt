@@ -159,14 +159,10 @@ This value can be set to any arbitrary number. Depending on the number
 of threads, the required numbers of thread contexts are statically allocated.
 
 The number of threads define:
+
 * the number of concurrent DRNG instances that are maintained independent of
   each other - this value is limited by the number of found CPUs as it makes no
-  sense to have more DRNG instances than CPUs that can execute them, and
-
-* the number of unprivileged Unix Domain Sockets exported by the ESDM server
-  to support concurrent client requests (the privileged interface is never
-  available with multiple threads as the provided functionality is not
-  performance-critical).
+  sense to have more DRNG instances than CPUs that can execute them.
 
 There is no other value that needs changing if the number of threads
 shall be adjusted.

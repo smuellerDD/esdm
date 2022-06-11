@@ -240,7 +240,7 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 			}
 		} while ((0 < ret || EINTR == errno) && buflen);
 	} else {
-		snprintf(buf, buflen, "disabled");
+		snprintf(buf, buflen, " disabled - missing kernel support\n");
 	}
 }
 

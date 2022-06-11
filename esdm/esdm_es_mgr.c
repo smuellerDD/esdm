@@ -217,7 +217,7 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 
 	/*
 	 * The init DRNG instance must always be fully seeded as this instance
-	 * is the fall-back if any of the per-NUMA node DRNG instances is
+	 * is the fall-back if any of the per-node DRNG instances is
 	 * insufficiently seeded. Thus, we mark the entire ESDM as
 	 * non-operational if the initial DRNG becomes not fully seeded.
 	 */
