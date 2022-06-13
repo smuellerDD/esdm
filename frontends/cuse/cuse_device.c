@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/shm.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "bool.h"
@@ -49,66 +50,33 @@ static char *mount_src = NULL;
 static char *mount_dst = NULL;
 
 /******************************************************************************
- * Semaphore for shared memory segment
- ******************************************************************************/
-
-static sem_t *esdm_cuse_semid = SEM_FAILED;
-
-static void esdm_cuse_shm_status_down(void)
-{
-	if (esdm_cuse_semid == SEM_FAILED) {
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
-		return;
-	}
-
-	if (sem_wait(esdm_cuse_semid))
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
-}
-
-
-static void esdm_cuse_shm_status_close_sem(void)
-{
-	if (esdm_cuse_semid != SEM_FAILED) {
-		sem_close(esdm_cuse_semid);
-		esdm_cuse_semid = SEM_FAILED;
-	}
-}
-
-static int esdm_cuse_shm_status_create_sem(void)
-{
-	int errsv;
-
-	esdm_cuse_semid = sem_open(ESDM_SEM_NAME, O_CREAT, 0644, 0);
-	if (esdm_cuse_semid == SEM_FAILED) {
-		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Semaphore creation failed: %s\n",
-		       strerror(errsv));
-		return -errsv;
-	}
-
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-	       "ESDM change indicator semaphore successfully attached to\n");
-
-	return 0;
-}
-
-/******************************************************************************
  * Shared memory segment
  ******************************************************************************/
 
 static struct esdm_shm_status *esdm_cuse_shm_status = NULL;
 static int esdm_cuse_shmid = -1;
 
+static int esdm_cuse_shm_status_avail(void)
+{
+	static int initialized = 0;
+	int ret = (esdm_cuse_shm_status &&
+		   esdm_cuse_shm_status->version == ESDM_SHM_STATUS_VERSION);
+
+	if (ret && !initialized) {
+		initialized = 1;
+		logger_status(LOGGER_C_CUSE,
+			      "CUSE client started detected ESDM server with properties:\n%s\n",
+			      esdm_cuse_shm_status->info);
+	}
+
+	return ret;
+}
+
 static void esdm_cuse_shm_status_close_shm(void)
 {
 	if (esdm_cuse_shm_status) {
 		shmdt(esdm_cuse_shm_status);
 		esdm_cuse_shm_status = NULL;
-	}
-	if (esdm_cuse_shmid >= 0) {
-		shmctl(esdm_cuse_shmid, IPC_RMID, NULL);
-		esdm_cuse_shmid = -1;
 	}
 }
 
@@ -122,11 +90,20 @@ static int esdm_cuse_shm_status_create_shm(void)
 	esdm_cuse_shmid = shmget(key, sizeof(struct esdm_shm_status),
 				 S_IRUSR | S_IRGRP | S_IROTH);
 	if (esdm_cuse_shmid < 0) {
-		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Shared memory segment creation failed: %s\n",
-		       strerror(errsv));
-		return -errsv;
+		if (errno == ENOENT) {
+			esdm_cuse_shmid = shmget(key,
+						 sizeof(struct esdm_shm_status),
+						 IPC_CREAT |
+						 S_IRUSR | S_IWUSR |
+						 S_IRGRP | S_IROTH);
+			if (esdm_cuse_shmid < 0) {
+				errsv = errno;
+				logger(LOGGER_ERR, LOGGER_C_ANY,
+				       "ESDM shared memory segment creation failed: %s\n",
+				       strerror(errsv));
+				return -errsv;
+			}
+		}
 	}
 
 	tmp = shmat(esdm_cuse_shmid, NULL, SHM_RDONLY);
@@ -140,15 +117,66 @@ static int esdm_cuse_shm_status_create_shm(void)
 	}
 	esdm_cuse_shm_status = tmp;
 
-	if (esdm_cuse_shm_status->version != ESDM_SHM_STATUS_VERSION) {
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Shared memory segment version mismatch (expected %u, found %u)\n",
-		       ESDM_SHM_STATUS_VERSION, esdm_cuse_shm_status->version);
-		return -EINVAL;
+	logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+	       "ESDM shared memory segment successfully attached to\n");
+
+	return 0;
+}
+
+/******************************************************************************
+ * Semaphore for shared memory segment
+ ******************************************************************************/
+
+static sem_t *esdm_cuse_semid = SEM_FAILED;
+
+static void esdm_cuse_shm_status_down(void)
+{
+	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
+
+	if (esdm_cuse_semid == SEM_FAILED) {
+		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
+		return;
+	}
+
+	/* Wait and block until the SHM-Segment becomes available */
+	while (!esdm_cuse_shm_status_avail())
+		nanosleep(&ts, NULL);
+
+	if (sem_wait(esdm_cuse_semid))
+		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
+}
+
+
+static void esdm_cuse_shm_status_close_sem(void)
+{
+	if (esdm_cuse_semid != SEM_FAILED) {
+		sem_t *tmp = esdm_cuse_semid;
+
+		esdm_cuse_semid = SEM_FAILED;
+		sem_close(tmp);
+	}
+}
+
+static int esdm_cuse_shm_status_create_sem(void)
+{
+	int errsv;
+
+	esdm_cuse_semid = sem_open(ESDM_SEM_NAME, O_CREAT, 0644, 0);
+	if (esdm_cuse_semid == SEM_FAILED) {
+		if (errno == EEXIST) {
+			esdm_cuse_semid = sem_open(ESDM_SEM_NAME, 0, 0644, 0);
+			if (esdm_cuse_semid == SEM_FAILED) {
+				errsv = errno;
+				logger(LOGGER_ERR, LOGGER_C_ANY,
+				       "ESDM change indicator semaphore creation failed: %s\n",
+				       strerror(errsv));
+				return -errsv;
+			}
+		}
 	}
 
 	logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-	       "ESDM shared memory segment successfully attached to\n");
+	       "ESDM change indicator semaphore initialized\n");
 
 	return 0;
 }
@@ -774,17 +802,13 @@ void esdm_cuse_init_done(void *userdata)
 	CKINT(esdm_cuse_bind_mount(mount_src, mount_dst));
 
 	CKINT(esdm_cuse_shm_status_create_sem());
+	CKINT(esdm_cuse_shm_status_create_shm());
 
 	esdm_cuse_drop_privileges();
-	CKINT(esdm_cuse_shm_status_create_shm());
 
 	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL,
 			       ESDM_THREAD_CUSE_POLL_GROUP, NULL),
 		  "Starting poll-in-reset thread failed: %d\n", ret);
-
-	logger_status(LOGGER_C_CUSE,
-		      "CUSE client started with ESDM server properties:\n%s\n",
-		      esdm_cuse_shm_status->info);
 
 	return;
 

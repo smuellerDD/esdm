@@ -12,7 +12,7 @@ After=local-fs.target
 Before=sysinit.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
-Requires=esdm-server.service
+Wants=esdm-server.service
 After=esdm-server.service
 
 [Service]

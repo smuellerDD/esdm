@@ -91,6 +91,12 @@ static void esdm_proc_raise_privilege(void)
 		raise_privilege_transient(0, 0);
 }
 
+static void esdm_proc_empty_file(struct esdm_proc_file *file)
+{
+	file->valdata[0] = '\0';
+	file->vallen = 0;
+}
+
 /******************************************************************************
  * Data access functions
  ******************************************************************************/
@@ -119,8 +125,10 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	ssize_t ret;
 
 	esdm_invoke(esdm_rpcc_get_random_bytes_full(uuid, sizeof(uuid)));
-	if (ret < 0)
-		return (int)ret;
+	if (ret < 0) {
+		esdm_proc_empty_file(file);
+		return 0;
+	}
 	if (ret != sizeof(uuid))
 		return -EFAULT;
 
@@ -144,12 +152,14 @@ static int esdm_proc_data(struct esdm_proc_file *file,
 	int ret;
 
 	esdm_invoke(content(&val));
-	if (!ret) {
+	if (ret) {
+		esdm_proc_empty_file(file);
+	} else {
 		snprintf(file->valdata, ESDM_PROC_BUF_LEN, "%u\n", val);
 		file->vallen = strlen(file->valdata);
 	}
 
-	return ret;
+	return 0;
 }
 
 static int esdm_proc_poolsize(struct esdm_proc_file *file)
@@ -215,10 +225,12 @@ static int esdm_proc_get_status(struct esdm_proc_file *file)
 	int ret;
 
 	esdm_invoke(esdm_rpcc_status(file->valdata, ESDM_PROC_BUF_LEN));
-	if (!ret)
+	if (ret)
+		esdm_proc_empty_file(file);
+	else
 		file->vallen = strlen(file->valdata);
 
-	return ret;
+	return 0;
 }
 
 static struct esdm_proc_file esdm_proc_files[] = {
@@ -300,7 +312,7 @@ static int esdm_proc_pre_init(void)
 	char buf[ESDM_RPC_MAX_MSG_SIZE];
 	size_t data_read = 0;
 	ssize_t rc;
-	int ret, fd;
+	int fd;
 
 	fd = open("/proc/sys/kernel/random/boot_id", O_RDONLY);
 	if (fd < 0) {
@@ -321,13 +333,16 @@ static int esdm_proc_pre_init(void)
 
 	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "boot_id: %s\n", file->valdata);
 
-	CKINT(esdm_rpcc_status(buf, sizeof(buf)));
-	logger_status(LOGGER_C_CUSE,
-		      "PROC client started with ESDM server properties:\n%s\n",
-		      buf);
+	if (esdm_rpcc_status(buf, sizeof(buf))) {
+		logger(LOGGER_WARN, LOGGER_C_CUSE,
+		       "PROC client started but ESDM server not available!\n");
+	} else {
+		logger_status(LOGGER_C_CUSE,
+			      "PROC client started with ESDM server properties:\n%s\n",
+			      buf);
+	}
 
-out:
-	return ret;
+	return 0;
 }
 
 static void *esdm_proc_init(struct fuse_conn_info *conn,
