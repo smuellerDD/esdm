@@ -106,6 +106,11 @@ void esdm_rpc_get_random_bytes_min(UnprivAccess_Service *service,
 				   GetRandomBytesMinResponse_Closure closure,
 				   void *closure_data);
 
+void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
+				  const GetRandomBytesPrRequest *request,
+				  GetRandomBytesPrResponse_Closure closure,
+				  void *closure_data);
+
 void esdm_rpc_get_random_bytes(UnprivAccess_Service *service,
 			       const GetRandomBytesRequest *request,
 			       GetRandomBytesResponse_Closure closure,

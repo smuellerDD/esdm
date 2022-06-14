@@ -364,7 +364,6 @@ static void esdm_cuse_raise_privilege(fuse_req_t req)
 /******************************************************************************
  * CUSE callback handler
  ******************************************************************************/
-
 void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi)
 {
 	fuse_reply_open(req, fi);
@@ -380,9 +379,11 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	ssize_t ret = 0;
 
 	(void)off;
-	(void)fi;
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
+
+	if (fi->flags & O_SYNC)
+		get = esdm_rpcc_get_random_bytes_pr;
 
 	if (size > sizeof(tmpbuf)) {
 		logger(LOGGER_ERR, LOGGER_C_CUSE,

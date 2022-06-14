@@ -312,24 +312,31 @@ void esdm_drng_inject(struct esdm_drng *drng,
 	}
 }
 
-/* Perform the seeding of the DRNG with data from noise source */
-static void esdm_drng_seed_es(struct esdm_drng *drng)
+/*
+ * Perform the seeding of the DRNG with data from entropy source.
+ * The function returns the entropy injected into the DRNG in bits.
+ */
+static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN);
+	uint32_t collected_entropy;
 
 	/* This clearing is not strictly needed, but it silences valgrind */
 	memset(&seedbuf, 0, sizeof(seedbuf));
 	esdm_fill_seed_buffer(&seedbuf,
 			      esdm_get_seed_entropy_osr(drng->fully_seeded));
 
+	collected_entropy = esdm_entropy_rate_eb(&seedbuf);
 	esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-			 esdm_fully_seeded_eb(drng->fully_seeded, &seedbuf),
-			 "regular");
+			 esdm_fully_seeded(drng->fully_seeded,
+					   collected_entropy), "regular");
 
 	/* Set the seeding state of the ESDM */
 	esdm_init_ops(&seedbuf);
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
+
+	return collected_entropy;
 }
 
 static void esdm_drng_seed(struct esdm_drng *drng)
@@ -466,12 +473,16 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng)
  * @drng: DRNG instance
  * @outbuf: buffer for storing random data
  * @outbuflen: length of outbuf
+ * @pr: operate the DRNG with prediction resistance (i.e. reseed from the
+ *	entropy sources and only return the amount bytes for which we have
+ *	received fresh entropy)
  *
  * @return:
  * * < 0 in error case (DRNG generation or update failed)
  * * >=0 returning the returned number of bytes
  */
-ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf, size_t outbuflen)
+static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
+			     size_t outbuflen, bool pr)
 {
 	ssize_t processed = 0;
 
@@ -502,6 +513,33 @@ ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf, size_t outbuflen)
 		}
 
 		mutex_w_lock(&drng->lock);
+
+		/*
+		 * Handle the prediction resistance: force a reseed and
+		 * only generate the amount of data that was seeded. Note,
+		 * esdm_drng_seed_es returns the entropy amount in bits, but
+		 * we operate here in bytes.
+		 */
+		if (pr) {
+			uint32_t collected_entropy_bits;
+
+			/* If ESDM is not operational, PR is not possible. */
+			if (!esdm_state_operational()) {
+				mutex_w_unlock(&drng->lock);
+				goto out;
+			}
+
+			collected_entropy_bits = esdm_drng_seed_es(drng);
+
+			/* If no new entropy was received, stop now. */
+			if (!collected_entropy_bits) {
+				mutex_w_unlock(&drng->lock);
+				goto out;
+			}
+
+			todo = min_t(uint32_t, todo,
+				     collected_entropy_bits >> 3);
+		}
 		ret = drng->drng_cb->drng_generate(drng->drng,
 						   outbuf + processed, todo);
 		mutex_w_unlock(&drng->lock);
@@ -515,10 +553,11 @@ ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf, size_t outbuflen)
 		outbuflen -= (size_t)ret;
 	}
 
+out:
 	return processed;
 }
 
-ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen)
+static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	struct esdm_drng *drng = &esdm_drng_init;
@@ -540,7 +579,7 @@ ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen)
 	if (ret)
 		return ret;
 
-	rc = esdm_drng_get(drng, outbuf, outbuflen);
+	rc = esdm_drng_get(drng, outbuf, outbuflen, pr);
 	esdm_drng_put_instances();
 
 	return rc;
@@ -596,21 +635,28 @@ void esdm_drng_sleep_while_non_min_seeded(void)
 }
 
 DSO_PUBLIC
+ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
+{
+	esdm_drng_sleep_while_nonoperational(0);
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+}
+
+DSO_PUBLIC
 ssize_t esdm_get_random_bytes_full(uint8_t *buf, size_t nbytes)
 {
 	esdm_drng_sleep_while_nonoperational(0);
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes);
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
 }
 
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_min(uint8_t *buf, size_t nbytes)
 {
 	esdm_drng_sleep_while_non_min_seeded();
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes);
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
 }
 
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes(uint8_t *buf, size_t nbytes)
 {
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes);
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
 }

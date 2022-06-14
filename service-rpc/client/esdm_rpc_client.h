@@ -182,6 +182,24 @@ ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen);
 ssize_t esdm_rpcc_get_random_bytes_min(uint8_t *buf, size_t buflen);
 
 /**
+ * @brief RPC-version of esdm_get_random_bytes_pr
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * This function blocks until the ESDM is fully seeded. It causes a reseed of
+ * the ESDM and only returns at most the amount of data equal to the entropy
+ * gathered from the entropy sources.
+ *
+ * @param buf [out] Buffer to be filled with random bits.
+ * @param buflen [in] Size of the buffer to be filled.
+ *
+ * @return: read data length on success, < 0 on error (-EINTR means connection
+ *	    was interrupted and the caller may try again)
+ */
+ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen);
+
+/**
  * @brief RPC-version of esdm_get_random_bytes
  *
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore

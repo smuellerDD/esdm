@@ -191,13 +191,12 @@ static void esdm_init_wakeup(void)
 	thread_wake_all(&esdm_init_wait);
 }
 
-static bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy)
+bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy)
 {
 	return (collected_entropy >= esdm_get_seed_entropy_osr(fully_seeded));
 }
 
-/* Policy to check whether entropy buffer contains full seeded entropy */
-bool esdm_fully_seeded_eb(bool fully_seeded, struct entropy_buf *eb)
+uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 {
 	uint32_t i, collected_entropy = 0;
 
@@ -206,7 +205,7 @@ bool esdm_fully_seeded_eb(bool fully_seeded, struct entropy_buf *eb)
 
 	esdm_test_seed_entropy(collected_entropy);
 
-	return esdm_fully_seeded(fully_seeded, collected_entropy);
+	return collected_entropy;
 }
 
 /* Mark one DRNG as not fully seeded */

@@ -38,7 +38,8 @@ int esdm_pool_trylock(void);
 void esdm_pool_unlock(void);
 void esdm_pool_all_nodes_seeded(bool set);
 
-bool esdm_fully_seeded_eb(bool fully_seeded, struct entropy_buf *eb);
+bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy);
+uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb);
 void esdm_unset_fully_seeded(struct esdm_drng *drng);
 void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits);
 void esdm_init_ops(struct entropy_buf *eb);

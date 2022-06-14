@@ -86,6 +86,35 @@ message GetRandomBytesMinResponse {
 }
 
 /******************************************************************************
+ * get_random_bytes_pr
+ ******************************************************************************/
+
+/**
+ * @brief Request to get random bytes from fully seeded DRNG with prediction
+ *	  resistance enabled
+ *
+ * @param len number of random bytes that are requested
+ */
+message GetRandomBytesPrRequest {
+	uint64 len = 1;
+}
+
+/**
+ * @brief Response providing random bytes from fully seeded DRNG with prediction
+ *	  resistance enabled.
+ *
+ * @param ret Return code of generation request (>= 0 on success with the value
+ *	      indicating the generated number of random bytes,
+ *	      < -255 indicating the maximum number of bytes that can be
+ *	      transferred in one request, < 0 on error)
+ * @param randval Random bytes
+ */
+message GetRandomBytesPrResponse {
+	int64 ret = 1;
+	bytes randval = 2;
+}
+
+/******************************************************************************
  * get_random_bytes
  ******************************************************************************/
 
@@ -235,6 +264,8 @@ service UnprivAccess {
 				  (GetRandomBytesFullResponse);
 	rpc RpcGetRandomBytesMin (GetRandomBytesMinRequest) returns
 				 (GetRandomBytesMinResponse);
+	rpc RpcGetRandomBytesPr (GetRandomBytesPrRequest) returns
+				(GetRandomBytesPrResponse);
 	rpc RpcGetRandomBytes (GetRandomBytesRequest) returns
 			      (GetRandomBytesResponse);
 	rpc RpcWriteData (WriteDataRequest) returns (WriteDataResponse);

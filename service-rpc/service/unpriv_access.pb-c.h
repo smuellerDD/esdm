@@ -21,6 +21,8 @@ typedef struct GetRandomBytesFullRequest GetRandomBytesFullRequest;
 typedef struct GetRandomBytesFullResponse GetRandomBytesFullResponse;
 typedef struct GetRandomBytesMinRequest GetRandomBytesMinRequest;
 typedef struct GetRandomBytesMinResponse GetRandomBytesMinResponse;
+typedef struct GetRandomBytesPrRequest GetRandomBytesPrRequest;
+typedef struct GetRandomBytesPrResponse GetRandomBytesPrResponse;
 typedef struct GetRandomBytesRequest GetRandomBytesRequest;
 typedef struct GetRandomBytesResponse GetRandomBytesResponse;
 typedef struct WriteDataRequest WriteDataRequest;
@@ -141,6 +143,43 @@ struct  GetRandomBytesMinResponse
 };
 #define GET_RANDOM_BYTES_MIN_RESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_min_response__descriptor) \
+    , 0, {0,NULL} }
+
+
+/*
+ **
+ * @brief Request to get random bytes from fully seeded DRNG with prediction
+ *	  resistance enabled
+ * @param len number of random bytes that are requested
+ */
+struct  GetRandomBytesPrRequest
+{
+  ProtobufCMessage base;
+  uint64_t len;
+};
+#define GET_RANDOM_BYTES_PR_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_pr_request__descriptor) \
+    , 0 }
+
+
+/*
+ **
+ * @brief Response providing random bytes from fully seeded DRNG with prediction
+ *	  resistance enabled.
+ * @param ret Return code of generation request (>= 0 on success with the value
+ *	      indicating the generated number of random bytes,
+ *	      < -255 indicating the maximum number of bytes that can be
+ *	      transferred in one request, < 0 on error)
+ * @param randval Random bytes
+ */
+struct  GetRandomBytesPrResponse
+{
+  ProtobufCMessage base;
+  int64_t ret;
+  ProtobufCBinaryData randval;
+};
+#define GET_RANDOM_BYTES_PR_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_pr_response__descriptor) \
     , 0, {0,NULL} }
 
 
@@ -447,6 +486,44 @@ GetRandomBytesMinResponse *
 void   get_random_bytes_min_response__free_unpacked
                      (GetRandomBytesMinResponse *message,
                       ProtobufCAllocator *allocator);
+/* GetRandomBytesPrRequest methods */
+void   get_random_bytes_pr_request__init
+                     (GetRandomBytesPrRequest         *message);
+size_t get_random_bytes_pr_request__get_packed_size
+                     (const GetRandomBytesPrRequest   *message);
+size_t get_random_bytes_pr_request__pack
+                     (const GetRandomBytesPrRequest   *message,
+                      uint8_t             *out);
+size_t get_random_bytes_pr_request__pack_to_buffer
+                     (const GetRandomBytesPrRequest   *message,
+                      ProtobufCBuffer     *buffer);
+GetRandomBytesPrRequest *
+       get_random_bytes_pr_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_random_bytes_pr_request__free_unpacked
+                     (GetRandomBytesPrRequest *message,
+                      ProtobufCAllocator *allocator);
+/* GetRandomBytesPrResponse methods */
+void   get_random_bytes_pr_response__init
+                     (GetRandomBytesPrResponse         *message);
+size_t get_random_bytes_pr_response__get_packed_size
+                     (const GetRandomBytesPrResponse   *message);
+size_t get_random_bytes_pr_response__pack
+                     (const GetRandomBytesPrResponse   *message,
+                      uint8_t             *out);
+size_t get_random_bytes_pr_response__pack_to_buffer
+                     (const GetRandomBytesPrResponse   *message,
+                      ProtobufCBuffer     *buffer);
+GetRandomBytesPrResponse *
+       get_random_bytes_pr_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_random_bytes_pr_response__free_unpacked
+                     (GetRandomBytesPrResponse *message,
+                      ProtobufCAllocator *allocator);
 /* GetRandomBytesRequest methods */
 void   get_random_bytes_request__init
                      (GetRandomBytesRequest         *message);
@@ -695,6 +772,12 @@ typedef void (*GetRandomBytesMinRequest_Closure)
 typedef void (*GetRandomBytesMinResponse_Closure)
                  (const GetRandomBytesMinResponse *message,
                   void *closure_data);
+typedef void (*GetRandomBytesPrRequest_Closure)
+                 (const GetRandomBytesPrRequest *message,
+                  void *closure_data);
+typedef void (*GetRandomBytesPrResponse_Closure)
+                 (const GetRandomBytesPrResponse *message,
+                  void *closure_data);
 typedef void (*GetRandomBytesRequest_Closure)
                  (const GetRandomBytesRequest *message,
                   void *closure_data);
@@ -750,6 +833,10 @@ struct UnprivAccess_Service
                                    const GetRandomBytesMinRequest *input,
                                    GetRandomBytesMinResponse_Closure closure,
                                    void *closure_data);
+  void (*rpc_get_random_bytes_pr)(UnprivAccess_Service *service,
+                                  const GetRandomBytesPrRequest *input,
+                                  GetRandomBytesPrResponse_Closure closure,
+                                  void *closure_data);
   void (*rpc_get_random_bytes)(UnprivAccess_Service *service,
                                const GetRandomBytesRequest *input,
                                GetRandomBytesResponse_Closure closure,
@@ -785,6 +872,7 @@ void unpriv_access__init (UnprivAccess_Service *service,
       function_prefix__ ## rpc_status,\
       function_prefix__ ## rpc_get_random_bytes_full,\
       function_prefix__ ## rpc_get_random_bytes_min,\
+      function_prefix__ ## rpc_get_random_bytes_pr,\
       function_prefix__ ## rpc_get_random_bytes,\
       function_prefix__ ## rpc_write_data,\
       function_prefix__ ## rpc_rnd_get_ent_cnt,\
@@ -803,6 +891,10 @@ void unpriv_access__rpc_get_random_bytes_min(ProtobufCService *service,
                                              const GetRandomBytesMinRequest *input,
                                              GetRandomBytesMinResponse_Closure closure,
                                              void *closure_data);
+void unpriv_access__rpc_get_random_bytes_pr(ProtobufCService *service,
+                                            const GetRandomBytesPrRequest *input,
+                                            GetRandomBytesPrResponse_Closure closure,
+                                            void *closure_data);
 void unpriv_access__rpc_get_random_bytes(ProtobufCService *service,
                                          const GetRandomBytesRequest *input,
                                          GetRandomBytesResponse_Closure closure,
@@ -836,6 +928,8 @@ extern const ProtobufCMessageDescriptor get_random_bytes_full_request__descripto
 extern const ProtobufCMessageDescriptor get_random_bytes_full_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_min_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_min_response__descriptor;
+extern const ProtobufCMessageDescriptor get_random_bytes_pr_request__descriptor;
+extern const ProtobufCMessageDescriptor get_random_bytes_pr_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_response__descriptor;
 extern const ProtobufCMessageDescriptor write_data_request__descriptor;

@@ -79,11 +79,8 @@ void esdm_drng_reset(struct esdm_drng *drng);
 void esdm_drng_inject(struct esdm_drng *drng,
 		      const uint8_t *inbuf, size_t inbuflen,
 		      bool fully_seeded, const char *drng_type);
-ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
-		      size_t outbuflen);
 int esdm_drng_sleep_while_nonoperational(int nonblock);
 void esdm_drng_sleep_while_non_min_seeded(void);
-ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen);
 void esdm_drng_seed_work(void);
 
 static inline uint32_t esdm_compress_osr(void)
