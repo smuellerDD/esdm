@@ -1,6 +1,10 @@
 Changes 0.4.0-prerelease:
 * Start CUSE daemons independently from ESDM server
 
+* add prediction resistance behavior with O_SYNC /dev/random
+
+* initialize the DRNG immediately with 256 bits (disregarding 32/128 bits)
+
 Changes 0.3.0:
 * Replace protobuf-c-rpc with built-in RPC mechanism reducing amount of mallocs,
   performing proper zeroization and being fully thread-aware

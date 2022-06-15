@@ -63,7 +63,7 @@ struct esdm_state {
 
 static struct esdm_state esdm_state = {
 	false, false, false, false,
-	.boot_entropy_thresh	= ATOMIC_INIT(ESDM_INIT_ENTROPY_BITS),
+	.boot_entropy_thresh	= ATOMIC_INIT(ESDM_FULL_SEED_ENTROPY_BITS),
 	.reseed_in_progress	= ATOMIC_INIT(0),
 };
 
