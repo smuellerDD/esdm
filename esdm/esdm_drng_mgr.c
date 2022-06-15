@@ -551,6 +551,9 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		}
 		processed += ret;
 		outbuflen -= (size_t)ret;
+
+		if (pr && outbuflen)
+			sched_yield();
 	}
 
 out:
@@ -608,7 +611,7 @@ void esdm_reset(void)
 		}
 	}
 	esdm_drng_atomic_reset();
-	esdm_set_entropy_thresh(ESDM_INIT_ENTROPY_BITS);
+	esdm_set_entropy_thresh(ESDM_FULL_SEED_ENTROPY_BITS);
 
 	esdm_reset_state();
 	esdm_drng_put_instances();
