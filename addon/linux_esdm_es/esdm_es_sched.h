@@ -6,6 +6,8 @@
 #ifndef _ESDM_ES_SCHED_H
 #define _ESDM_ES_SCHED_H
 
+#include "esdm_es_mgr_cb.h"
+
 void esdm_sched_es_init(bool highres_timer);
 
 extern struct esdm_es_cb esdm_es_sched;
