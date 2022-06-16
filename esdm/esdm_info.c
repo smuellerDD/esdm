@@ -67,26 +67,28 @@ void esdm_status(char *buf, size_t buflen)
 	len = esdm_remaining_buf_len(buf, buflen);
 
 	snprintf(buf + len, buflen - len,
-                 "DRNG name: %s\n"
-                 "ESDM security strength in bits: %d\n"
-                 "Number of DRNG instances: %u\n"
-                 "Standards compliance: %s\n"
-                 "ESDM minimally seeded: %s\n"
-                 "ESDM fully seeded: %s\n",
-                 drng->drng_cb->drng_name(),
-                 esdm_security_strength(),
-                 esdm_nodes,
-                 esdm_sp80090c_compliant() ? "SP800-90C " : "",
-                 esdm_state_min_seeded() ? "true" : "false",
-                 esdm_state_fully_seeded() ? "true" : "false");
+		 "DRNG name: %s\n"
+		 "ESDM security strength in bits: %d\n"
+		 "Number of DRNG instances: %u\n"
+		 "Standards compliance: %s\n"
+		 "ESDM minimally seeded: %s\n"
+		 "ESDM fully seeded: %s\n"
+		 "ESDM entropy level: %u\n",
+		 drng->drng_cb->drng_name(),
+		 esdm_security_strength(),
+		 esdm_nodes,
+		 esdm_sp80090c_compliant() ? "SP800-90C " : "",
+		 esdm_state_min_seeded() ? "true" : "false",
+		 esdm_state_fully_seeded() ? "true" : "false",
+		 esdm_avail_entropy());
 
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es(i) {
 		len = esdm_remaining_buf_len(buf, buflen);
 		snprintf(buf + len, buflen - len,
-                         "Entropy Source %u properties:\n"
-                         " Name: %s\n",
-                         i, esdm_es[i]->name);
+			 "Entropy Source %u properties:\n"
+			 " Name: %s\n",
+			 i, esdm_es[i]->name);
 
 		len = esdm_remaining_buf_len(buf, buflen);
 		esdm_es[i]->state(buf + len, buflen - len);

@@ -127,7 +127,7 @@ void esdm_drngs_node_alloc(void)
 		       node);
 	}
 
-	/* counterpart to memory barrier in esdm_drng_instances */
+	/* counterpart to memory barrier in esdm_drng_get_instances */
 	if (!__sync_val_compare_and_swap(&esdm_drng, NULL, drngs)) {
 		esdm_pool_all_nodes_seeded(false);
 		esdm_es_add_entropy();
