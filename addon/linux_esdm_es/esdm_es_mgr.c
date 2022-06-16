@@ -139,7 +139,7 @@ static ssize_t esdm_es_mgr_sched_ent_write(struct file *file,
 static int esdm_es_mgr_debugfs_init(void)
 {
 	esdm_es_mgr_debugfs.esdm_es_mgr_debugfs_root =
-	debugfs_create_dir(KBUILD_MODNAME, NULL);
+		debugfs_create_dir(KBUILD_MODNAME, NULL);
 	return 0;
 }
 
@@ -149,7 +149,6 @@ static struct file_operations esdm_es_mgr_sched_ent_fops = {
 	.write = esdm_es_mgr_sched_ent_write,
 	.llseek = default_llseek,
 };
-
 
 static struct file_operations esdm_es_mgr_sched_stat_fops = {
 	.owner = THIS_MODULE,
@@ -183,7 +182,6 @@ static int __init esdm_es_mgr_init(void)
 		goto out;
 
 	ret = esdm_es_mgr_debugfs_init();
-
 	if (ret)
 		goto out;
 

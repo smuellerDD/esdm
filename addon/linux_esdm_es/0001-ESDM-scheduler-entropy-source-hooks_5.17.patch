@@ -44,7 +44,7 @@ index 000000000000..66b6121124b7
 +
 +#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 +
-+#include <linux/esdm.h>
++#include <linux/esdm_sched.h>
 +#include <linux/module.h>
 +
 +static esdm_sched_randomness_t esdm_sched_randomness_func = NULL;
@@ -75,19 +75,19 @@ index 000000000000..66b6121124b7
 +		pr_warn("Cannot unregister ESDM scheduler callback\n");
 +}
 +EXPORT_SYMBOL(esdm_sched_unregister);
-diff --git a/include/linux/esdm.h b/include/linux/esdm.h
+diff --git a/include/linux/esdm_sched.h b/include/linux/esdm_sched.h
 new file mode 100644
 index 000000000000..4b0569cacde9
 --- /dev/null
-+++ b/include/linux/esdm.h
++++ b/include/linux/esdm_sched.h
 @@ -0,0 +1,20 @@
 +/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 +/*
 + * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
 + */
 +
-+#ifndef _ESDM_H
-+#define _ESDM_H
++#ifndef _ESDM_SCHED_H
++#define _ESDM_SCHED_H
 +
 +#include <linux/sched.h>
 +
@@ -100,7 +100,7 @@ index 000000000000..4b0569cacde9
 +int esdm_sched_register(esdm_sched_randomness_t func);
 +void esdm_sched_unregister(esdm_sched_randomness_t func);
 +
-+#endif /* _ESDM_H */
++#endif /* _ESDM_SCHED_H */
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
 index 51efaabac3e4..777a32f6af6c 100644
 --- a/kernel/sched/core.c
@@ -109,7 +109,7 @@ index 51efaabac3e4..777a32f6af6c 100644
   *
   *  Copyright (C) 1991-2002  Linus Torvalds
   */
-+#include <linux/esdm.h>
++#include <linux/esdm_sched.h>
  #include <linux/highmem.h>
  #include <linux/hrtimer_api.h>
  #include <linux/ktime_api.h>

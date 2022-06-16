@@ -10,7 +10,7 @@
 #include <asm/irq_regs.h>
 #include <asm/ptrace.h>
 #include <crypto/hash.h>
-#include <linux/esdm.h>
+#include <linux/esdm_sched.h>
 #include <linux/module.h>
 #include <linux/random.h>
 

@@ -8,7 +8,6 @@
 #ifndef _ESDM_ES_MGR_CB_H
 #define _ESDM_ES_MGR_CB_H
 
-#include <linux/esdm.h>
 #include <linux/slab.h>
 
 #include "esdm_definitions.h"
