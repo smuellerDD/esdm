@@ -20,3 +20,7 @@ server_rpc_src = files([
 	'esdm_rpc_write_data_s.c',
 	'privileges.c'
 ])
+
+if get_option('es_irq').enabled()
+	server_rpc_src += files('esdm_rpc_server_linux.c')
+endif

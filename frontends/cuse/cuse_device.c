@@ -645,7 +645,7 @@ void esdm_cuse_ioctl(int backend_fd,
 			fuse_reply_ioctl(req, 0, NULL, 0);
 		break;
 
-	/* ESDM-specific IOCTL */
+	/* ESDM-specific IOCTL: get ESDM information */
 	case 42:
 		if (out_bufsz < esdm_cuse_shm_status->infolen) {
 			struct iovec iov = { arg,
@@ -655,6 +655,46 @@ void esdm_cuse_ioctl(int backend_fd,
 		} else {
 			fuse_reply_ioctl(req, 0, esdm_cuse_shm_status->info,
 					 esdm_cuse_shm_status->infolen);
+		}
+		break;
+
+	/* ESDM-specific IOCTL: Reseed kernel directly */
+	case 43:
+		rpi = (const struct rand_pool_info *)in_buf;
+
+		if (in_bufsz < sizeof(struct rand_pool_info)) {
+			struct iovec iov = {arg, sizeof(struct rand_pool_info)};
+
+			fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
+		} else if (rpi->buf_size < 0) {
+			fuse_reply_err(req, EINVAL);
+		} else if ((size_t)rpi->buf_size !=
+			   in_bufsz - sizeof(struct rand_pool_info)) {
+				struct iovec iov = { arg,
+					sizeof(struct rand_pool_info) +
+					(size_t)rpi->buf_size};
+
+				fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
+		} else {
+			/*
+			 * This operation requires privileges. Thus, raise the
+			 * privilege level to the same level as the caller has.
+			 */
+			if (!esdm_cuse_client_privileged(req)) {
+				fuse_reply_err(req, EPERM);
+				return;
+			}
+			esdm_cuse_raise_privilege(req);
+			if (backend_fd >= 0 &&
+			    ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
+				ret = -errno;
+			else
+				ret = 0;
+			drop_privileges_transient(esdm_cuse_unprivileged_user);
+			if (ret)
+				fuse_reply_err(req, -ret);
+			else
+				fuse_reply_ioctl(req, 0, NULL, 0);
 		}
 		break;
 
