@@ -28,12 +28,12 @@ index 70e800e9127f..d95a3cc42fe9 100644
  obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
  obj-$(CONFIG_HI6421V600_IRQ)	+= hi6421v600-irq.o
  obj-$(CONFIG_OPEN_DICE)		+= open-dice.o
-+obj-y				+= esdm.o
-diff --git a/drivers/misc/esdm.c b/drivers/misc/esdm.c
++obj-y				+= esdm_sched.o
+diff --git a/drivers/misc/esdm_sched.c b/drivers/misc/esdm_sched.c
 new file mode 100644
 index 000000000000..66b6121124b7
 --- /dev/null
-+++ b/drivers/misc/esdm.c
++++ b/drivers/misc/esdm_sched.c
 @@ -0,0 +1,40 @@
 +/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 +/*
