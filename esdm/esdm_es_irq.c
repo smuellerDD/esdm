@@ -217,7 +217,8 @@ static int esdm_irq_initialize(void)
 	}
 
 	/* Try asynchronously to check for entropy */
-	if (!esdm_pool_all_nodes_seeded_get()) {
+	if (esdm_config_es_irq_entropy_rate() &&
+	    !esdm_pool_all_nodes_seeded_get()) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 		       "Initializing interrupt ES monitoring thread\n");
 		esdm_irq_seed_init();

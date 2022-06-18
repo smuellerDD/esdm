@@ -218,7 +218,8 @@ static int esdm_sched_initialize(void)
 	}
 
 	/* Try asynchronously to check for entropy */
-	if (!esdm_pool_all_nodes_seeded_get()) {
+	if (esdm_config_es_sched_entropy_rate() &&
+	    !esdm_pool_all_nodes_seeded_get()) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 		       "Initializing scheduler ES monitoring thread\n");
 		esdm_sched_seed_init();
