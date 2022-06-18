@@ -166,6 +166,11 @@ void esdm_pool_all_nodes_seeded(bool set)
 	esdm_state.all_online_nodes_seeded = set;
 }
 
+bool esdm_pool_all_nodes_seeded_get(void)
+{
+	return esdm_state.all_online_nodes_seeded;
+}
+
 /* Return boolean whether ESDM reached minimally seed level */
 bool esdm_state_min_seeded(void)
 {

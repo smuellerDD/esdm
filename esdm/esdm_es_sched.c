@@ -106,16 +106,19 @@ static uint32_t esdm_sched_entropylevel(uint32_t requested_bits)
 	uint32_t entropy;
 	ssize_t readlen;
 
+	(void)requested_bits;
+
 	if (esdm_sched_entropy_fd < 0)
 		return 0;
 
 	/* Set current entropy rate */
-	if (esdm_sched_set_entropy_rate(requested_bits) < 0)
+	if (esdm_sched_set_entropy_rate(esdm_sched_requested_bits_set) < 0)
 		return 0;
 
 	/* Read entropy level */
 	lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
 	readlen = read(esdm_sched_entropy_fd, &entropy, sizeof(entropy));
+
 	if (readlen != sizeof(entropy))
 		return 0;
 
@@ -137,9 +140,15 @@ static int _esdm_sched_seed_init(void __unused *unused)
 	thread_set_name(sched_seed, 0);
 
 #define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
-	for (i = 0; i < secs(300); i++) {
+	for (i = 0; i < secs(900); i++) {
 		if (esdm_get_terminate())
 			return 0;
+
+		if (esdm_pool_all_nodes_seeded_get()) {
+			logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			       "Stopping scheduler ES entropy poll\n");
+			return 0;
+		}
 
 		ent = esdm_sched_entropylevel(sec_strength);
 
@@ -148,7 +157,7 @@ static int _esdm_sched_seed_init(void __unused *unused)
 			       "Full entropy of scheduler ES detected\n");
 			esdm_es_add_entropy();
 			esdm_test_seed_entropy(ent);
-			return 0;
+			continue;
 		}
 
 		if (!min_seeded_checked && ent >= ESDM_MIN_SEED_ENTROPY_BITS) {
@@ -182,7 +191,7 @@ static void esdm_sched_seed_init(void)
 
 static int esdm_sched_initialize(void)
 {
-	uint32_t status[2], sec_strength = esdm_security_strength();
+	uint32_t status[2];
 	ssize_t readlen;
 
 	esdm_sched_entropy_fd = open("/sys/kernel/debug/esdm_es/entropy_sched",
@@ -208,8 +217,8 @@ static int esdm_sched_initialize(void)
 		return -EFAULT;
 	}
 
-	if (esdm_sched_entropylevel(sec_strength) <
-	    esdm_config_es_sched_entropy_rate()) {
+	/* Try asynchronously to check for entropy */
+	if (!esdm_pool_all_nodes_seeded_get()) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 		       "Initializing scheduler ES monitoring thread\n");
 		esdm_sched_seed_init();
@@ -280,7 +289,7 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 	if (esdm_sched_status_fd >= 0) {
 		ssize_t ret;
 
-		esdm_sched_set_entropy_rate(esdm_security_strength());
+		esdm_sched_set_entropy_rate(esdm_sched_requested_bits_set);
 
 		lseek(esdm_sched_status_fd, 0, SEEK_SET);
 		do {

@@ -125,7 +125,7 @@ static ssize_t esdm_es_mgr_sched_ent_write(struct file *file,
 	if (tmp[1] > 0)
 		esdm_es_sched.set_entropy_rate(tmp[1]);
 
-	return 0;
+	return ret;
 }
 
 static struct file_operations esdm_es_mgr_sched_ent_fops = {
