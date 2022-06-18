@@ -71,7 +71,12 @@ struct esdm_health {
 static struct esdm_health esdm_health = {
 	.health_test_enabled = true,
 
+#ifdef ESDM_ES_IRQ
+	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_irq])
+#endif
+#ifdef ESDM_ES_SCHED
 	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
+#endif
 };
 
 static DEFINE_PER_CPU(struct esdm_stuck_test[esdm_int_es_last],
@@ -129,8 +134,8 @@ static void esdm_sp80090b_startup_failure(struct esdm_health *health,
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
-	/* Reset of ESDM and its entropy - NOTE: we are in atomic context */
-	esdm_reset_state();
+	/* Reset entropy state NOTE: we are in atomic context */
+	esdm_reset_state(es);
 
 	/*
 	 * Reset the SP800-90B startup test.

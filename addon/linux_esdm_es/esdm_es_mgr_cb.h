@@ -14,6 +14,7 @@
 #include "esdm_hash_kcapi.h"
 
 enum esdm_internal_es {
+	esdm_int_es_irq,			/* Interrupt entropy source */
 	esdm_int_es_sched,			/* Scheduler entropy source */
 	esdm_int_es_last,			/* MUST be the last entry */
 };
@@ -23,7 +24,7 @@ struct entropy_buf {
 	u32 e_bits;
 };
 
-void esdm_reset_state(void);
+void esdm_reset_state(enum esdm_internal_es es);
 
 /*
  * struct esdm_es_cb - callback defining an entropy source
@@ -45,6 +46,7 @@ struct esdm_es_cb {
 	u32 (*max_entropy)(void);
 	void (*state)(unsigned char *buf, size_t buflen);
 	void (*reset)(void);
+	void (*set_entropy_rate)(u32 rate);
 };
 
 /* Cap to maximum entropy that can ever be generated with given hash */

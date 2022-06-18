@@ -11,16 +11,20 @@
 #include <linux/module.h>
 
 #include "esdm_es_mgr_cb.h"
+#include "esdm_es_mgr_irq.h"
 #include "esdm_es_mgr_sched.h"
 #include "esdm_es_timer_common.h"
 #include "esdm_testing.h"
 
 static struct dentry *esdm_es_mgr_debugfs_root = NULL;
 
-void esdm_reset_state(void)
+void esdm_reset_state(enum esdm_internal_es es)
 {
-        esdm_es_mgr_sched_reset();
-        pr_debug("reset ESDM\n");
+	if (es == esdm_int_es_irq)
+		esdm_es_mgr_irq_reset();
+	if (es == esdm_int_es_sched)
+		esdm_es_mgr_sched_reset();
+        pr_debug("reset ESDM ES %u\n", es);
 }
 
 /* Module init: allocate memory, register the debugfs files */
@@ -41,11 +45,15 @@ static int __init esdm_es_mgr_init(void)
 	if (ret)
 		goto out;
 
+	ret = esdm_es_mgr_irq_init(esdm_es_mgr_debugfs_root);
+	if (ret)
+		goto outfs;
+
 	ret = esdm_es_mgr_sched_init(esdm_es_mgr_debugfs_root);
 	if (ret)
 		goto outfs;
 
-	ret = esdm_raw_init(esdm_es_mgr_debugfs_root);
+	ret = esdm_test_init(esdm_es_mgr_debugfs_root);
 	if (ret)
 		goto outfs;
 
@@ -54,6 +62,7 @@ static int __init esdm_es_mgr_init(void)
 outfs:
 	debugfs_remove_recursive(esdm_es_mgr_debugfs_root);
 out:
+	esdm_es_mgr_irq_exit();
 	esdm_es_mgr_sched_exit();
 	return ret;
 }
@@ -62,6 +71,7 @@ static void __exit esdm_es_mgr_exit(void)
 {
 	debugfs_remove_recursive(esdm_es_mgr_debugfs_root);
 	esdm_es_mgr_sched_exit();
+	esdm_es_mgr_irq_exit();
 }
 
 module_init(esdm_es_mgr_init);

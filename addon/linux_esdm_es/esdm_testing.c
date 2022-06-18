@@ -22,12 +22,12 @@
 
 #include "esdm_testing.h"
 
-#if defined(CONFIG_LRNG_RAW_SCHED_HIRES_ENTROPY) ||		\
-    defined(CONFIG_LRNG_RAW_SCHED_PID_ENTROPY) ||		\
-    defined(CONFIG_LRNG_RAW_SCHED_START_TIME_ENTROPY) ||	\
-    defined(CONFIG_LRNG_RAW_SCHED_NVCSW_ENTROPY) ||		\
-    defined(CONFIG_LRNG_SCHED_PERF)
-#define LRNG_TESTING_USE_BUSYLOOP
+#if defined(CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY) ||		\
+    defined(CONFIG_ESDM_RAW_SCHED_PID_ENTROPY) ||		\
+    defined(CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY) ||	\
+    defined(CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY) ||		\
+    defined(CONFIG_ESDM_SCHED_PERF)
+#define ESDM_TESTING_USE_BUSYLOOP
 #endif
 
 #define ESDM_TESTING_RINGBUFFER_SIZE	1024
@@ -261,6 +261,288 @@ static int esdm_testing_extract_user(struct file *file, char __user *buf,
 	return ret;
 }
 
+/************* Raw High-Resolution IRQ Timer Entropy Data Handling ************/
+
+#ifdef CONFIG_ESDM_RAW_HIRES_ENTROPY
+
+static u32 boot_raw_hires_test = 0;
+module_param(boot_raw_hires_test, uint, 0644);
+MODULE_PARM_DESC(boot_raw_hires_test, "Enable gathering boot time high resolution timer entropy of the first IRQ entropy events");
+
+static struct esdm_testing esdm_raw_hires = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_raw_hires.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_hires.read_wait)
+};
+
+bool esdm_raw_hires_entropy_store(u32 value)
+{
+	return esdm_testing_store(&esdm_raw_hires, value, &boot_raw_hires_test);
+}
+
+static int esdm_raw_hires_entropy_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_raw_hires, &boot_raw_hires_test,
+				   outbuf, outbuflen);
+}
+
+static ssize_t esdm_raw_hires_read(struct file *file, char __user *to,
+				   size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_raw_hires_entropy_reader);
+}
+
+static const struct file_operations esdm_raw_hires_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_raw_hires_read,
+};
+
+#endif /* CONFIG_ESDM_RAW_HIRES_ENTROPY */
+
+/********************* Raw Jiffies Entropy Data Handling **********************/
+
+#ifdef CONFIG_ESDM_RAW_JIFFIES_ENTROPY
+
+static u32 boot_raw_jiffies_test = 0;
+module_param(boot_raw_jiffies_test, uint, 0644);
+MODULE_PARM_DESC(boot_raw_jiffies_test, "Enable gathering boot time high resolution timer entropy of the first entropy events");
+
+static struct esdm_testing esdm_raw_jiffies = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_raw_jiffies.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_jiffies.read_wait)
+};
+
+bool esdm_raw_jiffies_entropy_store(u32 value)
+{
+	return esdm_testing_store(&esdm_raw_jiffies, value,
+				  &boot_raw_jiffies_test);
+}
+
+static int esdm_raw_jiffies_entropy_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_raw_jiffies, &boot_raw_jiffies_test,
+				   outbuf, outbuflen);
+}
+
+static ssize_t esdm_raw_jiffies_read(struct file *file, char __user *to,
+				   size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_raw_jiffies_entropy_reader);
+}
+
+static const struct file_operations esdm_raw_jiffies_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_raw_jiffies_read,
+};
+
+#endif /* CONFIG_ESDM_RAW_JIFFIES_ENTROPY */
+
+/************************** Raw IRQ Data Handling ****************************/
+
+#ifdef CONFIG_ESDM_RAW_IRQ_ENTROPY
+
+static u32 boot_raw_irq_test = 0;
+module_param(boot_raw_irq_test, uint, 0644);
+MODULE_PARM_DESC(boot_raw_irq_test, "Enable gathering boot time entropy of the first IRQ entropy events");
+
+static struct esdm_testing esdm_raw_irq = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_raw_irq.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_irq.read_wait)
+};
+
+bool esdm_raw_irq_entropy_store(u32 value)
+{
+	return esdm_testing_store(&esdm_raw_irq, value, &boot_raw_irq_test);
+}
+
+static int esdm_raw_irq_entropy_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_raw_irq, &boot_raw_irq_test, outbuf,
+				   outbuflen);
+}
+
+static ssize_t esdm_raw_irq_read(struct file *file, char __user *to,
+				 size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_raw_irq_entropy_reader);
+}
+
+static const struct file_operations esdm_raw_irq_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_raw_irq_read,
+};
+
+#endif /* CONFIG_ESDM_RAW_IRQ_ENTROPY */
+
+/************************ Raw _RET_IP_ Data Handling **************************/
+
+#ifdef CONFIG_ESDM_RAW_RETIP_ENTROPY
+
+static u32 boot_raw_retip_test = 0;
+module_param(boot_raw_retip_test, uint, 0644);
+MODULE_PARM_DESC(boot_raw_retip_test, "Enable gathering boot time entropy of the first return instruction pointer entropy events");
+
+static struct esdm_testing esdm_raw_retip = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_raw_retip.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_retip.read_wait)
+};
+
+bool esdm_raw_retip_entropy_store(u32 value)
+{
+	return esdm_testing_store(&esdm_raw_retip, value, &boot_raw_retip_test);
+}
+
+static int esdm_raw_retip_entropy_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_raw_retip, &boot_raw_retip_test,
+				   outbuf, outbuflen);
+}
+
+static ssize_t esdm_raw_retip_read(struct file *file, char __user *to,
+				   size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_raw_retip_entropy_reader);
+}
+
+static const struct file_operations esdm_raw_retip_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_raw_retip_read,
+};
+
+#endif /* CONFIG_ESDM_RAW_RETIP_ENTROPY */
+
+/********************** Raw IRQ register Data Handling ************************/
+
+#ifdef CONFIG_ESDM_RAW_REGS_ENTROPY
+
+static u32 boot_raw_regs_test = 0;
+module_param(boot_raw_regs_test, uint, 0644);
+MODULE_PARM_DESC(boot_raw_regs_test, "Enable gathering boot time entropy of the first interrupt register entropy events");
+
+static struct esdm_testing esdm_raw_regs = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_raw_regs.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_regs.read_wait)
+};
+
+bool esdm_raw_regs_entropy_store(u32 value)
+{
+	return esdm_testing_store(&esdm_raw_regs, value, &boot_raw_regs_test);
+}
+
+static int esdm_raw_regs_entropy_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_raw_regs, &boot_raw_regs_test,
+				   outbuf, outbuflen);
+}
+
+static ssize_t esdm_raw_regs_read(struct file *file, char __user *to,
+				  size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_raw_regs_entropy_reader);
+}
+
+static const struct file_operations esdm_raw_regs_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_raw_regs_read,
+};
+
+#endif /* CONFIG_ESDM_RAW_REGS_ENTROPY */
+
+/********************** Raw Entropy Array Data Handling ***********************/
+
+#ifdef CONFIG_ESDM_RAW_ARRAY
+
+static u32 boot_raw_array = 0;
+module_param(boot_raw_array, uint, 0644);
+MODULE_PARM_DESC(boot_raw_array, "Enable gathering boot time raw noise array data of the first entropy events");
+
+static struct esdm_testing esdm_raw_array = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_raw_array.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_array.read_wait)
+};
+
+bool esdm_raw_array_entropy_store(u32 value)
+{
+	return esdm_testing_store(&esdm_raw_array, value, &boot_raw_array);
+}
+
+static int esdm_raw_array_entropy_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_raw_array, &boot_raw_array, outbuf,
+				   outbuflen);
+}
+
+static ssize_t esdm_raw_array_read(struct file *file, char __user *to,
+				   size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_raw_array_entropy_reader);
+}
+
+static const struct file_operations esdm_raw_array_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_raw_array_read,
+};
+
+#endif /* CONFIG_ESDM_RAW_ARRAY */
+
+/******************** Interrupt Performance Data Handling *********************/
+
+#ifdef CONFIG_ESDM_IRQ_PERF
+
+static u32 boot_irq_perf = 0;
+module_param(boot_irq_perf, uint, 0644);
+MODULE_PARM_DESC(boot_irq_perf, "Enable gathering interrupt entropy source performance data");
+
+static struct esdm_testing esdm_irq_perf = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock      = __SPIN_LOCK_UNLOCKED(esdm_irq_perf.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_irq_perf.read_wait)
+};
+
+bool esdm_perf_time(u32 start)
+{
+	return esdm_testing_store(&esdm_irq_perf, random_get_entropy() - start,
+				  &boot_irq_perf);
+}
+
+static int esdm_irq_perf_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_irq_perf, &boot_irq_perf, outbuf,
+				   outbuflen);
+}
+
+static ssize_t esdm_irq_perf_read(struct file *file, char __user *to,
+				  size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_irq_perf_reader);
+}
+
+static const struct file_operations esdm_irq_perf_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_irq_perf_read,
+};
+
+#endif /* CONFIG_ESDM_IRQ_PERF */
+
 /****** Raw High-Resolution Scheduler-based Timer Entropy Data Handling *******/
 
 #ifdef CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
@@ -473,8 +755,41 @@ static const struct file_operations esdm_raw_sched_nvcsw_fops = {
  * Debugfs interface
  **************************************************************************/
 
-int __init esdm_raw_init(struct dentry *esdm_raw_debugfs_root)
+int __init esdm_test_init(struct dentry *esdm_raw_debugfs_root)
 {
+#ifdef CONFIG_ESDM_RAW_HIRES_ENTROPY
+	debugfs_create_file_unsafe("esdm_raw_hires", 0400,
+				   esdm_raw_debugfs_root, NULL,
+				   &esdm_raw_hires_fops);
+#endif
+#ifdef CONFIG_ESDM_RAW_JIFFIES_ENTROPY
+	debugfs_create_file_unsafe("esdm_raw_jiffies", 0400,
+				   esdm_raw_debugfs_root, NULL,
+				   &esdm_raw_jiffies_fops);
+#endif
+#ifdef CONFIG_ESDM_RAW_IRQ_ENTROPY
+	debugfs_create_file_unsafe("esdm_raw_irq", 0400, esdm_raw_debugfs_root,
+				   NULL, &esdm_raw_irq_fops);
+#endif
+#ifdef CONFIG_ESDM_RAW_RETIP_ENTROPY
+	debugfs_create_file_unsafe("esdm_raw_retip", 0400,
+				   esdm_raw_debugfs_root, NULL,
+				   &esdm_raw_retip_fops);
+#endif
+#ifdef CONFIG_ESDM_RAW_REGS_ENTROPY
+	debugfs_create_file_unsafe("esdm_raw_regs", 0400,
+				   esdm_raw_debugfs_root, NULL,
+				   &esdm_raw_regs_fops);
+#endif
+#ifdef CONFIG_ESDM_RAW_ARRAY
+	debugfs_create_file_unsafe("esdm_raw_array", 0400,
+				   esdm_raw_debugfs_root, NULL,
+				   &esdm_raw_array_fops);
+#endif
+#ifdef CONFIG_ESDM_IRQ_PERF
+	debugfs_create_file_unsafe("esdm_irq_perf", 0400, esdm_raw_debugfs_root,
+				   NULL, &esdm_irq_perf_fops);
+#endif
 #ifdef CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
 	debugfs_create_file_unsafe("esdm_raw_sched_hires", 0400,
 				   esdm_raw_debugfs_root,

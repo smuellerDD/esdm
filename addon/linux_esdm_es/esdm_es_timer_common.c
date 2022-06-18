@@ -10,6 +10,7 @@
 #include <linux/gcd.h>
 #include <linux/module.h>
 
+#include "esdm_es_irq.h"
 #include "esdm_es_sched.h"
 #include "esdm_es_timer_common.h"
 #include "esdm_health.h"
@@ -132,6 +133,7 @@ int __init esdm_init_time_source(void)
 		esdm_highres_timer_val = false;
 	}
 
+	esdm_irq_es_init(esdm_highres_timer_val);
 	esdm_sched_es_init(esdm_highres_timer_val);
 
 	/* Ensure that changes to global variables are visible */
