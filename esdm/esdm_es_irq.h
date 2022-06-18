@@ -24,21 +24,11 @@
 #include "esdm_es_mgr_cb.h"
 
 #ifdef ESDM_ES_IRQ
-void esdm_irq_es_init(bool highres_timer);
-void esdm_irq_array_add_uint32_t(uint32_t data);
 
 extern struct esdm_es_cb esdm_es_irq;
 
 #else /* ESDM_ES_IRQ */
-static inline void esdm_irq_es_init(bool highres_timer)
-{
-	(void)highres_timer;
-}
 
-static inline void esdm_irq_array_add_uint32_t(uint32_t data)
-{
-	(void)data;
-}
 #endif /* ESDM_ES_IRQ */
 
 #endif /* _ESDM_ES_IRQ_H */

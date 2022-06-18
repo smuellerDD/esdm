@@ -42,8 +42,9 @@ conf_data.set('ESDM_CPU_ENTROPY_RATE',
 conf_data.set('ESDM_CPU_FULL_ENT_MULTIPLIER',
 	      get_option('es_cpu_multiplier'))
 
-# This option currently is not configurable as the IRQ ES is not provided
-conf_data.set('ESDM_ES_IRQ', false)
+conf_data.set('ESDM_ES_IRQ', get_option('es_sched').enabled())
+conf_data.set('ESDM_IRQ_ENTROPY_RATE',
+	      get_option('es_irq_entropy_rate'))
 
 conf_data.set('ESDM_ES_KERNEL_RNG', get_option('es_kernel').enabled())
 conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
@@ -52,6 +53,10 @@ conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
 conf_data.set('ESDM_ES_SCHED', get_option('es_sched').enabled())
 conf_data.set('ESDM_SCHED_ENTROPY_RATE',
 	      get_option('es_sched_entropy_rate'))
+
+if (get_option('es_irq_entropy_rate') > 0) and get_option('es_sched_entropy_rate') > 0
+	error('It is not permissible to award both, the interrupt and scheduler-based entropy sources, an entropy rate greater than zero. Adjust es_irq_entropy_rate or es_sched_entropy_rate to zero.')
+endif
 
 conf_data.set('ESDM_SELINUX_ENABLED', get_option('selinux').enabled())
 conf_data.set('ESDM_NODE', get_option('node').enabled())

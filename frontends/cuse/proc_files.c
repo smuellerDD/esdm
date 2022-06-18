@@ -40,7 +40,7 @@
 #include "selinux.h"
 
 #define ESDM_PROC_UUID_LEN		38
-#define ESDM_PROC_BUF_LEN		1024
+#define ESDM_PROC_BUF_LEN		ESDM_SHM_STATUS_INFO_SIZE
 struct esdm_proc_file {
 	const char *filename;
 	size_t filename_len;

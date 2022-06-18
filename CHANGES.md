@@ -1,9 +1,11 @@
 Changes 0.4.0-prerelease:
 * Start CUSE daemons independently from ESDM server
 
-* add prediction resistance behavior with O_SYNC /dev/random
+* add prediction resistance behavior with O_SYNC /dev/random - BSI AIS 20/31 2011 NTG.1 compliance. Also it supports chaining of DRBGs pursuent to SP800-90C and FIPS 140.
 
 * initialize the DRNG immediately with 256 bits (disregarding 32/128 bits)
+
+* add interrupt entropy source
 
 Changes 0.3.0:
 * Replace protobuf-c-rpc with built-in RPC mechanism reducing amount of mallocs,

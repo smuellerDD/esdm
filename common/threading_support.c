@@ -435,6 +435,9 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 	case sched_seed:
 		snprintf(name, sizeof(name), "sched_es_seed");
 		break;
+	case irq_seed:
+		snprintf(name, sizeof(name), "irq_es_seed");
+		break;
 	case rpc_unpriv_server:
 		snprintf(name, sizeof(name), "unpriv_rpc");
 		break;

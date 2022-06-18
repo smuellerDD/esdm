@@ -42,7 +42,10 @@ specifications:
   claimed to provide an SP800-90B entropy source. Also, when using the
   scheduler-based entropy source - which is only implemented for the Linux
   kernel using the code in `addon/linux_esdm_es`, a separate SP800-90B
-  entropy source is provided.
+  entropy source is provided. In addition, when using the interrupt-based
+  entropy source - which is only implemented for the Linux kernel using the
+  code in `addon/linux_esdm_es`, a separate SP800-90B entropy source is
+  provided.
 
 * SP800-90C: The specification provides guidelines how to combine a DRNG
   and entropy sources.

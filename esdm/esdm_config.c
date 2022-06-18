@@ -31,6 +31,7 @@
 struct esdm_config {
 	uint32_t esdm_es_cpu_entropy_rate_bits;
 	uint32_t esdm_es_jent_entropy_rate_bits;
+	uint32_t esdm_es_irq_entropy_rate_bits;
 	uint32_t esdm_es_krng_entropy_rate_bits;
 	uint32_t esdm_es_sched_entropy_rate_bits;
 	uint32_t esdm_drng_max_wo_reseed;
@@ -56,6 +57,11 @@ static struct esdm_config esdm_config = {
 	 * considered to be acceptable to all reviewers.
 	 */
 	.esdm_es_jent_entropy_rate_bits = ESDM_JENT_ENTROPY_RATE,
+
+	/*
+	 * See documentation of ESDM_IRQ_ENTROPY_RATE
+	 */
+	.esdm_es_irq_entropy_rate_bits = ESDM_IRQ_ENTROPY_RATE,
 
 	/*
 	 * See documentation of ESDM_KERNEL_RNG_ENTROPY_RATE
@@ -115,6 +121,20 @@ void esdm_config_es_jent_entropy_rate_set(uint32_t ent)
 }
 
 DSO_PUBLIC
+uint32_t esdm_config_es_irq_entropy_rate(void)
+{
+	return esdm_config.esdm_es_irq_entropy_rate_bits;
+}
+
+DSO_PUBLIC
+void esdm_config_es_irq_entropy_rate_set(uint32_t ent)
+{
+	esdm_config.esdm_es_irq_entropy_rate_bits =
+		esdm_config_entropy_rate_max(ent);
+	esdm_es_add_entropy();
+}
+
+DSO_PUBLIC
 uint32_t esdm_config_es_krng_entropy_rate(void)
 {
 	return esdm_config.esdm_es_krng_entropy_rate_bits;
@@ -123,8 +143,16 @@ uint32_t esdm_config_es_krng_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_krng_entropy_rate_set(uint32_t ent)
 {
-	esdm_config.esdm_es_krng_entropy_rate_bits =
-		esdm_config_entropy_rate_max(ent);
+	uint32_t val = esdm_config_entropy_rate_max(ent);
+
+	/*
+	 * Due to dependencies between both entropy sources, it is not
+	 * permissible to have both set to non-zero values.
+	 */
+	if (val > 0)
+		esdm_config_es_sched_entropy_rate_set(0);
+
+	esdm_config.esdm_es_krng_entropy_rate_bits = val;
 	esdm_es_add_entropy();
 }
 
@@ -137,8 +165,16 @@ uint32_t esdm_config_es_sched_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_sched_entropy_rate_set(uint32_t ent)
 {
-	esdm_config.esdm_es_sched_entropy_rate_bits =
-		esdm_config_entropy_rate_max(ent);
+	uint32_t val = esdm_config_entropy_rate_max(ent);
+
+	/*
+	 * Due to dependencies between both entropy sources, it is not
+	 * permissible to have both set to non-zero values.
+	 */
+	if (val > 0)
+		esdm_config_es_irq_entropy_rate_set(0);
+
+	esdm_config.esdm_es_sched_entropy_rate_bits = val;
 	esdm_es_add_entropy();
 }
 

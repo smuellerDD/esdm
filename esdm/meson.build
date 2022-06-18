@@ -21,6 +21,10 @@ if get_option('es_cpu').enabled()
 	esdm_src += files('esdm_es_cpu.c')
 endif
 
+if get_option('es_irq').enabled()
+	esdm_src += files('esdm_es_irq.c')
+endif
+
 if get_option('es_kernel').enabled()
 	esdm_src += files('esdm_es_krng.c')
 endif

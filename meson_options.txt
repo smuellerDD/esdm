@@ -81,13 +81,61 @@ random.c is not SP800-90B compliant.
 ''')
 
 ################################################################################
+# Interrupt-based entropy source configuration
+################################################################################
+
+# Option for: ESDM_ES_IRQ
+ option('es_irq', type: 'feature', value: 'enabled',
+       description: '''Enable support for interrupt-based entropy source.
+
+The ESDM models an entropy source based on the timing of the
+occurrence of interrupts. Enable this option to enable this
+IRQ entropy source.
+
+The IRQ entropy source is triggered every time an interrupt
+arrives and thus causes the interrupt handler to execute
+slightly longer. Disabling the IRQ entropy source implies
+that the performance penalty on the interrupt handler added
+by the ESDM is eliminated. Yet, this entropy source is
+considered to be an internal entropy source of the ESDM.
+Thus, only disable it if you ensured that other entropy
+sources are available that supply the ESDM with entropy.
+
+Side note: when enabling this entropy source, one of the main
+entropy sources of the kernel RNG is divered into ESDM. This
+means that this entropy source is not available to the kernel
+RNG any more. To offset the issue, the ESDM reseeds the
+kernel RNG once in a while.
+''')
+
+# Option for: ESDM_IRQ_ENTROPY_RATE
+option('es_irq_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+       description:'''Interrupt-based entropy source entropy rate.
+
+ES configuration done in the kernel module - see kernel module code.
+
+The option defines the amount of entropy the ESDM applies to 256 bits of
+data obtained from the interrupt entropy source. The ESDM enforces the
+limit that this value must be between 0 and 256 bits. Note, this entropy
+rate is applied on the entropy value reported by the interrupt-ES kernel
+module.
+
+Note, this value caps the interrupt ES kernel module value!
+
+Note 2: The events for the interrupt-baased and scheduler-based ES
+both have some dependencies. Thus it is not permissible to award both
+entropy sources an entropy rate greater than zero.
+''')
+
+################################################################################
 # Scheduler-based entropy source configuration
 ################################################################################
 
- option('es_sched', type: 'feature', value: 'enabled',
+# Option for: ESDM_ES_SCHED
+option('es_sched', type: 'feature', value: 'enabled',
        description: '''Enable support for scheduler-based entropy source.
 
-The LRNG models an entropy source based on the timing of the
+The ESDM models an entropy source based on the timing of the
 occurrence of scheduler-triggered context switches. Enable
 this option to enable this scheduler entropy source.
 
@@ -95,10 +143,10 @@ The scheduler entropy source is triggered every time a
 context switch is triggered thus causes the scheduler to
 execute slightly longer. Disabling the scheduler entropy
 source implies that the performance penalty on the scheduler
-added by the LRNG is eliminated. Yet, this entropy source is
-considered to be an internal entropy source of the LRNG.
+added by the ESDM is eliminated. Yet, this entropy source is
+considered to be an internal entropy source of the ESDM.
 Thus, only disable it if you ensured that other entropy
-sources are available that supply the LRNG with entropy.
+sources are available that supply the ESDM with entropy.
 
 If you disable the scheduler entropy source, you MUST
 ensure one or more entropy sources collectively have the
@@ -112,7 +160,7 @@ to be present.
 ''')
 
 # Option for: ESDM_SCHED_ENTROPY_RATE
-option('es_sched_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+option('es_sched_entropy_rate', type: 'integer', min: 0, max: 256, value: 0,
        description:'''Scheduler-based entropy source entropy rate.
 
 ES configuration done in the kernel module - see kernel module code.
@@ -124,6 +172,10 @@ rate is applied on the entropy value reported by the scheduler-ES kernel
 module.
 
 Note, this value caps the scheduler ES kernel module value!
+
+Note 2: The events for the interrupt-baased and scheduler-based ES
+both have some dependencies. Thus it is not permissible to award both
+entropy sources an entropy rate greater than zero.
 ''')
 
 ################################################################################
