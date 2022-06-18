@@ -35,6 +35,7 @@
 
 static int esdm_sched_entropy_fd = -1;
 static int esdm_sched_status_fd = -1;
+static uint32_t esdm_sched_requested_bits_set = 0;
 
 static void esdm_sched_finalize(void)
 {
@@ -53,12 +54,51 @@ bool esdm_sched_enabled(void)
 	       esdm_config_es_sched_entropy_rate();
 }
 
-static uint32_t esdm_sched_cap_entropylevel(uint32_t entropy,
-					    uint32_t requested_bits)
+/* Only set requested bit size */
+static void esdm_sched_set_requested_bits(uint32_t requested_bits)
 {
-	return esdm_fast_noise_entropylevel(
-		min_t(uint32_t, entropy, esdm_config_es_sched_entropy_rate()),
-		requested_bits);
+	if (esdm_sched_requested_bits_set != requested_bits) {
+		uint32_t data[2];
+		ssize_t ret;
+
+		data[0] = requested_bits;
+		data[1] = 0;
+		lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
+		ret = write(esdm_sched_entropy_fd, &data, sizeof(data));
+		if (ret == sizeof(requested_bits))
+			esdm_sched_requested_bits_set = requested_bits;
+	}
+}
+
+/* Set requested bit size and entropy rate */
+static int esdm_sched_set_entropy_rate(uint32_t requested_bits)
+{
+	uint32_t entropy[2];
+	ssize_t writelen;
+
+	if (esdm_sched_requested_bits_set != requested_bits)
+		entropy[0] = requested_bits;
+	else
+		entropy[0] = 0;
+
+	entropy[1] = esdm_config_es_sched_entropy_rate();
+	/* Convert into events */
+	if (!entropy[1])
+		entropy[1] = 0xffffffff;
+	else {
+		entropy[1] = ESDM_DRNG_SECURITY_STRENGTH_BITS *
+			     ESDM_DRNG_SECURITY_STRENGTH_BITS / entropy[1];
+	}
+
+	/* Set current entropy rate */
+	lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
+
+	writelen = write(esdm_sched_entropy_fd, &entropy, sizeof(entropy));
+	if (writelen != sizeof(entropy))
+		return -EINVAL;
+
+	esdm_sched_requested_bits_set = requested_bits;
+	return 0;
 }
 
 static uint32_t esdm_sched_entropylevel(uint32_t requested_bits)
@@ -69,20 +109,32 @@ static uint32_t esdm_sched_entropylevel(uint32_t requested_bits)
 	if (esdm_sched_entropy_fd < 0)
 		return 0;
 
+	/* Set current entropy rate */
+	if (esdm_sched_set_entropy_rate(requested_bits) < 0)
+		return 0;
+
+	/* Read entropy level */
 	lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
 	readlen = read(esdm_sched_entropy_fd, &entropy, sizeof(entropy));
 	if (readlen != sizeof(entropy))
 		return 0;
 
-	return esdm_sched_cap_entropylevel(entropy, requested_bits);
+	return entropy;
 }
 
+/*
+ * Thread to monitor the initial seeding state of the entropy source. This
+ * thread may disable the entropy source if the kernel driver cannot detect
+ * sufficient entropy.
+ */
 static int _esdm_sched_seed_init(void __unused *unused)
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<28 };
 	uint64_t i;
 	uint32_t ent, sec_strength = esdm_security_strength();
 	bool min_seeded_checked = false;
+
+	thread_set_name(sched_seed, 0);
 
 #define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
 	for (i = 0; i < secs(300); i++) {
@@ -91,7 +143,7 @@ static int _esdm_sched_seed_init(void __unused *unused)
 
 		ent = esdm_sched_entropylevel(sec_strength);
 
-		if (ent >= sec_strength) {
+		if (ent >= esdm_config_es_sched_entropy_rate()) {
 			logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			       "Full entropy of scheduler ES detected\n");
 			esdm_es_add_entropy();
@@ -119,7 +171,7 @@ static int _esdm_sched_seed_init(void __unused *unused)
 static void esdm_sched_seed_init(void)
 {
 	int ret = thread_start(_esdm_sched_seed_init, NULL,
-				       ESDM_THREAD_SCHED_INIT_GROUP, NULL);
+			       ESDM_THREAD_SCHED_INIT_GROUP, NULL);
 
 	if (ret) {
 		logger(LOGGER_ERR, LOGGER_C_ES,
@@ -156,8 +208,15 @@ static int esdm_sched_initialize(void)
 		return -EFAULT;
 	}
 
-	if (esdm_sched_entropylevel(sec_strength) < sec_strength)
+	if (esdm_sched_entropylevel(sec_strength) <
+	    esdm_config_es_sched_entropy_rate()) {
+		logger(LOGGER_DEBUG, LOGGER_C_ES,
+		       "Initializing scheduler ES monitoring thread\n");
 		esdm_sched_seed_init();
+	} else {
+		logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		       "Full entropy of scheduler ES detected\n");
+	}
 
 	esdm_sched_status_fd = open("/sys/kernel/debug/esdm_es/status_sched",
 				    O_RDWR);
@@ -186,18 +245,11 @@ static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 	size_t buflen;
 	ssize_t ret;
 	uint8_t *buf;
-	static uint32_t requested_bits_set = 0;
 
 	if (esdm_sched_entropy_fd < 0)
 		goto err;
 
-	if (requested_bits_set != requested_bits) {
-		lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
-		ret = write(esdm_sched_entropy_fd, &requested_bits,
-			    sizeof(requested_bits));
-		if (ret == sizeof(requested_bits))
-			requested_bits_set = requested_bits;
-	}
+	esdm_sched_set_requested_bits(requested_bits);
 
 	buf = (uint8_t *)eb_es;
 	buflen = sizeof(struct entropy_es);
@@ -212,9 +264,6 @@ static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 	if (buflen)
 		goto err;
-
-	eb_es->e_bits = esdm_sched_cap_entropylevel(eb_es->e_bits,
-						    requested_bits);
 
 	logger(LOGGER_DEBUG, LOGGER_C_ES,
 	       "obtained %u bits of entropy from scheduler-based entropy source\n",
@@ -231,8 +280,10 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 	if (esdm_sched_status_fd >= 0) {
 		ssize_t ret;
 
+		esdm_sched_set_entropy_rate(esdm_security_strength());
+
+		lseek(esdm_sched_status_fd, 0, SEEK_SET);
 		do {
-			lseek(esdm_sched_status_fd, 0, SEEK_SET);
 			ret = read(esdm_sched_status_fd, buf, buflen);
 			if (ret > 0) {
 				buflen -= (size_t)ret;
@@ -244,10 +295,12 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 	}
 }
 
-#define ESDM_ES_MGR_RESET_BIT		0x10000
 static void esdm_sched_reset(void)
 {
-	uint32_t reset = ESDM_ES_MGR_RESET_BIT;
+	uint32_t reset[2];
+
+	reset[0] = ESDM_ES_MGR_RESET_BIT;
+	reset[1] = 0;
 
 	if (esdm_sched_entropy_fd >= 0) {
 		ssize_t ret;
