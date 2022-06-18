@@ -306,11 +306,6 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 						       esdm_irq_entropy_bits));
 }
 
-/*
- * When reading the per-CPU message digest, make sure we use the crypto
- * callbacks defined for the NUMA node the per-CPU pool is defined for because
- * the ESDM crypto switch support is only atomic per NUMA node.
- */
 static u32
 esdm_irq_pool_hash_one(const struct esdm_hash_cb *pcpu_hash_cb,
 		       void *pcpu_hash, int cpu, u8 *digest, u32 *digestsize)
@@ -449,16 +444,6 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	pr_debug("obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
 		 returned_ent_bits, collected_ent_bits);
 
-	/*
-	 * Truncate to available entropy as implicitly allowed by SP800-90B
-	 * section 3.1.5.1.1 table 1 which awards truncated hashes full
-	 * entropy.
-	 *
-	 * During boot time, we read requested_bits data with
-	 * returned_ent_bits entropy. In case our conservative entropy
-	 * estimate underestimates the available entropy we can transport as
-	 * much available entropy as possible.
-	 */
 	memcpy(eb->e, digest, returned_ent_bits >> 3);
 	eb->e_bits = returned_ent_bits;
 
