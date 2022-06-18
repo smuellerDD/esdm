@@ -65,9 +65,9 @@ extern "C" {
  */
 #define ESDM_THREAD_CUSE_POLL_GROUP ((uint32_t)-1)
 #define ESDM_THREAD_SCHED_INIT_GROUP ((uint32_t)-2)
-#define ESDM_THREAD_IRQ_INIT_GROUP ((uint32_t)-2)
-#define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t)-3)
-#define ESDM_THREAD_MAX_SPECIAL_GROUPS 3
+#define ESDM_THREAD_IRQ_INIT_GROUP ((uint32_t)-3)
+#define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t)-4)
+#define ESDM_THREAD_MAX_SPECIAL_GROUPS 4
 
 enum esdm_request_type {
 	drng_seed,
