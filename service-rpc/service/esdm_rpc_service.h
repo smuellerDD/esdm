@@ -62,13 +62,14 @@ extern "C"
 #endif /* ESDM_TESTMODE */
 
 #define ESDM_SHM_STATUS_VERSION	1
+#define ESDM_SHM_STATUS_INFO_SIZE	1536
 
 struct esdm_shm_status {
 	/* Monotonic increasing version */
 	uint32_t version;
 
 	/* String with status information */
-	char info[1024];
+	char info[ESDM_SHM_STATUS_INFO_SIZE];
 	size_t infolen;
 
 	/* Number of threads handling the unprivileged interface */
