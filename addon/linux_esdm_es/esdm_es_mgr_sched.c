@@ -18,7 +18,7 @@
 static struct dentry *esdm_es_mgr_debugfs_sched_ent; /* .../entropy */
 static struct dentry *esdm_es_mgr_debugfs_sched_stat; /* .../status */
 
-static u32 esdm_requested_bits = ESDM_DRNG_INIT_SEED_SIZE_BITS;
+static u32 esdm_requested_sched_bits = ESDM_DRNG_INIT_SEED_SIZE_BITS;
 
 /* Available entropy in the entire ESDM considering all entropy sources */
 static u32 esdm_avail_entropy_sched(u32 requested_bits)
@@ -56,7 +56,8 @@ static ssize_t esdm_es_mgr_sched_ent_read(struct file *file, char __user *buf,
 
 	if (nbytes == sizeof(u32)) {
 		/* Return entropy level */
-		u32 entropy = esdm_avail_entropy_sched(esdm_requested_bits);
+		u32 entropy =
+			esdm_avail_entropy_sched(esdm_requested_sched_bits);
 
 		return simple_read_from_buffer(buf, nbytes, ppos, &entropy,
 					       sizeof(entropy));
@@ -74,7 +75,7 @@ static ssize_t esdm_es_mgr_sched_ent_read(struct file *file, char __user *buf,
 		return -EINVAL;
 
 	memset(&eb, 0, sizeof(eb));
-	esdm_es_sched.get_ent(&eb, esdm_requested_bits);
+	esdm_es_sched.get_ent(&eb, esdm_requested_sched_bits);
 
 	ret = simple_read_from_buffer(buf, nbytes, ppos, (void *)&eb,
 				      sizeof(eb));
@@ -83,18 +84,25 @@ static ssize_t esdm_es_mgr_sched_ent_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-/* low 9 bits - can set 512 bits of entropy max */
-#define ESDM_ES_MGR_REQ_BITS_MASK	0x1ff
-#define ESDM_ES_MGR_RESET_BIT		0x10000
-
+/*
+ * The following protocol is applied for data written to the file:
+ *
+ * 1. When writing 2 * sizeof(u32): the first 4 bits are interpreted as a bit
+ *    field with:
+ * 	ESDM_ES_MGR_RESET_BIT set -> reset entropy source
+ * 	ESDM_ES_MGR_REQ_BITS_MASK: amount of requested entropy in bits
+ *    The second 4 bits are interpreted as entropy rate.
+ *
+ * Any other value is treated as an error.
+ */
 static ssize_t esdm_es_mgr_sched_ent_write(struct file *file,
 					   const char __user *buf,
 					   size_t nbytes, loff_t *ppos)
 {
-	u32 tmp, requested_bits;
+	u32 tmp[2], requested_bits;
 	ssize_t ret;
 
-	if (nbytes != sizeof(esdm_requested_bits))
+	if (nbytes != sizeof(tmp))
 		return -EINVAL;
 
 	ret = simple_write_to_buffer(&tmp, sizeof(tmp), ppos, buf, nbytes);
@@ -103,19 +111,21 @@ static ssize_t esdm_es_mgr_sched_ent_write(struct file *file,
 	if (ret != sizeof(tmp))
 		return -EFAULT;
 
-	if (tmp & ESDM_ES_MGR_RESET_BIT)
+	if (tmp[0] & ESDM_ES_MGR_RESET_BIT)
 		esdm_es_mgr_sched_reset();
 
-	requested_bits = tmp & ESDM_ES_MGR_REQ_BITS_MASK;
-	if (requested_bits == 0)
-		return ret;
+	requested_bits = tmp[0] & ESDM_ES_MGR_REQ_BITS_MASK;
+	if (requested_bits > 0) {
+		if (requested_bits != ESDM_DRNG_INIT_SEED_SIZE_BITS ||
+		    requested_bits != ESDM_DRNG_SECURITY_STRENGTH_BITS)
+			return -EINVAL;
+		esdm_requested_sched_bits = requested_bits;
+	}
 
-	if (requested_bits != ESDM_DRNG_INIT_SEED_SIZE_BITS &&
-	    requested_bits != ESDM_DRNG_SECURITY_STRENGTH_BITS)
-		return -EINVAL;
+	if (tmp[1] > 0)
+		esdm_es_sched.set_entropy_rate(tmp[1]);
 
-	esdm_requested_bits = requested_bits;
-	return ret;
+	return 0;
 }
 
 static struct file_operations esdm_es_mgr_sched_ent_fops = {
@@ -128,6 +138,7 @@ static struct file_operations esdm_es_mgr_sched_ent_fops = {
 static struct file_operations esdm_es_mgr_sched_stat_fops = {
 	.owner = THIS_MODULE,
 	.read = esdm_es_mgr_sched_stat_read,
+	.llseek = default_llseek,
 };
 
 void esdm_es_mgr_sched_reset(void)

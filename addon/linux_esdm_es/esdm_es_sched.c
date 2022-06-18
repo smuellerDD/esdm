@@ -62,7 +62,7 @@ config LRNG_RUNTIME_ES_CONFIG
 
 /******************************************************************************/
 
-static void *esdm_sched_hash_state;
+static void *esdm_sched_hash_state = NULL;
 static rwlock_t esdm_hash_lock = __RW_LOCK_UNLOCKED(esdm_hash_lock);
 
 /*
@@ -418,6 +418,11 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 		 esdm_highres_timer() ? "true" : "false");
 }
 
+static void esdm_sched_set_entropy_rate(u32 rate)
+{
+	esdm_sched_entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS, rate);
+}
+
 struct esdm_es_cb esdm_es_sched = {
 	.name			= "Scheduler",
 	.get_ent		= esdm_sched_pool_hash,
@@ -425,7 +430,10 @@ struct esdm_es_cb esdm_es_sched = {
 	.max_entropy		= esdm_sched_avail_pool_size,
 	.state			= esdm_sched_es_state,
 	.reset			= esdm_sched_reset,
+	.set_entropy_rate	= esdm_sched_set_entropy_rate,
 };
+
+/************************** Registration with Kernel **************************/
 
 int __init esdm_es_sched_module_init(void)
 {
@@ -437,7 +445,7 @@ int __init esdm_es_sched_module_init(void)
 
 	esdm_sched_hash_state = hash_cb->hash_alloc();
 	if (IS_ERR(esdm_sched_hash_state)) {
-		pr_warn("could not allocate new LRNG pool hash (%ld)\n",
+		pr_warn("could not allocate new ESDM pool hash (%ld)\n",
 			PTR_ERR(esdm_sched_hash_state));
 		ret = PTR_ERR(esdm_sched_hash_state);
 		goto out;
@@ -448,6 +456,8 @@ int __init esdm_es_sched_module_init(void)
 		hash_cb->hash_dealloc(esdm_sched_hash_state);
 		esdm_sched_hash_state = NULL;
 	}
+
+	pr_info("ESDM Scheduler ES registered\n");
 
 out:
 	write_unlock_irqrestore(&esdm_hash_lock, flags);
@@ -466,4 +476,6 @@ void esdm_es_sched_module_exit(void)
 	esdm_sched_hash_state = NULL;
 
 	write_unlock_irqrestore(&esdm_hash_lock, flags);
+
+	pr_info("ESDM Scheduler ES unregistered\n");
 }

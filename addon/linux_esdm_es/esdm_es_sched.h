@@ -8,7 +8,7 @@
 
 #include "esdm_es_mgr_cb.h"
 
-void esdm_sched_es_init(bool highres_timer);
+void __init esdm_sched_es_init(bool highres_timer);
 
 extern struct esdm_es_cb esdm_es_sched;
 

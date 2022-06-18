@@ -113,6 +113,10 @@
  */
 #define ESDM_POOL_SIZE	(sizeof(struct shash_desc) + HASH_MAX_DESCSIZE)
 
+/* low 9 bits - can set 512 bits of entropy max */
+#define ESDM_ES_MGR_REQ_BITS_MASK	0x1ff
+#define ESDM_ES_MGR_RESET_BIT		0x80000000
+
 /****************************** Helper code ***********************************/
 
 static inline u32 esdm_fast_noise_entropylevel(u32 ent_bits, u32 requested_bits)
