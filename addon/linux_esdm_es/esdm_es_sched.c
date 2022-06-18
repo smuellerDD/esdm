@@ -91,6 +91,29 @@ static DEFINE_PER_CPU(u32 [ESDM_DATA_ARRAY_SIZE], esdm_sched_array)
 static DEFINE_PER_CPU(u32, esdm_sched_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_sched_array_events) = ATOMIC_INIT(0);
 
+/*
+ * Per-CPU entropy pool with compressed entropy event
+ *
+ * The per-CPU entropy pool is defined as the hash state. New data is simply
+ * inserted into the entropy pool by performing a hash update operation.
+ * To read the entropy pool, a hash final must be invoked. However, before
+ * the entropy pool is released again after a hash final, the hash init must
+ * be performed.
+ */
+static DEFINE_PER_CPU(u8 [ESDM_POOL_SIZE], esdm_sched_pool)
+						__aligned(ESDM_KCAPI_ALIGN);
+/*
+ * Lock to allow other CPUs to read the pool - as this is only done during
+ * reseed which is infrequent, this lock is hardly contended.
+ */
+static DEFINE_PER_CPU(spinlock_t, esdm_sched_lock);
+static DEFINE_PER_CPU(bool, esdm_sched_lock_init) = false;
+
+static bool esdm_sched_pool_online(int cpu)
+{
+	return per_cpu(esdm_sched_lock_init, cpu);
+}
+
 static void __init esdm_sched_check_compression_state(void)
 {
 	/* One pool should hold sufficient entropy for disabled compression */
@@ -128,8 +151,13 @@ static u32 esdm_sched_avail_pool_size(void)
 	    max_size = min_t(u32, max_pool, ESDM_DATA_NUM_VALUES);
 	int cpu;
 
-	for_each_online_cpu(cpu)
-		max_size += max_pool;
+	for_each_online_cpu(cpu) {
+		if (!esdm_sched_pool_online(cpu))
+			continue;
+
+		if (esdm_sched_pool_online(cpu))
+			max_size += max_pool;
+	}
 
 	return max_size;
 }
@@ -176,6 +204,59 @@ static void esdm_sched_reset(void)
 		atomic_set(per_cpu_ptr(&esdm_sched_array_events, cpu), 0);
 }
 
+static u32
+esdm_sched_pool_hash_one(const struct esdm_hash_cb *pcpu_hash_cb,
+			 void *pcpu_hash, int cpu, u8 *digest, u32 *digestsize)
+{
+	struct shash_desc *pcpu_shash =
+		(struct shash_desc *)per_cpu_ptr(esdm_sched_pool, cpu);
+	spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
+	unsigned long flags;
+	u32 digestsize_events, found_events;
+
+	if (unlikely(!per_cpu(esdm_sched_lock_init, cpu))) {
+		if (pcpu_hash_cb->hash_init(pcpu_shash, pcpu_hash)) {
+			pr_warn("Initialization of hash failed\n");
+			return 0;
+		}
+		spin_lock_init(lock);
+		per_cpu(esdm_sched_lock_init, cpu) = true;
+		pr_debug("Initializing per-CPU entropy pool for CPU %d with hash %s\n",
+			 raw_smp_processor_id(), pcpu_hash_cb->hash_name());
+	}
+
+	/* Lock guarding against reading / writing to per-CPU pool */
+	spin_lock_irqsave(lock, flags);
+
+	*digestsize = pcpu_hash_cb->hash_digestsize(pcpu_hash);
+	digestsize_events = esdm_entropy_to_data(*digestsize << 3,
+						 esdm_sched_entropy_bits);
+
+	/* Obtain entropy statement like for the entropy pool */
+	found_events = atomic_xchg_relaxed(
+				per_cpu_ptr(&esdm_sched_array_events, cpu), 0);
+	/* Cap to maximum amount of data we can hold in hash */
+	found_events = min_t(u32, found_events, digestsize_events);
+
+	/* Cap to maximum amount of data we can hold in array */
+	found_events = min_t(u32, found_events, ESDM_DATA_NUM_VALUES);
+
+	/* Store all not-yet compressed data in data array into hash, ... */
+	if (pcpu_hash_cb->hash_update(pcpu_shash,
+				(u8 *)per_cpu_ptr(esdm_sched_array, cpu),
+				ESDM_DATA_ARRAY_SIZE * sizeof(u32)) ?:
+	    /* ... get the per-CPU pool digest, ... */
+	    pcpu_hash_cb->hash_final(pcpu_shash, digest) ?:
+	    /* ... re-initialize the hash, ... */
+	    pcpu_hash_cb->hash_init(pcpu_shash, pcpu_hash) ?:
+	    /* ... feed the old hash into the new state. */
+	    pcpu_hash_cb->hash_update(pcpu_shash, digest, *digestsize))
+		found_events = 0;
+
+	spin_unlock_irqrestore(lock, flags);
+	return found_events;
+}
+
 /*
  * Hash all per-CPU arrays and return the digest to be used as seed data for
  * seeding a DRNG. The caller must guarantee backtracking resistance.
@@ -201,7 +282,7 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	u8 digest[ESDM_MAX_DIGESTSIZE];
 	unsigned long flags;
 	u32 found_events, collected_events = 0, collected_ent_bits,
-	    requested_events, returned_ent_bits, digestsize, digestsize_events;
+	    requested_events, returned_ent_bits;
 	int ret, cpu;
 	void *hash;
 
@@ -222,39 +303,27 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	if (ret)
 		goto err;
 
-	digestsize = hash_cb->hash_digestsize(shash);
-
 	/* Cap to maximum entropy that can ever be generated with given hash */
-	esdm_cap_requested(digestsize << 3, requested_bits);
+	esdm_cap_requested(hash_cb->hash_digestsize(hash) << 3, requested_bits);
 	requested_events = esdm_entropy_to_data(requested_bits +
 						esdm_compress_osr(),
 						esdm_sched_entropy_bits);
-	digestsize_events = esdm_entropy_to_data(digestsize << 3,
-						 esdm_sched_entropy_bits);
 
 	/*
 	 * Harvest entropy from each per-CPU hash state - even though we may
 	 * have collected sufficient entropy, we will hash all per-CPU pools.
 	 */
 	for_each_online_cpu(cpu) {
-		u32 unused_events = 0;
+		u32 digestsize, unused_events = 0;
 
-		ret = hash_cb->hash_update(shash,
-				(u8 *)per_cpu_ptr(esdm_sched_array, cpu),
-				ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+		found_events = esdm_sched_pool_hash_one(hash_cb, hash,
+							cpu, digest,
+							&digestsize);
 
 		/* Store all not-yet compressed data in data array into hash */
 		ret = hash_cb->hash_update(shash, digest, digestsize);
 		if (ret)
 			goto err;
-
-		/* Obtain entropy statement like for the entropy pool */
-		found_events = atomic_xchg_relaxed(
-				per_cpu_ptr(&esdm_sched_array_events, cpu), 0);
-		/* Cap to maximum amount of data we can hold in hash */
-		found_events = min_t(u32, found_events, digestsize_events);
-		/* Cap to maximum amount of data we can hold in array */
-		found_events = min_t(u32, found_events, ESDM_DATA_NUM_VALUES);
 
 		collected_events += found_events;
 		if (collected_events > requested_events) {
