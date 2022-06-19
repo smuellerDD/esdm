@@ -36,9 +36,12 @@
 static int esdm_irq_entropy_fd = -1;
 static int esdm_irq_status_fd = -1;
 static uint32_t esdm_irq_requested_bits_set = 0;
+static atomic_t esdm_irq_terminate = ATOMIC_INIT(0);
 
 static void esdm_irq_finalize(void)
 {
+	atomic_set(&esdm_irq_terminate, 1);
+
 	if (esdm_irq_entropy_fd >= 0)
 		close(esdm_irq_entropy_fd);
 	esdm_irq_entropy_fd = -1;
@@ -140,7 +143,7 @@ static int _esdm_irq_seed_init(void __unused *unused)
 
 #define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
 	for (i = 0; i < secs(900); i++) {
-		if (esdm_get_terminate())
+		if (atomic_read(&esdm_irq_terminate))
 			return 0;
 
 		if (esdm_pool_all_nodes_seeded_get()) {
