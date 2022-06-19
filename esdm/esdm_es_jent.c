@@ -68,10 +68,11 @@ static void esdm_jent_finalize(void)
 	if (!atomic_read(&esdm_jent_initialized))
 		return;
 
+	atomic_set(&esdm_jent_initialized, 0);
+
 	mutex_w_lock(&esdm_jent_lock);
 	jent_entropy_collector_free(esdm_jent_state);
 	esdm_jent_state = NULL;
-	atomic_set(&esdm_jent_initialized, 0);
 	mutex_w_unlock(&esdm_jent_lock);
 }
 
