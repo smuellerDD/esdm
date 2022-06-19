@@ -212,8 +212,11 @@ out:
 /* Worker loop of a thread */
 static void *thread_worker(void *arg)
 {
-	sigset_t block, old;
 	struct thread_ctx *tctx = (struct thread_ctx *)arg;
+
+	/* Do not block signals */
+#if 0
+	sigset_t block, old;
 	int ret;
 
 	/* Block all signals from being processed by thread */
@@ -221,6 +224,7 @@ static void *thread_worker(void *arg)
 	ret = -pthread_sigmask(SIG_BLOCK, &block, &old);
 	if (ret)
 		return NULL;
+#endif
 
 	while (1) {
 		mutex_w_lock(&tctx->inuse);
