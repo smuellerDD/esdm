@@ -24,9 +24,6 @@ extern struct esdm_es_cb *esdm_es[];
 #define for_each_esdm_es(ctr)		\
 	for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
 
-bool esdm_get_terminate(void);
-void esdm_set_terminate(void);
-
 bool esdm_state_min_seeded(void);
 void esdm_debug_report_seedlevel(const char *name);
 

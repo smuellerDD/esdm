@@ -74,8 +74,6 @@ static struct esdm_state esdm_state = {
  */
 uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
 
-static atomic_t esdm_terminate = ATOMIC_INIT(0);
-
 /*
  * The entries must be in the same order as defined by enum esdm_internal_es and
  * enum esdm_external_es
@@ -100,16 +98,6 @@ struct esdm_es_cb *esdm_es[] = {
 };
 
 /********************************** Helper ***********************************/
-
-bool esdm_get_terminate(void)
-{
-	return !!atomic_read(&esdm_terminate);
-}
-
-void esdm_set_terminate(void)
-{
-	atomic_set(&esdm_terminate, 1);
-}
 
 void esdm_debug_report_seedlevel(const char *name)
 {
