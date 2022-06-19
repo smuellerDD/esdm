@@ -214,17 +214,16 @@ static void *thread_worker(void *arg)
 {
 	struct thread_ctx *tctx = (struct thread_ctx *)arg;
 
-	/* Do not block signals */
-#if 0
-	sigset_t block, old;
-	int ret;
+	if (!thread_is_special(tctx)) {
+		sigset_t block, old;
+		int ret;
 
-	/* Block all signals from being processed by thread */
-	sigfillset(&block);
-	ret = -pthread_sigmask(SIG_BLOCK, &block, &old);
-	if (ret)
-		return NULL;
-#endif
+		/* Block all signals from being processed by thread */
+		sigfillset(&block);
+		ret = -pthread_sigmask(SIG_BLOCK, &block, &old);
+		if (ret)
+			return NULL;
+	}
 
 	while (1) {
 		mutex_w_lock(&tctx->inuse);
