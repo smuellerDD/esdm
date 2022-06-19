@@ -770,9 +770,6 @@ int esdm_rpc_server_init(const char *username)
 	/* Initialize test pertubation support */
 	CKINT(esdm_test_shm_status_init());
 
-	/* One thread group */
-	CKINT(thread_init(1));
-
 	pid = fork();
 	if (pid < 0) {
 		logger(LOGGER_ERR, LOGGER_C_SERVER,

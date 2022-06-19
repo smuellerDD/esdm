@@ -24,6 +24,7 @@
 #include "esdm_node.h"
 #include "esdm_shm_status.h"
 #include "ret_checkers.h"
+#include "threading_support.h"
 #include "visibility.h"
 
 DSO_PUBLIC
@@ -33,6 +34,9 @@ int esdm_init(void)
 
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_init());
+
+	/* One thread group */
+	CKINT(thread_init(1));
 
 	/*
 	 * Initialize the DRNG manager: the DRNG should be ready before the
@@ -57,8 +61,7 @@ out:
 DSO_PUBLIC
 void esdm_fini(void)
 {
-	/* Set global notifier that we are terminating */
-	esdm_set_terminate();
+	thread_stop_spawning();
 
 	/* Clear up the SHM information */
 	esdm_shm_status_exit();
@@ -71,4 +74,7 @@ void esdm_fini(void)
 
 	/* Terminate all nodes */
 	esdm_node_fini();
+
+	/* Kill all remaining threads */
+	thread_release(true, true);
 }
