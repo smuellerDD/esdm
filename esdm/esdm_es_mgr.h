@@ -43,6 +43,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits);
 void esdm_init_ops(struct entropy_buf *eb);
 
 int esdm_es_mgr_initialize(void);
+int esdm_es_mgr_monitor_initialize(void);
 void esdm_es_mgr_finalize(void);
 
 #endif /* _ESDM_ES_MGR_H */

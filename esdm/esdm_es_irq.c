@@ -36,12 +36,9 @@
 static int esdm_irq_entropy_fd = -1;
 static int esdm_irq_status_fd = -1;
 static uint32_t esdm_irq_requested_bits_set = 0;
-static atomic_t esdm_irq_terminate = ATOMIC_INIT(0);
 
 static void esdm_irq_finalize(void)
 {
-	atomic_set(&esdm_irq_terminate, 1);
-
 	if (esdm_irq_entropy_fd >= 0)
 		close(esdm_irq_entropy_fd);
 	esdm_irq_entropy_fd = -1;
@@ -127,68 +124,22 @@ static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 	return entropy;
 }
 
-/*
- * Thread to monitor the initial seeding state of the entropy source. This
- * thread may disable the entropy source if the kernel driver cannot detect
- * sufficient entropy.
- */
-static int _esdm_irq_seed_init(void __unused *unused)
+static int esdm_irq_seed_monitor(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<28 };
-	uint64_t i;
-	uint32_t ent, sec_strength = esdm_security_strength();
-	bool min_seeded_checked = false;
+	uint32_t ent = esdm_irq_entropylevel(esdm_security_strength());
 
-	thread_set_name(irq_seed, 0);
+	if (!esdm_config_es_irq_entropy_rate())
+		return 0;
 
-#define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
-	for (i = 0; i < secs(900); i++) {
-		if (atomic_read(&esdm_irq_terminate))
-			return 0;
+	if (ent >= esdm_config_es_irq_entropy_rate()) {
+		logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			"Full entropy of irquler ES detected\n");
+		esdm_es_add_entropy();
+		esdm_test_seed_entropy(ent);
 
-		if (esdm_pool_all_nodes_seeded_get()) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "Stopping interrupt ES entropy poll\n");
-			return 0;
-		}
-
-		ent = esdm_irq_entropylevel(sec_strength);
-
-		if (ent >= esdm_config_es_irq_entropy_rate()) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "Full entropy of interrupt ES detected\n");
-			esdm_es_add_entropy();
-			esdm_test_seed_entropy(ent);
-			continue;
-		}
-
-		if (!min_seeded_checked && ent >= ESDM_MIN_SEED_ENTROPY_BITS) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "Minimum entropy of interrupt ES detected\n");
-			esdm_es_add_entropy();
-			esdm_test_seed_entropy(ent);
-			min_seeded_checked = true;
-		}
-
-		nanosleep(&ts, NULL);
+		return 0;
 	}
-#undef secs
-
-	logger(LOGGER_WARN, LOGGER_C_ES,
-	       "Full entropy of interrupt ES not detected within reasonable time\n");
-	return 0;
-}
-
-static void esdm_irq_seed_init(void)
-{
-	int ret = thread_start(_esdm_irq_seed_init, NULL,
-			       ESDM_THREAD_IRQ_INIT_GROUP, NULL);
-
-	if (ret) {
-		logger(LOGGER_ERR, LOGGER_C_ES,
-		       "Starting the interrupt ES seed thread failed: %d\n",
-		       ret);
-	}
+	return -EAGAIN;
 }
 
 static int esdm_irq_initialize(void)
@@ -226,17 +177,7 @@ static int esdm_irq_initialize(void)
 		return 0;
 	}
 
-	/* Try asynchronously to check for entropy */
-	if (esdm_config_es_irq_entropy_rate() &&
-	    !esdm_pool_all_nodes_seeded_get()) {
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-		       "Initializing interrupt ES monitoring thread\n");
-		esdm_irq_seed_init();
-	} else {
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
-		       "Full entropy of interrupt ES detected\n");
-		esdm_es_add_entropy();
-	}
+	esdm_es_add_entropy();
 
 	return 0;
 }
@@ -324,8 +265,6 @@ static void esdm_irq_reset(void)
 		if (ret != sizeof(reset)) {
 			logger(LOGGER_ERR, LOGGER_C_ES,
 			       "Reset of interrupt entropy source failed\n");
-		} else {
-			esdm_irq_seed_init();
 		}
 	}
 }
@@ -333,6 +272,7 @@ static void esdm_irq_reset(void)
 struct esdm_es_cb esdm_es_irq = {
 	.name			= "Interrupt",
 	.init			= esdm_irq_initialize,
+	.monitor_es		= esdm_irq_seed_monitor,
 	.fini			= esdm_irq_finalize,
 	.get_ent		= esdm_irq_get,
 	.curr_entropy		= esdm_irq_entropylevel,

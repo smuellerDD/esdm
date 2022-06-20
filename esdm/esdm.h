@@ -29,6 +29,7 @@
  * @return: 0 on success, < 0 on error
  */
 int esdm_init(void);
+int esdm_init_monitor(void);
 
 /**
  * esdm_fini - finalize the ESDM library and release all resources

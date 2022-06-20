@@ -432,14 +432,8 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 	char name[ESDM_THREAD_MAX_NAMELEN];
 
 	switch (type) {
-	case drng_seed:
-		snprintf(name, sizeof(name), "drng_seed%u", id);
-		break;
-	case sched_seed:
-		snprintf(name, sizeof(name), "sched_es_seed");
-		break;
-	case irq_seed:
-		snprintf(name, sizeof(name), "irq_es_seed");
+	case es_monitor:
+		snprintf(name, sizeof(name), "es_monitor");
 		break;
 	case rpc_unpriv_server:
 		snprintf(name, sizeof(name), "unpriv_rpc");

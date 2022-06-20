@@ -74,6 +74,8 @@ static struct esdm_state esdm_state = {
  */
 uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
 
+static atomic_t esdm_es_mgr_terminate = ATOMIC_INIT(0);
+
 /*
  * The entries must be in the same order as defined by enum esdm_internal_es and
  * enum esdm_external_es
@@ -345,6 +347,8 @@ void esdm_init_ops(struct entropy_buf *eb)
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "ESDM fully seeded with %u bits of entropy\n",
 			seed_bits);
+esdm_get_seed_entropy_osr(
+					state->all_online_nodes_seeded);
 		esdm_set_entropy_thresh(requested_bits);
 	} else if (!state->esdm_min_seeded) {
 
@@ -382,6 +386,8 @@ int esdm_es_mgr_initialize(void)
 
 	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Initialize ES manager\n");
 
+	esdm_set_entropy_thresh(esdm_get_seed_entropy_osr(false));
+
 	/* Initialize the entropy sources */
 	for_each_esdm_es(i) {
 		if (esdm_es[i]->init) {
@@ -409,9 +415,47 @@ out:
 	return ret;
 }
 
+int esdm_es_mgr_monitor_initialize(void)
+{
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<28 };
+	uint64_t i;
+
+	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
+
+	thread_set_name(es_monitor, 0);
+
+#define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
+	for (i = 0; i < secs(1800); i++) {
+		unsigned int j;
+
+		if (atomic_read(&esdm_es_mgr_terminate))
+			return 0;
+
+		if (esdm_pool_all_nodes_seeded_get()) {
+			logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			       "Stopping entropy monitor\n");
+			return 0;
+		}
+
+		for_each_esdm_es(j) {
+			if (esdm_es[j]->monitor_es)
+				esdm_es[j]->monitor_es();
+		}
+
+		nanosleep(&ts, NULL);
+	}
+#undef secs
+
+	logger(LOGGER_WARN, LOGGER_C_ES,
+	       "Full entropy monitor terminated: did not collect sufficient entropy\n");
+	return 0;
+}
+
 void esdm_es_mgr_finalize(void)
 {
 	uint32_t i;
+
+	atomic_set(&esdm_es_mgr_terminate, 1);
 
 	for_each_esdm_es(i) {
 		if (esdm_es[i]->fini)

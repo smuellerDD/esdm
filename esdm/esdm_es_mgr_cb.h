@@ -71,6 +71,7 @@ struct entropy_buf {
  * struct esdm_es_cb - callback defining an entropy source
  * @name: Name of the entropy source.
  * @init: Initialize the entropy source - may be NULL
+ * @monitor_es: Check the ES for new entropy - may be NULL
  * @fini: Deinitialize the entropy source - may be NULL
  * @get_ent: Fetch entropy into the entropy_buf. The ES shall only deliver
  *	     data if its internal initialization is complete, including any
@@ -87,6 +88,7 @@ struct entropy_buf {
 struct esdm_es_cb {
 	const char *name;
 	int (*init)(void);
+	int (*monitor_es)(void);
 	void (*fini)(void);
 	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits,
 			bool fully_seeded);

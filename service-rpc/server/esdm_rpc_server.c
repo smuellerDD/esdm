@@ -38,6 +38,7 @@
 #include "atomic.h"
 #include "conv_be_le.h"
 #include "config.h"
+#include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_rpc_protocol.h"
 #include "esdm_rpc_server.h"
@@ -762,6 +763,13 @@ static void esdm_rpcs_cleanup_term(int sig)
 		kill(server_pid, sig);
 }
 
+static int esdm_rpc_server_es_monitor(void __unused *unused)
+{
+	thread_set_name(es_monitor, 0);
+
+	return esdm_init_monitor();
+}
+
 int esdm_rpc_server_init(const char *username)
 {
 	pid_t pid;
@@ -779,6 +787,12 @@ int esdm_rpc_server_init(const char *username)
 		       "Cannot fork interface process\n");
 		exit(1);
 	} else if (pid == 0) {
+		/* Create thread for entropy source monitor */
+		if (thread_start(esdm_rpc_server_es_monitor, NULL,
+				 ESDM_THREAD_ES_MONITOR, NULL)) {
+			logger(LOGGER_WARN, LOGGER_C_RPC,
+			       "Starting ES monitor thread failed\n");
+		}
 		/* Fork the server process */
 		esdm_rpcs_interfaces_init(username);
 	} else {

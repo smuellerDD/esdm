@@ -35,9 +35,6 @@ int esdm_init(void)
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_init());
 
-	/* One thread group */
-	CKINT(thread_init(1));
-
 	/*
 	 * Initialize the DRNG manager: the DRNG should be ready before the
 	 * entropy manager as the entropy manager may try to immediately
@@ -61,8 +58,6 @@ out:
 DSO_PUBLIC
 void esdm_fini(void)
 {
-	thread_stop_spawning();
-
 	/* Clear up the SHM information */
 	esdm_shm_status_exit();
 
@@ -74,7 +69,10 @@ void esdm_fini(void)
 
 	/* Terminate all nodes */
 	esdm_node_fini();
+}
 
-	/* Kill all remaining threads */
-	thread_release(true, true);
+DSO_PUBLIC
+int esdm_init_monitor(void)
+{
+	return esdm_es_mgr_monitor_initialize();
 }
