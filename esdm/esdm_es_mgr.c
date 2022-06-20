@@ -417,7 +417,7 @@ out:
 
 int esdm_es_mgr_monitor_initialize(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<28 };
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
 	uint64_t i;
 
 	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
