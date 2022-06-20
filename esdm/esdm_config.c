@@ -252,6 +252,7 @@ int esdm_config_init(void)
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_sched_entropy_rate_bits);
 
+#if 0
 	/*
 	 * In FIPS mode, the Jitter RNG is defined to have full of entropy
 	 * unless a different value has been specified at the command line
@@ -266,6 +267,7 @@ int esdm_config_init(void)
 	     ESDM_JENT_ENTROPY_RATE)
 		esdm_config_es_jent_entropy_rate_set(
 			ESDM_DRNG_SECURITY_STRENGTH_BITS);
+#endif
 
 	return 0;
 }
