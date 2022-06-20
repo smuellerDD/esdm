@@ -220,6 +220,13 @@ static int esdm_sched_initialize(void)
 		return -EFAULT;
 	}
 
+	esdm_sched_status_fd = open("/sys/kernel/debug/esdm_es/status_sched",
+				    O_RDWR);
+	if (esdm_sched_entropy_fd < 0) {
+		esdm_sched_finalize();
+		return 0;
+	}
+
 	/* Try asynchronously to check for entropy */
 	if (esdm_config_es_sched_entropy_rate() &&
 	    !esdm_pool_all_nodes_seeded_get()) {
@@ -229,13 +236,7 @@ static int esdm_sched_initialize(void)
 	} else {
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "Full entropy of scheduler ES detected\n");
-	}
-
-	esdm_sched_status_fd = open("/sys/kernel/debug/esdm_es/status_sched",
-				    O_RDWR);
-	if (esdm_sched_entropy_fd < 0) {
-		esdm_sched_finalize();
-		return 0;
+		esdm_es_add_entropy();
 	}
 
 	return 0;

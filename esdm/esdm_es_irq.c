@@ -219,6 +219,13 @@ static int esdm_irq_initialize(void)
 		return -EFAULT;
 	}
 
+	esdm_irq_status_fd = open("/sys/kernel/debug/esdm_es/status_irq",
+				  O_RDWR);
+	if (esdm_irq_entropy_fd < 0) {
+		esdm_irq_finalize();
+		return 0;
+	}
+
 	/* Try asynchronously to check for entropy */
 	if (esdm_config_es_irq_entropy_rate() &&
 	    !esdm_pool_all_nodes_seeded_get()) {
@@ -228,13 +235,7 @@ static int esdm_irq_initialize(void)
 	} else {
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "Full entropy of interrupt ES detected\n");
-	}
-
-	esdm_irq_status_fd = open("/sys/kernel/debug/esdm_es/status_irq",
-				  O_RDWR);
-	if (esdm_irq_entropy_fd < 0) {
-		esdm_irq_finalize();
-		return 0;
+		esdm_es_add_entropy();
 	}
 
 	return 0;
