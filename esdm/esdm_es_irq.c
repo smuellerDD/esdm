@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "esdm_config.h"

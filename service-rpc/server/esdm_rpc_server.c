@@ -82,6 +82,7 @@ static DECLARE_WAIT_QUEUE(esdm_rpc_thread_init_wait);
 static pid_t server_pid = -1;
 static atomic_t server_exit = ATOMIC_INIT(0);
 
+/* Remove a potentially left-over old Unix Domain socket. */
 static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 				   unsigned addr_len)
 {
@@ -113,6 +114,7 @@ static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 	unlink(path);
 }
 
+/* Write data into an RPC connection. */
 static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 				const uint8_t *data, size_t len)
 {
@@ -141,14 +143,16 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 	return 0;
 }
 
+/* Write out data from a ProtobufC buffer. */
 static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
 				  const uint8_t *data)
 {
-	struct esdm_rpcs_write_buf *buf = (struct esdm_rpcs_write_buf *) buffer;
+	struct esdm_rpcs_write_buf *buf = (struct esdm_rpcs_write_buf *)buffer;
 
 	esdm_rpcs_write_data(buf->rpc_conn, data, len);
 }
 
+/* Pack the message into a ProtobufC structure and write it to the receiver. */
 static int esdm_rpcs_pack(const ProtobufCMessage *message,
 			  struct esdm_rpcs_connection *rpc_conn)
 {
@@ -195,6 +199,7 @@ out:
 	return ret;
 }
 
+/* Is the calling RPC client a privileged user? */
 bool esdm_rpc_client_is_privileged(void *closure_data)
 {
 	struct esdm_rpcs_connection *rpc_conn = closure_data;
@@ -229,6 +234,7 @@ out:
 	return;
 }
 
+/* Unpack the received data and invoke the intended ProtobufC handler. */
 static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 			    struct esdm_rpc_proto_cs *received_data)
 {
@@ -262,8 +268,10 @@ out:
 	return ret;
 }
 
+/* Read data from the RPC connection into a local buffer. */
 static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 {
+	/* Read the data into a stack buffer to avoid mallocs. */
 	ProtobufCAllocator esdm_rpc_allocator = {
 		.alloc = &esdm_rpc_alloc,
 		.free = &esdm_rpc_free,
@@ -288,6 +296,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 	thread_set_name(rpc_handler, (uint32_t)rpc_conn->child_fd);
 
+	/* Prepare the allocator to use the stack buffer. */
 	tls.buf = unpacked;
 	tls.len = sizeof(unpacked);
 	esdm_rpc_allocator.allocator_data = &tls;
@@ -341,9 +350,11 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		       "Reading %zd bytes, already consumed %zu bytes\n",
 		       received, total_received);
 
+		/* We insist on having at least a header received. */
 		if (total_received < sizeof(*received_data))
 			continue;
 
+		/* Header is received, analyze it. */
 		if (!data_to_fetch) {
 			struct esdm_rpc_proto_cs_header *header =
 				&received_data->header;
@@ -386,6 +397,13 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 	} while (total_received < sizeof(buf));
 
+	/* If we have received insufficient data, bail out now. */
+	if (total_received < sizeof(*received_data) ||
+	    total_received < data_to_fetch) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	/*
 	 * We now have a filled buffer that has a header and received
 	 * as much data as the header defined. We also start the
@@ -400,6 +418,7 @@ out:
 	return ret;
 }
 
+/* Thread main for receiving a new connection and process it. */
 static int esdm_rpcs_handler(void *args)
 {
 	struct esdm_rpcs_connection *rpc_conn = args;
@@ -419,6 +438,7 @@ static int esdm_rpcs_handler(void *args)
 	return 0;
 }
 
+/* The ESDM RPC server main worker loop. */
 static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 {
 	struct esdm_rpcs_connection *rpc_conn = NULL;
@@ -488,6 +508,7 @@ out:
 	return ret;
 }
 
+/* Open the socket that we want to use for receiving data. */
 static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 			   ProtobufCService *service,
 			   struct esdm_rpcs *proto)
@@ -552,6 +573,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	return 0;
 }
 
+/* Terminating the RPC server. */
 static void eesdm_rpcs_stop(struct esdm_rpcs *proto)
 {
 	if (proto->server_listening_fd >= 0) {
@@ -606,8 +628,8 @@ static int esdm_rpcs_unpriv_init(void *args)
 	       ESDM_RPC_UNPRIV_SOCKET);
 
 	/* Server handing unprivileged interface in current thread */
-	CKINT(esdm_rpcs_workerloop(&unpriv_proto))
-	;
+	CKINT(esdm_rpcs_workerloop(&unpriv_proto));
+
 	return 0;
 
 out:
@@ -616,17 +638,11 @@ out:
 	return ret;
 }
 
-static int esdm_rpcs_unpriv_init_threads(void)
-{
-	if (thread_start(esdm_rpcs_unpriv_init, NULL,
-			 ESDM_THREAD_RPC_UNPRIV_GROUP, NULL)) {
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "Starting server thread failed\n");
-	}
-
-	return 0;
-}
-
+/*
+ * Initialize the RPC server interfaces:
+ *	* The current thread processes the privileged RPC interface.
+ *	* A newly started thread processes the unprivileged RPC interface.
+ */
 static int esdm_rpcs_interfaces_init(const char *username)
 {
 	struct esdm_rpcs priv_proto;
@@ -654,8 +670,10 @@ static int esdm_rpcs_interfaces_init(const char *username)
 		goto out;
 	}
 
-	/* Spawn all threads handling the unprivileged interface */
-	CKINT(esdm_rpcs_unpriv_init_threads());
+	/* Spawn the thread handling the unprivileged interface */
+	CKINT_LOG(thread_start(esdm_rpcs_unpriv_init, NULL,
+			      ESDM_THREAD_RPC_UNPRIV_GROUP, NULL),
+		  "Starting server thread failed\n");
 
 	/* Wait for the unprivileged thread to complete initialization. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
@@ -682,6 +700,7 @@ out:
 	return ret;
 }
 
+/* Cleanup the RPC server resources - this call needs root privilege. */
 static void esdm_rpcs_cleanup(void)
 {
 	/* Clean up all unprivileged Unix domain socket */

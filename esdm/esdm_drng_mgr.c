@@ -588,7 +588,12 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	return rc;
 }
 
-/* Reset ESDM such that all existing entropy is gone */
+/*
+ * Reset ESDM such that all existing entropy is gone.
+ *
+ * TODO: After this call is invoked, the esdm_init_monitor should be invoked
+ * to monitor the ES for new entropy.
+ */
 void esdm_reset(void)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();

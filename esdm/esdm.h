@@ -24,15 +24,26 @@
 #include <sys/types.h>
 
 /**
- * esdm_init() - initialize the ESDM library
+ * @brief esdm_init() - initialize the ESDM library
  *
  * @return: 0 on success, < 0 on error
  */
 int esdm_init(void);
+
+/**
+ * @brief esdm_init_monitor() - initialize ES monitor
+ *
+ * This call is intended to be invoked from a thread to monitor the ES
+ * for arrival of new entropy when not yet all DRNGs are initialized.
+ * Yet, it is also permissible to call it in the current thread if one
+ * wants to synchronously wait until all DRNGs are initialized.
+ *
+ * @return: 0 on success, < 0 on error
+ */
 int esdm_init_monitor(void);
 
 /**
- * esdm_fini - finalize the ESDM library and release all resources
+ * @brief esdm_fini() - finalize the ESDM library and release all resources
  */
 void esdm_fini(void);
 

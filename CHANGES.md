@@ -7,6 +7,8 @@ Changes 0.4.0-prerelease:
 
 * add interrupt entropy source
 
+* modify collection in scheduler ES: maintain a hash state per CPU as a per-CPU entropy pool
+
 Changes 0.3.0:
 * Replace protobuf-c-rpc with built-in RPC mechanism reducing amount of mallocs,
   performing proper zeroization and being fully thread-aware
