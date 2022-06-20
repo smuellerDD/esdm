@@ -170,19 +170,39 @@ static int esdm_shm_status_create_shm(void)
 
 	esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
 			    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-	if (esdm_shmid < 0) {
-		if (errno == ENOENT) {
-			esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
-					    IPC_CREAT |
-					    S_IRUSR | S_IWUSR |
-					    S_IRGRP | S_IROTH);
-			if (esdm_shmid < 0) {
-				errsv = errno;
-				logger(LOGGER_ERR, LOGGER_C_ANY,
-				       "ESDM shared memory segment creation failed: %s\n",
-				       strerror(errsv));
-				return -errsv;
+	errsv = errno;
+
+	/* If we received EINVAL, the memory is too small, force a deletion. */
+	if (esdm_shmid < 0 && errsv == EINVAL) {
+		/* Try to get it with smallest size possible. */
+		esdm_shmid = shmget(key, 1,
+				    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		if (esdm_shmid >= 0) {
+			if (shmctl(esdm_shmid, IPC_RMID, NULL) < 0) {
+				logger(LOGGER_ERR, LOGGER_C_SERVER,
+				       "ESDM shared memory segment cannot be deleted: %s\n",
+				strerror(errno));
+			} else {
+				logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+				       "ESDM shared memory segment deleted\n");
+
+				/* Create SHM with the next code block. */
+				esdm_shmid = -1;
 			}
+		}
+	}
+
+	/* Create the SHM segment. */
+	if (esdm_shmid < 0) {
+		esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
+				    IPC_CREAT |
+				    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		if (esdm_shmid < 0) {
+			errsv = errno;
+			logger(LOGGER_ERR, LOGGER_C_ANY,
+			       "ESDM shared memory segment creation failed: %s\n",
+			       strerror(errsv));
+			return -errsv;
 		}
 	}
 
