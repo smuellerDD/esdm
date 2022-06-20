@@ -22,6 +22,7 @@
 #include "config.h"
 #include "esdm_config.h"
 #include "esdm_definitions.h"
+#include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "fips.h"
 #include "helper.h"
@@ -234,6 +235,7 @@ uint32_t esdm_config_curr_node(void)
 
 int esdm_config_init(void)
 {
+	uint32_t complete_entropy_rate = 0;
 
 	/*
 	 * Sanity checks - if runtime configuration is added, it must be
@@ -242,15 +244,28 @@ int esdm_config_init(void)
 	esdm_config.esdm_es_cpu_entropy_rate_bits =
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_cpu_entropy_rate_bits);
+	complete_entropy_rate += esdm_config.esdm_es_cpu_entropy_rate_bits;
 	esdm_config.esdm_es_jent_entropy_rate_bits =
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_jent_entropy_rate_bits);
+	complete_entropy_rate += esdm_config.esdm_es_jent_entropy_rate_bits;
 	esdm_config.esdm_es_krng_entropy_rate_bits =
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_krng_entropy_rate_bits);
+	complete_entropy_rate += esdm_config.esdm_es_krng_entropy_rate_bits;
 	esdm_config.esdm_es_sched_entropy_rate_bits =
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_sched_entropy_rate_bits);
+	complete_entropy_rate += esdm_config.esdm_es_sched_entropy_rate_bits;
+	esdm_config.esdm_es_irq_entropy_rate_bits =
+		esdm_config_entropy_rate_max(
+			esdm_config.esdm_es_irq_entropy_rate_bits);
+	complete_entropy_rate += esdm_config.esdm_es_irq_entropy_rate_bits;
+
+	if (complete_entropy_rate < esdm_get_seed_entropy_osr(false)) {
+		logger(LOGGER_WARN, LOGGER_C_ES,
+		       "All entropy sources managed by ESDM collectively cannot satisfy seed requirement - ensure to use an external entropy provider to fill up auxiliary pool!\n");
+	}
 
 #if 0
 	/*
