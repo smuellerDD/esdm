@@ -744,16 +744,16 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	}
 
 	write_lock_irqsave(&esdm_hash_lock, flags);
-	ret = esdm_irq_register(esdm_add_interrupt_randomness);
-	if (ret) {
-		hash_cb->hash_dealloc(esdm_irq_hash_state);
-		esdm_irq_hash_state = NULL;
-	}
-
 	esdm_irq_hash_state = hash_cb->hash_alloc();
 	if (IS_ERR(esdm_irq_hash_state)) {
 		pr_warn("could not allocate new ESDM pool hash (%ld)\n",
 			PTR_ERR(esdm_irq_hash_state));
+	}
+
+	ret = esdm_irq_register(esdm_add_interrupt_randomness);
+	if (ret) {
+		hash_cb->hash_dealloc(esdm_irq_hash_state);
+		esdm_irq_hash_state = NULL;
 	}
 
 	write_unlock_irqrestore(&esdm_hash_lock, flags);
