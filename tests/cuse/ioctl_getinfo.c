@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include "env.h"
+#include "esdm_rpc_service.h"
 #include "privileges.h"
 
 /******************************************************************************/
@@ -40,7 +41,7 @@
  */
 static int getinfo_ioctl(int fd)
 {
-	char buf[1024];
+	char buf[ESDM_SHM_STATUS_INFO_SIZE];
 	size_t len;
 	char *buf_p;
 	int ret = 1;
