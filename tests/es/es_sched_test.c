@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
@@ -132,14 +133,14 @@ static int es_sched_poolsize(void)
 
 	ret = esdm_es[esdm_int_es_sched]->max_entropy();
 	/* Maximum digest size is 512 bits */
-	if (ret > 512) {
+	if (ret > 512 * esdm_online_nodes()) {
 		printf("ES Scheduler - fail: max_entropy too large: %d\n", ret);
 		return 1;
 	}
 	printf("ES Scheduler - pass: max_entropy: %d\n", ret);
 
 	ret2 = esdm_es[esdm_int_es_sched]->curr_entropy(esdm_security_strength());
-	if (ret2 > 512) {
+	if (ret2 > 512 * esdm_online_nodes()) {
 		printf("ES Scheduler - fail: curr_entropy too large: %u\n", ret2);
 		return 1;
 	}
@@ -245,10 +246,11 @@ static int es_sched_reset(void)
 	if (es_sched_reset_check())
 		return 1;
 
+	create_sched_entropy();
+
 	do {
+		esdm_es[esdm_int_es_sched]->monitor_es();
 		ptr = atomic_read(&seed_entropy_ptr);
-		if (seed_entropy[ptr] >= ESDM_DRNG_SECURITY_STRENGTH_BITS)
-			break;
 		nanosleep(&ts, NULL);
 		i++;
 	} while (ptr < 1 && i < 60);
@@ -264,7 +266,7 @@ static int es_sched_reset(void)
 		printf("ES Scheduler - info: Entropy value for %u. seed operation: %u\n",
 		       1, seed_entropy[1]);
 
-		if (seed_entropy[0] >= ESDM_DRNG_SECURITY_STRENGTH_BITS)
+		if (seed_entropy[0] < ESDM_DRNG_SECURITY_STRENGTH_BITS)
 			return 1;
 		if (seed_entropy[1] < ESDM_DRNG_SECURITY_STRENGTH_BITS)
 			return 1;
@@ -293,6 +295,7 @@ int main(int argc, char *argv[])
 
 	logger_set_verbosity(LOGGER_DEBUG);
 
+	esdm_config_es_sched_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 	ret = es_sched_init();
 	if (ret)
 		return ret;
