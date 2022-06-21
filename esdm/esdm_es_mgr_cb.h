@@ -119,8 +119,6 @@ void esdm_es_add_entropy(void);
 
 /* Kernel entropy sources */
 #define ESDM_ES_MGR_REQ_BITS_MASK	0x1ff
-#define ESDM_ES_MGR_ENT_BITS_MASK	0x3fe00
-#define ESDM_ES_MGR_ENT_BITS_SHIFT	9
 #define ESDM_ES_MGR_RESET_BIT		0x80000000
 
 #endif /* _ESDM_ES_MGR_CB_H */
