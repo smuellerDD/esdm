@@ -130,8 +130,16 @@ uint32_t esdm_config_es_irq_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_irq_entropy_rate_set(uint32_t ent)
 {
-	esdm_config.esdm_es_irq_entropy_rate_bits =
-		esdm_config_entropy_rate_max(ent);
+	uint32_t val = esdm_config_entropy_rate_max(ent);
+
+	/*
+	 * Due to dependencies between both entropy sources, it is not
+	 * permissible to have both set to non-zero values.
+	 */
+	if (val > 0)
+		esdm_config_es_sched_entropy_rate_set(0);
+
+	esdm_config.esdm_es_irq_entropy_rate_bits = val;
 	esdm_es_add_entropy();
 }
 
@@ -144,16 +152,8 @@ uint32_t esdm_config_es_krng_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_krng_entropy_rate_set(uint32_t ent)
 {
-	uint32_t val = esdm_config_entropy_rate_max(ent);
-
-	/*
-	 * Due to dependencies between both entropy sources, it is not
-	 * permissible to have both set to non-zero values.
-	 */
-	if (val > 0)
-		esdm_config_es_sched_entropy_rate_set(0);
-
-	esdm_config.esdm_es_krng_entropy_rate_bits = val;
+	esdm_config.esdm_es_krng_entropy_rate_bits =
+		esdm_config_entropy_rate_max(ent);
 	esdm_es_add_entropy();
 }
 
@@ -236,6 +236,16 @@ uint32_t esdm_config_curr_node(void)
 int esdm_config_init(void)
 {
 	uint32_t complete_entropy_rate = 0;
+	uint32_t kernel_es = esdm_config_entropy_rate_max(
+			esdm_config.esdm_es_krng_entropy_rate_bits);
+
+	/*
+	 * The presence of the interrupt entropy source implies that the main
+	 * entropy source of the kernel random.c is being taken away.
+	 */
+#ifdef ESDM_ES_IRQ
+	kernel_es = min_t(uint32_t, kernel_es, 4);
+#endif
 
 	/*
 	 * Sanity checks - if runtime configuration is added, it must be
@@ -249,9 +259,7 @@ int esdm_config_init(void)
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_jent_entropy_rate_bits);
 	complete_entropy_rate += esdm_config.esdm_es_jent_entropy_rate_bits;
-	esdm_config.esdm_es_krng_entropy_rate_bits =
-		esdm_config_entropy_rate_max(
-			esdm_config.esdm_es_krng_entropy_rate_bits);
+	esdm_config.esdm_es_krng_entropy_rate_bits = kernel_es;
 	complete_entropy_rate += esdm_config.esdm_es_krng_entropy_rate_bits;
 	esdm_config.esdm_es_sched_entropy_rate_bits =
 		esdm_config_entropy_rate_max(
