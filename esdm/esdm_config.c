@@ -270,7 +270,7 @@ int esdm_config_init(void)
 			esdm_config.esdm_es_irq_entropy_rate_bits);
 	complete_entropy_rate += esdm_config.esdm_es_irq_entropy_rate_bits;
 
-	if (complete_entropy_rate < esdm_get_seed_entropy_osr(false)) {
+	if (complete_entropy_rate < esdm_get_seed_entropy_osr(true)) {
 		logger(LOGGER_WARN, LOGGER_C_ES,
 		       "All entropy sources managed by ESDM collectively cannot satisfy seed requirement - ensure to use an external entropy provider to fill up auxiliary pool!\n");
 	}
