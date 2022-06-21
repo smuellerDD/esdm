@@ -160,6 +160,14 @@ int main(int argc, char *argv[])
 
 	val = strtoul(argv[2], NULL, 10);
 
+	logger_set_verbosity(LOGGER_DEBUG);
+
+	/* First initialize */
+	ret = esdm_init();
+	if (ret)
+		return ret;
+
+	/* Now set specific entropy rates */
 	switch (val) {
 		case 0:
 		/* Use default configuration */
@@ -170,6 +178,7 @@ int main(int argc, char *argv[])
 		esdm_config_es_jent_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_krng_entropy_rate_set(0);
 		esdm_config_es_sched_entropy_rate_set(0);
+		esdm_config_es_irq_entropy_rate_set(0);
 		break;
 	case 2:
 		/* CPU ES: fully seeded */
@@ -177,6 +186,7 @@ int main(int argc, char *argv[])
 		esdm_config_es_jent_entropy_rate_set(0);
 		esdm_config_es_krng_entropy_rate_set(0);
 		esdm_config_es_sched_entropy_rate_set(0);
+		esdm_config_es_irq_entropy_rate_set(0);
 		break;
 	case 3:
 		if (force_fips) {
@@ -188,6 +198,8 @@ int main(int argc, char *argv[])
 		esdm_config_es_jent_entropy_rate_set(0);
 		esdm_config_es_krng_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_sched_entropy_rate_set(0);
+		esdm_config_es_irq_entropy_rate_set(0);
+printf("========= %u\n", esdm_config_es_irq_entropy_rate());
 		break;
 	case 4:
 		/* Scheduler ES fully seeded */
@@ -195,18 +207,13 @@ int main(int argc, char *argv[])
 		esdm_config_es_jent_entropy_rate_set(0);
 		esdm_config_es_krng_entropy_rate_set(0);
 		esdm_config_es_sched_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		esdm_config_es_irq_entropy_rate_set(0);
 		only_sched = 1;
 		break;
 	default:
 		printf("Unknown ES configuration value\n");
 		return 1;
 	}
-
-	logger_set_verbosity(LOGGER_DEBUG);
-
-	ret = esdm_init();
-	if (ret)
-		return ret;
 
 	/*
 	 * Having the call below esdm_init also implicitly tests the monitoring
