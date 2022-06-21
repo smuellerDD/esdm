@@ -34,7 +34,6 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
-#include "threading_support.h"
 
 static struct esdm_shm_status *esdm_shm_status = NULL;
 static int esdm_shmid = -1;

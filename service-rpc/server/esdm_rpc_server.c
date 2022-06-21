@@ -49,6 +49,7 @@
 #include "memset_secure.h"
 #include "privileges.h"
 #include "ret_checkers.h"
+#include "queue.h"
 #include "threading_support.h"
 
 struct esdm_rpcs {

@@ -38,6 +38,7 @@
 #include "logger.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
+#include "queue.h"
 #include "ret_checkers.h"
 #include "test_pertubation.h"
 #include "visibility.h"
@@ -421,8 +422,6 @@ int esdm_es_mgr_monitor_initialize(void)
 	uint64_t i;
 
 	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
-
-	thread_set_name(es_monitor, 0);
 
 #define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
 	for (i = 0; i < secs(1800); i++) {

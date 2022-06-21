@@ -300,8 +300,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 
 static void esdm_proc_term(void)
 {
-	thread_release(true, true);
-
 	esdm_rpcc_fini_priv_service();
 	esdm_rpcc_fini_unpriv_service();
 }

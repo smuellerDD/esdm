@@ -133,53 +133,6 @@ int thread_get_name(char *name, size_t len);
  */
 void thread_stop_spawning(void);
 
-struct thread_wait_queue {
-	pthread_cond_t thread_wait_cv;
-	pthread_mutex_t thread_wait_lock;
-};
-
-#define WAIT_QUEUE_INIT(name)						\
-	pthread_mutex_init(&(name).thread_wait_lock, NULL)
-
-#define WAIT_QUEUE_FINI(name)						\
-	pthread_mutex_destroy(&(name).thread_wait_lock)
-
-#define DECLARE_WAIT_QUEUE(name)					\
-	struct thread_wait_queue name = {				\
-		.thread_wait_lock = PTHREAD_MUTEX_INITIALIZER,		\
-	}
-
-#define thread_wait_no_event(queue)					\
-	pthread_mutex_lock(&(queue)->thread_wait_lock);			\
-	pthread_cond_wait(&(queue)->thread_wait_cv,			\
-			  &(queue)->thread_wait_lock);			\
-	pthread_mutex_unlock(&(queue)->thread_wait_lock)
-
-#define thread_wait_event(queue, condition)				\
-	while (!condition) {						\
-		thread_wait_no_event(queue);				\
-	}
-
-static inline bool thread_queue_sleeper(struct thread_wait_queue *queue)
-{
-	if (pthread_mutex_trylock(&queue->thread_wait_lock))
-		return true;
-
-	pthread_mutex_unlock(&(queue)->thread_wait_lock);
-	return false;
-}
-
-#define thread_wake(queue)						\
-	do {								\
-		pthread_cond_signal(&(queue)->thread_wait_cv);		\
-	} while (0);
-
-
-#define thread_wake_all(queue)						\
-	do {								\
-		pthread_cond_broadcast(&(queue)->thread_wait_cv);	\
-	} while (0);
-
 #ifdef __cplusplus
 }
 #endif

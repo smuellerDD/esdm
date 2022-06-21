@@ -21,6 +21,7 @@
 #include "esdm_es_mgr.h"
 #include "esdm_interface_dev_common.h"
 #include "esdm_shm_status.h"
+#include "queue.h"
 
 DECLARE_WAIT_QUEUE(esdm_write_wait);
 

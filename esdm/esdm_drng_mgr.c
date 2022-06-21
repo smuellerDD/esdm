@@ -36,8 +36,8 @@
 #include "esdm_es_mgr.h"
 #include "esdm_node.h"
 #include "helper.h"
+#include "queue.h"
 #include "ret_checkers.h"
-#include "threading_support.h"
 #include "visibility.h"
 
 /*

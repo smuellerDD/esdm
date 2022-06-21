@@ -30,7 +30,6 @@
 #include "esdm_definitions.h"
 #include "mutex.h"
 #include "mutex_w.h"
-#include "threading_support.h"
 
 extern struct thread_wait_queue esdm_init_wait;
 extern mutex_w_t esdm_crypto_cb_update;

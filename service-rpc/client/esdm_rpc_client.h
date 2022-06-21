@@ -26,7 +26,7 @@
 
 #include "atomic.h"
 #include "mutex_w.h"
-#include "threading_support.h"
+#include "queue.h"
 
 #ifdef __cplusplus
 extern "C"
