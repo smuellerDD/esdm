@@ -120,6 +120,7 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 			ESDM_SERVER_LINUX_ENTROPY_BYTES]
 						__aligned(sizeof(uint32_t));
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
+	struct esdm_status_st status;
 
 	/* Wake up every 2 minutes */
 	struct timespec ts = { .tv_sec = 120, .tv_nsec = 0 };
@@ -128,6 +129,11 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
 	for (;;) {
+		/* Only keep going if the IRQ entropy source is available */
+		esdm_status_machine(&status);
+		if (!status.es_irq_enabled)
+			break;
+
 		ret = esdm_get_random_bytes_full((uint8_t *)rpi->buf,
 						 (size_t)rpi->buf_size);
 		if (ret < 0) {

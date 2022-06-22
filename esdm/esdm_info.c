@@ -22,6 +22,7 @@
 #include "esdm.h"
 #include "esdm_es_aux.h"
 #include "esdm_drng_mgr.h"
+#include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
 #include "esdm_info.h"
 #include "logger.h"
@@ -93,4 +94,10 @@ void esdm_status(char *buf, size_t buflen)
 		len = esdm_remaining_buf_len(buf, buflen);
 		esdm_es[i]->state(buf + len, buflen - len);
 	}
+}
+
+DSO_PUBLIC
+void esdm_status_machine(struct esdm_status_st *status)
+{
+	status->es_irq_enabled = esdm_irq_enabled();
 }

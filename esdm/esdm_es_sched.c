@@ -132,7 +132,7 @@ static int esdm_sched_seed_monitor(void)
 		return 0;
 
 	if (ent >= esdm_config_es_sched_entropy_rate()) {
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		logger(LOGGER_DEBUG, LOGGER_C_ES,
 			"Full entropy of scheduler ES detected\n");
 		esdm_es_add_entropy();
 		esdm_test_seed_entropy(ent);

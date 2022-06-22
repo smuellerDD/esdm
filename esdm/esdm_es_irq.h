@@ -25,9 +25,12 @@
 
 #ifdef ESDM_ES_IRQ
 
+bool esdm_irq_enabled(void);
 extern struct esdm_es_cb esdm_es_irq;
 
 #else /* ESDM_ES_IRQ */
+
+static inline bool esdm_irq_enabled(void) { return false; }
 
 #endif /* ESDM_ES_IRQ */
 

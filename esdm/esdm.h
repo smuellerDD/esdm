@@ -124,6 +124,16 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes);
 void esdm_status(char *buf, size_t buflen);
 
 /**
+ * @brief esdm_status_machine() - Get status information on ESDM
+ *
+ * @param status [out] Buffer to be filled with status information
+ */
+struct esdm_status_st {
+	unsigned int es_irq_enabled:1;
+};
+void esdm_status_machine(struct esdm_status_st *status);
+
+/**
  * @brief esdm_version() - Get ESDM version information
  *
  * @param buf [out] Buffer to be filled with status information
