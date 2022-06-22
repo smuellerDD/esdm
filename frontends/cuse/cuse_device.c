@@ -369,10 +369,18 @@ void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi)
 	fuse_reply_open(req, fi);
 }
 
+static bool esdm_cuse_interrupt(void *data)
+{
+	fuse_req_t req = (fuse_req_t)data;
+
+	if (!req)
+		return 0;
+	return !!fuse_req_interrupted(req);
+}
+
 void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi,
-			     ssize_t (*get)(uint8_t *buf, size_t buflen),
-			     int fallback_fd)
+			     get_func_t get, int fallback_fd)
 {
 	uint8_t tmpbuf[ESDM_RPC_MAX_MSG_SIZE];
 	size_t cleansize = min_t(size_t, sizeof(tmpbuf), size);
@@ -383,12 +391,12 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
 	if (fi->flags & O_SYNC)
-		get = esdm_rpcc_get_random_bytes_pr;
+		get = esdm_rpcc_get_random_bytes_pr_int;
 
 	if (size > sizeof(tmpbuf)) {
 		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Due to FUSE limitation, the maximum request size is %u\n",
-		       ESDM_RPC_MAX_MSG_SIZE);
+		       "Due to FUSE limitation, the maximum request size is %zu\n",
+		       sizeof(tmpbuf));
 		size = sizeof(tmpbuf);
 	}
 
@@ -396,7 +404,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	{
 		size_t todo = min_t(size_t, sizeof(tmpbuf), size);
 
-		esdm_invoke(get(tmpbuf, todo));
+		esdm_invoke(get(tmpbuf, todo, req));
 
 		/*
 		 * If call to the ESDM server failed, let us fall back to the
@@ -457,7 +465,7 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
-	esdm_invoke(esdm_rpcc_write_data((const uint8_t *)buf, size));
+	esdm_invoke(esdm_rpcc_write_data_int((const uint8_t *)buf, size, req));
 	if (ret == 0)
 		written = size;
 
@@ -510,7 +518,8 @@ void esdm_cuse_ioctl(int backend_fd,
 
 			fuse_reply_ioctl_retry(req, NULL, 0, &iov, 1);
 		} else {
-			esdm_invoke(esdm_rpcc_rnd_get_ent_cnt(&ent_count_bits));
+			esdm_invoke(esdm_rpcc_rnd_get_ent_cnt_int(
+				&ent_count_bits, req));
 			if (ret)
 				fuse_reply_err(req, -ret);
 			else
@@ -534,8 +543,8 @@ void esdm_cuse_ioctl(int backend_fd,
 				return;
 			}
 			esdm_cuse_raise_privilege(req);
-			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt(
-				ent_count_bits));
+			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt_int(
+				ent_count_bits, req));
 			/* In case of an error, update the kernel */
 			if (ret) {
 				if (backend_fd >= 0 &&
@@ -579,10 +588,11 @@ void esdm_cuse_ioctl(int backend_fd,
 			}
 			esdm_cuse_raise_privilege(req);
 
-			esdm_invoke(esdm_rpcc_rnd_add_entropy(
+			esdm_invoke(esdm_rpcc_rnd_add_entropy_int(
 						(const uint8_t *)rpi->buf,
 						(size_t)rpi->buf_size,
-						(uint32_t)rpi->entropy_count));
+						(uint32_t)rpi->entropy_count,
+						req));
 
 			/* In case of an error, update the kernel */
 			if (ret) {
@@ -610,7 +620,7 @@ void esdm_cuse_ioctl(int backend_fd,
 			return;
 		}
 		esdm_cuse_raise_privilege(req);
-		esdm_invoke(esdm_rpcc_rnd_clear_pool());
+		esdm_invoke(esdm_rpcc_rnd_clear_pool_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDCLEARPOOL) == -1)
@@ -632,7 +642,7 @@ void esdm_cuse_ioctl(int backend_fd,
 			return;
 		}
 		esdm_cuse_raise_privilege(req);
-		esdm_invoke(esdm_rpcc_rnd_reseed_crng());
+		esdm_invoke(esdm_rpcc_rnd_reseed_crng_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDRESEEDCRNG) == -1)
@@ -991,9 +1001,9 @@ int main_common(const char *devname, const char *target,
 			free(param.dev_name);
 	}
 
-	CKINT_LOG(esdm_rpcc_init_unpriv_service(),
+	CKINT_LOG(esdm_rpcc_init_unpriv_service(esdm_cuse_interrupt),
                   "Initialization of dispatcher failed\n");
-	CKINT_LOG(esdm_rpcc_init_priv_service(),
+	CKINT_LOG(esdm_rpcc_init_priv_service(esdm_cuse_interrupt),
                   "Initialization of dispatcher failed\n");
 
 

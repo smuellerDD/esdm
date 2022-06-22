@@ -24,6 +24,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"
 
@@ -39,10 +40,10 @@ esdm_rpcc_rnd_get_ent_cnt_cb(const RndGetEntCntResponse *response,
 	struct esdm_rnd_get_ent_cnt_buf *buffer =
 			(struct esdm_rnd_get_ent_cnt_buf *)closure_data;
 
-	if (!response) {
+	if (IS_ERR(response)) {
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
-		buffer->ret = -EINTR;
+		buffer->ret = (int)PTR_ERR(response);
 		return;
 	}
 
@@ -51,14 +52,14 @@ esdm_rpcc_rnd_get_ent_cnt_cb(const RndGetEntCntResponse *response,
 }
 
 DSO_PUBLIC
-int esdm_rpcc_rnd_get_ent_cnt(unsigned int *entcnt)
+int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data)
 {
 	RndGetEntCntRequest msg = RND_GET_ENT_CNT_REQUEST__INIT;
 	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_rnd_get_ent_cnt_buf buffer;
 	int ret = 0;
 
-	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
+	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
 	buffer.ret = -ETIMEDOUT;
 
@@ -72,4 +73,10 @@ int esdm_rpcc_rnd_get_ent_cnt(unsigned int *entcnt)
 
 out:
 	return ret;
+}
+
+DSO_PUBLIC
+int esdm_rpcc_rnd_get_ent_cnt(unsigned int *entcnt)
+{
+	return esdm_rpcc_rnd_get_ent_cnt_int(entcnt, NULL);
 }

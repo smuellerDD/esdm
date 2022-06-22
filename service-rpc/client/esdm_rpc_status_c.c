@@ -23,6 +23,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 #include "logger.h"
+#include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"
 
@@ -37,10 +38,10 @@ static void esdm_rpcc_status_cb(const StatusResponse *response,
 {
 	struct esdm_get_status_buf *buffer =
 				(struct esdm_get_status_buf *)closure_data;
-	if (!response) {
+	if (IS_ERR(response)) {
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
-		buffer->ret = -EINTR;
+		buffer->ret = (int)PTR_ERR(response);
 		return;
 	}
 
@@ -52,7 +53,7 @@ static void esdm_rpcc_status_cb(const StatusResponse *response,
 }
 
 DSO_PUBLIC
-int esdm_rpcc_status(char *buf, size_t buflen)
+int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data)
 {
 	StatusRequest msg = STATUS_REQUEST__INIT;
 	struct esdm_rpc_client_connection *rpc_conn;
@@ -63,7 +64,7 @@ int esdm_rpcc_status(char *buf, size_t buflen)
 	};
 	int ret;
 
-	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
+	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
 	msg.maxlen = ESDM_RPC_MAX_MSG_SIZE;
 	unpriv_access__rpc_status(&rpc_conn->service, &msg,
@@ -73,4 +74,10 @@ int esdm_rpcc_status(char *buf, size_t buflen)
 
 out:
 	return ret;
+}
+
+DSO_PUBLIC
+int esdm_rpcc_status(char *buf, size_t buflen)
+{
+	return esdm_rpcc_status_int(buf, buflen, NULL);
 }

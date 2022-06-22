@@ -42,8 +42,8 @@ static void esdm_cuse_urandom_ioctl(fuse_req_t req,
 static void esdm_cuse_read_nonblock(fuse_req_t req, size_t size, off_t off,
 				    struct fuse_file_info *fi)
 {
-	esdm_cuse_read_internal(req, size, off, fi, esdm_rpcc_get_random_bytes,
-				urandom_fd);
+	esdm_cuse_read_internal(req, size, off, fi,
+				esdm_rpcc_get_random_bytes_int, urandom_fd);
 }
 
 static void esdm_cuse_urandom_write(fuse_req_t req, const char *buf,

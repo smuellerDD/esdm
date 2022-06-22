@@ -31,7 +31,7 @@ static void esdm_getrandom_lib_init(void)
 {
 	esdm_rpcc_set_max_online_nodes(1);
 	/* Return code irrelevant due to fallback in functions below */
-	esdm_rpcc_init_unpriv_service();
+	esdm_rpcc_init_unpriv_service(NULL);
 }
 
 ESDM_DEFINE_DESTRUCTOR(esdm_getrandom_lib_exit);

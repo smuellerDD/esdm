@@ -42,7 +42,7 @@ static void esdm_cuse_read_block(fuse_req_t req, size_t size, off_t off,
 				 struct fuse_file_info *fi)
 {
 	esdm_cuse_read_internal(req, size, off, fi,
-				esdm_rpcc_get_random_bytes_full, random_fd);
+				esdm_rpcc_get_random_bytes_full_int, random_fd);
 }
 
 static void esdm_cuse_random_write(fuse_req_t req, const char *buf, size_t size,

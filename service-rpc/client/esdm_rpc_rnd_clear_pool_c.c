@@ -24,6 +24,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"
 
@@ -38,10 +39,10 @@ esdm_rpcc_rnd_clear_pool_cb(const RndClearPoolResponse *response,
 	struct esdm_rnd_clear_pool_buf *buffer =
 			(struct esdm_rnd_clear_pool_buf *)closure_data;
 
-	if (!response) {
+	if (IS_ERR(response)) {
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
-		buffer->ret = -EINTR;
+		buffer->ret = (int)PTR_ERR(response);
 		return;
 	}
 
@@ -49,14 +50,14 @@ esdm_rpcc_rnd_clear_pool_cb(const RndClearPoolResponse *response,
 }
 
 DSO_PUBLIC
-int esdm_rpcc_rnd_clear_pool(void)
+int esdm_rpcc_rnd_clear_pool_int(void *int_data)
 {
 	RndClearPoolRequest msg = RND_CLEAR_POOL_REQUEST__INIT;
 	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_rnd_clear_pool_buf buffer;
 	int ret = 0;
 
-	CKINT(esdm_rpcc_get_priv_service(&rpc_conn));
+	CKINT(esdm_rpcc_get_priv_service(&rpc_conn, int_data));
 
 	buffer.ret = -ETIMEDOUT;
 
@@ -66,4 +67,10 @@ int esdm_rpcc_rnd_clear_pool(void)
 
 out:
 	return ret;
+}
+
+DSO_PUBLIC
+int esdm_rpcc_rnd_clear_pool(void)
+{
+	return esdm_rpcc_rnd_clear_pool_int(NULL);
 }

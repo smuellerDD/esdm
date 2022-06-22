@@ -26,6 +26,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"
 
@@ -42,10 +43,10 @@ esdm_rpcc_get_random_bytes_pr_cb(const GetRandomBytesPrResponse *response,
 	struct esdm_get_random_bytes_pr_buf *buffer =
 			(struct esdm_get_random_bytes_pr_buf *)closure_data;
 
-	if (!response) {
+	if (IS_ERR(response)) {
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
-		buffer->ret = -EINTR;
+		buffer->ret = PTR_ERR(response);
 		return;
 	}
 
@@ -59,7 +60,8 @@ esdm_rpcc_get_random_bytes_pr_cb(const GetRandomBytesPrResponse *response,
 }
 
 DSO_PUBLIC
-ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen)
+ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
+					  void *int_data)
 {
 	GetRandomBytesPrRequest msg = GET_RANDOM_BYTES_PR_REQUEST__INIT;
 	struct esdm_rpc_client_connection *rpc_conn;
@@ -67,7 +69,7 @@ ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen)
 	size_t maxbuflen = buflen, orig_buflen = buflen;
 	ssize_t ret = 0;
 
-	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
+	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
 	while (buflen) {
 		buffer.ret = -ETIMEDOUT;
@@ -95,4 +97,10 @@ ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen)
 
 out:
 	return (ret < 0) ? ret : (ssize_t)orig_buflen;
+}
+
+DSO_PUBLIC
+ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen)
+{
+	return esdm_rpcc_get_random_bytes_pr_int(buf, buflen, NULL);
 }

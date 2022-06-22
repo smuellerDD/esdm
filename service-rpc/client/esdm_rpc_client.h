@@ -25,6 +25,7 @@
 #include <stdio.h>
 
 #include "atomic.h"
+#include "bool.h"
 #include "mutex_w.h"
 #include "queue.h"
 
@@ -40,10 +41,19 @@ enum {
 	esdm_rpcc_in_termination,
 };
 
+typedef bool (*esdm_rpcc_interrupt_func_t)(void *interrupt_data);
+
 struct esdm_rpc_client_connection {
 	ProtobufCService service;
 	char socketname[FILENAME_MAX];
 	int fd;
+
+	/*
+	 * Caller can register function that is invoked to check whether call
+	 * should be interrupted.
+	 */
+	esdm_rpcc_interrupt_func_t interrupt_func;
+	void *interrupt_data;
 
 	mutex_w_t lock;
 	atomic_t ref_cnt;
@@ -82,17 +92,23 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
  *
  * @param rpc_conn [in] Connection handle that shall be used. This handle can be
  *		   	located on the stack.
+ * @param int_data [in] Opaque data pointer used when invoking the interrupt
+ *			function. This may be NULL.
  *
  * @return 0 on success, < 0 on error
  */
-int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn);
+int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
+				 void *int_data);
 
 /**
  * @brief Initiate the memory for accessing the unprivileged RPC connection.
  *
+ * @param interrupt_func [in] Function pointer invoked to check when the
+ *			      operation shall be interrupted.
+ *
  * @return 0 on success, < 0 on error
  */
-int esdm_rpcc_init_unpriv_service(void);
+int esdm_rpcc_init_unpriv_service(esdm_rpcc_interrupt_func_t interrupt_func);
 
 /**
  * @brief Release all resources around the RPC connection.
@@ -111,17 +127,23 @@ void esdm_rpcc_fini_unpriv_service(void);
  *
  * @param rpc_conn [in] Connection handle that shall be used. This handle can be
  *		    	located on the stack.
+ * @param int_data [in] Opaque data pointer used when invoking the interrupt
+ *			function. This may be NULL.
  *
  * @return 0 on success, < 0 on error
  */
-int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn);
+int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
+			       void *int_data);
 
 /**
  * @brief Initiate the memory for accessing the privileged RPC connection.
  *
+ * @param interrupt_func [in] Function pointer invoked to check when the
+ *			      operation shall be interrupted.
+ *
  * @return 0 on success, < 0 on error
  */
-int esdm_rpcc_init_priv_service(void);
+int esdm_rpcc_init_priv_service(esdm_rpcc_interrupt_func_t interrupt_func);
 
 /**
  * @brief Release all resources around the RPC connection.
@@ -146,6 +168,7 @@ void esdm_rpcc_fini_priv_service(void);
  *	    and the caller may try again)
  */
 int esdm_rpcc_status(char *buf, size_t buflen);
+int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes_full
@@ -162,6 +185,8 @@ int esdm_rpcc_status(char *buf, size_t buflen);
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen);
+ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
+					    void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes_min
@@ -180,6 +205,8 @@ ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen);
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_min(uint8_t *buf, size_t buflen);
+ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
+					   void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes_pr
@@ -198,6 +225,8 @@ ssize_t esdm_rpcc_get_random_bytes_min(uint8_t *buf, size_t buflen);
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen);
+ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
+					  void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes
@@ -215,6 +244,8 @@ ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen);
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes(uint8_t *buf, size_t buflen);
+ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
+				       void *int_data);
 
 /**
  * @brief RPC-version of writing data into ESDM auxiliary pool
@@ -229,6 +260,8 @@ ssize_t esdm_rpcc_get_random_bytes(uint8_t *buf, size_t buflen);
  *	    and the caller may try again)
  */
 int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len);
+int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
+			     void *int_data);
 
 /******************************************************************************
  * IOCTL handlers
@@ -245,6 +278,7 @@ int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len);
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_get_ent_cnt(unsigned int *entcnt);
+int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data);
 
 /**
  * @brief RNDADDTOENTCNT IOCTL
@@ -258,6 +292,7 @@ int esdm_rpcc_rnd_get_ent_cnt(unsigned int *entcnt);
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_add_to_ent_cnt(unsigned int entcnt);
+int esdm_rpcc_rnd_add_to_ent_cnt_int(unsigned int entcnt, void *int_data);
 
 /**
  * @brief RNDADDENTROPY IOCTL
@@ -272,6 +307,9 @@ int esdm_rpcc_rnd_add_to_ent_cnt(unsigned int entcnt);
  */
 int esdm_rpcc_rnd_add_entropy(const uint8_t *entropy_buf,
 			      size_t entropy_buf_len, uint32_t entropy_cnt);
+int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
+				  size_t entropy_buf_len, uint32_t entropy_cnt,
+				  void *int_data);
 
 /**
  * @brief RNDCLEARPOOL / RNDZAPENTCNT IOCTL
@@ -285,6 +323,7 @@ int esdm_rpcc_rnd_add_entropy(const uint8_t *entropy_buf,
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_clear_pool(void);
+int esdm_rpcc_rnd_clear_pool_int(void *int_data);
 
 /**
  * @brief RNDRESEEDCRNG IOCTL
@@ -302,6 +341,7 @@ int esdm_rpcc_rnd_clear_pool(void);
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_reseed_crng(void);
+int esdm_rpcc_rnd_reseed_crng_int(void *int_data);
 
 /******************************************************************************
  * /proc handlers
@@ -318,6 +358,7 @@ int esdm_rpcc_rnd_reseed_crng(void);
  *	    and the caller may try again)
  */
 int esdm_rpcc_get_poolsize(unsigned int *poolsize);
+int esdm_rpcc_get_poolsize_int(unsigned int *poolsize, void *int_data);
 
 /**
  * @brief write_wakeup_thresh /proc read handler
@@ -330,6 +371,8 @@ int esdm_rpcc_get_poolsize(unsigned int *poolsize);
  *	    and the caller may try again)
  */
 int esdm_rpcc_get_write_wakeup_thresh(unsigned int *write_wakeup_thresh);
+int esdm_rpcc_get_write_wakeup_thresh_int(unsigned int *write_wakeup_thresh,
+					  void *int_data);
 
 /**
  * @brief write_wakeup_thresh /proc write handler
@@ -342,6 +385,8 @@ int esdm_rpcc_get_write_wakeup_thresh(unsigned int *write_wakeup_thresh);
  *	    and the caller may try again)
  */
 int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh);
+int esdm_rpcc_set_write_wakeup_thresh_int(unsigned int write_wakeup_thresh,
+					  void *int_data);
 
 /**
  * @brief urandom_min_reseed_secs /proc read handler
@@ -354,6 +399,7 @@ int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh);
  *	    and the caller may try again)
  */
 int esdm_rpcc_get_min_reseed_secs(unsigned int *seconds);
+int esdm_rpcc_get_min_reseed_secs_int(unsigned int *seconds, void *int_data);
 
 /**
  * @brief urandom_min_reseed_secs /proc write handler
@@ -366,6 +412,7 @@ int esdm_rpcc_get_min_reseed_secs(unsigned int *seconds);
  *	    and the caller may try again)
  */
 int esdm_rpcc_set_min_reseed_secs(unsigned int seconds);
+int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data);
 
 /**
  * @brief Invoke a function up to 5 times if EINTR was returned
@@ -379,7 +426,7 @@ int esdm_rpcc_set_min_reseed_secs(unsigned int seconds);
 									       \
 		do {							       \
 			ret = x;					       \
-		} while (ret == -EINTR && __ctr < 5);			       \
+		} while (ret == -EINTR && __ctr++ < 5);			       \
 	} while(0)
 
 #ifdef __cplusplus

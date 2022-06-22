@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 	if (ret)
 		return ret;
 
-	ret = esdm_rpcc_init_unpriv_service();
+	ret = esdm_rpcc_init_unpriv_service(NULL);
 	if (ret) {
 		ret = 1;
 		goto out;

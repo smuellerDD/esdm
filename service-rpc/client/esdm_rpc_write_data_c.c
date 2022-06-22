@@ -24,6 +24,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"
 
@@ -37,10 +38,10 @@ esdm_rpcc_write_data_cb(const WriteDataResponse *response, void *closure_data)
 	struct esdm_write_data_buf *buffer =
 			(struct esdm_write_data_buf *)closure_data;
 
-	if (!response) {
+	if (IS_ERR(response)) {
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
-		buffer->ret = -EINTR;
+		buffer->ret = (int)PTR_ERR(response);
 		return;
 	}
 
@@ -48,14 +49,15 @@ esdm_rpcc_write_data_cb(const WriteDataResponse *response, void *closure_data)
 }
 
 DSO_PUBLIC
-int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len)
+int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
+			     void *int_data)
 {
 	WriteDataRequest msg = WRITE_DATA_REQUEST__INIT;
 	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_write_data_buf buffer;
 	int ret = 0;
 
-	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn));
+	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
 	while (data_buf_len) {
 		size_t todo = min_t(size_t, data_buf_len, ESDM_RPC_MAX_DATA);
@@ -80,4 +82,10 @@ int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len)
 
 out:
 	return ret;
+}
+
+DSO_PUBLIC
+int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len)
+{
+	return esdm_rpcc_write_data_int(data_buf, data_buf_len, NULL);
 }

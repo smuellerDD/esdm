@@ -613,9 +613,9 @@ int main(int argc, char *argv[])
 					  &args));
 	}
 
-	CKINT_LOG(esdm_rpcc_init_unpriv_service(),
+	CKINT_LOG(esdm_rpcc_init_unpriv_service(NULL),
                   "Initialization of dispatcher failed\n");
-	CKINT_LOG(esdm_rpcc_init_priv_service(),
+	CKINT_LOG(esdm_rpcc_init_priv_service(NULL),
                   "Initialization of dispatcher failed\n");
 
 	CKINT(esdm_proc_pre_init());

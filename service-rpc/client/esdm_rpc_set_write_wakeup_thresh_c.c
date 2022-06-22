@@ -23,6 +23,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"
 
@@ -36,10 +37,10 @@ static void esdm_rpcc_set_write_wakeup_thresh_cb(
 	struct esdm_set_write_wakeup_thresh_buf *buffer =
 			(struct esdm_set_write_wakeup_thresh_buf *)closure_data;
 
-	if (!response) {
+	if (IS_ERR(response)) {
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		       "missing data - connection interrupted\n");
-		buffer->ret = -EINTR;
+		buffer->ret = (int)PTR_ERR(response);
 		return;
 	}
 
@@ -47,14 +48,15 @@ static void esdm_rpcc_set_write_wakeup_thresh_cb(
 }
 
 DSO_PUBLIC
-int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh)
+int esdm_rpcc_set_write_wakeup_thresh_int(unsigned int write_wakeup_thresh,
+					  void *int_data)
 {
 	SetWriteWakeupThreshRequest msg = SET_WRITE_WAKEUP_THRESH_REQUEST__INIT;
 	struct esdm_rpc_client_connection *rpc_conn;
 	struct esdm_set_write_wakeup_thresh_buf buffer;
 	int ret = 0;
 
-	CKINT(esdm_rpcc_get_priv_service(&rpc_conn));
+	CKINT(esdm_rpcc_get_priv_service(&rpc_conn, int_data));
 
 	buffer.ret = -ETIMEDOUT;
 
@@ -66,4 +68,10 @@ int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh)
 
 out:
 	return ret;
+}
+
+DSO_PUBLIC
+int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh)
+{
+	return esdm_rpcc_set_write_wakeup_thresh_int(write_wakeup_thresh, NULL);
 }
