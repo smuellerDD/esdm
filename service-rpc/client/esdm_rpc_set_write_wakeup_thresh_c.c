@@ -67,6 +67,7 @@ int esdm_rpcc_set_write_wakeup_thresh_int(unsigned int write_wakeup_thresh,
 	ret = buffer.ret;
 
 out:
+	esdm_rpcc_put_priv_service(rpc_conn);
 	return ret;
 }
 

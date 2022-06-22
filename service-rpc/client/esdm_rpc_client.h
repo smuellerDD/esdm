@@ -88,7 +88,8 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
  * @brief Initiate connection
  *
  * It will be transparently initialized if it does not exist before. terminate
- * the connection with esdm_rpc_client_fini_unpriv_service.
+ * the connection with esdm_rpc_client_fini_unpriv_service. Release the
+ * connection with esdm_rpcc_put_unpriv_service.
  *
  * @param rpc_conn [in] Connection handle that shall be used. This handle can be
  *		   	located on the stack.
@@ -99,6 +100,16 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
  */
 int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
 				 void *int_data);
+
+/**
+ * @brief Release the client connection handle
+ *
+ * Release for the next service request.
+ *
+ * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ *		    	located on the stack.
+ */
+void esdm_rpcc_put_unpriv_service(struct esdm_rpc_client_connection *rpc_conn);
 
 /**
  * @brief Initiate the memory for accessing the unprivileged RPC connection.
@@ -122,8 +133,9 @@ void esdm_rpcc_fini_unpriv_service(void);
 /**
  * @brief Get the client connection handle
  *
- * It will be transparently initialized if it does not exist before. terminate
- * the connection with esdm_rpc_client_fini_priv_service.
+ * It will be transparently initialized if it does not exist before. Terminate
+ * the connection with esdm_rpc_client_fini_priv_service. Release the
+ * connection with esdm_rpcc_put_priv_service.
  *
  * @param rpc_conn [in] Connection handle that shall be used. This handle can be
  *		    	located on the stack.
@@ -134,6 +146,16 @@ void esdm_rpcc_fini_unpriv_service(void);
  */
 int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
 			       void *int_data);
+
+/**
+ * @brief Release the client connection handle
+ *
+ * Release for the next service request.
+ *
+ * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ *		    	located on the stack.
+ */
+void esdm_rpcc_put_priv_service(struct esdm_rpc_client_connection *rpc_conn);
 
 /**
  * @brief Initiate the memory for accessing the privileged RPC connection.

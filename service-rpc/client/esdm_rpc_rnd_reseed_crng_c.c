@@ -67,6 +67,7 @@ int esdm_rpcc_rnd_reseed_crng_int(void *int_data)
 	ret = buffer.ret;
 
 out:
+	esdm_rpcc_put_priv_service(rpc_conn);
 	return ret;
 }
 

@@ -81,6 +81,7 @@ int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
 	}
 
 out:
+	esdm_rpcc_put_unpriv_service(rpc_conn);
 	return ret;
 }
 

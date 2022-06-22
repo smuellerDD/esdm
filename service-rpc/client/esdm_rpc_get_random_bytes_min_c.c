@@ -96,6 +96,7 @@ ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
 	}
 
 out:
+	esdm_rpcc_put_unpriv_service(rpc_conn);
 	return (ret < 0) ? ret : (ssize_t)orig_buflen;
 }
 

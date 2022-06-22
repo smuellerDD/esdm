@@ -66,6 +66,7 @@ int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data)
 	ret = buffer.ret;
 
 out:
+	esdm_rpcc_put_priv_service(rpc_conn);
 	return ret;
 }
 

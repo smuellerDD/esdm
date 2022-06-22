@@ -74,6 +74,7 @@ int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
 	ret = buffer.ret;
 
 out:
+	esdm_rpcc_put_priv_service(rpc_conn);
 	return ret;
 }
 

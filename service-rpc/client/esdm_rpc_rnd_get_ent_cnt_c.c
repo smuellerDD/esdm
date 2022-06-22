@@ -72,6 +72,7 @@ int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data)
 		*entcnt = buffer.entcnt;
 
 out:
+	esdm_rpcc_put_unpriv_service(rpc_conn);
 	return ret;
 }
 

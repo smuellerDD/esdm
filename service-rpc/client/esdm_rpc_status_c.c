@@ -73,6 +73,7 @@ int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data)
 	ret = buffer.ret;
 
 out:
+	esdm_rpcc_put_unpriv_service(rpc_conn);
 	return ret;
 }
 

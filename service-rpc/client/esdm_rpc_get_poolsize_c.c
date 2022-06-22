@@ -71,6 +71,7 @@ int esdm_rpcc_get_poolsize_int(unsigned int *poolsize, void *int_data)
 		*poolsize = buffer.poolsize;
 
 out:
+	esdm_rpcc_put_unpriv_service(rpc_conn);
 	return ret;
 }
 

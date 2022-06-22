@@ -416,10 +416,6 @@ esdm_client_invoke(ProtobufCService *service, unsigned int method_index,
 
 out:
 	mutex_w_unlock(&rpc_conn->lock);
-	atomic_dec(&rpc_conn->ref_cnt);
-
-	/* Notify all unpriv handler threads that they can become active */
-	thread_wake_all(&rpc_conn->completion);
 }
 
 static void esdm_client_destroy(ProtobufCService *service)
@@ -590,6 +586,18 @@ out:
 	return ret;
 }
 
+static void
+esdm_rpcc_put_service(struct esdm_rpc_client_connection *rpc_conn)
+{
+	if (!rpc_conn)
+		return;
+
+	atomic_set(&rpc_conn->ref_cnt, 0);
+
+	/* Notify all unpriv handler threads that they can become active */
+	thread_wake_all(&rpc_conn->completion);
+}
+
 /******************************************************************************
  * Unprivileged connection
  ******************************************************************************/
@@ -600,6 +608,12 @@ int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
 				 void *int_data)
 {
 	return esdm_rpcc_get_service(unpriv_rpc_conn, rpc_conn, int_data);
+}
+
+DSO_PUBLIC
+void esdm_rpcc_put_unpriv_service(struct esdm_rpc_client_connection *rpc_conn)
+{
+	esdm_rpcc_put_service(rpc_conn);
 }
 
 DSO_PUBLIC
@@ -626,6 +640,12 @@ int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
 			       void *int_data)
 {
 	return esdm_rpcc_get_service(priv_rpc_conn, rpc_conn, int_data);
+}
+
+DSO_PUBLIC
+void esdm_rpcc_put_priv_service(struct esdm_rpc_client_connection *rpc_conn)
+{
+	esdm_rpcc_put_service(rpc_conn);
 }
 
 DSO_PUBLIC
