@@ -382,7 +382,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi,
 			     get_func_t get, int fallback_fd)
 {
-	uint8_t tmpbuf[ESDM_RPC_MAX_MSG_SIZE];
+	uint8_t tmpbuf[ESDM_RPC_MAX_DATA];
 	size_t cleansize = min_t(size_t, sizeof(tmpbuf), size);
 	ssize_t ret = 0;
 
