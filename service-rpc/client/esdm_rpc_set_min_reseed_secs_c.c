@@ -20,6 +20,7 @@
 #include <errno.h>
 
 #include "esdm_rpc_client.h"
+#include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
@@ -37,13 +38,7 @@ static void esdm_rpcc_set_min_reseed_secs_cb(
 	struct esdm_set_min_reseed_secs_buf *buffer =
 			(struct esdm_set_min_reseed_secs_buf *)closure_data;
 
-	if (IS_ERR(response)) {
-		logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		       "missing data - connection interrupted\n");
-		buffer->ret = (int)PTR_ERR(response);
-		return;
-	}
-
+	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
 }
 

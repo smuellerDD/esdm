@@ -23,6 +23,7 @@
 #include <sys/types.h>
 
 #include "esdm_rpc_client.h"
+#include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
@@ -43,12 +44,7 @@ esdm_rpcc_get_random_bytes_full_cb(const GetRandomBytesFullResponse *response,
 	struct esdm_get_random_bytes_full_buf *buffer =
 			(struct esdm_get_random_bytes_full_buf *)closure_data;
 
-	if (IS_ERR(response)) {
-		logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		       "missing data - connection interrupted\n");
-		buffer->ret = PTR_ERR(response);
-		return;
-	}
+	esdm_rpcc_error_check(response, buffer);
 
 	if (response->ret < 0) {
 		buffer->ret = response->ret;

@@ -21,6 +21,7 @@
 #include <stdio.h>
 
 #include "esdm_rpc_client.h"
+#include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_service.h"
 #include "logger.h"
 #include "ptr_err.h"
@@ -38,13 +39,8 @@ static void esdm_rpcc_status_cb(const StatusResponse *response,
 {
 	struct esdm_get_status_buf *buffer =
 				(struct esdm_get_status_buf *)closure_data;
-	if (IS_ERR(response)) {
-		logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		       "missing data - connection interrupted\n");
-		buffer->ret = (int)PTR_ERR(response);
-		return;
-	}
 
+	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
 	if (response->ret < 0)
 		return;
