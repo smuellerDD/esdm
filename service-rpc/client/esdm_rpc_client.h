@@ -190,6 +190,14 @@ void esdm_rpcc_fini_priv_service(void);
  *	    and the caller may try again)
  */
 int esdm_rpcc_status(char *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_status
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
 
 /**
@@ -207,6 +215,15 @@ int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen);
+
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes_full
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 					    void *int_data);
 
@@ -227,6 +244,14 @@ ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_min(uint8_t *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes_min
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
 					   void *int_data);
 
@@ -247,6 +272,14 @@ ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes_pr
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 					  void *int_data);
 
@@ -266,6 +299,14 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes(uint8_t *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 				       void *int_data);
 
@@ -282,6 +323,14 @@ ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
  *	    and the caller may try again)
  */
 int esdm_rpcc_write_data(const uint8_t *data_buf, size_t data_buf_len);
+
+/**
+ * @brief See esdm_rpcc_write_data
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
 			     void *int_data);
 
@@ -300,6 +349,14 @@ int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_get_ent_cnt(unsigned int *entcnt);
+
+/**
+ * @brief See esdm_rpcc_rnd_get_ent_cnt
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data);
 
 /**
@@ -314,6 +371,14 @@ int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data);
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_add_to_ent_cnt(unsigned int entcnt);
+
+/**
+ * @brief See esdm_rpcc_rnd_add_to_ent_cnt
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_rnd_add_to_ent_cnt_int(unsigned int entcnt, void *int_data);
 
 /**
@@ -329,6 +394,14 @@ int esdm_rpcc_rnd_add_to_ent_cnt_int(unsigned int entcnt, void *int_data);
  */
 int esdm_rpcc_rnd_add_entropy(const uint8_t *entropy_buf,
 			      size_t entropy_buf_len, uint32_t entropy_cnt);
+
+/**
+ * @brief See esdm_rpcc_rnd_add_entropy
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
 				  size_t entropy_buf_len, uint32_t entropy_cnt,
 				  void *int_data);
@@ -345,6 +418,14 @@ int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_clear_pool(void);
+
+/**
+ * @brief See esdm_rpcc_rnd_clear_pool
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_rnd_clear_pool_int(void *int_data);
 
 /**
@@ -363,6 +444,14 @@ int esdm_rpcc_rnd_clear_pool_int(void *int_data);
  *	    and the caller may try again)
  */
 int esdm_rpcc_rnd_reseed_crng(void);
+
+/**
+ * @brief See esdm_rpcc_rnd_reseed_crng
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_rnd_reseed_crng_int(void *int_data);
 
 /******************************************************************************
@@ -380,6 +469,14 @@ int esdm_rpcc_rnd_reseed_crng_int(void *int_data);
  *	    and the caller may try again)
  */
 int esdm_rpcc_get_poolsize(unsigned int *poolsize);
+
+/**
+ * @brief See esdm_rpcc_get_poolsize
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_get_poolsize_int(unsigned int *poolsize, void *int_data);
 
 /**
@@ -393,6 +490,14 @@ int esdm_rpcc_get_poolsize_int(unsigned int *poolsize, void *int_data);
  *	    and the caller may try again)
  */
 int esdm_rpcc_get_write_wakeup_thresh(unsigned int *write_wakeup_thresh);
+
+/**
+ * @brief See esdm_rpcc_get_write_wakeup_thresh
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_get_write_wakeup_thresh_int(unsigned int *write_wakeup_thresh,
 					  void *int_data);
 
@@ -407,6 +512,14 @@ int esdm_rpcc_get_write_wakeup_thresh_int(unsigned int *write_wakeup_thresh,
  *	    and the caller may try again)
  */
 int esdm_rpcc_set_write_wakeup_thresh(unsigned int write_wakeup_thresh);
+
+/**
+ * @brief See esdm_rpcc_set_write_wakeup_thresh
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_set_write_wakeup_thresh_int(unsigned int write_wakeup_thresh,
 					  void *int_data);
 
@@ -421,6 +534,14 @@ int esdm_rpcc_set_write_wakeup_thresh_int(unsigned int write_wakeup_thresh,
  *	    and the caller may try again)
  */
 int esdm_rpcc_get_min_reseed_secs(unsigned int *seconds);
+
+/**
+ * @brief See urandom_min_reseed_secs
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_get_min_reseed_secs_int(unsigned int *seconds, void *int_data);
 
 /**
@@ -434,6 +555,14 @@ int esdm_rpcc_get_min_reseed_secs_int(unsigned int *seconds, void *int_data);
  *	    and the caller may try again)
  */
 int esdm_rpcc_set_min_reseed_secs(unsigned int seconds);
+
+/**
+ * @brief See esdm_rpcc_set_min_reseed_secs
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
 int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data);
 
 /**
