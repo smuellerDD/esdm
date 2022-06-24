@@ -235,6 +235,13 @@ int esdm_sp80090c_compliant(void)
 }
 
 DSO_PUBLIC
+int esdm_ntg1_compliant(void)
+{
+	/* Implies using of /dev/random with O_SYNC */
+	return true;
+}
+
+DSO_PUBLIC
 uint32_t esdm_get_reseed_max_time(void)
 {
 	return esdm_drng_reseed_max_time;
