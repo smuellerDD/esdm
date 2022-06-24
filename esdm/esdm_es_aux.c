@@ -38,7 +38,7 @@
 /*
  * This is the auxiliary pool
  *
- * The aux pool array is aligned to 8 bytes to comfort the kernel crypto API
+ * The aux pool array is aligned to 8 bytes to comfort any used 
  * cipher implementations of the hash functions used to read the pool: for some
  * accelerated implementations, we need an alignment to avoid a realignment
  * which involves memcpy(). The alignment to 8 bytes should satisfy all crypto
