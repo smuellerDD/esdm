@@ -76,15 +76,6 @@
 #define ESDM_INIT_ENTROPY_BITS		32
 
 /*
- * Wakeup value
- *
- * This value is allowed to be changed but must not be larger than the
- * digest size of the hash operation used update the aux_pool.
- */
-#define ESDM_ATOMIC_DIGEST_SIZE		ESDM_HASH_DIGESTSIZE_BYTES
-#define ESDM_WRITE_WAKEUP_ENTROPY	ESDM_ATOMIC_DIGEST_SIZE
-
-/*
  * If the switching support is configured, we must provide support up to
  * the largest digest size. Without switching support, we know it is only
  * the built-in digest size.
