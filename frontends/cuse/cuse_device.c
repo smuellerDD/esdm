@@ -37,7 +37,7 @@
 #include "helper.h"
 #include "logger.h"
 #include "memset_secure.h"
-#include "mutex_w.h"
+#include "mutex.h"
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
@@ -355,10 +355,34 @@ static bool esdm_cuse_client_privileged(fuse_req_t req)
 	return false;
 }
 
-static void esdm_cuse_raise_privilege(fuse_req_t req)
+/*
+ * When a privilege level is changed, the write lock must be taken to ensure
+ * that no other caller is executing at the same time. If the privilege level
+ * remains, a reader lock can be taken allowing concurrent unprivileged
+ * operations.
+ */
+static mutex_t esdm_cuse_priv = MUTEX_UNLOCKED;
+static void esdm_cuse_raise_privilege_transient(fuse_req_t req)
 {
+	mutex_lock(&esdm_cuse_priv);
 	if (esdm_cuse_client_privileged(req))
 		raise_privilege_transient(0, 0);
+}
+
+static void esdm_cuse_drop_privilege_transient(void)
+{
+	drop_privileges_transient(esdm_cuse_unprivileged_user);
+	mutex_unlock(&esdm_cuse_priv);
+}
+
+static void esdm_cuse_unpriv_call_start(void)
+{
+	mutex_reader_lock(&esdm_cuse_priv);
+}
+
+static void esdm_cuse_unpriv_call_end(void)
+{
+	mutex_reader_unlock(&esdm_cuse_priv);
 }
 
 /******************************************************************************
@@ -404,7 +428,9 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	{
 		size_t todo = min_t(size_t, sizeof(tmpbuf), size);
 
+		esdm_cuse_unpriv_call_start();
 		esdm_invoke(get(tmpbuf, todo, req));
+		esdm_cuse_unpriv_call_end();
 
 		/*
 		 * If call to the ESDM server failed, let us fall back to the
@@ -465,7 +491,9 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
+	esdm_cuse_unpriv_call_start();
 	esdm_invoke(esdm_rpcc_write_data_int((const uint8_t *)buf, size, req));
+	esdm_cuse_unpriv_call_end();
 	if (ret == 0)
 		written = size;
 
@@ -518,8 +546,10 @@ void esdm_cuse_ioctl(int backend_fd,
 
 			fuse_reply_ioctl_retry(req, NULL, 0, &iov, 1);
 		} else {
+			esdm_cuse_unpriv_call_start();
 			esdm_invoke(esdm_rpcc_rnd_get_ent_cnt_int(
 				&ent_count_bits, req));
+			esdm_cuse_unpriv_call_end();
 			if (ret)
 				fuse_reply_err(req, -ret);
 			else
@@ -542,7 +572,7 @@ void esdm_cuse_ioctl(int backend_fd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege(req);
+			esdm_cuse_raise_privilege_transient(req);
 			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt_int(
 				ent_count_bits, req));
 			/* In case of an error, update the kernel */
@@ -554,7 +584,7 @@ void esdm_cuse_ioctl(int backend_fd,
 				else
 					ret = 0;
 			}
-			drop_privileges_transient(esdm_cuse_unprivileged_user);
+			esdm_cuse_drop_privilege_transient();
 			if (ret)
 				fuse_reply_err(req, -ret);
 			else
@@ -586,7 +616,7 @@ void esdm_cuse_ioctl(int backend_fd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege(req);
+			esdm_cuse_raise_privilege_transient(req);
 
 			esdm_invoke(esdm_rpcc_rnd_add_entropy_int(
 						(const uint8_t *)rpi->buf,
@@ -602,7 +632,7 @@ void esdm_cuse_ioctl(int backend_fd,
 				else
 					ret = 0;
 			}
-			drop_privileges_transient(esdm_cuse_unprivileged_user);
+			esdm_cuse_drop_privilege_transient();
 			if (ret)
 				fuse_reply_err(req, -ret);
 			else
@@ -619,14 +649,14 @@ void esdm_cuse_ioctl(int backend_fd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege(req);
+		esdm_cuse_raise_privilege_transient(req);
 		esdm_invoke(esdm_rpcc_rnd_clear_pool_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDCLEARPOOL) == -1)
 				ret = -errno;
 		}
-		drop_privileges_transient(esdm_cuse_unprivileged_user);
+		esdm_cuse_drop_privilege_transient();
 		if (ret)
 			fuse_reply_err(req, -ret);
 		else
@@ -641,14 +671,14 @@ void esdm_cuse_ioctl(int backend_fd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege(req);
+		esdm_cuse_raise_privilege_transient(req);
 		esdm_invoke(esdm_rpcc_rnd_reseed_crng_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDRESEEDCRNG) == -1)
 				ret = -errno;
 		}
-		drop_privileges_transient(esdm_cuse_unprivileged_user);
+		esdm_cuse_drop_privilege_transient();
 		if (ret)
 			fuse_reply_err(req, -ret);
 		else
@@ -694,13 +724,13 @@ void esdm_cuse_ioctl(int backend_fd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege(req);
+			esdm_cuse_raise_privilege_transient(req);
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
 				ret = -errno;
 			else
 				ret = 0;
-			drop_privileges_transient(esdm_cuse_unprivileged_user);
+			esdm_cuse_drop_privilege_transient();
 			if (ret)
 				fuse_reply_err(req, -ret);
 			else
