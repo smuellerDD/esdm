@@ -23,6 +23,14 @@
 #include "config.h"
 #include "esdm_es_mgr_cb.h"
 
+/*
+ * The presence of the interrupt entropy source implies that the main
+ * entropy source of the kernel random.c is being taken away. Yet, we may
+ * have some entropy. Thus, we apply a safe assumption that we could get
+ * at least the given amount of bits of entropy from the kernel RNG.
+ */
+#define ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY	4
+
 #ifdef ESDM_ES_IRQ
 
 bool esdm_irq_enabled(void);

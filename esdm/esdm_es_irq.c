@@ -176,6 +176,13 @@ static int esdm_irq_initialize(void)
 		return 0;
 	}
 
+	/*
+	 * The presence of the interrupt entropy source implies that the main
+         * entropy source of the kernel random.c is being taken away.
+	 */
+	esdm_config_es_krng_entropy_rate_set(
+		ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY);
+
 	esdm_es_add_entropy();
 
 	return 0;
