@@ -109,11 +109,6 @@ static DEFINE_PER_CPU(u8 [ESDM_POOL_SIZE], esdm_sched_pool)
 static DEFINE_PER_CPU(spinlock_t, esdm_sched_lock);
 static DEFINE_PER_CPU(bool, esdm_sched_lock_init) = false;
 
-static bool esdm_sched_pool_online(int cpu)
-{
-	return per_cpu(esdm_sched_lock_init, cpu);
-}
-
 static void __init esdm_sched_check_compression_state(void)
 {
 	/* One pool should hold sufficient entropy for disabled compression */
@@ -151,13 +146,8 @@ static u32 esdm_sched_avail_pool_size(void)
 	    max_size = min_t(u32, max_pool, ESDM_DATA_NUM_VALUES);
 	int cpu;
 
-	for_each_online_cpu(cpu) {
-		if (!esdm_sched_pool_online(cpu))
-			continue;
-
-		if (esdm_sched_pool_online(cpu))
-			max_size += max_pool;
-	}
+	for_each_online_cpu(cpu)
+		max_size += max_pool;
 
 	return max_size;
 }
