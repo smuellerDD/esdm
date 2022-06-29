@@ -536,7 +536,15 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				goto out;
 			}
 
+			/* If we cannot get the pool lock, try again. */
+			if (esdm_pool_trylock()) {
+				mutex_w_unlock(&drng->lock);
+				continue;
+			}
+
 			collected_entropy_bits = esdm_drng_seed_es(drng);
+
+			esdm_pool_unlock();
 
 			/* If no new entropy was received, stop now. */
 			if (!collected_entropy_bits) {
