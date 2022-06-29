@@ -510,7 +510,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				      ESDM_DRNG_MAX_REQSIZE);
 		ssize_t ret;
 
-		if (esdm_drng_must_reseed(drng)) {
+		/* In normal operation, check whether to reseed */
+		if (!pr && esdm_drng_must_reseed(drng)) {
 			if (esdm_pool_trylock()) {
 				drng->force_reseed = true;
 			} else {
@@ -590,17 +591,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		processed += ret;
 		outbuflen -= (size_t)ret;
 
-		if (pr && outbuflen) {
-			/*
-			 * In FIPS mode, be compliant to FIPS IG 7.19, at most
-			 * only the security strength bits of data are allowed
-			 * to be generated. Thus the processing stops here.
-			 */
-			if (esdm_sp80090c_compliant())
-				goto out;
-
+		if (pr && outbuflen)
 			sched_yield();
-		}
 	}
 
 out:
