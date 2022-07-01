@@ -576,7 +576,18 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 		/*
 		 * In FIPS mode according to IG 7.19, force a reseed after
-		 * generating data as conditioning component.
+		 * generating data as conditioning component. When setting
+		 * ->force_reseed = true, it is possible that the subsequent
+		 * reseed may fail if insufficient entropy is available but yet
+		 * random bits are generated. We accept this potential issue
+		 * as bullet-proof  solution would be to invoke
+		 * esdm_unset_fully_seeded(drng) which is an easy DoS vector.
+		 * This function would then imply that the respective DRNG
+		 * instance is not usable until a reseed happened. If this is
+		 * the initial DRNG, the entire ESDM goes back to
+		 * non-operational mode, which is the DoS. The other solution
+		 * would be to instantiate a separate DRNG for PR, which is
+		 * a waste.
 		 */
 		if (pr && esdm_sp80090c_compliant())
 			drng->force_reseed = true;
@@ -604,8 +615,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	struct esdm_drng *drng = &esdm_drng_init;
 	uint32_t node = esdm_config_curr_node();
-	ssize_t rc;
-	int ret;
+	ssize_t ret;
 
 	if (esdm_drng && esdm_drng[node] && esdm_drng[node]->fully_seeded) {
 		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
@@ -617,14 +627,12 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 		       "Using DRNG instance on node 0 to service generate request\n");
 	}
 
-	ret = esdm_drng_mgr_initalize();
-	if (ret)
-		return ret;
+	CKINT(esdm_drng_mgr_initalize());
+	CKINT(esdm_drng_get(drng, outbuf, outbuflen, pr));
 
-	rc = esdm_drng_get(drng, outbuf, outbuflen, pr);
+out:
 	esdm_drng_put_instances();
-
-	return rc;
+	return ret;
 }
 
 /*
