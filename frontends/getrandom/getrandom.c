@@ -17,16 +17,18 @@
  * DAMAGE.
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <limits.h>
 #include <linux/random.h>
 #include <sys/random.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 #include "constructor.h"
 #include "esdm_rpc_client.h"
 #include "visibility.h"
 
-ESDM_DEFINE_CONSTRUCTOR(esdm_getrandom_lib_init);
 static void esdm_getrandom_lib_init(void)
 {
 	esdm_rpcc_set_max_online_nodes(1);
@@ -47,6 +49,7 @@ DSO_PUBLIC
 ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 {
 	ssize_t ret;
+	static bool initialized = false;
 
 	if (flags & (unsigned int)(~(GRND_NONBLOCK|GRND_RANDOM|GRND_INSECURE)))
 		return -EINVAL;
@@ -62,6 +65,11 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 	if (length > INT_MAX)
 		length = INT_MAX;
 
+	if (!initialized) {
+		esdm_getrandom_lib_init();
+		initialized = true;
+	}
+
 	if (flags & GRND_INSECURE) {
 		esdm_invoke(esdm_rpcc_get_random_bytes(buffer, length));
 	} else {
@@ -71,7 +79,7 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 	if (ret >= 0)
 		return ret;
 
-	return __real_getrandom(buffer, length, flags);
+	return syscall(__NR_getrandom, buffer, length, flags);
 }
 
 DSO_PUBLIC
@@ -84,13 +92,19 @@ DSO_PUBLIC
 int __wrap_getentropy(void *buffer, size_t length)
 {
 	ssize_t ret = -EFAULT;
+	static bool initialized = false;
 
 	if (length > 256)
 		return -EIO;
 
+	if (!initialized) {
+		esdm_getrandom_lib_init();
+		initialized = true;
+	}
+
 	esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
 	if (ret < 0)
-		return __real_getentropy(buffer, length);
+		return (int)syscall(__NR_getrandom, buffer, length, 0);
 	return 0;
 }
 
