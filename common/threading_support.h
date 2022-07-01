@@ -70,6 +70,7 @@ extern "C" {
 
 enum esdm_request_type {
 	es_monitor,
+	es_kernel_feeder,
 	rpc_unpriv_server,
 	rpc_priv_server,
 	rpc_handler,

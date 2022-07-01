@@ -126,6 +126,8 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 	struct timespec ts = { .tv_sec = 120, .tv_nsec = 0 };
 	ssize_t ret;
 
+	thread_set_name(es_kernel_feeder, 0);
+
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
 	for (;;) {

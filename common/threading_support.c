@@ -447,6 +447,9 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 	case cuse_poll:
 		snprintf(name, sizeof(name), "cuse_poll");
 		break;
+	case es_kernel_feeder:
+		snprintf(name, sizeof(name), "kernel_feeder");
+		break;
 	default:
 		snprintf(name, sizeof(name), "%u", id);
 		break;
