@@ -75,6 +75,12 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 }
 
 DSO_PUBLIC
+ssize_t getrandom(void *buffer, size_t length, unsigned int flags)
+{
+	return __wrap_getrandom(buffer, length, flags);
+}
+
+DSO_PUBLIC
 int __wrap_getentropy(void *buffer, size_t length)
 {
 	ssize_t ret = -EFAULT;
@@ -86,4 +92,10 @@ int __wrap_getentropy(void *buffer, size_t length)
 	if (ret < 0)
 		return __real_getentropy(buffer, length);
 	return 0;
+}
+
+DSO_PUBLIC
+int getentropy(void *buffer, size_t length)
+{
+	return __wrap_getentropy(buffer, length);
 }

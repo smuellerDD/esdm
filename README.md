@@ -207,6 +207,11 @@ The ESDM consists of the following components:
 	- Use LD_PRELOAD="/path/to/libesdm-getentropy.so" with the intended
 	  application.
 
+        - Create / update `/etc/ld.so.preload` to add the entry
+          `/usr/local/lib64/libesdm-getrandom.so` (or the respective path to
+          the `libesdm-getrandom.so` on the system). This is to be followed
+          by the execution of `ldconfig`.
+
 	- Compile the application or library with the following options:
 
 		- `LDFLAGS += -Wl,--wrap=getrandom,--wrap=getentropy`
