@@ -50,6 +50,7 @@ require {
 allow esdm_proc_t bin_t:file { execute execute_no_trans };
 allow esdm_proc_t fuse_device_t:chr_file { open read write };
 allow esdm_proc_t fusefs_t:filesystem relabelfrom;
+allow esdm_proc_t fusefs_t:file { execute getattr open read map };
 allow esdm_proc_t fusermount_exec_t:file { execute execute_no_trans open read };
 allow esdm_proc_t sysctl_kernel_t:dir mounton;
 allow esdm_proc_t sysctl_kernel_t:filesystem { mount relabelfrom relabelto };
