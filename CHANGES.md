@@ -1,7 +1,11 @@
 Changes 0.4.0-prerelease:
 * Start CUSE daemons independently from ESDM server
 
-* add prediction resistance behavior with O_SYNC /dev/random - BSI AIS 20/31 2011 NTG.1 compliance. Also it supports chaining of DRBGs pursuent to SP800-90C and FIPS 140.
+* add support for invoking DRNG with prediction resistance when opening
+  /dev/random with O_SYNC or using the esdm_get_random_bytes_pr API.
+  This reestablishes the NTG.1 property as well as well as supports
+  using the DRBG as a conditioning component pursuent to SP800-90C and
+  FIPS 140 IG 7.19 / D.K.
 
 * initialize the DRNG immediately with 256 bits (disregarding 32/128 bits)
 
@@ -9,7 +13,11 @@ Changes 0.4.0-prerelease:
 
 * modify collection in scheduler ES: maintain a hash state per CPU as a per-CPU entropy pool
 
-* add proper interrupt handling code
+* add proper interrupt/signal handling code to the ESDM RPC client library
+
+* privilege level change in CUSE is now limited to caller only
+
+* add support to allow ld.so.preload to be used to refer to libesdm-getrandom.so for a system-wide replacement of getrandom/getentropy system call.
 
 Changes 0.3.0:
 * Replace protobuf-c-rpc with built-in RPC mechanism reducing amount of mallocs,
