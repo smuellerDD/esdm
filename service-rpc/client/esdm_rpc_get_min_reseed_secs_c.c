@@ -49,7 +49,7 @@ DSO_PUBLIC
 int esdm_rpcc_get_min_reseed_secs_int(unsigned int *seconds, void *int_data)
 {
 	GetMinReseedSecsRequest msg = GET_MIN_RESEED_SECS_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_min_reseed_secs_buf buffer;
 	int ret = 0;
 

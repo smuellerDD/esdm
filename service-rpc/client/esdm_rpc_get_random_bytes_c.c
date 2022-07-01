@@ -60,7 +60,7 @@ ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 				       void *int_data)
 {
 	GetRandomBytesRequest msg = GET_RANDOM_BYTES_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_get_random_bytes_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
 	ssize_t ret = 0;

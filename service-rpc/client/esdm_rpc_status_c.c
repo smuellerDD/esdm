@@ -52,7 +52,7 @@ DSO_PUBLIC
 int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data)
 {
 	StatusRequest msg = STATUS_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_get_status_buf buffer = {
 		.ret = -ETIMEDOUT,
 		.buf = buf,

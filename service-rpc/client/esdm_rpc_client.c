@@ -394,16 +394,11 @@ esdm_client_invoke(ProtobufCService *service, unsigned int method_index,
 	const ProtobufCMethodDescriptor *method = desc->methods + method_index;
 	struct esdm_rpc_client_connection *rpc_conn =
 		(struct esdm_rpc_client_connection *)service;
-	socklen_t size_int = sizeof (int);
-	int ret, fd_errno = EINVAL;
+	int ret;
 
 	mutex_w_lock(&rpc_conn->lock);
-	getsockopt(rpc_conn->fd, SOL_SOCKET, SO_ERROR, &fd_errno, &size_int);
 
-	/* Ignore transient errors */
-	if (fd_errno && !(fd_errno == EINTR || fd_errno == EAGAIN)) {
-		CKINT(esdm_connect_proto_service(rpc_conn));
-	}
+	CKINT(esdm_connect_proto_service(rpc_conn));
 
 	/* Pack the protobuf-c data and send it over the wire */
 	CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn),
@@ -415,6 +410,14 @@ esdm_client_invoke(ProtobufCService *service, unsigned int method_index,
 		  "Receiving of data failed: %d\n", ret);
 
 out:
+	if (ret < 0) {
+		ProtobufCMessage *msg;
+
+		logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+		       "Server returned with an error, aborting\n");
+		msg = ERR_PTR(ret);
+		closure(msg, closure_data);
+	}
 	mutex_w_unlock(&rpc_conn->lock);
 }
 

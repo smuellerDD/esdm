@@ -48,7 +48,7 @@ DSO_PUBLIC
 int esdm_rpcc_rnd_reseed_crng_int(void *int_data)
 {
 	RndReseedCRNGRequest msg = RND_RESEED_CRNGREQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_rnd_reseed_crng_buf buffer;
 	int ret = 0;
 

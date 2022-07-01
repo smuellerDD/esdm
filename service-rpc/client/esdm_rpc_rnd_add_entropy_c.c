@@ -51,7 +51,7 @@ int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
 				  void *int_data)
 {
 	RndAddEntropyRequest msg = RND_ADD_ENTROPY_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_rnd_add_entropy_buf buffer;
 	int ret = 0;
 

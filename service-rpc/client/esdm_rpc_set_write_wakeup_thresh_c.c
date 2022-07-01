@@ -47,7 +47,7 @@ int esdm_rpcc_set_write_wakeup_thresh_int(unsigned int write_wakeup_thresh,
 					  void *int_data)
 {
 	SetWriteWakeupThreshRequest msg = SET_WRITE_WAKEUP_THRESH_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_set_write_wakeup_thresh_buf buffer;
 	int ret = 0;
 

@@ -50,7 +50,7 @@ DSO_PUBLIC
 int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data)
 {
 	RndGetEntCntRequest msg = RND_GET_ENT_CNT_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_rnd_get_ent_cnt_buf buffer;
 	int ret = 0;
 

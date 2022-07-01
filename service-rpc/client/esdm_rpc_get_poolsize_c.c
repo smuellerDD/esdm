@@ -50,7 +50,7 @@ DSO_PUBLIC
 int esdm_rpcc_get_poolsize_int(unsigned int *poolsize, void *int_data)
 {
 	GetPoolsizeRequest msg = GET_POOLSIZE_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn;
+	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_poolsize_buf buffer;
 	int ret = 0;
 
