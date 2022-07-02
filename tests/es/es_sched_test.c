@@ -31,6 +31,7 @@
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "esdm_es_sched.h"
 #include "test_pertubation.h"
 
 static void create_sched_entropy(void)
@@ -177,6 +178,9 @@ static int es_sched_init(void)
 		printf("ES Scheduler - fail: init failed: %d\n", ret);
 		return 1;
 	}
+
+	if (!esdm_sched_enabled())
+		return 77;
 
 	printf("ES Scheduler - pass: init\n");
 
