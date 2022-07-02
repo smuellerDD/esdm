@@ -1,4 +1,4 @@
-Changes 0.4.0-prerelease:
+Changes 0.4.0:
 * Start CUSE daemons independently from ESDM server
 
 * add support for invoking DRNG with prediction resistance when opening
