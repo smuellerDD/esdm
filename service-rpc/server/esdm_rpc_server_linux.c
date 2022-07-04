@@ -112,6 +112,13 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 	return -errsv;
 }
 
+/*
+ * Thread to insert entropy into the kernel RNG occasionally. When the IRQ ES
+ * is present, this is required as the kernel RNG is deprived of its main ES.
+ * But also in any other case it is good to insert data into the kernel RNG
+ * to provide data that is gathered from other entropy sources. Basically
+ * the ESDM acts as an RNGd to top up the entropy in the kernel.
+ */
 static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 {
 #define ESDM_SERVER_LINUX_ENTROPY_BYTES	32
@@ -131,10 +138,7 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
 	for (;;) {
-		/* Only keep going if the IRQ entropy source is available */
 		esdm_status_machine(&status);
-		if (!status.es_irq_enabled)
-			break;
 
 		ret = esdm_get_random_bytes_full((uint8_t *)rpi->buf,
 						 (size_t)rpi->buf_size);
@@ -142,7 +146,20 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 			logger(LOGGER_ERR, LOGGER_C_SERVER,
 			       "Failure in generating random bits: %zd\n", ret);
 		} else {
-			rpi->entropy_count = (int)((ret) << 3);
+			/*
+			 * When the IRQ entropy source is enabled, the
+			 * kernel RNG is deprived of its main entropy source.
+			 * Also, the ESDM does not credit its data with any
+			 * entropy. In this case we can inject data that we
+			 * claim it has entropy. Conversely, if the IRQ ES is
+			 * not enabled* it has its main entropy source and is
+			 * credited with entropy by the ESDM. This implies
+			 * we cannot inject data that we claim has entropy.
+			 */
+			if (status.es_irq_enabled)
+				rpi->entropy_count = (int)((ret) << 3);
+			else
+				rpi->entropy_count = 0;
 			esdm_rpcs_linux_insert_entropy(rpi);
 		}
 

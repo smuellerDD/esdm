@@ -1,3 +1,6 @@
+Changes 0.5.0-prerelease:
+* Linux kernel entropy feeder is now always enabled
+
 Changes 0.4.0:
 * Start CUSE daemons independently from ESDM server
 
