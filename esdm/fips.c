@@ -96,7 +96,7 @@ bool fips_enabled(void)
 #else
 		if (getenv("ESDM_SERVER_FORCE_FIPS")) {
 #endif
-			fipsflag[0] = 1;
+			fipsflag[0] = '1';
 		} else {
 			FILE *fipsfile = NULL;
 
