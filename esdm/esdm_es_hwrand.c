@@ -78,12 +78,18 @@ static int esdm_hwrand_init(void)
 
 static uint32_t esdm_hwrand_entropylevel(uint32_t requested_bits)
 {
+	if (esdm_hwrand_fd < 0)
+		return 0;
+
 	return esdm_fast_noise_entropylevel(
 		esdm_config_es_hwrand_entropy_rate(), requested_bits);
 }
 
 static uint32_t esdm_hwrand_poolsize(void)
 {
+	if (esdm_hwrand_fd < 0)
+		return 0;
+
 	return esdm_hwrand_entropylevel(esdm_security_strength());
 }
 
