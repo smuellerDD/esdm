@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 /*
  * ESDM Fast Entropy Source: CPU-based entropy source
  *
@@ -207,7 +206,7 @@ esdm_cpu_switch_hash(struct esdm_drng __unused *drng, int __unused node,
 }
 
 /*
- * esdm_get_arch() - Get CPU entropy source entropy
+ * esdm_cpu_get() - Get CPU entropy source entropy
  *
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
@@ -251,6 +250,7 @@ struct esdm_es_cb esdm_es_cpu = {
 	.name			= "CPU",
 	.init			= esdm_cpu_init,
 	.fini			= NULL,
+	.monitor_es		= NULL,
 	.get_ent		= esdm_cpu_get,
 	.curr_entropy		= esdm_cpu_entropylevel,
 	.max_entropy		= esdm_cpu_poolsize,

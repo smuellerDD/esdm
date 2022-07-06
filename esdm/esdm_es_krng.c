@@ -258,6 +258,7 @@ struct esdm_es_cb esdm_es_krng = {
 	.name			= "KernelRNG",
 	.init			= esdm_krng_init,
 	.fini			= esdm_krng_fini,
+	.monitor_es		= NULL,
 	.get_ent		= esdm_krng_get,
 	.curr_entropy		= esdm_krng_entropylevel,
 	.max_entropy		= esdm_krng_poolsize,

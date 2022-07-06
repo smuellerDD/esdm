@@ -142,6 +142,7 @@ struct esdm_es_cb esdm_es_jent = {
 	.name			= "JitterRNG",
 	.init			= esdm_jent_initialize,
 	.fini			= esdm_jent_finalize,
+	.monitor_es		= NULL,
 	.get_ent		= esdm_jent_get,
 	.curr_entropy		= esdm_jent_entropylevel,
 	.max_entropy		= esdm_jent_poolsize,
