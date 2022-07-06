@@ -53,6 +53,9 @@ enum esdm_external_es {
 #ifdef ESDM_ES_KERNEL_RNG
 	esdm_ext_es_krng,			/* random.c */
 #endif
+#ifdef ESDM_ES_HWRAND
+	esdm_ext_es_hwrand,			/* Linux /dev/hwrng */
+#endif
 	esdm_ext_es_aux,			/* MUST BE LAST ES! */
 	esdm_ext_es_last			/* MUST be the last entry */
 };

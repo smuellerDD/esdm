@@ -44,6 +44,7 @@ extern "C"
 
 uint32_t esdm_online_nodes(void);
 uint32_t esdm_curr_node(void);
+int esdm_safe_read(int fd, uint8_t *buf, size_t buflen);
 
 #ifdef __cplusplus
 }

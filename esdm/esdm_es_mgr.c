@@ -27,6 +27,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_cpu.h"
+#include "esdm_es_hwrand.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_jent.h"
 #include "esdm_es_krng.h"
@@ -96,6 +97,9 @@ struct esdm_es_cb *esdm_es[] = {
 #endif
 #ifdef ESDM_ES_KERNEL_RNG
 	&esdm_es_krng,
+#endif
+#ifdef ESDM_ES_HWRAND
+	&esdm_es_hwrand,
 #endif
 	&esdm_es_aux
 };

@@ -33,6 +33,10 @@ if get_option('es_sched').enabled()
 	esdm_src += files('esdm_es_sched.c')
 endif
 
+if get_option('es_hwrand').enabled()
+	esdm_src += files('esdm_es_hwrand.c')
+endif
+
 if get_option('node').enabled()
 	esdm_src += files('esdm_node.c')
 endif

@@ -54,6 +54,10 @@ conf_data.set('ESDM_ES_SCHED', get_option('es_sched').enabled())
 conf_data.set('ESDM_SCHED_ENTROPY_RATE',
 	      get_option('es_sched_entropy_rate'))
 
+conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
+conf_data.set('ESDM_HWRAND_ENTROPY_RATE',
+	      get_option('es_hwrand_entropy_rate'))
+
 if (get_option('es_irq_entropy_rate') > 0) and get_option('es_sched_entropy_rate') > 0
 	error('It is not permissible to award both, the interrupt and scheduler-based entropy sources, an entropy rate greater than zero. Adjust es_irq_entropy_rate or es_sched_entropy_rate to zero.')
 endif

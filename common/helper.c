@@ -64,3 +64,18 @@ uint32_t esdm_curr_node(void)
 	 */
 	return (cpu % esdm_online_nodes());
 }
+
+int esdm_safe_read(int fd, uint8_t *buf, size_t buflen)
+{
+	ssize_t readlen;
+
+	do {
+		readlen = read(fd, buf, buflen);
+		if (readlen > 0) {
+			buflen -= (size_t)readlen;
+			buf += (size_t)readlen;
+		}
+	} while ((0 < readlen || errno == EINTR) && buflen);
+
+	return buflen ? -errno : 0;
+}

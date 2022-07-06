@@ -1,7 +1,3 @@
-- add TPM support
-
-- add HW Rand support
-
 - linker version script - how do do that with meson?
 
 - libesdm_getrandom.so: how to convince Meson to address issue outlined in frontends/getrandom/meson.build?

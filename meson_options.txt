@@ -179,6 +179,34 @@ entropy sources an entropy rate greater than zero.
 ''')
 
 ################################################################################
+# /dev/hwrand-based Entropy Source configuration options
+################################################################################
+
+option('es_hwrand', type: 'feature', value: 'enabled',
+       description: '''Enable support for /dev/hwrng-based entropy source.
+
+The Linux kernel offers the hardware random number generator framework
+which is accessible via /dev/hwrng. This interface covers also TPM2.0
+devices.
+
+Note, if this option is enabled and the underlying Linux system
+does not offer such entropy source, the ESDM will
+automatically detect this and ignore the hardware.
+''')
+
+# Option for: ESDM_HWRAND_ENTROPY_RATE
+option('es_hwrand_entropy_rate', type: 'integer', min: 0, max: 256, value: 128,
+       description:'''CPU-based entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256
+bits of data obtained from the CPU entropy source. The ESDM
+enforces the limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the CPU entropy source will provide
+256 bits of data without being credited to contain entropy.
+''')
+
+################################################################################
 # Common Options
 ################################################################################
 
