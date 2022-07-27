@@ -227,10 +227,15 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 		esdm_state.esdm_fully_seeded = false;
 
 		esdm_shm_status_set_operational(false);
-
-		/* If sufficient entropy is available, reseed now. */
-		esdm_es_add_entropy();
 	}
+
+	/* If sufficient entropy is available, reseed now. */
+	esdm_es_add_entropy();
+
+	/*
+	 * TODO: The esdm_es_mgr_monitor_initialize should be invoked to monitor
+	 * the ES for new entropy.
+	 */
 }
 
 /* Policy to enable ESDM operational mode */
@@ -345,15 +350,12 @@ void esdm_init_ops(struct entropy_buf *eb)
 		esdm_set_entropy_thresh(requested_bits);
 	} else if (esdm_fully_seeded(state->all_online_nodes_seeded,
 				     seed_bits)) {
-
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
 		state->esdm_min_seeded = true;
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "ESDM fully seeded with %u bits of entropy\n",
 			seed_bits);
-esdm_get_seed_entropy_osr(
-					state->all_online_nodes_seeded);
 		esdm_set_entropy_thresh(requested_bits);
 	} else if (!state->esdm_min_seeded) {
 
