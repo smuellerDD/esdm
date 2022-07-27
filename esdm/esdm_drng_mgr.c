@@ -85,6 +85,13 @@ static struct esdm_drng esdm_drng_init = {
 	.lock = MUTEX_W_UNLOCKED,
 };
 
+/* Prediction-resistance DRNG */
+static struct esdm_drng esdm_drng_pr = {
+	ESDM_DRNG_STATE_INIT(esdm_drng_pr, NULL, NULL,
+			     &esdm_builtin_sha512_cb),
+	.lock = MUTEX_W_UNLOCKED,
+};
+
 /* Wait queue to wait until the ESDM is initialized - can freely be used */
 DECLARE_WAIT_QUEUE(esdm_init_wait);
 
@@ -130,6 +137,8 @@ int esdm_drng_alloc_common(struct esdm_drng *drng,
 
 	if (!drng || !drng_cb)
 		return -EINVAL;
+	if (drng->drng)
+		return 0;
 
 	drng->drng_cb = drng_cb;
 	CKINT(drng_cb->drng_alloc(&drng->drng,
@@ -138,6 +147,17 @@ int esdm_drng_alloc_common(struct esdm_drng *drng,
 
 out:
 	return ret;
+}
+
+static void esdm_drng_dealloc_common(struct esdm_drng *drng)
+{
+	const struct esdm_drng_cb *drng_cb;
+
+	mutex_w_lock(&drng->lock);
+	drng_cb = drng->drng_cb;
+	drng_cb->drng_dealloc(drng->drng);
+	drng->drng = NULL;
+	mutex_w_unlock(&drng->lock);
 }
 
 static int esdm_drng_mgr_selftest(void)
@@ -197,13 +217,22 @@ int esdm_drng_mgr_initalize(void)
 		return 0;
 	}
 
-	ret = esdm_drng_alloc_common(&esdm_drng_init, esdm_default_drng_cb);
+	/* Initialize the PR DRNG inside init lock as it guards esdm_avail. */
+	mutex_w_lock(&esdm_drng_pr.lock);
+	ret = esdm_drng_alloc_common(&esdm_drng_pr, esdm_default_drng_cb);
+	mutex_w_unlock(&esdm_drng_pr.lock);
+
+	if (!ret) {
+		ret = esdm_drng_alloc_common(&esdm_drng_init,
+					     esdm_default_drng_cb);
+		if (!ret)
+			atomic_set(&esdm_avail, 1);
+	}
 	mutex_w_unlock(&esdm_drng_init.lock);
 	CKINT(ret);
 
 	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 	       "ESDM for general use is available\n");
-	atomic_set(&esdm_avail, 1);
 
 	CKINT(esdm_drng_mgr_selftest());
 
@@ -213,25 +242,19 @@ out:
 
 void esdm_drng_mgr_finalize(void)
 {
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_drng_cb *drng_cb;
-
-	mutex_w_lock(&drng->lock);
-	drng_cb = drng->drng_cb;
-	drng_cb->drng_dealloc(drng->drng);
-	drng->drng = NULL;
-	mutex_w_unlock(&drng->lock);
+	esdm_drng_dealloc_common(esdm_drng_init_instance());
+	esdm_drng_dealloc_common(&esdm_drng_pr);
 }
 
 DSO_PUBLIC
 int esdm_sp80090c_compliant(void)
 {
 #ifndef ESDM_OVERSAMPLE_ENTROPY_SOURCES
-		return false;
-#endif
-
+	return false;
+#else
 	/* SP800-90C only requested in FIPS mode */
 	return esdm_config_fips_enabled();
+#endif
 }
 
 DSO_PUBLIC
@@ -411,6 +434,13 @@ static void __esdm_drng_seed_work(void)
 		}
 	}
 
+	if (!esdm_drng_pr.fully_seeded) {
+		mutex_w_lock(&esdm_drng_pr.lock);
+		esdm_drng_seed_work_one(&esdm_drng_pr, 0);
+		mutex_w_unlock(&esdm_drng_pr.lock);
+		goto out;
+	}
+
 	esdm_pool_all_nodes_seeded(true);
 
 out:
@@ -480,18 +510,16 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng)
  * @drng: DRNG instance
  * @outbuf: buffer for storing random data
  * @outbuflen: length of outbuf
- * @pr: operate the DRNG with prediction resistance (i.e. reseed from the
- *	entropy sources and only return the amount bytes for which we have
- *	received fresh entropy)
  *
  * @return:
  * * < 0 in error case (DRNG generation or update failed)
  * * >=0 returning the returned number of bytes
  */
 static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
-			     size_t outbuflen, bool pr)
+			     size_t outbuflen)
 {
 	ssize_t processed = 0;
+	bool pr = (drng == &esdm_drng_pr) ? true : false;
 
 	if (!outbuf || !outbuflen)
 		return 0;
@@ -522,43 +550,38 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 		mutex_w_lock(&drng->lock);
 
-		/*
-		 * Handle the prediction resistance: force a reseed and
-		 * only generate the amount of data that was seeded. Note,
-		 * esdm_drng_seed_es returns the entropy amount in bits, but
-		 * we operate here in bytes.
-		 */
 		if (pr) {
-			uint32_t collected_entropy_bits;
-
-			/* If ESDM is not operational, PR is not possible. */
-			if (!esdm_state_operational()) {
-				mutex_w_unlock(&drng->lock);
-				goto out;
-			}
-
-			/* If we cannot get the pool lock, try again. */
-			if (esdm_pool_trylock()) {
-				mutex_w_unlock(&drng->lock);
-				continue;
-			}
-
-			collected_entropy_bits = esdm_drng_seed_es(drng);
-
-			esdm_pool_unlock();
-
-			/* If no new entropy was received, stop now. */
-			if (!collected_entropy_bits) {
-				mutex_w_unlock(&drng->lock);
-				goto out;
-			}
-
 			/*
-			 * Do not produce more than the amount of entropy
-			 * we received.
+			 * Handle the prediction resistance: force a reseed and
+			 * only generate the amount of data that was seeded if
+			 * the DRNG is not fully seeded.
 			 */
-			todo = min_t(uint32_t, todo,
-				     collected_entropy_bits >> 3);
+			if (!drng->fully_seeded) {
+				uint32_t collected_ent_bits;
+
+				/* If we cannot get the pool lock, try again. */
+				if (esdm_pool_trylock()) {
+					mutex_w_unlock(&drng->lock);
+					continue;
+				}
+
+				collected_ent_bits = esdm_drng_seed_es(drng);
+
+				esdm_pool_unlock();
+
+				/* If no new entropy was received, stop now. */
+				if (!collected_ent_bits) {
+					mutex_w_unlock(&drng->lock);
+					goto out;
+				}
+
+				/*
+				 * Do not produce more than the amount of
+				 * entropy we received.
+				 */
+				todo = min_t(uint32_t, todo,
+					     collected_ent_bits >> 3);
+			}
 
 			/*
 			 * Do not produce more than the security strength of
@@ -573,25 +596,6 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		}
 		ret = drng->drng_cb->drng_generate(drng->drng,
 						   outbuf + processed, todo);
-
-		/*
-		 * In FIPS mode according to IG 7.19, force a reseed after
-		 * generating data as conditioning component. When setting
-		 * ->force_reseed = true, it is possible that the subsequent
-		 * reseed may fail if insufficient entropy is available but yet
-		 * random bits are generated. We accept this potential issue
-		 * as bullet-proof  solution would be to invoke
-		 * esdm_unset_fully_seeded(drng) which is an easy DoS vector.
-		 * This function would then imply that the respective DRNG
-		 * instance is not usable until a reseed happened. If this is
-		 * the initial DRNG, the entire ESDM goes back to
-		 * non-operational mode, which is the DoS. The other solution
-		 * would be to instantiate a separate DRNG for PR, which is
-		 * a waste.
-		 */
-		if (pr && esdm_sp80090c_compliant())
-			drng->force_reseed = true;
-
 		mutex_w_unlock(&drng->lock);
 		if (ret <= 0) {
 			logger(LOGGER_WARN, LOGGER_C_DRNG,
@@ -602,8 +606,12 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		processed += ret;
 		outbuflen -= (size_t)ret;
 
-		if (pr && outbuflen)
-			sched_yield();
+		if (pr) {
+			/* Force the async reseed for PR DRNG */
+			esdm_unset_fully_seeded(drng);
+			if (outbuflen)
+				sched_yield();
+		}
 	}
 
 out:
@@ -617,7 +625,12 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	uint32_t node = esdm_config_curr_node();
 	ssize_t ret;
 
-	if (esdm_drng && esdm_drng[node] && esdm_drng[node]->fully_seeded) {
+	if (pr) {
+		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+		       "Using prediction resistance DRNG instance to service generate request\n");
+		drng = &esdm_drng_pr;
+	} else if (esdm_drng && esdm_drng[node] &&
+		   esdm_drng[node]->fully_seeded) {
 		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 		       "Using DRNG instance on node %u to service generate request\n",
 		       node);
@@ -628,7 +641,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	}
 
 	CKINT(esdm_drng_mgr_initalize());
-	CKINT(esdm_drng_get(drng, outbuf, outbuflen, pr));
+	CKINT(esdm_drng_get(drng, outbuf, outbuflen));
 
 out:
 	esdm_drng_put_instances();
@@ -662,6 +675,11 @@ void esdm_reset(void)
 			mutex_w_unlock(&drng->lock);
 		}
 	}
+
+	mutex_w_lock(&esdm_drng_pr.lock);
+	esdm_drng_reset(&esdm_drng_pr);
+	mutex_w_unlock(&esdm_drng_pr.lock);
+
 	esdm_drng_atomic_reset();
 	esdm_set_entropy_thresh(ESDM_FULL_SEED_ENTROPY_BITS);
 

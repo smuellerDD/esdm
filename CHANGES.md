@@ -3,6 +3,8 @@ Changes 0.5.0-prerelease:
 
 * Add Linux /dev/hwrng entropy source
 
+* FIPS IG 7.19/D.K / BSI NTG.1: use a new DRNG instance executed with PR
+
 Changes 0.4.0:
 * Start CUSE daemons independently from ESDM server
 
