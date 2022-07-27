@@ -451,7 +451,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		return -EINVAL;
 	CKNULL(proto->service, -EINVAL);
 
-	for(;;) {
+	for (;;) {
 		/*
 		 * Allocate the memory for the thread invocation. This is done
 		 * before the accept() call as now we should have time but
