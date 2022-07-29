@@ -95,7 +95,7 @@ static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 	if (!S_ISSOCK(statbuf.st_mode))
 		return;
 
-	fd = socket(PF_UNIX, SOCK_STREAM, 0);
+	fd = socket(PF_UNIX, SOCK_SEQPACKET, 0);
 	if (fd < 0)
 		return;
 	set_fd_nonblocking(fd);
@@ -149,8 +149,12 @@ static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
 				  const uint8_t *data)
 {
 	struct esdm_rpcs_write_buf *buf = (struct esdm_rpcs_write_buf *)buffer;
+	int ret = esdm_rpcs_write_data(buf->rpc_conn, data, len);
 
-	esdm_rpcs_write_data(buf->rpc_conn, data, len);
+	if (ret < 0)
+		logger(LOGGER_ERR, LOGGER_C_RPC,
+		       "Submission of payload data failed with error %d\n",
+		       ret);
 }
 
 /* Pack the message into a ProtobufC structure and write it to the receiver. */
@@ -186,8 +190,10 @@ static int esdm_rpcs_pack(const ProtobufCMessage *message,
 	       sc_header.status_code, sc_header.message_length,
 	       sc_header.method_index, sc_header.request_id);
 
-	CKINT(esdm_rpcs_write_data(rpc_conn,
-				   (uint8_t *)&sc_header, sizeof(sc_header)));
+	CKINT_LOG(esdm_rpcs_write_data(rpc_conn,
+				       (uint8_t *)&sc_header,
+				       sizeof(sc_header)),
+		  "Submission of header data failed with error %d\n", ret);
 
 	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
 	    message_length) {
@@ -278,14 +284,12 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		.free = &esdm_rpc_free,
 		.allocator_data = NULL,
 	};
-	struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
 	BUFFER_INIT(tls);
 	struct esdm_rpc_proto_cs *received_data;
 	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)]
 						__aligned(sizeof(uint64_t));
 	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128]
 						__aligned(sizeof(uint64_t));
-	fd_set fds;
 	size_t total_received = 0;
 	ssize_t received;
 	uint32_t data_to_fetch = 0;
@@ -308,29 +312,6 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 	/* Read the data into the thread-local storage */
 	do {
-		FD_ZERO(&fds);
-		FD_SET(rpc_conn->child_fd, &fds);
-
-		/*
-		 * The reason for using select here is to only wait for a
-		 * given amount of time for activity on the FD. After the
-		 * timeout, the file descriptor is closed. If an attacker
-		 * starts connections, he could leave them open and thus
-		 * starve other callers. By timing out on a read the server
-		 * tries to avert such attack scenarios. This is the price
-		 * to pay for not using malloc and a thread-local storage
-		 * buffer.
-		 */
-		ret = select((rpc_conn->child_fd + 1), &fds, NULL, NULL,
-			     &timeout);
-		if (ret == 0) {
-			ret = -EAGAIN;
-			goto out;
-		} else if (ret == -1) {
-			ret = -errno;
-			goto out;
-		}
-
 		received = read(rpc_conn->child_fd, buf_p,
 				sizeof(buf) - total_received);
 		if (received < 0) {
@@ -434,6 +415,8 @@ static int esdm_rpcs_handler(void *args)
 		ret = esdm_rpcs_read(rpc_conn);
 	} while (!ret);
 
+	logger(LOGGER_DEBUG, LOGGER_C_RPC,
+	       "Closing incoming connection for FD %d\n", rpc_conn->child_fd);
 	close(rpc_conn->child_fd);
 	free(rpc_conn);
 	return 0;
@@ -442,6 +425,17 @@ static int esdm_rpcs_handler(void *args)
 /* The ESDM RPC server main worker loop. */
 static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 {
+	/*
+	 * The reason for using select here is to only wait for a
+	 * given amount of time for activity on the FD. After the
+	 * timeout, the file descriptor is closed. If an attacker
+	 * starts connections, he could leave them open and thus
+	 * starve other callers. By timing out on a read the server
+	 * tries to avert such attack scenarios. This is the price
+	 * to pay for not using malloc and a thread-local storage
+	 * buffer.
+	 */
+	struct timeval tv = { .tv_sec = 2, .tv_usec = 0 };
 	struct esdm_rpcs_connection *rpc_conn = NULL;
 	struct sockaddr addr;
 	socklen_t addr_len = sizeof (addr);
@@ -483,8 +477,21 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			continue;
 		}
 
+		if (setsockopt(rpc_conn->child_fd, SOL_SOCKET, SO_RCVTIMEO,
+			       (const char*)&tv, sizeof(tv)) < 0 ||
+		    setsockopt(rpc_conn->child_fd, SOL_SOCKET, SO_SNDTIMEO,
+			       (const char*)&tv, sizeof(tv)) < 0) {
+			int errsv = errno;
+
+			logger(LOGGER_ERR, LOGGER_C_RPC,
+			       "Error setting timeout on socket: %s\n",
+			       strerror(errsv));
+			return -errsv;
+		}
+
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		       "Processing new incoming connection\n");
+		       "Processing new incoming connection for FD %d\n",
+		       rpc_conn->child_fd);
 
 		/* Handle new incoming connection */
 #ifdef DEBUG
@@ -496,7 +503,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 #else /* DEBUG */
 		if (thread_start(esdm_rpcs_handler, rpc_conn, 0, NULL)) {
 			logger(LOGGER_ERR, LOGGER_C_RPC,
-			       "Starting new thread for incoming conneection failed\n");
+			       "Starting new thread for incoming connection failed\n");
 			free(rpc_conn);
 		}
 #endif /* DEBUG */
@@ -541,7 +548,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		return -EINVAL;
 	}
 
-	fd = socket(protocol_family, SOCK_STREAM, 0);
+	fd = socket(protocol_family, SOCK_SEQPACKET, 0);
 	if (fd < 0) {
 		errsv = -errno;
 		logger(LOGGER_ERR, LOGGER_C_RPC,

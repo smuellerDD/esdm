@@ -101,7 +101,7 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 	/* Connect to the Unix domain socket */
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, socketname, sizeof(addr.sun_path));
-	rpc_conn->fd = socket(addr.sun_family, SOCK_STREAM, 0);
+	rpc_conn->fd = socket(addr.sun_family, SOCK_SEQPACKET, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
@@ -110,7 +110,10 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 		return -errsv;
 	}
 
+	/* Set timeout on socket */
 	if (setsockopt(rpc_conn->fd, SOL_SOCKET, SO_RCVTIMEO,
+		       (const char*)&tv, sizeof(tv)) < 0 ||
+	    setsockopt(rpc_conn->fd, SOL_SOCKET, SO_SNDTIMEO,
 		       (const char*)&tv, sizeof(tv)) < 0) {
 		errsv = errno;
 
@@ -193,8 +196,12 @@ esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 			   const uint8_t *data)
 {
 	struct esdm_rpcc_write_buf *buf = (struct esdm_rpcc_write_buf *) buffer;
+	int ret = esdm_rpc_client_write_data(buf->rpc_conn, data, len);
 
-	esdm_rpc_client_write_data(buf->rpc_conn, data, len);
+	if (ret < 0)
+		logger(LOGGER_ERR, LOGGER_C_RPC,
+		       "Submission of payload data failed with error %d\n",
+		       ret);
 }
 
 static int
@@ -220,9 +227,10 @@ esdm_rpc_client_pack(const ProtobufCMessage *message,
 	       cs_header.message_length, cs_header.method_index,
 	       cs_header.request_id);
 
-	CKINT(esdm_rpc_client_write_data(rpc_conn,
-					 (uint8_t *)&cs_header,
-					 sizeof(cs_header)));
+	CKINT_LOG(esdm_rpc_client_write_data(rpc_conn,
+					     (uint8_t *)&cs_header,
+					     sizeof(cs_header)),
+		  "Submission of header data failed with error %d\n", ret);
 
 	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
 	    message_length) {
@@ -284,19 +292,21 @@ esdm_rpc_client_read_handler(struct esdm_rpc_client_connection *rpc_conn,
 					break;
 				}
 
-				continue;
+				/* Trigger the re-submission of the request */
+				ret = EAGAIN;
+				goto out;
 			}
 
 			ret = -errno;
 			logger(LOGGER_DEBUG, LOGGER_C_RPC, "Read failed: %s\n",
 			       strerror(errno));
-			goto out;
+			break;
 		}
 
 		/* Received EOF */
 		if (received == 0) {
 			ret = 0;
-			goto out;
+			break;
 		}
 
 		total_received += (size_t)received;
@@ -357,18 +367,24 @@ esdm_rpc_client_read_handler(struct esdm_rpc_client_connection *rpc_conn,
 		ProtobufCMessage *msg = protobuf_c_message_unpack(
 			message_desc, &esdm_rpc_client_allocator,
 			header->message_length, received_data->data);
-		CKNULL_LOG(msg, -EFAULT, "Response message not found\n");
-		closure(msg, closure_data);
-		protobuf_c_message_free_unpacked(msg,
-						 &esdm_rpc_client_allocator);
-		logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		       "Data with length %u send to client closure handler\n",
-		       header->message_length);
+		if (msg) {
+			closure(msg, closure_data);
+			protobuf_c_message_free_unpacked(
+				msg, &esdm_rpc_client_allocator);
+			logger(LOGGER_DEBUG, LOGGER_C_RPC,
+			       "Data with length %u send to client closure handler\n",
+			       header->message_length);
+		} else {
+			logger(LOGGER_ERR, LOGGER_C_RPC,
+			       "Response message not found\n");
+			msg = ERR_PTR(-EFAULT);
+			closure(msg, closure_data);
+		}
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
 
 		logger(LOGGER_VERBOSE, LOGGER_C_RPC, "Request interrupted\n");
-		msg = ERR_PTR(-EAGAIN);
+		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
 	} else {
 		ProtobufCMessage *msg;
@@ -398,26 +414,20 @@ esdm_client_invoke(ProtobufCService *service, unsigned int method_index,
 
 	mutex_w_lock(&rpc_conn->lock);
 
-	CKINT(esdm_connect_proto_service(rpc_conn));
+	do {
+		CKINT(esdm_connect_proto_service(rpc_conn));
 
-	/* Pack the protobuf-c data and send it over the wire */
-	CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn),
-		  "Sending of data failed: %d\n", ret);
+		/* Pack the protobuf-c data and send it over the wire */
+		CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn),
+			  "Sending of data failed: %d\n", ret);
 
-	/* Receive data */
-	CKINT_LOG(esdm_rpc_client_read_handler(rpc_conn, method->output,
-					       closure, closure_data),
-		  "Receiving of data failed: %d\n", ret);
+		/* Receive data */
+		CKINT_LOG(esdm_rpc_client_read_handler(rpc_conn, method->output,
+						       closure, closure_data),
+			  "Receiving of data failed: %d\n", ret);
+	} while (ret == EAGAIN);
 
 out:
-	if (ret < 0) {
-		ProtobufCMessage *msg;
-
-		logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-		       "Server returned with an error, aborting\n");
-		msg = ERR_PTR(ret);
-		closure(msg, closure_data);
-	}
 	mutex_w_unlock(&rpc_conn->lock);
 }
 
