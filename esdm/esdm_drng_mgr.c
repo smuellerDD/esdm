@@ -85,7 +85,7 @@ static struct esdm_drng esdm_drng_init = {
 	.lock = MUTEX_W_UNLOCKED,
 };
 
-/* Prediction-resistance DRNG */
+/* Prediction-resistance DRNG: only deliver as much data as received entropy */
 static struct esdm_drng esdm_drng_pr = {
 	ESDM_DRNG_STATE_INIT(esdm_drng_pr, NULL, NULL,
 			     &esdm_builtin_sha512_cb),
@@ -551,11 +551,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		mutex_w_lock(&drng->lock);
 
 		if (pr) {
-			/*
-			 * Handle the prediction resistance: force a reseed and
-			 * only generate the amount of data that was seeded if
-			 * the DRNG is not fully seeded.
-			 */
+			/* If async reseed did not deliver entropy, try now */
 			if (!drng->fully_seeded) {
 				uint32_t collected_ent_bits;
 
@@ -575,22 +571,12 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 					goto out;
 				}
 
-				/*
-				 * Do not produce more than the amount of
-				 * entropy we received.
-				 */
+				/* If no new entropy was received, stop now. */
 				todo = min_t(uint32_t, todo,
 					     collected_ent_bits >> 3);
 			}
 
-			/*
-			 * Do not produce more than the security strength of
-			 * the DRNG - the DRNG can only produce this amount of
-			 * entropy. This is a bit more strict than SP800-90A
-			 * prediction resistance, but complies with the
-			 * German AIS20/31 as well as when using the DRNG as
-			 * a conditioning component to chain with other DRNGs.
-			 */
+			/* Do not produce more than DRNG security strength */
 			todo = min_t(uint32_t, todo,
 				     esdm_security_strength() >> 3);
 		}
@@ -650,9 +636,6 @@ out:
 
 /*
  * Reset ESDM such that all existing entropy is gone.
- *
- * TODO: After this call is invoked, the esdm_init_monitor should be invoked
- * to monitor the ES for new entropy.
  */
 void esdm_reset(void)
 {
@@ -676,6 +659,8 @@ void esdm_reset(void)
 		}
 	}
 
+	esdm_drng_put_instances();
+
 	mutex_w_lock(&esdm_drng_pr.lock);
 	esdm_drng_reset(&esdm_drng_pr);
 	mutex_w_unlock(&esdm_drng_pr.lock);
@@ -684,7 +669,6 @@ void esdm_reset(void)
 	esdm_set_entropy_thresh(ESDM_FULL_SEED_ENTROPY_BITS);
 
 	esdm_reset_state();
-	esdm_drng_put_instances();
 }
 
 /******************* Generic ESDM kernel output interfaces ********************/
