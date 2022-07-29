@@ -146,7 +146,8 @@ static inline unsigned int cpu_es_multiplier(void)
 {
 	unsigned long v;
 
-	if (!cpu_es_x86_rdseed(&v)) {
+	/* Invoke check twice in case the first time the gather loop failed */
+	if (!cpu_es_x86_rdseed(&v) && !cpu_es_x86_rdseed(&v)) {
 		/*
 		 * Intel SPEC: pulling 512 blocks from RDRAND ensures
 		 * one reseed making it logically equivalent to RDSEED.
