@@ -142,8 +142,8 @@ static inline void thread_cleanup(struct thread_ctx *tctx)
 {
 	tctx->data = NULL;
 	tctx->start_routine = NULL;
-	pthread_cond_signal(&thread_schedule_cv);
-	pthread_cond_signal(&thread_wait_cv);
+	pthread_cond_broadcast(&thread_schedule_cv);
+	pthread_cond_broadcast(&thread_wait_cv);
 
 	/* Return values of special threads is irrelevant */
 	if (thread_is_special(tctx))
@@ -218,8 +218,15 @@ static void *thread_worker(void *arg)
 		sigset_t block, old;
 		int ret;
 
-		/* Block all signals from being processed by thread */
+		/*
+		 * Block all but terminating signals from being processed by
+		 * thread.
+		 */
 		sigfillset(&block);
+		sigdelset(&block, SIGHUP);
+		sigdelset(&block, SIGINT);
+		sigdelset(&block, SIGQUIT);
+		sigdelset(&block, SIGTERM);
 		ret = -pthread_sigmask(SIG_BLOCK, &block, &old);
 		if (ret)
 			return NULL;
@@ -248,11 +255,11 @@ static void *thread_worker(void *arg)
 			logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
 			       "Thread %u completed\n", tctx->thread_num);
 			mutex_w_unlock(&tctx->inuse);
-			pthread_cond_signal(&thread_wait_cv);
+			pthread_cond_broadcast(&thread_wait_cv);
 		} else {
-			/* Idle */
 			mutex_w_unlock(&tctx->inuse);
-			pthread_cond_signal(&thread_wait_cv);
+
+			/* Idle */
 			thread_block(&tctx->worker_cv, &tctx->worker_lock);
 		}
 	}
@@ -314,20 +321,25 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			return -ESHUTDOWN;
 
 		if (mutex_w_trylock(&threads[i].inuse)) {
-			/* The thread is currently executing a body of code */
+			/*
+			 * The thread is currently executing a body of code -
+			 * kick the worker.
+			 */
 			if (threads[i].start_routine ||
 			    atomic_bool_read(&threads[i].shutdown)) {
 				mutex_w_unlock(&threads[i].inuse);
+				pthread_cond_broadcast(&threads[i].worker_cv);
 				continue;
 			}
 
 			/*
-			 * Thread is not being picked up by thread_wait of the
-			 * mother thread, skip.
+			 * Thread is not being picked up by thread_block of the
+			 * mother thread - kick the worker.
 			 */
 			if (threads[i].scheduled &&
 			    !pthread_equal(threads[i].parent, self)) {
 				mutex_w_unlock(&threads[i].inuse);
+				pthread_cond_broadcast(&threads[i].worker_cv);
 				continue;
 			}
 
@@ -361,9 +373,9 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			threads[i].start_routine = start_routine;
 			threads[i].parent = pthread_self();
 			threads[i].scheduled = true;
+			pthread_cond_broadcast(&threads[i].worker_cv);
 			mutex_w_unlock(&threads[i].inuse);
-			pthread_cond_signal(&thread_wait_cv);
-			pthread_cond_signal(&threads[i].worker_cv);
+			pthread_cond_broadcast(&thread_wait_cv);
 
 			return 0;
 		}
@@ -480,9 +492,9 @@ static int thread_wait_all(bool system_threads)
 	/* Ensure that no new thread is spawned. */
 	for (i = 0; i < upper; i++) {
 		atomic_bool_set_true(&threads[i].shutdown);
-		pthread_cond_signal(&threads[i].worker_cv);
+		pthread_cond_broadcast(&threads[i].worker_cv);
 	}
-	pthread_cond_signal(&thread_wait_cv);
+	pthread_cond_broadcast(&thread_wait_cv);
 
 	/* Wait for all worker threads. */
 	for (i = 0; i < upper; i++) {
@@ -518,9 +530,9 @@ static void thread_cancel(bool system_threads)
 	for (i = 0; i < upper; i++) {
 		atomic_bool_set_true(&threads[i].shutdown);
 		threads[i].start_routine = NULL;
-		pthread_cond_signal(&threads[i].worker_cv);
+		pthread_cond_broadcast(&threads[i].worker_cv);
 	}
-	pthread_cond_signal(&thread_wait_cv);
+	pthread_cond_broadcast(&thread_wait_cv);
 
 	/* Kill all worker threads. */
 	for (i = 0; i < upper; i++) {
