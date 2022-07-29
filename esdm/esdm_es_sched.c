@@ -269,6 +269,11 @@ static void esdm_sched_reset(void)
 	}
 }
 
+static bool esdm_sched_active(void)
+{
+	return (esdm_sched_entropy_fd != -1);
+}
+
 struct esdm_es_cb esdm_es_sched = {
 	.name			= "Scheduler",
 	.init			= esdm_sched_initialize,
@@ -279,5 +284,6 @@ struct esdm_es_cb esdm_es_sched = {
 	.max_entropy		= esdm_sched_poolsize,
 	.state			= esdm_sched_es_state,
 	.reset			= esdm_sched_reset,
+	.active			= esdm_sched_active,
 	.switch_hash		= NULL,
 };

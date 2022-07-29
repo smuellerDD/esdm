@@ -246,6 +246,15 @@ static void esdm_cpu_es_state(char *buf, size_t buflen)
 		 data_multiplier);
 }
 
+static bool esdm_cpu_active(void)
+{
+#ifdef ESDM_CPU_ES_IMPLEMENTED
+	return true;
+#else
+	return false;
+#endif
+}
+
 struct esdm_es_cb esdm_es_cpu = {
 	.name			= "CPU",
 	.init			= esdm_cpu_init,
@@ -256,5 +265,6 @@ struct esdm_es_cb esdm_es_cpu = {
 	.max_entropy		= esdm_cpu_poolsize,
 	.state			= esdm_cpu_es_state,
 	.reset			= NULL,
+	.active			= esdm_cpu_active,
 	.switch_hash		= esdm_cpu_switch_hash,
 };

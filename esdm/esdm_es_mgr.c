@@ -78,6 +78,9 @@ uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
 
 static atomic_t esdm_es_mgr_terminate = ATOMIC_INIT(0);
 
+/* Wait queue to wait until the ESDM is not initialized. */
+static DECLARE_WAIT_QUEUE(esdm_monitor_wait);
+
 /*
  * The entries must be in the same order as defined by enum esdm_internal_es and
  * enum esdm_external_es
@@ -103,6 +106,55 @@ struct esdm_es_cb *esdm_es[] = {
 #endif
 	&esdm_es_aux
 };
+
+/******************************** ES monitor **********************************/
+
+/* Restart the ES monitor if it is sleeping */
+static void esdm_es_mgr_monitor_wakeup(void)
+{
+	thread_wake_all(&esdm_monitor_wait);
+}
+
+/* ES monitor worker loop */
+int esdm_es_mgr_monitor_initialize(void)
+{
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
+	uint64_t i;
+	unsigned int avail = 0;
+
+	for_each_esdm_es(i) {
+		if (esdm_es[i]->active())
+			avail += !!esdm_es[i]->monitor_es;
+	}
+
+	if (!avail) {
+		logger(LOGGER_DEBUG, LOGGER_C_ES,
+		       "Full entropy monitor not started as no slow entropy sources present\n");
+		return 0;
+	}
+
+	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
+
+#define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
+	while (!atomic_read(&esdm_es_mgr_terminate)) {
+		unsigned int j;
+
+		for_each_esdm_es(j) {
+			if (esdm_es[j]->monitor_es)
+				esdm_es[j]->monitor_es();
+		}
+
+		thread_wait_event(&esdm_init_wait,
+				  !esdm_pool_all_nodes_seeded_get() &&
+				  !atomic_read(&esdm_es_mgr_terminate));
+
+		nanosleep(&ts, NULL);
+	}
+#undef secs
+
+	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Stopping entropy monitor\n");
+	return 0;
+}
 
 /********************************** Helper ***********************************/
 
@@ -153,6 +205,9 @@ void esdm_reset_state(void)
 	esdm_state.esdm_min_seeded = false;
 	esdm_state.all_online_nodes_seeded = false;
 	logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
+
+	/* Start the entropy monitor */
+	esdm_es_mgr_monitor_wakeup();
 }
 
 /* Set flag that all DRNGs are fully seeded */
@@ -231,11 +286,7 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 
 	/* If sufficient entropy is available, reseed now. */
 	esdm_es_add_entropy();
-
-	/*
-	 * TODO: The esdm_es_mgr_monitor_initialize should be invoked to monitor
-	 * the ES for new entropy.
-	 */
+	esdm_es_mgr_monitor_wakeup();
 }
 
 /* Policy to enable ESDM operational mode */
@@ -422,45 +473,12 @@ out:
 	return ret;
 }
 
-int esdm_es_mgr_monitor_initialize(void)
-{
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
-	uint64_t i;
-
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
-
-#define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
-	for (i = 0; i < secs(1800); i++) {
-		unsigned int j;
-
-		if (atomic_read(&esdm_es_mgr_terminate))
-			return 0;
-
-		if (esdm_pool_all_nodes_seeded_get()) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "Stopping entropy monitor\n");
-			return 0;
-		}
-
-		for_each_esdm_es(j) {
-			if (esdm_es[j]->monitor_es)
-				esdm_es[j]->monitor_es();
-		}
-
-		nanosleep(&ts, NULL);
-	}
-#undef secs
-
-	logger(LOGGER_WARN, LOGGER_C_ES,
-	       "Full entropy monitor terminated: did not collect sufficient entropy\n");
-	return 0;
-}
-
 void esdm_es_mgr_finalize(void)
 {
 	uint32_t i;
 
 	atomic_set(&esdm_es_mgr_terminate, 1);
+	esdm_es_mgr_monitor_wakeup();
 
 	for_each_esdm_es(i) {
 		if (esdm_es[i]->fini)

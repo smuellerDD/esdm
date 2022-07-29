@@ -123,6 +123,11 @@ static void esdm_hwrand_es_state(char *buf, size_t buflen)
 		 esdm_hwrand_entropylevel(256));
 }
 
+static bool esdm_hwrand_active(void)
+{
+	return (esdm_hwrand_fd != -1);
+}
+
 struct esdm_es_cb esdm_es_hwrand = {
 	.name			= "LinuxHWRand",
 	.init			= esdm_hwrand_init,
@@ -133,5 +138,6 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.max_entropy		= esdm_hwrand_poolsize,
 	.state			= esdm_hwrand_es_state,
 	.reset			= NULL,
+	.active			= esdm_hwrand_active,
 	.switch_hash		= NULL,
 };

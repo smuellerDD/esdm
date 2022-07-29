@@ -33,7 +33,7 @@
 static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
 
 static atomic_t esdm_jent_initialized = ATOMIC_INIT(0);
-static struct rand_data *esdm_jent_state;
+static struct rand_data *esdm_jent_state = NULL;
 
 static int esdm_jent_initialize(void)
 {
@@ -50,7 +50,8 @@ static int esdm_jent_initialize(void)
 	}
 	atomic_set(&esdm_jent_initialized, 1);
 	mutex_w_unlock(&esdm_jent_lock);
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "Jitter RNG working on current system\n");
+	logger(LOGGER_DEBUG, LOGGER_C_ES,
+	       "Jitter RNG working on current system\n");
 
 	/* Do not trigger a reseed if the DRNG manger is not available */
 	if (!esdm_get_available())
@@ -138,6 +139,11 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 jent_version());
 }
 
+static bool esdm_jent_active(void)
+{
+	return (esdm_jent_state != NULL);
+}
+
 struct esdm_es_cb esdm_es_jent = {
 	.name			= "JitterRNG",
 	.init			= esdm_jent_initialize,
@@ -148,5 +154,6 @@ struct esdm_es_cb esdm_es_jent = {
 	.max_entropy		= esdm_jent_poolsize,
 	.state			= esdm_jent_es_state,
 	.reset			= NULL,
+	.active			= esdm_jent_active,
 	.switch_hash		= NULL,
 };

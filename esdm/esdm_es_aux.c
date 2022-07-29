@@ -372,14 +372,21 @@ static void esdm_aux_es_state(char *buf, size_t buflen)
 		 esdm_aux_avail_entropy(0));
 }
 
+static bool esdm_aux_active(void)
+{
+	return true;
+}
+
 struct esdm_es_cb esdm_es_aux = {
 	.name			= "Auxiliary",
 	.init			= esdm_aux_init,
 	.fini			= NULL,
+	.monitor_es		= NULL,
 	.get_ent		= esdm_aux_get_backtrack,
 	.curr_entropy		= esdm_aux_avail_entropy,
 	.max_entropy		= esdm_get_digestsize,
 	.state			= esdm_aux_es_state,
 	.reset			= esdm_aux_reset,
+	.active			= esdm_aux_active,
 	.switch_hash		= esdm_aux_switch_hash,
 };

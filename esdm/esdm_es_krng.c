@@ -254,6 +254,11 @@ static void esdm_krng_es_state(char *buf, size_t buflen)
 		 esdm_krng_entropylevel(256));
 }
 
+static bool esdm_krng_active(void)
+{
+	return true;
+}
+
 struct esdm_es_cb esdm_es_krng = {
 	.name			= "KernelRNG",
 	.init			= esdm_krng_init,
@@ -264,5 +269,6 @@ struct esdm_es_cb esdm_es_krng = {
 	.max_entropy		= esdm_krng_poolsize,
 	.state			= esdm_krng_es_state,
 	.reset			= NULL,
+	.active			= esdm_krng_active,
 	.switch_hash		= NULL,
 };

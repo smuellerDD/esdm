@@ -275,6 +275,11 @@ static void esdm_irq_reset(void)
 	}
 }
 
+static bool esdm_irq_active(void)
+{
+	return (esdm_irq_entropy_fd != -1);
+}
+
 struct esdm_es_cb esdm_es_irq = {
 	.name			= "Interrupt",
 	.init			= esdm_irq_initialize,
@@ -285,5 +290,6 @@ struct esdm_es_cb esdm_es_irq = {
 	.max_entropy		= esdm_irq_poolsize,
 	.state			= esdm_irq_es_state,
 	.reset			= esdm_irq_reset,
+	.active			= esdm_irq_active,
 	.switch_hash		= NULL,
 };
