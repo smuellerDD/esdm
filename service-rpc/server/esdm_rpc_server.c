@@ -400,6 +400,15 @@ out:
 	return ret;
 }
 
+static void esdm_rpcs_release_conn(struct esdm_rpcs_connection *rpc_conn)
+{
+	if (!rpc_conn)
+		return;
+	if (rpc_conn->child_fd >= 0)
+		close(rpc_conn->child_fd);
+	free(rpc_conn);
+}
+
 /* Thread main for receiving a new connection and process it. */
 static int esdm_rpcs_handler(void *args)
 {
@@ -417,8 +426,7 @@ static int esdm_rpcs_handler(void *args)
 
 	logger(LOGGER_DEBUG, LOGGER_C_RPC,
 	       "Closing incoming connection for FD %d\n", rpc_conn->child_fd);
-	close(rpc_conn->child_fd);
-	free(rpc_conn);
+	esdm_rpcs_release_conn(rpc_conn);
 	return 0;
 }
 
@@ -486,7 +494,8 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			logger(LOGGER_ERR, LOGGER_C_RPC,
 			       "Error setting timeout on socket: %s\n",
 			       strerror(errsv));
-			return -errsv;
+			esdm_rpcs_release_conn(rpc_conn);
+			continue;
 		}
 
 		logger(LOGGER_DEBUG, LOGGER_C_RPC,
@@ -504,15 +513,15 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		if (thread_start(esdm_rpcs_handler, rpc_conn, 0, NULL)) {
 			logger(LOGGER_ERR, LOGGER_C_RPC,
 			       "Starting new thread for incoming connection failed\n");
-			free(rpc_conn);
+			esdm_rpcs_release_conn(rpc_conn);
+			continue;
 		}
 #endif /* DEBUG */
 		rpc_conn = NULL;
 	}
 
 out:
-	if (rpc_conn)
-		free(rpc_conn);
+	esdm_rpcs_release_conn(rpc_conn);
 	return ret;
 }
 
