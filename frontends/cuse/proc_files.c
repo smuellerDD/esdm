@@ -622,6 +622,10 @@ int main(int argc, char *argv[])
 
 	ret = fuse_main(args.argc, args.argv, &esdm_proc_oper, NULL);
 
+	/* Do not care about return code 7 */
+	if (ret == 7)
+		ret = 0;
+
 out:
 	fuse_opt_free_args(&args);
 	esdm_proc_term();
