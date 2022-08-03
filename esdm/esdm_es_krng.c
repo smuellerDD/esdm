@@ -63,7 +63,6 @@ static void esdm_krng_adjust_entropy(void)
 	if (!esdm_get_available())
 		return 0;
 
-	esdm_drng_force_reseed();
 	if (entropylevel)
 		esdm_es_add_entropy();
 }
@@ -77,6 +76,8 @@ static int esdm_krng_init(void)
 	struct timeval timeout;
 	fd_set fds;
 	int ret = 0, fd = -1;
+
+	/* Re-invocation of init function is safe */
 
 #define DEVRANDOM	"/dev/random"
 	fd = open(DEVRANDOM, O_RDONLY);
@@ -133,20 +134,22 @@ static void esdm_krng_fini(void)
 
 static uint32_t krng_entropy = ESDM_KERNEL_RNG_ENTROPY_RATE;
 
+static void esdm_krng_fini(void) { }
+
 static int esdm_krng_init(void)
 {
+	/* Allow the init function to be called multiple times */
+	esdm_krng_fini();
+
 	/* Do not trigger a reseed if the DRNG manger is not available */
 	if (!esdm_get_available())
 		return 0;
 
-	esdm_drng_force_reseed();
 	if (esdm_config_es_krng_entropy_rate())
 		esdm_es_add_entropy();
 
 	return 0;
 }
-
-static void esdm_krng_fini(void) { }
 
 #endif /* ESDM_KRNG_ES_SELECT */
 

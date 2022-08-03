@@ -34,6 +34,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "ret_checkers.h"
 
 static struct esdm_shm_status *esdm_shm_status = NULL;
 static int esdm_shmid = -1;
@@ -250,4 +251,15 @@ void esdm_shm_status_exit(void)
 {
 	esdm_shm_status_delete_shm();
 	esdm_shm_status_delete_sem();
+}
+
+int esdm_shm_status_reinit(void)
+{
+	int ret;
+
+	esdm_shm_status_exit();
+	CKINT(esdm_shm_status_init());
+
+out:
+	return ret;
 }

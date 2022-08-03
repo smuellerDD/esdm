@@ -39,7 +39,7 @@ int esdm_init(void)
 	 * entropy manager as the entropy manager may try to immediately
 	 * seed the DRNG.
 	 */
-	CKINT(esdm_drng_mgr_initalize());
+	CKINT(esdm_drng_mgr_initialize());
 
 	/* Initialize the entropy source manager */
 	CKINT(esdm_es_mgr_initialize());
@@ -49,6 +49,27 @@ int esdm_init(void)
 
 	/* Initialize the status ESDM shared memory segment */
 	CKINT(esdm_shm_status_init());
+
+out:
+	return ret;
+}
+
+DSO_PUBLIC
+int esdm_reinit(void)
+{
+	int ret;
+
+	/* Initialize configuration subsystem */
+	CKINT(esdm_config_reinit());
+
+	/* Reinitialize the DRNG manager */
+	CKINT(esdm_drng_mgr_reinitialize());
+
+	/* Reinitialize the entropy source manager */
+	CKINT(esdm_es_mgr_reinitialize());
+
+	/* Reinitialize the status ESDM shared memory segment */
+	CKINT(esdm_shm_status_reinit());
 
 out:
 	return ret;

@@ -71,7 +71,8 @@ struct esdm_drng *esdm_drng_node_instance(void);
 void esdm_reset(void);
 int esdm_drng_alloc_common(struct esdm_drng *drng,
 			   const struct esdm_drng_cb *crypto_cb);
-int esdm_drng_mgr_initalize(void);
+int esdm_drng_mgr_reinitialize(void);
+int esdm_drng_mgr_initialize(void);
 void esdm_drng_mgr_finalize(void);
 bool esdm_get_available(void);
 void esdm_drng_reset(struct esdm_drng *drng);

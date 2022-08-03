@@ -195,8 +195,18 @@ out:
 	return ret;
 }
 
+int esdm_drng_mgr_reinitialize(void)
+{
+	int ret;
+
+	CKINT(esdm_drng_mgr_selftest());
+
+out:
+	return ret;
+}
+
 /* Initialize the default DRNG during boot and perform its seeding */
-int esdm_drng_mgr_initalize(void)
+int esdm_drng_mgr_initialize(void)
 {
 	int ret;
 
@@ -626,7 +636,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 		       "Using DRNG instance on node 0 to service generate request\n");
 	}
 
-	CKINT(esdm_drng_mgr_initalize());
+	CKINT(esdm_drng_mgr_initialize());
 	CKINT(esdm_drng_get(drng, outbuf, outbuflen));
 
 out:

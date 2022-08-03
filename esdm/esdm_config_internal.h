@@ -24,6 +24,7 @@
 
 /* Initialization */
 int esdm_config_init(void);
+int esdm_config_reinit(void);
 
 #ifdef ESDM_TESTMODE
 void esdm_config_drng_max_wo_reseed_set(uint32_t val);

@@ -87,7 +87,7 @@ void esdm_drngs_node_alloc(void)
 		goto unlock;
 
 	/* Make sure the initial DRNG is initialized and its drng_cb is set */
-	if (esdm_drng_mgr_initalize())
+	if (esdm_drng_mgr_initialize())
 		goto unlock;
 
 	drngs = calloc(esdm_config_online_nodes(), sizeof(struct esdm_drng *));

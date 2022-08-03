@@ -147,6 +147,9 @@ static int esdm_sched_initialize(void)
 	uint32_t status[2];
 	ssize_t readlen;
 
+	/* Allow the init function to be called multiple times */
+	esdm_sched_finalize();
+
 	esdm_sched_entropy_fd = open("/sys/kernel/debug/esdm_es/entropy_sched",
 				     O_RDWR);
 	if (esdm_sched_entropy_fd < 0) {

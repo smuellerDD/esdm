@@ -35,8 +35,24 @@ static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
 static atomic_t esdm_jent_initialized = ATOMIC_INIT(0);
 static struct rand_data *esdm_jent_state = NULL;
 
+static void esdm_jent_finalize(void)
+{
+	if (!atomic_read(&esdm_jent_initialized))
+		return;
+
+	atomic_set(&esdm_jent_initialized, 0);
+
+	mutex_w_lock(&esdm_jent_lock);
+	jent_entropy_collector_free(esdm_jent_state);
+	esdm_jent_state = NULL;
+	mutex_w_unlock(&esdm_jent_lock);
+}
+
 static int esdm_jent_initialize(void)
 {
+	/* Allow the init function to be called multiple times */
+	esdm_jent_finalize();
+
 	mutex_w_lock(&esdm_jent_lock);
 
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
@@ -57,24 +73,10 @@ static int esdm_jent_initialize(void)
 	if (!esdm_get_available())
 		return 0;
 
-	esdm_drng_force_reseed();
 	if (esdm_config_es_jent_entropy_rate())
 		esdm_es_add_entropy();
 
 	return 0;
-}
-
-static void esdm_jent_finalize(void)
-{
-	if (!atomic_read(&esdm_jent_initialized))
-		return;
-
-	atomic_set(&esdm_jent_initialized, 0);
-
-	mutex_w_lock(&esdm_jent_lock);
-	jent_entropy_collector_free(esdm_jent_state);
-	esdm_jent_state = NULL;
-	mutex_w_unlock(&esdm_jent_lock);
 }
 
 static uint32_t esdm_jent_entropylevel(uint32_t requested_bits)

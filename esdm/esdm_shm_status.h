@@ -32,6 +32,7 @@ void esdm_shm_status_set_need_entropy(void);
 
 int esdm_shm_status_init(void);
 void esdm_shm_status_exit(void);
+int esdm_shm_status_reinit(void);
 
 #ifdef __cplusplus
 }

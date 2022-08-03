@@ -146,8 +146,11 @@ static int esdm_irq_initialize(void)
 	uint32_t status[2];
 	ssize_t readlen;
 
+	/* Allow the init function to be called multiple times */
+	esdm_irq_finalize();
+
 	esdm_irq_entropy_fd = open("/sys/kernel/debug/esdm_es/entropy_irq",
-				     O_RDWR);
+				   O_RDWR);
 	if (esdm_irq_entropy_fd < 0) {
 		logger(LOGGER_WARN, LOGGER_C_ES,
 		       "Disabling interrupt-based entropy source which is not present in kernel\n")

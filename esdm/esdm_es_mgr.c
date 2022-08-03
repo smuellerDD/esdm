@@ -429,6 +429,28 @@ void esdm_init_ops(struct entropy_buf *eb)
 	}
 }
 
+int esdm_es_mgr_reinitialize(void)
+{
+	unsigned int i;
+	int ret = 0;
+
+	esdm_set_entropy_thresh(esdm_get_seed_entropy_osr(false));
+
+	/* Initialize the entropy sources */
+	for_each_esdm_es(i) {
+		if (esdm_es[i]->init) {
+			logger(LOGGER_DEBUG, LOGGER_C_ES, "Initialize ES %s\n",
+			       esdm_es[i]->name);
+			CKINT_LOG(esdm_es[i]->init(),
+				  "Reinitialization of ES %s failed: %d",
+				  esdm_es[i]->name, ret);
+		}
+	}
+
+out:
+	return ret;
+}
+
 int esdm_es_mgr_initialize(void)
 {
 	struct seed {

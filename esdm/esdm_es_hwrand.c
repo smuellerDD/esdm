@@ -51,6 +51,9 @@ static int esdm_hwrand_init(void)
 	size_t buflen = 1;
 	int fd;
 
+	/* Allow the init function to be called multiple times */
+	esdm_hwrand_finalize();
+
 	esdm_hwrand_fd = open(ESDM_ES_HWRAND_IF, O_RDONLY);
 	if (esdm_hwrand_fd < 0) {
 		logger(LOGGER_WARN, LOGGER_C_ES,

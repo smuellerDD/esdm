@@ -31,6 +31,21 @@
 int esdm_init(void);
 
 /**
+ * @brief esdm_reinit() - reinitialize the ESDM library
+ *
+ * The reinitialization implies that all parts re-initialized like the entropy
+ * sources or the configuration but without loosing any state or entropy.
+ *
+ * It is intended to re-initialize the ESDM after configuration changes or
+ * entropy source changes, i.e. after esdm_init() was run.
+ *
+ * It MUST NOT be run concurrently with esdm_init().
+ *
+ * @return: 0 on success, < 0 on error
+ */
+int esdm_reinit(void);
+
+/**
  * @brief esdm_init_monitor() - initialize ES monitor
  *
  * This call is intended to be invoked from a thread to monitor the ES
