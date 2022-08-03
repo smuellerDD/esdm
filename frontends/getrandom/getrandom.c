@@ -72,6 +72,8 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 
 	if (flags & GRND_INSECURE) {
 		esdm_invoke(esdm_rpcc_get_random_bytes(buffer, length));
+	} else if (flags & GRND_RANDOM) {
+		esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer, length));
 	} else {
 		esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
 	}
