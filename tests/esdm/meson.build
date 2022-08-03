@@ -55,6 +55,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_get_seed_test = executable(
+		'esdm_get_seed_test',
+		[ 'esdm_get_seed_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	test('ESDM API call esdm_status', esdm_status_test)
 	test('ESDM API call esdm_version', esdm_version_test)
 	test('ESDM API call esdm_get_random_bytes_full', esdm_get_random_bytes_full_test)
@@ -105,6 +113,15 @@ if get_option('esdm-server').enabled()
 		is_parallel: false)
 	test('ESDM seed entropy - Sched ES, FIPS', esdm_drng_seed_entropy_test,
 		args : [ '1', '4' ],
+		timeout: 300,
+		is_parallel: false)
+
+	test('ESDM get seed - all ES, no FIPS', esdm_get_seed_test,
+		args : [ '0' ],
+		timeout: 300,
+		is_parallel: false)
+	test('ESDM get seed - all ES, FIPS', esdm_get_seed_test,
+		args : [ '1' ],
 		timeout: 300,
 		is_parallel: false)
 endif

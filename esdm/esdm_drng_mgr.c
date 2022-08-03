@@ -19,8 +19,10 @@
  * DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200112L
 #include <errno.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #include "build_bug_on.h"
 #include "config.h"
@@ -94,6 +96,8 @@ static struct esdm_drng esdm_drng_pr = {
 
 /* Wait queue to wait until the ESDM is initialized - can freely be used */
 DECLARE_WAIT_QUEUE(esdm_init_wait);
+
+static atomic_t esdm_drng_mgr_terminate = ATOMIC_INIT(0);
 
 /********************************** Helper ************************************/
 
@@ -252,6 +256,7 @@ out:
 
 void esdm_drng_mgr_finalize(void)
 {
+	atomic_set(&esdm_drng_mgr_terminate, 1);
 	esdm_drng_dealloc_common(esdm_drng_init_instance());
 	esdm_drng_dealloc_common(&esdm_drng_pr);
 }
@@ -683,22 +688,102 @@ void esdm_reset(void)
 
 /******************* Generic ESDM kernel output interfaces ********************/
 
-int esdm_drng_sleep_while_nonoperational(int nonblock)
+static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
+{
+	if (esdm_pool_all_nodes_seeded_get())
+		return 0;
+	if (nonblock)
+		return -EAGAIN;
+	thread_wait_event(&esdm_init_wait,
+			  esdm_pool_all_nodes_seeded_get() &&
+			  !atomic_read(&esdm_drng_mgr_terminate));
+	return 0;
+}
+
+static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 {
 	if (esdm_state_operational())
 		return 0;
 	if (nonblock)
 		return -EAGAIN;
-	thread_wait_event(&esdm_init_wait, esdm_state_operational());
+	thread_wait_event(&esdm_init_wait, esdm_state_operational() &&
+			  !atomic_read(&esdm_drng_mgr_terminate));
 	return 0;
 }
 
-void esdm_drng_sleep_while_non_min_seeded(void)
+static void esdm_drng_sleep_while_non_min_seeded(void)
 {
 	if (esdm_state_min_seeded())
 		return;
-	thread_wait_event(&esdm_init_wait, esdm_state_min_seeded());
+	thread_wait_event(&esdm_init_wait, esdm_state_min_seeded() &&
+			  !atomic_read(&esdm_drng_mgr_terminate));
 	return;
+}
+
+DSO_PUBLIC
+ssize_t esdm_get_seed(uint8_t *buf, size_t *nbytes,
+		      enum esdm_get_seed_flags flags)
+{
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
+	struct entropy_buf eb_tmp __aligned(ESDM_KCAPI_ALIGN), *eb = &eb_tmp;
+	uint32_t collected_bits = 0;
+
+	if (*nbytes < sizeof(struct entropy_buf)) {
+		*nbytes = sizeof(struct entropy_buf);
+		return -EMSGSIZE;
+	}
+
+	if (aligned(buf, ESDM_KCAPI_ALIGN - 1)) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+		eb = (struct entropy_buf *)buf;
+#pragma GCC diagnostic pop
+	}
+
+	esdm_drng_sleep_while_not_all_nodes_seeded(flags &
+						   ESDM_GET_SEED_NONBLOCK);
+
+	/* Try to get the pool lock */
+	while (esdm_pool_trylock()) {
+		/*
+		 * If we cannot get the pool lock, but an ESDM DRNG becomes
+		 * unseeded, give this DRNG precedence.
+		 */
+		if (!esdm_pool_all_nodes_seeded_get() ||
+		    atomic_read(&esdm_drng_mgr_terminate))
+			return 0;
+		nanosleep(&ts, NULL);
+	}
+
+	/* Try to get seed data */
+	for (;;) {
+		esdm_fill_seed_buffer(eb,
+			esdm_get_seed_entropy_osr(flags &
+						  ESDM_GET_SEED_FULLY_SEEDED));
+		collected_bits = esdm_entropy_rate_eb(eb);
+
+		/* Break the collection loop if we got entropy, ... */
+		if (collected_bits ||
+		    /* ... a DRNG becomes unseeded, give DRNG precedence, ... */
+		    !esdm_pool_all_nodes_seeded_get() ||
+		    /* ... when the DRNG manager terminates, or ... */
+		    atomic_read(&esdm_drng_mgr_terminate) ||
+		    /* ... if the caller does not want a blocking behavior. */
+		    (flags & ESDM_GET_SEED_NONBLOCK))
+			break;
+
+		nanosleep(&ts, NULL);
+	}
+
+	esdm_pool_unlock();
+
+	/* Copy out a filled buffer */
+	if (eb == &eb_tmp && collected_bits) {
+		memcpy(buf, eb, sizeof(struct entropy_buf));
+		memset_secure(eb, 0, sizeof(struct entropy_buf));
+	}
+
+	return (ssize_t)collected_bits;
 }
 
 DSO_PUBLIC

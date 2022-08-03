@@ -42,6 +42,13 @@ extern "C"
 #define member_to_struct(member, data_type, member_var)                 \
         (data_type *)((char *)(member) - (char *) &((data_type *)0)->member_var)
 
+static inline int aligned(const uint8_t *ptr, uint32_t alignmask)
+{
+	if ((uintptr_t)ptr & alignmask)
+		return 0;
+	return 1;
+}
+
 uint32_t esdm_online_nodes(void);
 uint32_t esdm_curr_node(void);
 int esdm_safe_read(int fd, uint8_t *buf, size_t buflen);

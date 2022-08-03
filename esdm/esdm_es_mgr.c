@@ -214,6 +214,8 @@ void esdm_reset_state(void)
 void esdm_pool_all_nodes_seeded(bool set)
 {
 	esdm_state.all_online_nodes_seeded = set;
+	if (set)
+		thread_wake_all(&esdm_init_wait);
 }
 
 bool esdm_pool_all_nodes_seeded_get(void)

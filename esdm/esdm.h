@@ -130,6 +130,70 @@ ssize_t esdm_get_random_bytes_min(uint8_t *buf, size_t nbytes);
  */
 ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes);
 
+
+enum esdm_get_seed_flags {
+	ESDM_GET_SEED_NONBLOCK = 0x0001, /**< Do not block the call */
+	ESDM_GET_SEED_FULLY_SEEDED = 0x0002, /**< DRNG is fully seeded */
+};
+
+/**
+ * @brief esdm_get_seed() - Fill buffer with data from entropy sources
+ *
+ * This call allows accessing the entropy sources directly and fill the buffer
+ * with data from all available entropy sources. This filled buffer is
+ * identical to the temporary seed buffer used by the ESDM to seed its DRNGs.
+ *
+ * The call is to allows users to seed their DRNG directly from the entropy
+ * sources in case the caller does not want to use the ESDM's DRNGs. This
+ * buffer can be directly used to seed the caller's DRNG from.
+ *
+ * If the buffer is not aligned to 8 bytes, the ESDM will use a temporary
+ * buffer that requires an additional memcpy to fill the @param buf.
+ *
+ * The call blocks as long as one ESDM DRNG is not yet fully seeded. If
+ * ESDM_GET_SEED_NONBLOCK is specified, it does not block in this case, but
+ * returns with an error.
+ *
+ * Considering SP800-90C, there is a differentiation between the seeding
+ * requirements during instantiating a DRNG and at runtime of the DRNG. When
+ * specifying ESDM_GET_SEED_FULLY_SEEDED the caller indicates the DRNG was
+ * already fully seeded and the regular amount of entropy is requested.
+ * Otherwise, the ESDM will obtain the entropy rate required for initial
+ * seeding. The following minimum entropy rates will be obtained:
+ *
+ * * FIPS mode:
+ *	* Initial seeding: 384 bits of entropy
+ *	* Runtime seeding: 256 bits of entropy
+ * * Non-FIPS mode:
+ *	* 128 bits of entropy in any case
+ *
+ * Albeit these are minimum entropy rates, the ESDM tries to request the
+ * given amount of entropy from each entropy source individually. If the
+ * minimum amount of entropy cannot be obtained collectively by all entropy
+ * sources, the ESDM will not fill the buffer.
+ *
+ * Hint: if you do not want to use the ESDM's DRNGs in general, you may want
+ * to consider to reduce the number of DRNGs to only one to reduce the pressure
+ * on the entropy sources as all DRNGs are always seeded from the entropy
+ * sources.
+ *
+ * The @param buf must be at least as large as struct entropy_buf. If the caller
+ * provided a buffer that is too small, an error is returned and the
+ * @param nbytes parameter is updated to contain the minimum size.
+ *
+ * @param buf [out] Buffer to be filled with data from the entropy sources
+ * @param nbytes [in/out] Size of the buffer. If the buffer size is too small,
+ *			  the minimum size is returned in this parameter and
+ *			  and error is returned.
+ * @param flags [in] Flags field to adjust the behavior
+ *
+ * @return -EMSGSIZE indicating the buffer is too small, -EAGAIN when
+ *	   the call would block, but NONBLOCK is specified, >= 0 the amount of
+ *	   entropy in bits held by the buffer.
+ */
+ssize_t esdm_get_seed(uint8_t *buf, size_t *nbytes,
+		      enum esdm_get_seed_flags flags);
+
 /**
  * @brief esdm_status() - Get status information on ESDM
  *
