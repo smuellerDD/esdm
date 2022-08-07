@@ -29,6 +29,24 @@
 #include "esdm_rpc_client.h"
 #include "visibility.h"
 
+/**
+ * @brief GRND_SEED
+ *
+ * This flag requests to provide the data directly from the entropy sources.
+ *
+ * The behavior of the call is exactly as outlined for the function
+ * esdm_get_seed in esdm.h.
+ */
+#define GRND_SEED		0x0010
+
+/**
+ * @brief GRND_FULLY_SEEDED
+ *
+ * This flag indicates whether the caller wants to reseed a DRNG that is already
+ * fully seeded. See esdm_get_seed in esdm.h for details.
+ */
+#define GRND_FULLY_SEEDED	0x0020
+
 static void esdm_getrandom_lib_init(void)
 {
 	esdm_rpcc_set_max_online_nodes(1);
@@ -51,7 +69,8 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 	ssize_t ret;
 	static bool initialized = false;
 
-	if (flags & (unsigned int)(~(GRND_NONBLOCK|GRND_RANDOM|GRND_INSECURE)))
+	if (flags & (unsigned int)(~(GRND_NONBLOCK|GRND_RANDOM|GRND_INSECURE|
+				     GRND_SEED|GRND_FULLY_SEEDED)))
 		return -EINVAL;
 
 	/*
@@ -60,6 +79,12 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 	 */
 	if ((flags &
 	     (GRND_INSECURE|GRND_RANDOM)) == (GRND_INSECURE|GRND_RANDOM))
+		return -EINVAL;
+	if ((flags &
+	     (GRND_INSECURE|GRND_SEED)) == (GRND_INSECURE|GRND_SEED))
+		return -EINVAL;
+	if ((flags &
+	     (GRND_RANDOM|GRND_SEED)) == (GRND_RANDOM|GRND_SEED))
 		return -EINVAL;
 
 	if (length > INT_MAX)
@@ -74,6 +99,18 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 		esdm_invoke(esdm_rpcc_get_random_bytes(buffer, length));
 	} else if (flags & GRND_RANDOM) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer, length));
+	} else if (flags & GRND_SEED) {
+		unsigned int seed_flags = (flags & GRND_NONBLOCK) ?
+					  ESDM_GET_SEED_NONBLOCK : 0;
+
+		seed_flags |= (flags & GRND_FULLY_SEEDED) ?
+			      ESDM_GET_SEED_FULLY_SEEDED : 0;
+		esdm_invoke(esdm_rpcc_get_seed(buffer, length, seed_flags));
+		if (ret < 0) {
+			errno = (int)(-ret);
+			ret = -1;
+		}
+		return ret;
 	} else {
 		esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
 	}
