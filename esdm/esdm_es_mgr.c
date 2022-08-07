@@ -19,6 +19,7 @@
  * DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200112L
 #include <time.h>
 
 #include "build_bug_on.h"
@@ -60,13 +61,13 @@ struct esdm_state {
 	 */
 
 	atomic_t boot_entropy_thresh;	/* Reseed threshold */
-	atomic_t reseed_in_progress;	/* Flag for on executing reseed */
+	mutex_w_t reseed_in_progress;	/* Flag for on executing reseed */
 };
 
 static struct esdm_state esdm_state = {
 	false, false, false, false,
 	.boot_entropy_thresh	= ATOMIC_INIT(ESDM_FULL_SEED_ENTROPY_BITS),
-	.reseed_in_progress	= ATOMIC_INIT(0),
+	.reseed_in_progress	= MUTEX_W_UNLOCKED,
 };
 
 /*
@@ -174,12 +175,17 @@ void esdm_debug_report_seedlevel(const char *name)
  */
 int esdm_pool_trylock(void)
 {
-	return atomic_cmpxchg(&esdm_state.reseed_in_progress, 0, 1);
+	return mutex_w_trylock(&esdm_state.reseed_in_progress);
+}
+
+void esdm_pool_lock(void)
+{
+	mutex_w_lock(&esdm_state.reseed_in_progress);
 }
 
 void esdm_pool_unlock(void)
 {
-	atomic_set(&esdm_state.reseed_in_progress, 0);
+	mutex_w_unlock(&esdm_state.reseed_in_progress);
 }
 
 /* Set new entropy threshold for reseeding during boot */
@@ -538,7 +544,7 @@ void esdm_es_add_entropy(void)
 		return;
 
 	/* Ensure that the seeding only occurs once at any given time. */
-	if (esdm_pool_trylock())
+	if (!esdm_pool_trylock())
 		return;
 
 	/* Seed the DRNG with any available noise. */

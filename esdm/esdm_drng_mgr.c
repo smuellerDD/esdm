@@ -555,7 +555,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 		/* In normal operation, check whether to reseed */
 		if (!pr && esdm_drng_must_reseed(drng)) {
-			if (esdm_pool_trylock()) {
+			if (!esdm_pool_trylock()) {
 				drng->force_reseed = true;
 			} else {
 				esdm_drng_seed(drng);
@@ -571,7 +571,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				uint32_t collected_ent_bits;
 
 				/* If we cannot get the pool lock, try again. */
-				if (esdm_pool_trylock()) {
+				if (!esdm_pool_trylock()) {
 					mutex_w_unlock(&drng->lock);
 					continue;
 				}
@@ -721,41 +721,45 @@ static void esdm_drng_sleep_while_non_min_seeded(void)
 }
 
 DSO_PUBLIC
-ssize_t esdm_get_seed(uint8_t *buf, size_t *nbytes,
+ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		      enum esdm_get_seed_flags flags)
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
-	struct entropy_buf eb_tmp __aligned(ESDM_KCAPI_ALIGN), *eb = &eb_tmp;
-	uint32_t collected_bits = 0;
+	struct entropy_buf *eb =
+		(struct entropy_buf *)(buf + 2);
+	uint64_t buflen = sizeof(struct entropy_buf) + 2 * sizeof(uint64_t);
+	uint64_t collected_bits = 0;
+	int ret;
 
-	if (*nbytes < sizeof(struct entropy_buf)) {
-		*nbytes = sizeof(struct entropy_buf);
+	/* Ensure buffer is aligned as required */
+	BUILD_BUG_ON(sizeof(buflen) < ESDM_KCAPI_ALIGN);
+	if (nbytes < sizeof(buflen))
+		return -EINVAL;
+
+	/* Write buffer size into first word */
+	buf[0] = buflen;
+	if (nbytes < buflen)
 		return -EMSGSIZE;
+
+	ret = esdm_drng_sleep_while_not_all_nodes_seeded(
+		flags & ESDM_GET_SEED_NONBLOCK);
+	if (ret < 0)
+		return ret;
+
+	/* Try to get the pool lock and sleep on it to get it. */
+	esdm_pool_lock();
+
+	/* If an ESDM DRNG becomes unseeded, give this DRNG precedence. */
+	if (!esdm_pool_all_nodes_seeded_get()) {
+		esdm_pool_unlock();
+		return 0;
 	}
 
-	if (aligned(buf, ESDM_KCAPI_ALIGN - 1)) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-		eb = (struct entropy_buf *)buf;
-#pragma GCC diagnostic pop
-	}
-
-	esdm_drng_sleep_while_not_all_nodes_seeded(flags &
-						   ESDM_GET_SEED_NONBLOCK);
-
-	/* Try to get the pool lock */
-	while (esdm_pool_trylock()) {
-		/*
-		 * If we cannot get the pool lock, but an ESDM DRNG becomes
-		 * unseeded, give this DRNG precedence.
-		 */
-		if (!esdm_pool_all_nodes_seeded_get() ||
-		    atomic_read(&esdm_drng_mgr_terminate))
-			return 0;
-		nanosleep(&ts, NULL);
-	}
-
-	/* Try to get seed data */
+	/*
+	 * Try to get seed data - a rarely used busyloop is cheaper than a wait
+	 * queue that is constantly woken up by the hot code path of
+	 * esdm_init_ops.
+	 */
 	for (;;) {
 		esdm_fill_seed_buffer(eb,
 			esdm_get_seed_entropy_osr(flags &
@@ -777,13 +781,10 @@ ssize_t esdm_get_seed(uint8_t *buf, size_t *nbytes,
 
 	esdm_pool_unlock();
 
-	/* Copy out a filled buffer */
-	if (eb == &eb_tmp && collected_bits) {
-		memcpy(buf, eb, sizeof(struct entropy_buf));
-		memset_secure(eb, 0, sizeof(struct entropy_buf));
-	}
+	/* Write collected entropy size into second word */
+	buf[1] = collected_bits;
 
-	return (ssize_t)collected_bits;
+	return (ssize_t)buflen;
 }
 
 DSO_PUBLIC

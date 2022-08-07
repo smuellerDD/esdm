@@ -130,7 +130,6 @@ ssize_t esdm_get_random_bytes_min(uint8_t *buf, size_t nbytes);
  */
 ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes);
 
-
 enum esdm_get_seed_flags {
 	ESDM_GET_SEED_NONBLOCK = 0x0001, /**< Do not block the call */
 	ESDM_GET_SEED_FULLY_SEEDED = 0x0002, /**< DRNG is fully seeded */
@@ -146,9 +145,6 @@ enum esdm_get_seed_flags {
  * The call is to allows users to seed their DRNG directly from the entropy
  * sources in case the caller does not want to use the ESDM's DRNGs. This
  * buffer can be directly used to seed the caller's DRNG from.
- *
- * If the buffer is not aligned to 8 bytes, the ESDM will use a temporary
- * buffer that requires an additional memcpy to fill the @param buf.
  *
  * The call blocks as long as one ESDM DRNG is not yet fully seeded. If
  * ESDM_GET_SEED_NONBLOCK is specified, it does not block in this case, but
@@ -177,21 +173,40 @@ enum esdm_get_seed_flags {
  * on the entropy sources as all DRNGs are always seeded from the entropy
  * sources.
  *
- * The @param buf must be at least as large as struct entropy_buf. If the caller
- * provided a buffer that is too small, an error is returned and the
- * @param nbytes parameter is updated to contain the minimum size.
+ * The return data in @param buf is structurally equivalent to the following
+ * definition:
  *
- * @param buf [out] Buffer to be filled with data from the entropy sources
- * @param nbytes [in/out] Size of the buffer. If the buffer size is too small,
- *			  the minimum size is returned in this parameter and
- *			  and error is returned.
+ * struct {
+ *	uint64_t seedlen;
+ *	uint64_t entropy_rate;
+ *	struct entropy_buf seed;
+ * } __attribute((__packed__));
+ *
+ * As struct entropy_buf is not known outsize of the ESDM, the ESDM fills
+ * seedlen first with the size of struct entropy_buf. If the caller-provided
+ * buffer @param buf is smaller than uint64_t, then -EINVAL is returned
+ * and @param buf is not touched. If it is uint64_t or larger but smaller
+ * than the size of the structure above, -EMSGSIZE is returned and seedlen
+ * is filled with the size of the buffer. Finally, if @param buf is large
+ * enough to hold all data, it is filled with the seed data and the seedlen
+ * is set to sizeof(struct entropy_buf). The entropy rate is returned with
+ * the variable entropy_rate and provides the value in bits.
+ *
+ * The seed buffer is the data that should be handed to the caller's DRNG as
+ * seed data.
+ *
+ * @param buf [out] Buffer to be filled with data from the entropy sources -
+ *		    note, the buffer is marked as uint64_t to ensure it is
+ *		    aligned to 64 bits.
+ * @param nbytes [in] Size of the buffer allocated by the caller - this value
+ *		      provides size of @param buf in bytes.
  * @param flags [in] Flags field to adjust the behavior
  *
- * @return -EMSGSIZE indicating the buffer is too small, -EAGAIN when
- *	   the call would block, but NONBLOCK is specified, >= 0 the amount of
- *	   entropy in bits held by the buffer.
+ * @return -EINVAL or -EMSGSIZE indicating the buffer is too small, -EAGAIN when
+ *	   the call would block, but NONBLOCK is specified, > 0 the size of
+ *	   the filled buffer.
  */
-ssize_t esdm_get_seed(uint8_t *buf, size_t *nbytes,
+ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		      enum esdm_get_seed_flags flags);
 
 /**

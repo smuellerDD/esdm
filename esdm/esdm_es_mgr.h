@@ -32,6 +32,7 @@ void esdm_set_entropy_thresh(uint32_t new);
 void esdm_reset_state(void);
 
 int esdm_pool_trylock(void);
+void esdm_pool_lock(void);
 void esdm_pool_unlock(void);
 void esdm_pool_all_nodes_seeded(bool set);
 bool esdm_pool_all_nodes_seeded_get(void);
