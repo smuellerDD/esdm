@@ -17,6 +17,7 @@
  * DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200112L
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -54,7 +55,7 @@ static int env_check_file(const char *path)
 		return errno;
 	}
 
-	if ((sb.st_mode & S_IFMT) != S_IFREG) {
+	if (!S_ISREG(sb.st_mode)) {
 		printf("File not regular file\n");
 		return EPERM;
 	}
@@ -64,7 +65,7 @@ static int env_check_file(const char *path)
 
 int env_init(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1<<29 };
+	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
 	const char *server = getenv("ESDM_SERVER");
 	pid_t pid;
 	int ret;

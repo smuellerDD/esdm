@@ -17,6 +17,7 @@
  * DAMAGE.
  */
 
+#define _POSIX_C_SOURCE 200112L
 #include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -70,7 +71,7 @@ static int env_check_file(const char *path)
 		return errno;
 	}
 
-	if ((sb.st_mode & S_IFMT) != S_IFREG) {
+	if (!S_ISREG(sb.st_mode)) {
 		printf("File not regular file\n");
 		return EPERM;
 	}
