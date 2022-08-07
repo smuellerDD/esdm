@@ -18,27 +18,24 @@
  */
 
 #include <errno.h>
-#include "inttypes.h"
+#include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "esdm.h"
-#include "esdm_config.h"
-#include "logger.h"
+#include "env.h"
+#include "esdm_rpc_client.h"
 #include "test_pertubation.h"
 
 int main(int argc, char *argv[])
 {
 	uint64_t buf[512 / sizeof(uint64_t)];
-	uint64_t buf2;
+	uint8_t buf2;
 	uint64_t size;
 	int ret;
 	ssize_t rc;
-	unsigned long val;
-	unsigned int force_fips = 0;
 
 	(void)argc;
 	(void)argv;
@@ -50,49 +47,49 @@ int main(int argc, char *argv[])
 	}
 #endif
 
-	if (argc != 2)
-		return 1;
-
-	val = strtoul(argv[1], NULL, 10);
-	if (val == ULONG_MAX)
-		return errno;
-
-	if (val) {
-		esdm_config_force_fips_set(esdm_config_force_fips_enabled);
-		force_fips = 1;
-	} else
-		esdm_config_force_fips_set(esdm_config_force_fips_disabled);
-
-	logger_set_verbosity(LOGGER_DEBUG);
-	ret = esdm_init();
+	ret = env_init();
 	if (ret)
 		return ret;
 
-	rc = esdm_get_seed(&buf2, 1, ESDM_GET_SEED_NONBLOCK);
-	if (rc != -EINVAL) {
-		printf("esdm_get_seed does not indicate that the buffer is too small\n");
+	ret = esdm_rpcc_init_unpriv_service(NULL);
+	if (ret) {
 		ret = 1;
 		goto out;
 	}
 
-	rc = esdm_get_seed(&size, sizeof(size), ESDM_GET_SEED_NONBLOCK);
+	rc = esdm_rpcc_get_seed(&buf2, 1, ESDM_GET_SEED_NONBLOCK);
+	if (rc != -EINVAL) {
+		printf("esdm_get_seed does not indicate that the buffer is too small: %zd\n", rc);
+		ret = 1;
+		goto out;
+	} else {
+		printf("esdm_get_seed indicates that the buffer is too small\n");
+	}
+
+	rc = esdm_rpcc_get_seed((uint8_t *)&size, sizeof(size),
+				ESDM_GET_SEED_NONBLOCK);
 	if (rc != -EMSGSIZE) {
 		printf("esdm_get_seed does not indicate that the buffer is too small\n");
 		ret = 1;
 		goto out;
+	} else {
+		printf("esdm_get_seed indicates that the buffer is too small\n");
 	}
+
 	if (size > sizeof(buf)) {
 		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64 "\n", size);
 		ret = 1;
 		goto out;
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf),
-			   ESDM_GET_SEED_NONBLOCK | ESDM_GET_SEED_FULLY_SEEDED);
+	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf),
+		ESDM_GET_SEED_NONBLOCK | ESDM_GET_SEED_FULLY_SEEDED);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
 		goto out;
+	} else {
+		printf("esdm_get_seed was successful to obtain seed\n");
 	}
 
 	if (rc == 0) {
@@ -108,7 +105,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (buf[1] < (force_fips ? 384 : 128)) {
+	if (buf[1] < 128) {
 		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
 		ret = 1;
 		goto out;
@@ -117,7 +114,8 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
+	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf),
+				ESDM_GET_SEED_NONBLOCK);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
@@ -130,7 +128,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (buf[1] < (force_fips ? 256 : 128)) {
+	if (buf[1] < 128) {
 		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
 		ret = 1;
 		goto out;
@@ -140,6 +138,7 @@ int main(int argc, char *argv[])
 	}
 
 out:
-	esdm_fini();
+	esdm_rpcc_fini_unpriv_service();
+	env_fini();
 	return ret;
 }

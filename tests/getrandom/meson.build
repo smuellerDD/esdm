@@ -5,6 +5,12 @@ if get_option('linux-getrandom').enabled()
 			dependencies: esdm_getrandom_dep
 		)
 
+	getrandom_get_seed_test = executable(
+			'getrandom_get_seed_test',
+			[ 'getrandom_get_seed_test.c', 'env.c' ],
+			dependencies: esdm_getrandom_dep
+		)
+
 	# Available test targets:
 	#	esdm-server: esdm_server
 	#	esdm-cuse-random: esdm_cuse_random
@@ -18,4 +24,9 @@ if get_option('linux-getrandom').enabled()
 	test('System call getrandom', getrandom_syscall,
 		env: [ tester_getrandom_env , 'LD_PRELOAD=' + esdm_getrandom_lib.full_path()],
 		is_parallel: false)
+
+	test('System call getrandom get_seed', getrandom_get_seed_test,
+		env: [ tester_getrandom_env , 'LD_PRELOAD=' + esdm_getrandom_lib.full_path()],
+		is_parallel: false)
+
 endif

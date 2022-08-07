@@ -26,36 +26,7 @@
 #include <time.h>
 
 #include "env.h"
-
-static inline ssize_t __getrandom(uint8_t *buffer, size_t bufferlen,
-				  unsigned int flags)
-{
-	ssize_t ret, totallen = 0;
-
-	if (bufferlen > INT_MAX)
-		return -EINVAL;
-
-	do {
-		ret = getrandom(buffer, bufferlen, flags);
-		if (ret > 0) {
-			bufferlen -= (size_t)ret;
-			buffer += ret;
-			totallen += ret;
-		}
-	} while ((ret > 0 || errno == EINTR) && bufferlen);
-
-	return ((ret < 0) ? -errno : totallen);
-}
-
-static inline ssize_t getrandom_urandom(uint8_t *buffer, size_t bufferlen)
-{
-	return __getrandom(buffer, bufferlen, 0);
-}
-
-static inline ssize_t getrandom_random(uint8_t *buffer, size_t bufferlen)
-{
-	return __getrandom(buffer, bufferlen, GRND_RANDOM);
-}
+#include "getrandom.h"
 
 /******************************************************************************/
 

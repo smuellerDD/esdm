@@ -25,10 +25,20 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "esdm.h"
-#include "esdm_config.h"
-#include "logger.h"
-#include "test_pertubation.h"
+#include "env.h"
+#include "getrandom.h"
+
+static inline ssize_t getrandom_seed_initial_n(uint8_t *buffer,
+					       size_t bufferlen)
+{
+	return __getrandom(buffer, bufferlen, GRND_SEED | GRND_NONBLOCK);
+}
+
+static inline ssize_t getrandom_seed_n(uint8_t *buffer, size_t bufferlen)
+{
+	return __getrandom(buffer, bufferlen,
+			   GRND_SEED | GRND_FULLY_SEEDED | GRND_NONBLOCK);
+}
 
 int main(int argc, char *argv[])
 {
@@ -37,47 +47,24 @@ int main(int argc, char *argv[])
 	uint64_t size;
 	int ret;
 	ssize_t rc;
-	unsigned long val;
-	unsigned int force_fips = 0;
 
 	(void)argc;
 	(void)argv;
 
-#ifndef ESDM_TESTMODE
-	if (getuid()) {
-		printf("Program must be started as root\n");
-		return 77;
-	}
-#endif
-
-	if (argc != 2)
-		return 1;
-
-	val = strtoul(argv[1], NULL, 10);
-	if (val == ULONG_MAX)
-		return errno;
-
-	if (val) {
-		esdm_config_force_fips_set(esdm_config_force_fips_enabled);
-		force_fips = 1;
-	} else
-		esdm_config_force_fips_set(esdm_config_force_fips_disabled);
-
-	logger_set_verbosity(LOGGER_DEBUG);
-	ret = esdm_init();
+	ret = env_init();
 	if (ret)
 		return ret;
 
-	rc = esdm_get_seed(&buf2, 1, ESDM_GET_SEED_NONBLOCK);
-	if (rc != -EINVAL) {
-		printf("esdm_get_seed does not indicate that the buffer is too small\n");
+	rc = getrandom_seed_initial_n((uint8_t *)&buf2, 1);
+	if (rc > 0 || errno != EINVAL) {
+		printf("esdm_get_seed does not indicate that the buffer is too small:%d\n", errno);
 		ret = 1;
 		goto out;
 	}
 
-	rc = esdm_get_seed(&size, sizeof(size), ESDM_GET_SEED_NONBLOCK);
-	if (rc != -EMSGSIZE) {
-		printf("esdm_get_seed does not indicate that the buffer is too small\n");
+	rc = getrandom_seed_initial_n((uint8_t *)&size, sizeof(size));
+	if (rc > 0 || errno != EMSGSIZE) {
+		printf("esdm_get_seed does not indicate that the buffer is too small %d\n", errno);
 		ret = 1;
 		goto out;
 	}
@@ -87,10 +74,9 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf),
-			   ESDM_GET_SEED_NONBLOCK | ESDM_GET_SEED_FULLY_SEEDED);
+	rc = getrandom_seed_n((uint8_t *)buf, sizeof(buf));
 	if (rc < 0) {
-		printf("esdm_get_seed returned an error %zd\n", rc);
+		printf("esdm_get_seed returned an error %d\n", errno);
 		ret = 1;
 		goto out;
 	}
@@ -108,7 +94,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (buf[1] < (force_fips ? 384 : 128)) {
+	if (buf[1] < 128) {
 		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
 		ret = 1;
 		goto out;
@@ -117,9 +103,9 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
+	rc = getrandom_seed_n((uint8_t *)buf, sizeof(buf));
 	if (rc < 0) {
-		printf("esdm_get_seed returned an error %zd\n", rc);
+		printf("esdm_get_seed returned an error %d\n", errno);
 		ret = 1;
 		goto out;
 	}
@@ -130,7 +116,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (buf[1] < (force_fips ? 256 : 128)) {
+	if (buf[1] < 128) {
 		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
 		ret = 1;
 		goto out;
@@ -140,6 +126,6 @@ int main(int argc, char *argv[])
 	}
 
 out:
-	esdm_fini();
+	env_fini();
 	return ret;
 }
