@@ -23,6 +23,7 @@
 #include <protobuf-c/protobuf-c.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 #include "atomic.h"
 #include "bool.h"
@@ -309,6 +310,38 @@ ssize_t esdm_rpcc_get_random_bytes(uint8_t *buf, size_t buflen);
  */
 ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 				       void *int_data);
+
+enum esdm_get_seed_flags {
+	ESDM_GET_SEED_NONBLOCK = 0x0001, /**< Do not block the call */
+	ESDM_GET_SEED_FULLY_SEEDED = 0x0002, /**< DRNG is fully seeded */
+};
+
+/**
+ * @brief RPC-version of esdm_get_seed
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * See esdm_get_seed for details.
+ *
+ * @param buf [out] Buffer to be filled with random bits.
+ * @param buflen [in] Size of the buffer to be filled.
+ * @param flags [in] Flags information
+ *
+ * @return: read data length on success, < 0 on error (-EINTR means connection
+ *	    was interrupted and the caller may try again)
+ */
+ssize_t esdm_rpcc_get_seed(uint8_t *buf, size_t buflen, unsigned int flags);
+
+/**
+ * @brief See esdm_rpcc_get_seed_int
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
+			       void *int_data);
 
 /**
  * @brief RPC-version of writing data into ESDM auxiliary pool

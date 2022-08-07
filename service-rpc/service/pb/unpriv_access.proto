@@ -115,6 +115,32 @@ message GetRandomBytesPrResponse {
 }
 
 /******************************************************************************
+ * get_seed
+ ******************************************************************************/
+
+/**
+ * @brief Request to get seed from entropy sources
+ *
+ * @param len buffer size provided by caller
+ * @param flags the flags field - see esdm_get_seed documentation
+ */
+message GetSeedRequest {
+	uint64 len = 1;
+	uint32 flags = 2;
+}
+
+/**
+ * @brief Response providing seed data from entropy sources.
+ *
+ * @param ret Return code of generation request as documented for esdm_get_seed
+ * @param randval seed data
+ */
+message GetSeedResponse {
+	int64 ret = 1;
+	bytes randval = 2;
+}
+
+/******************************************************************************
  * get_random_bytes
  ******************************************************************************/
 
@@ -268,6 +294,7 @@ service UnprivAccess {
 				(GetRandomBytesPrResponse);
 	rpc RpcGetRandomBytes (GetRandomBytesRequest) returns
 			      (GetRandomBytesResponse);
+	rpc RpcGetSeed (GetSeedRequest) returns (GetSeedResponse);
 	rpc RpcWriteData (WriteDataRequest) returns (WriteDataResponse);
 
 	/* IOCTLs */

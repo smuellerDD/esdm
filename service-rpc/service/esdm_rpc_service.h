@@ -117,6 +117,11 @@ void esdm_rpc_get_random_bytes(UnprivAccess_Service *service,
 			       GetRandomBytesResponse_Closure closure,
 			       void *closure_data);
 
+void esdm_rpc_get_seed(UnprivAccess_Service *service,
+		       const GetSeedRequest *request,
+		       GetSeedResponse_Closure closure,
+		       void *closure_data);
+
 void esdm_rpc_write_data(UnprivAccess_Service *service,
 			 const WriteDataRequest *request,
 			 WriteDataResponse_Closure closure,

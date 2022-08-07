@@ -23,6 +23,8 @@ typedef struct GetRandomBytesMinRequest GetRandomBytesMinRequest;
 typedef struct GetRandomBytesMinResponse GetRandomBytesMinResponse;
 typedef struct GetRandomBytesPrRequest GetRandomBytesPrRequest;
 typedef struct GetRandomBytesPrResponse GetRandomBytesPrResponse;
+typedef struct GetSeedRequest GetSeedRequest;
+typedef struct GetSeedResponse GetSeedResponse;
 typedef struct GetRandomBytesRequest GetRandomBytesRequest;
 typedef struct GetRandomBytesResponse GetRandomBytesResponse;
 typedef struct WriteDataRequest WriteDataRequest;
@@ -180,6 +182,40 @@ struct  GetRandomBytesPrResponse
 };
 #define GET_RANDOM_BYTES_PR_RESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_pr_response__descriptor) \
+    , 0, {0,NULL} }
+
+
+/*
+ **
+ * @brief Request to get seed from entropy sources
+ * @param len buffer size provided by caller
+ * @param flags the flags field - see esdm_get_seed documentation
+ */
+struct  GetSeedRequest
+{
+  ProtobufCMessage base;
+  uint64_t len;
+  uint32_t flags;
+};
+#define GET_SEED_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_seed_request__descriptor) \
+    , 0, 0 }
+
+
+/*
+ **
+ * @brief Response providing seed data from entropy sources.
+ * @param ret Return code of generation request as documented for esdm_get_seed
+ * @param randval seed data
+ */
+struct  GetSeedResponse
+{
+  ProtobufCMessage base;
+  int64_t ret;
+  ProtobufCBinaryData randval;
+};
+#define GET_SEED_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&get_seed_response__descriptor) \
     , 0, {0,NULL} }
 
 
@@ -524,6 +560,44 @@ GetRandomBytesPrResponse *
 void   get_random_bytes_pr_response__free_unpacked
                      (GetRandomBytesPrResponse *message,
                       ProtobufCAllocator *allocator);
+/* GetSeedRequest methods */
+void   get_seed_request__init
+                     (GetSeedRequest         *message);
+size_t get_seed_request__get_packed_size
+                     (const GetSeedRequest   *message);
+size_t get_seed_request__pack
+                     (const GetSeedRequest   *message,
+                      uint8_t             *out);
+size_t get_seed_request__pack_to_buffer
+                     (const GetSeedRequest   *message,
+                      ProtobufCBuffer     *buffer);
+GetSeedRequest *
+       get_seed_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_seed_request__free_unpacked
+                     (GetSeedRequest *message,
+                      ProtobufCAllocator *allocator);
+/* GetSeedResponse methods */
+void   get_seed_response__init
+                     (GetSeedResponse         *message);
+size_t get_seed_response__get_packed_size
+                     (const GetSeedResponse   *message);
+size_t get_seed_response__pack
+                     (const GetSeedResponse   *message,
+                      uint8_t             *out);
+size_t get_seed_response__pack_to_buffer
+                     (const GetSeedResponse   *message,
+                      ProtobufCBuffer     *buffer);
+GetSeedResponse *
+       get_seed_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   get_seed_response__free_unpacked
+                     (GetSeedResponse *message,
+                      ProtobufCAllocator *allocator);
 /* GetRandomBytesRequest methods */
 void   get_random_bytes_request__init
                      (GetRandomBytesRequest         *message);
@@ -778,6 +852,12 @@ typedef void (*GetRandomBytesPrRequest_Closure)
 typedef void (*GetRandomBytesPrResponse_Closure)
                  (const GetRandomBytesPrResponse *message,
                   void *closure_data);
+typedef void (*GetSeedRequest_Closure)
+                 (const GetSeedRequest *message,
+                  void *closure_data);
+typedef void (*GetSeedResponse_Closure)
+                 (const GetSeedResponse *message,
+                  void *closure_data);
 typedef void (*GetRandomBytesRequest_Closure)
                  (const GetRandomBytesRequest *message,
                   void *closure_data);
@@ -841,6 +921,10 @@ struct UnprivAccess_Service
                                const GetRandomBytesRequest *input,
                                GetRandomBytesResponse_Closure closure,
                                void *closure_data);
+  void (*rpc_get_seed)(UnprivAccess_Service *service,
+                       const GetSeedRequest *input,
+                       GetSeedResponse_Closure closure,
+                       void *closure_data);
   void (*rpc_write_data)(UnprivAccess_Service *service,
                          const WriteDataRequest *input,
                          WriteDataResponse_Closure closure,
@@ -874,6 +958,7 @@ void unpriv_access__init (UnprivAccess_Service *service,
       function_prefix__ ## rpc_get_random_bytes_min,\
       function_prefix__ ## rpc_get_random_bytes_pr,\
       function_prefix__ ## rpc_get_random_bytes,\
+      function_prefix__ ## rpc_get_seed,\
       function_prefix__ ## rpc_write_data,\
       function_prefix__ ## rpc_rnd_get_ent_cnt,\
       function_prefix__ ## rpc_get_poolsize,\
@@ -899,6 +984,10 @@ void unpriv_access__rpc_get_random_bytes(ProtobufCService *service,
                                          const GetRandomBytesRequest *input,
                                          GetRandomBytesResponse_Closure closure,
                                          void *closure_data);
+void unpriv_access__rpc_get_seed(ProtobufCService *service,
+                                 const GetSeedRequest *input,
+                                 GetSeedResponse_Closure closure,
+                                 void *closure_data);
 void unpriv_access__rpc_write_data(ProtobufCService *service,
                                    const WriteDataRequest *input,
                                    WriteDataResponse_Closure closure,
@@ -930,6 +1019,8 @@ extern const ProtobufCMessageDescriptor get_random_bytes_min_request__descriptor
 extern const ProtobufCMessageDescriptor get_random_bytes_min_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_pr_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_pr_response__descriptor;
+extern const ProtobufCMessageDescriptor get_seed_request__descriptor;
+extern const ProtobufCMessageDescriptor get_seed_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_response__descriptor;
 extern const ProtobufCMessageDescriptor write_data_request__descriptor;

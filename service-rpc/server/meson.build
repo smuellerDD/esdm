@@ -6,6 +6,7 @@ server_rpc_src = files([
 	'esdm_rpc_get_random_bytes_min_s.c',
 	'esdm_rpc_get_random_bytes_pr_s.c',
 	'esdm_rpc_get_random_bytes_s.c',
+	'esdm_rpc_get_seed_s.c',
 	'esdm_rpc_get_write_wakeup_thresh_s.c',
 	'esdm_rpc_rnd_add_entropy_s.c',
 	'esdm_rpc_rnd_add_to_ent_cnt_s.c',
