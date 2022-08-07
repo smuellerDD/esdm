@@ -53,6 +53,8 @@ esdm_rpcc_get_random_bytes_min_cb(const GetRandomBytesMinResponse *response,
 
 	buffer->ret = min_t(ssize_t, response->randval.len, buffer->buflen);
 	memcpy(buffer->buf, response->randval.data, (size_t)buffer->ret);
+
+	/* Zeroization of response is handled in esdm_rpc_client_read_handler */
 }
 
 DSO_PUBLIC
