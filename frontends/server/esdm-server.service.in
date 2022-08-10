@@ -15,6 +15,7 @@ StartLimitBurst=5
 
 [Service]
 DeviceAllow=/dev/null rw
+DeviceAllow=/dev/hwrng r
 DevicePolicy=strict
 Restart=on-failure
 RestartSec=5s
@@ -25,7 +26,6 @@ LockPersonality=yes
 MemoryDenyWriteExecute=yes
 MountFlags=private
 NoNewPrivileges=yes
-PrivateDevices=yes
 PrivateMounts=yes
 PrivateNetwork=yes
 PrivateTmp=yes
