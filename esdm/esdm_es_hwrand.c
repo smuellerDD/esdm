@@ -57,7 +57,8 @@ static int esdm_hwrand_init(void)
 	esdm_hwrand_fd = open(ESDM_ES_HWRAND_IF, O_RDONLY);
 	if (esdm_hwrand_fd < 0) {
 		logger(LOGGER_WARN, LOGGER_C_ES,
-		       "Disabling /dev/hwrng-based entropy source as device not present\n");
+		       "Disabling /dev/hwrng-based entropy source as device not present, error opening %s: %s\n",
+		       ESDM_ES_HWRAND_IF, strerror(errno));
 		return 0;
 	}
 
@@ -73,8 +74,6 @@ static int esdm_hwrand_init(void)
 		}
 		close(fd);
 	}
-
-	esdm_es_add_entropy();
 
 	return 0;
 }

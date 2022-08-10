@@ -252,8 +252,6 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 	ret = esdm_aux_pool_insert_locked(inbuf, inbuflen, entropy_bits);
 	mutex_w_unlock(&pool->lock);
 
-	esdm_es_add_entropy();
-
 	/*
 	 * As the DRNG is newly seeded, maybe the need entropy flag can be
 	 * unset?

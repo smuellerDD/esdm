@@ -73,9 +73,6 @@ static int esdm_jent_initialize(void)
 	if (!esdm_get_available())
 		return 0;
 
-	if (esdm_config_es_jent_entropy_rate())
-		esdm_es_add_entropy();
-
 	return 0;
 }
 

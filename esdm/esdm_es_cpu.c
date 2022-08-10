@@ -36,7 +36,6 @@ static uint32_t esdm_cpu_data_multiplier = 0;
 static int esdm_cpu_init(void)
 {
 	esdm_cpu_data_multiplier = 0;
-	esdm_es_add_entropy();
 	return 0;
 }
 

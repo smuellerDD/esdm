@@ -62,9 +62,6 @@ static void esdm_krng_adjust_entropy(void)
 	/* Do not trigger a reseed if the DRNG manger is not available */
 	if (!esdm_get_available())
 		return 0;
-
-	if (entropylevel)
-		esdm_es_add_entropy();
 }
 
 /*
@@ -144,9 +141,6 @@ static int esdm_krng_init(void)
 	/* Do not trigger a reseed if the DRNG manger is not available */
 	if (!esdm_get_available())
 		return 0;
-
-	if (esdm_config_es_krng_entropy_rate())
-		esdm_es_add_entropy();
 
 	return 0;
 }

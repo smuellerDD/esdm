@@ -180,8 +180,6 @@ static int esdm_sched_initialize(void)
 		return 0;
 	}
 
-	esdm_es_add_entropy();
-
 	return 0;
 }
 

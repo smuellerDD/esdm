@@ -447,13 +447,15 @@ int esdm_es_mgr_reinitialize(void)
 	/* Initialize the entropy sources */
 	for_each_esdm_es(i) {
 		if (esdm_es[i]->init) {
-			logger(LOGGER_DEBUG, LOGGER_C_ES, "Initialize ES %s\n",
+			logger(LOGGER_DEBUG, LOGGER_C_ES, "Re-initialize ES %s\n",
 			       esdm_es[i]->name);
 			CKINT_LOG(esdm_es[i]->init(),
 				  "Reinitialization of ES %s failed: %d",
 				  esdm_es[i]->name, ret);
 		}
 	}
+
+	esdm_es_add_entropy();
 
 out:
 	return ret;
@@ -498,6 +500,8 @@ int esdm_es_mgr_initialize(void)
 
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
 	memset_secure(&seed, 0, sizeof(seed));
+
+	esdm_es_add_entropy();
 
 out:
 	return ret;
