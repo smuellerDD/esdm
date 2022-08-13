@@ -182,12 +182,14 @@ int thread_init(uint32_t groups)
 		goto out;
 	thread_initialized = 1;
 
+	mutex_w_init(&threads_cleanup, 0, 1);
+
 	CKINT(pthread_attr_init(&pthread_attr));
 	memset(threads, 0, sizeof(threads));
 
 	for (i = 0; i < THREADING_REALLY_ALL_THREADS; i++) {
 		atomic_bool_set_false(&threads[i].thread_pending);
-		mutex_w_init(&threads[i].inuse, false);
+		mutex_w_init(&threads[i].inuse, false, 1);
 		atomic_bool_set_false(&threads[i].shutdown);
 		pthread_mutex_init(&threads[i].worker_lock, NULL);
 	}

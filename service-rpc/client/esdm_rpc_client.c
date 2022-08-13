@@ -467,7 +467,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	WAIT_QUEUE_INIT(rpc_conn->completion);
 	atomic_set(&rpc_conn->ref_cnt, 0);
 	rpc_conn->fd = -1;
-	mutex_w_init(&rpc_conn->lock, 0);
+	mutex_w_init(&rpc_conn->lock, 0, 1);
 	atomic_set(&rpc_conn->state, esdm_rpcc_initialized);
 
 out:

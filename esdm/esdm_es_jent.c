@@ -53,7 +53,7 @@ static int esdm_jent_initialize(void)
 	/* Allow the init function to be called multiple times */
 	esdm_jent_finalize();
 
-	mutex_w_lock(&esdm_jent_lock);
+	mutex_w_init(&esdm_jent_lock, 1, 1);
 
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
 	if (jent_entropy_init() ||

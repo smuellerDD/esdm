@@ -83,15 +83,13 @@ const struct esdm_drng_cb *esdm_default_drng_cb =
 /* DRNG for non-atomic use cases */
 static struct esdm_drng esdm_drng_init = {
 	ESDM_DRNG_STATE_INIT(esdm_drng_init, NULL, NULL,
-			     &esdm_builtin_sha512_cb),
-	.lock = MUTEX_W_UNLOCKED,
+			     &esdm_builtin_sha512_cb)
 };
 
 /* Prediction-resistance DRNG: only deliver as much data as received entropy */
 static struct esdm_drng esdm_drng_pr = {
 	ESDM_DRNG_STATE_INIT(esdm_drng_pr, NULL, NULL,
-			     &esdm_builtin_sha512_cb),
-	.lock = MUTEX_W_UNLOCKED,
+			     &esdm_builtin_sha512_cb)
 };
 
 /* Wait queue to wait until the ESDM is initialized - can freely be used */
@@ -103,7 +101,7 @@ static atomic_t esdm_drng_mgr_terminate = ATOMIC_INIT(0);
 
 bool esdm_get_available(void)
 {
-	return !!atomic_read(&esdm_avail);
+	return (atomic_read(&esdm_avail) == 2);
 }
 
 struct esdm_drng *esdm_drng_init_instance(void)
@@ -157,6 +155,10 @@ static void esdm_drng_dealloc_common(struct esdm_drng *drng)
 {
 	const struct esdm_drng_cb *drng_cb;
 
+	if (!drng)
+		return;
+
+	/* This only works with a robust mutex */
 	mutex_w_lock(&drng->lock);
 	drng_cb = drng->drng_cb;
 	drng_cb->drng_dealloc(drng->drng);
@@ -214,10 +216,12 @@ int esdm_drng_mgr_initialize(void)
 {
 	int ret;
 
-	if (esdm_get_available())
+	/*
+	 * If the esdm_avail is not 0, either the DRNG is initialized, or the
+	 * initializiation process is in progress.
+	 */
+	if (atomic_cmpxchg(&esdm_avail, 0, 1) != 0)
 		return 0;
-
-	logger(LOGGER_VERBOSE, LOGGER_C_DRNG, "Initialize DRNG manager\n");
 
 	/* Catch programming error */
 	if (esdm_drng_init.hash_cb != esdm_default_hash_cb) {
@@ -225,24 +229,25 @@ int esdm_drng_mgr_initialize(void)
 		       __func__);
 	}
 
-	mutex_w_lock(&esdm_drng_init.lock);
-	if (esdm_get_available()) {
-		mutex_w_unlock(&esdm_drng_init.lock);
-		return 0;
-	}
-
 	/* Initialize the PR DRNG inside init lock as it guards esdm_avail. */
-	mutex_w_lock(&esdm_drng_pr.lock);
+	mutex_w_init(&esdm_drng_pr.lock, 1, 1);
 	ret = esdm_drng_alloc_common(&esdm_drng_pr, esdm_default_drng_cb);
 	mutex_w_unlock(&esdm_drng_pr.lock);
 
 	if (!ret) {
+		logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
+		       "DRNG with prediction resistance allocated\n");
+		mutex_w_init(&esdm_drng_init.lock, 1, 1);
 		ret = esdm_drng_alloc_common(&esdm_drng_init,
 					     esdm_default_drng_cb);
-		if (!ret)
-			atomic_set(&esdm_avail, 1);
+		mutex_w_unlock(&esdm_drng_init.lock);
+		if (!ret) {
+			atomic_set(&esdm_avail, 2);
+			logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
+			       "DRNG without prediction resistance allocated\n");
+		}
 	}
-	mutex_w_unlock(&esdm_drng_init.lock);
+
 	CKINT(ret);
 
 	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
@@ -251,6 +256,8 @@ int esdm_drng_mgr_initialize(void)
 	CKINT(esdm_drng_mgr_selftest());
 
 out:
+	if (ret)
+		atomic_set(&esdm_avail, 0);
 	return ret;
 }
 

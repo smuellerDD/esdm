@@ -36,15 +36,21 @@ static DEFINE_MUTEX_UNLOCKED(esdm_node_cleanup_lock);
 
 struct esdm_drng **esdm_drng_get_instances(void)
 {
-	/* counterpart to cmpxchg_release in _esdm_drngs_node_alloc */
+	/*
+	 * counterpart to __sync_val_compare_and_swap in
+	 * _esdm_drngs_node_alloc
+	 */
 	mb();
-	mutex_reader_lock(&esdm_node_cleanup_lock);
+
+	/* Lock not needed as threads receive signals */
+	//mutex_reader_lock(&esdm_node_cleanup_lock);
 	return esdm_drng;
 }
 
 void esdm_drng_put_instances(void)
 {
-	mutex_reader_unlock(&esdm_node_cleanup_lock);
+	/* Lock not needed as threads receive signals */
+	//mutex_reader_unlock(&esdm_node_cleanup_lock);
 }
 
 static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
@@ -112,7 +118,7 @@ void esdm_drngs_node_alloc(void)
 
 		drng->hash_cb = esdm_drng_init->hash_cb;
 
-		mutex_w_init(&drng->lock, 0);
+		mutex_w_init(&drng->lock, 0, 1);
 		mutex_init(&drng->hash_lock, 0);
 
 		/*
