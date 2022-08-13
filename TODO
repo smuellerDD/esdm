@@ -1,3 +1,7 @@
+- add Tests: HW-Rand ES, entropy feeder, ES monitor
+
+- add: man pages for API / apps
+
 - linker version script - how do do that with meson?
 
 - libesdm_getrandom.so: how to convince Meson to address issue outlined in frontends/getrandom/meson.build?
