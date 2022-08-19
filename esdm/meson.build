@@ -57,6 +57,11 @@ if get_option('hash_sha512').enabled() or get_option('hash_sha3_512').enabled()
 	esdm_src += files([ 'esdm_builtin_sha512.c' ])
 endif
 
+if get_option('gnutls').enabled()
+	esdm_src += files([ 'esdm_gnutls.c' ])
+	dependencies_esdm_lib = [ dependency('gnutls') ]
+endif
+
 esdm_common_static_lib = static_library('esdm_common_static',
 	[ common_src ],
 	include_directories: include_dirs_client,

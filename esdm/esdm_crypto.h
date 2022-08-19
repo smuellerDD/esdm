@@ -80,8 +80,6 @@ struct esdm_drng_cb {
 struct esdm_hash_cb {
 	const char *(*hash_name)(void);
 	int (*hash_selftest)(void);
-	int (*hash_alloc)(void **hash);
-	void (*hash_dealloc)(void *hash);
 	uint32_t (*hash_digestsize)(void *hash);
 	int (*hash_init)(void *hash);
 	int (*hash_update)(void *hash, const uint8_t *inbuf, size_t inbuflen);

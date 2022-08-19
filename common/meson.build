@@ -27,6 +27,7 @@ conf_data.set('ESDM_DRNG_HASH_DRBG', get_option('drng_hash_drbg').enabled())
 conf_data.set('ESDM_DRNG_CHACHA20', get_option('drng_chacha20').enabled())
 conf_data.set('ESDM_HASH_SHA512', get_option('hash_sha512').enabled())
 conf_data.set('ESDM_HASH_SHA3_512', get_option('hash_sha3_512').enabled())
+conf_data.set('ESDM_GNUTLS', get_option('gnutls').enabled())
 
 # This option currently is not configurable!
 conf_data.set('CONFIG_ESDM_USE_PTHREAD', true)

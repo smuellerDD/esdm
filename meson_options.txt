@@ -271,6 +271,9 @@ option('hash_sha512', type: 'feature', value: 'enabled',
 option('hash_sha3_512', type: 'feature', value: 'disabled',
        description: 'Enable SHA3-512 conditioning hash')
 
+option('gnutls', type: 'feature', value: 'disabled',
+       description: 'Enable GnuTLS backend to provide cryptographic primitives')
+
 ################################################################################
 # Linux Interface Configuration
 ################################################################################

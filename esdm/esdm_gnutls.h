@@ -1,6 +1,4 @@
 /*
- * ESDM SHA definition.
- *
  * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
@@ -19,32 +17,19 @@
  * DAMAGE.
  */
 
-#ifndef _ESDM_HASH_COMMON_H
-#define _ESDM_HASH_COMMON_H
+#ifndef ESDM_GNUTLS_H
+#define ESDM_GNUTLS_H
 
-#include "lc_hash.h"
-#include "lc_sha512.h"
-#include "lc_sha3.h"
-
-#define SHA512_DIGEST_SIZE LC_SHA512_SIZE_DIGEST
-
-#if defined(ESDM_HASH_SHA512)
-#define LC_HASH_STATE_SIZE_CONST	200
-#elif defined(ESDM_HASH_SHA3_512)
-#define LC_HASH_STATE_SIZE_CONST	376
-#elif defined(ESDM_GNUTLS)
-#define LC_HASH_STATE_SIZE_CONST	0
-#else
-#error "Unknown hash size"
+#ifdef __cplusplus
+extern "C"
+{
 #endif
 
-/*
- * Replace the leancrypto LC_HASH_CTX_SIZE definition as it is not a
- * compile-time constant. NOTE: The caller should implement a check
- * verifying that this result equals to LC_HASH_CTX_SIZE(lc_sha512) to ensure
- * code consistency.
- */
-#define LC_HASH_CTX_SIZE_ESDM(x)	(sizeof(struct lc_hash_ctx) + x)
-#define HASH_MAX_DESCSIZE	LC_HASH_CTX_SIZE_ESDM(LC_HASH_STATE_SIZE_CONST)
+extern const struct esdm_hash_cb esdm_gnutls_hash_cb;
+extern const struct esdm_drng_cb esdm_gnutls_drbg_cb;
 
-#endif /* _ESDM_HASH_COMMON_H */
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* ESDM_GNUTLS_H */

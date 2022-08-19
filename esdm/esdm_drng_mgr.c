@@ -36,6 +36,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "esdm_gnutls.h"
 #include "esdm_node.h"
 #include "helper.h"
 #include "queue.h"
@@ -76,6 +77,8 @@ const struct esdm_drng_cb *esdm_default_drng_cb =
 	&esdm_builtin_hash_drbg_cb;
 #elif defined(ESDM_DRNG_CHACHA20)
 	&esdm_builtin_chacha20_cb;
+#elif defined(ESDM_GNUTLS)
+	&esdm_gnutls_drbg_cb;
 #else
 #error "Unknown default DRNG selected"
 #endif
