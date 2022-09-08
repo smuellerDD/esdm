@@ -447,25 +447,25 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 
 	switch (type) {
 	case es_monitor:
-		snprintf(name, sizeof(name), "es_monitor");
+		snprintf(name, sizeof(name), "ESDM es_monitor");
 		break;
 	case rpc_unpriv_server:
-		snprintf(name, sizeof(name), "unpriv_rpc");
+		snprintf(name, sizeof(name), "ESDM unpriv_rpc");
 		break;
 	case rpc_priv_server:
-		snprintf(name, sizeof(name), "priv_rpc");
+		snprintf(name, sizeof(name), "ESDM priv_rpc");
 		break;
 	case rpc_handler:
-		snprintf(name, sizeof(name), "handler_rpc%u", id);
+		snprintf(name, sizeof(name), "ESDM hdl_rpc%u", id);
 		break;
 	case cuse_poll:
-		snprintf(name, sizeof(name), "cuse_poll");
+		snprintf(name, sizeof(name), "ESDM cuse_poll");
 		break;
 	case es_kernel_feeder:
-		snprintf(name, sizeof(name), "kernel_feeder");
+		snprintf(name, sizeof(name), "ESDM krnl_feed");
 		break;
 	default:
-		snprintf(name, sizeof(name), "%u", id);
+		snprintf(name, sizeof(name), "ESDM %u", id);
 		break;
 	}
 

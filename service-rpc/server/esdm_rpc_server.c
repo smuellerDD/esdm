@@ -45,6 +45,7 @@
 #include "esdm_rpc_server_linux.h"
 #include "esdm_rpc_service.h"
 #include "helper.c"
+#include "linux_support.h"
 #include "logger.h"
 #include "memset_secure.h"
 #include "privileges.h"
@@ -434,7 +435,7 @@ static int esdm_rpcs_handler(void *args)
 static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 {
 	/*
-	 * The reason for using select here is to only wait for a
+	 * The reason for using a timeout here is to only wait for a
 	 * given amount of time for activity on the FD. After the
 	 * timeout, the file descriptor is closed. If an attacker
 	 * starts connections, he could leave them open and thus
@@ -811,6 +812,9 @@ int esdm_rpc_server_init(const char *username)
 	pid_t pid;
 	int ret = 0;
 
+	/* Enter PID name space */
+	CKINT(linux_isolate_namespace_prefork());
+
 	/* Initialize test pertubation support */
 	CKINT(esdm_test_shm_status_init());
 
@@ -823,6 +827,8 @@ int esdm_rpc_server_init(const char *username)
 		       "Cannot fork interface process\n");
 		exit(1);
 	} else if (pid == 0) {
+		pthread_setname_np(pthread_self(), "ESDM master");
+
 		/* Create thread for entropy source monitor */
 		if (thread_start(esdm_rpc_server_es_monitor, NULL,
 				 ESDM_THREAD_ES_MONITOR, NULL)) {
@@ -841,6 +847,8 @@ int esdm_rpc_server_init(const char *username)
 		 * waiting for the termination of the server process but has
 		 * full privileges to be able to clean up the server resources.
 		 */
+
+		pthread_setname_np(pthread_self(), "ESDM cleaner");
 
 		/*
 		 * In case the cleanup process received a signal, relay it to

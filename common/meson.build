@@ -11,6 +11,10 @@ if get_option('testmode').enabled()
 	common_src += files(['test_pertubation.c'])
 endif
 
+if build_machine.system() == 'linux'
+	common_src += files('linux_support.c')
+endif
+
 conf_data = configuration_data()
 
 conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
@@ -68,5 +72,9 @@ conf_data.set('ESDM_NODE', get_option('node').enabled())
 conf_data.set('ESDM_FIPS140', get_option('fips140').enabled())
 
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
+
+if build_machine.system() == 'linux'
+	conf_data.set('ESDM_LINUX', 1)
+endif
 
 configure_file(output: 'config.h', configuration : conf_data)

@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "linux_support.h"
 #include "logger.h"
 #include "privileges.h"
 #include "visibility.h"
@@ -38,6 +39,10 @@ int drop_privileges_permanent(const char *user)
 
 	if (!user)
 		return -EINVAL;
+
+	ret = linux_isolate_namespace();
+	if (ret)
+		return ret;
 
 	pwd = getpwnam(user);
 	if (pwd == NULL) {

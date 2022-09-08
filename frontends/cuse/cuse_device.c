@@ -35,6 +35,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
+#include "linux_support.h"
 #include "logger.h"
 #include "memset_secure.h"
 #include "mutex.h"
@@ -331,7 +332,8 @@ static void esdm_cuse_drop_privileges(void)
 	if (dropped)
 		return;
 
-	if (drop_privileges_transient(esdm_cuse_unprivileged_user) == 0)
+	if (linux_isolate_namespace() == 0 &&
+	    drop_privileges_transient(esdm_cuse_unprivileged_user) == 0)
 		dropped = true;
 }
 
@@ -1036,6 +1038,8 @@ int main_common(const char *devname, const char *target,
 	CKINT_LOG(esdm_rpcc_init_priv_service(esdm_cuse_interrupt),
                   "Initialization of dispatcher failed\n");
 
+	/* Enter PID namespace */
+	CKINT(linux_isolate_namespace_prefork());
 
 	/* One thread group */
 	CKINT(thread_init(1));
