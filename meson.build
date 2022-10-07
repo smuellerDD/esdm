@@ -71,7 +71,7 @@ meson.add_dist_script(dist_script, meson.project_version())
 ################################################################################
 
 cc = meson.get_compiler('c')
-dependencies = [ dependency('libprotobuf-c') ]
+dependencies = [ dependency('libprotobuf-c'), dependency('threads') ]
 
 include_user_files = [ ]
 
