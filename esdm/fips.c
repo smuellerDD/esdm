@@ -104,11 +104,12 @@ bool fips_enabled(void)
 			if (!fipsfile) {
 				if (errno == ENOENT) {
 					/* FIPS support not enabled in kernel */
+					fipsflag[0] = '0';
 					return 0;
 				} else {
 					logger(LOGGER_ERR, LOGGER_C_ANY,
-						"FIPS: Cannot open fips_enabled file: %s\n",
-						strerror(errno));
+					       "FIPS: Cannot open fips_enabled file: %s\n",
+					       strerror(errno));
 					return -EIO;
 				}
 			}
