@@ -333,6 +333,14 @@ int esdm_sp80090c_compliant(void);
 int esdm_ntg1_compliant(void);
 
 /**
+ * @brief Indicator whether ESDM operates NTG.1 compliant according to
+ * AIS 20/31 from 2022
+ *
+ * @return 1 if NTG.1 compliant, 0 if not NTG.1 compliant
+ */
+int esdm_ntg1_2022_compliant(void);
+
+/**
  * @brief Indicator whether at least one DRNG is fully seeded
  *
  * @return 1 if fully seeded, 0 if not fully seeded

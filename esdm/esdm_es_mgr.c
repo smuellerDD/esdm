@@ -254,8 +254,38 @@ static void esdm_init_wakeup(void)
 	thread_wake_all(&esdm_init_wait);
 }
 
-bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy)
+static uint32_t esdm_avail_entropy_thresh(void)
 {
+	uint32_t ent_thresh = esdm_security_strength();
+
+	/*
+	 * Apply oversampling during initialization according to SP800-90C as
+	 * we request a larger buffer from the ES.
+	 */
+	if (esdm_sp80090c_compliant() &&
+	    !esdm_state.all_online_nodes_seeded)
+		ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
+
+	return ent_thresh;
+}
+
+bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
+		       struct entropy_buf *eb)
+{
+	/* AIS20/31 NTG.1: two entropy sources with each delivering 220 bits */
+	if (esdm_ntg1_2022_compliant()) {
+		uint32_t i, result = 0,
+			 ent_thresh = esdm_avail_entropy_thresh();
+
+		for_each_esdm_es(i) {
+			result += (eb ? eb->entropy_es[i].e_bits :
+					esdm_es[i]->curr_entropy(ent_thresh)) >=
+				   ESDM_AIS2031_NPTRNG_MIN_ENTROPY;
+		}
+
+		return (result >= 2);
+	}
+
 	return (collected_entropy >= esdm_get_seed_entropy_osr(fully_seeded));
 }
 
@@ -312,21 +342,6 @@ static void esdm_set_operational(void)
 		esdm_shm_status_set_operational(true);
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,"ESDM fully operational\n");
 	}
-}
-
-static uint32_t esdm_avail_entropy_thresh(void)
-{
-	uint32_t ent_thresh = esdm_security_strength();
-
-	/*
-	 * Apply oversampling during initialization according to SP800-90C as
-	 * we request a larger buffer from the ES.
-	 */
-	if (esdm_sp80090c_compliant() &&
-	    !esdm_state.all_online_nodes_seeded)
-		ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
-
-	return ent_thresh;
 }
 
 /* Available entropy in the entire ESDM considering all entropy sources */
@@ -390,12 +405,14 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (state->esdm_operational)
 		return;
 
-	requested_bits = esdm_get_seed_entropy_osr(
-					state->all_online_nodes_seeded);
+	requested_bits = esdm_ntg1_2022_compliant() ?
+		/* Approximation so that two ES should deliver 220 bits each */
+		(esdm_avail_entropy() + ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
+		/* Apply SP800-90C oversampling if applicable */
+		esdm_get_seed_entropy_osr(state->all_online_nodes_seeded);
 
 	if (eb) {
-		for_each_esdm_es(i)
-			seed_bits += eb->entropy_es[i].e_bits;
+		seed_bits = esdm_entropy_rate_eb(eb);
 	} else {
 		uint32_t ent_thresh = esdm_avail_entropy_thresh();
 
@@ -408,7 +425,7 @@ void esdm_init_ops(struct entropy_buf *eb)
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
 	} else if (esdm_fully_seeded(state->all_online_nodes_seeded,
-				     seed_bits)) {
+				     seed_bits, eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
 		state->esdm_min_seeded = true;

@@ -1,6 +1,8 @@
 Changes 0.6.0-prerelease:
 * Move ESDM apps into separate namespaces to limit their privilege even further (e.g. no possibility to create network connections)
 
+* Add German AIS 20/31 (draft 2022) NTG.1 compliance support
+
 Changes 0.5.0:
 * Linux kernel entropy feeder is now always enabled
 

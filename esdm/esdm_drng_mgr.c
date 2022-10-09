@@ -290,6 +290,18 @@ int esdm_ntg1_compliant(void)
 }
 
 DSO_PUBLIC
+int esdm_ntg1_2022_compliant(void)
+{
+	return
+#ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
+		true
+#else
+		false
+#endif
+	;
+}
+
+DSO_PUBLIC
 uint32_t esdm_get_reseed_max_time(void)
 {
 	return esdm_drng_reseed_max_time;
@@ -384,7 +396,8 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 	collected_entropy = esdm_entropy_rate_eb(&seedbuf);
 	esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
 			 esdm_fully_seeded(drng->fully_seeded,
-					   collected_entropy), "regular");
+					   collected_entropy, &seedbuf),
+			 "regular");
 
 	/* Set the seeding state of the ESDM */
 	esdm_init_ops(&seedbuf);
