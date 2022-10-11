@@ -3,6 +3,12 @@ Changes 0.6.0-prerelease:
 
 * Add German AIS 20/31 (draft 2022) NTG.1 compliance support
 
+* the blocking property of an interface is implemented in the client - the
+  server reports -EAGAIN for a blocking behavior
+
+* add "emergency seeding" when entropy sources cannot collectively deliver
+  256 bits of entropy, pull data repeatedly until 256 bits are received
+
 Changes 0.5.0:
 * Linux kernel entropy feeder is now always enabled
 

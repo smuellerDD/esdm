@@ -48,8 +48,8 @@
 struct esdm_state {
 	bool esdm_operational;		/* Is DRNG operational? */
 	bool esdm_fully_seeded;		/* Is DRNG fully seeded? */
-	bool esdm_min_seeded;		/* Is DRNG minimally seeded? */
 	bool all_online_nodes_seeded;	/* All DRNGs nodes seeded? */
+	unsigned char esdm_min_seeded;	/* Is DRNG minimally seeded? */
 
 	/*
 	 * To ensure that external entropy providers cannot dominate the
@@ -208,7 +208,7 @@ void esdm_reset_state(void)
 	}
 	esdm_state.esdm_operational = false;
 	esdm_state.esdm_fully_seeded = false;
-	esdm_state.esdm_min_seeded = false;
+	esdm_state.esdm_min_seeded = 0;
 	esdm_state.all_online_nodes_seeded = false;
 	logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
@@ -230,7 +230,7 @@ bool esdm_pool_all_nodes_seeded_get(void)
 }
 
 /* Return boolean whether ESDM reached minimally seed level */
-bool esdm_state_min_seeded(void)
+unsigned int esdm_state_min_seeded(void)
 {
 	return esdm_state.esdm_min_seeded;
 }
@@ -424,11 +424,19 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (state->esdm_fully_seeded) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
+
+		state->esdm_min_seeded = 1;
 	} else if (esdm_fully_seeded(state->all_online_nodes_seeded,
 				     seed_bits, eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
-		state->esdm_min_seeded = true;
+
+		/*
+		 * Reset min-seeded trigger to allow it being counted up for
+		 * the next DRNG. This gives other entropy sources time to
+		 * collect entropy to seed the DRNG as well.
+		 */
+		state->esdm_min_seeded = 1;
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "ESDM fully seeded with %u bits of entropy\n",
 			seed_bits);
@@ -437,7 +445,7 @@ void esdm_init_ops(struct entropy_buf *eb)
 
 		/* DRNG is seeded with at least 128 bits of entropy */
 		if (seed_bits >= ESDM_MIN_SEED_ENTROPY_BITS) {
-			state->esdm_min_seeded = true;
+			state->esdm_min_seeded++;
 			logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			       "ESDM minimally seeded with %u bits of entropy\n",
 				seed_bits);
@@ -539,7 +547,10 @@ void esdm_es_mgr_finalize(void)
 
 bool esdm_es_reseed_wanted(void)
 {
-	/* If the ESDM is not yet availabe, skip */
+	struct esdm_state *state = &esdm_state;
+	uint32_t avail_entropy;
+
+	/* If the ESDM is not yet available, skip */
 	if (!esdm_get_available())
 		return false;
 
@@ -550,9 +561,16 @@ bool esdm_es_reseed_wanted(void)
 	if (esdm_state.all_online_nodes_seeded)
 		return false;
 
-	/* Only trigger the DRNG reseed if we have collected entropy. */
-	if (esdm_avail_entropy() <
-	    atomic_read_u32(&esdm_state.boot_entropy_thresh))
+	/*
+	 * Only trigger the DRNG reseed if we have collected entropy. If
+	 * we have several min-seeded entropy requests without reaching fully
+	 * seeded, we force the seeding with the available entropy.
+	 */
+	state->esdm_min_seeded++;
+	avail_entropy = esdm_avail_entropy();
+	if ((state->esdm_min_seeded < ESDM_FORCE_FULLY_SEEDED_ATTEMPT &&
+	    (avail_entropy < atomic_read_u32(&esdm_state.boot_entropy_thresh))) ||
+	     avail_entropy == 0)
 		return false;
 
 	return true;
@@ -573,7 +591,8 @@ void esdm_es_add_entropy(void)
 }
 
 /* Fill the seed buffer with data from the noise sources */
-void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits)
+void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
+			   bool force)
 {
 	struct esdm_state *state = &esdm_state;
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
@@ -590,7 +609,8 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits)
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
 	 */
-	if (state->esdm_fully_seeded && (esdm_avail_entropy() < req_ent)) {
+	if (!force &&
+	    state->esdm_fully_seeded && (esdm_avail_entropy() < req_ent)) {
 		for_each_esdm_es(i)
 			eb->entropy_es[i].e_bits = 0;
 

@@ -24,7 +24,7 @@ extern struct esdm_es_cb *esdm_es[];
 #define for_each_esdm_es(ctr)		\
 	for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
 
-bool esdm_state_min_seeded(void);
+unsigned int esdm_state_min_seeded(void);
 void esdm_debug_report_seedlevel(const char *name);
 
 extern uint32_t esdm_write_wakeup_bits;
@@ -41,7 +41,8 @@ bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 		       struct entropy_buf *eb);
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb);
 void esdm_unset_fully_seeded(struct esdm_drng *drng);
-void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits);
+void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
+			   bool force);
 void esdm_init_ops(struct entropy_buf *eb);
 
 int esdm_es_mgr_reinitialize(void);

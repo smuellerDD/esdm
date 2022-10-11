@@ -385,22 +385,60 @@ void esdm_drng_inject(struct esdm_drng *drng,
  */
 static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 {
-	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN);
-	uint32_t collected_entropy;
+	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
+			   collected_seedbuf;
+	uint32_t collected_entropy = 0;
+	unsigned int i;
+	bool force = esdm_state_min_seeded() > ESDM_FORCE_FULLY_SEEDED_ATTEMPT;
 
-	/* This clearing is not strictly needed, but it silences valgrind */
+	for_each_esdm_es(i)
+		collected_seedbuf.entropy_es[i].e_bits = 0;
+
+	/*
+	 * This clearing is not strictly needed, but it silences
+	 * valgrind.
+	 */
 	memset(&seedbuf, 0, sizeof(seedbuf));
-	esdm_fill_seed_buffer(&seedbuf,
-			      esdm_get_seed_entropy_osr(drng->fully_seeded));
 
-	collected_entropy = esdm_entropy_rate_eb(&seedbuf);
-	esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-			 esdm_fully_seeded(drng->fully_seeded,
-					   collected_entropy, &seedbuf),
-			 "regular");
+	do {
+		if (collected_entropy) {
+			logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
+			       "Force fully seeding level by repeatedly pull entropy from available entropy sources\n");
+		}
 
-	/* Set the seeding state of the ESDM */
-	esdm_init_ops(&seedbuf);
+		esdm_fill_seed_buffer(&seedbuf,
+			esdm_get_seed_entropy_osr(drng->fully_seeded), force);
+
+		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
+
+		/* Sum iterations up. */
+		for_each_esdm_es(i) {
+			collected_seedbuf.entropy_es[i].e_bits +=
+				seedbuf.entropy_es[i].e_bits;
+		}
+
+		/* Inject seed data into DRNG */
+		esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
+				 esdm_fully_seeded(drng->fully_seeded,
+						   collected_entropy,
+						   &collected_seedbuf),
+				 "regular");
+
+		/* Set the seeding state of the ESDM */
+		esdm_init_ops(&collected_seedbuf);
+
+	/*
+	 * Emergency reseeding: If we reached the min seed threshold now
+	 * multiple times but never reached fully seeded level and we collect
+	 * entropy, keep doing it until we reached fully seeded level for
+	 * at least one DRNG.
+	 *
+	 * The emergency reseeding implies that the consecutively injected
+	 * entropy can be added up. This is applicable due to the fact that
+	 * the entire operation is atomic which means that the DRNG is not
+	 * producing data while this is ongoing.
+	 */
+	} while (esdm_es_reseed_wanted() && !drng->fully_seeded);
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 
@@ -487,9 +525,7 @@ out:
 
 void esdm_drng_seed_work(void)
 {
-	do {
-		__esdm_drng_seed_work();
-	} while (esdm_es_reseed_wanted());
+	__esdm_drng_seed_work();
 
 	/* Allow the seeding operation to be called again */
 	esdm_pool_unlock();
@@ -713,6 +749,7 @@ void esdm_reset(void)
 
 static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 {
+	esdm_es_add_entropy();
 	if (esdm_pool_all_nodes_seeded_get())
 		return 0;
 	if (nonblock)
@@ -725,6 +762,7 @@ static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 
 static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 {
+	esdm_es_add_entropy();
 	if (esdm_state_operational())
 		return 0;
 	if (nonblock)
@@ -734,20 +772,22 @@ static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 	return 0;
 }
 
-static void esdm_drng_sleep_while_non_min_seeded(void)
+static int esdm_drng_sleep_while_non_min_seeded(unsigned int nonblock)
 {
+	esdm_es_add_entropy();
 	if (esdm_state_min_seeded())
-		return;
+		return 0;
+	if (nonblock)
+		return -EAGAIN;
 	thread_wait_event(&esdm_init_wait, esdm_state_min_seeded() &&
 			  !atomic_read(&esdm_drng_mgr_terminate));
-	return;
+	return 0;
 }
 
 DSO_PUBLIC
 ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		      enum esdm_get_seed_flags flags)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
 	struct entropy_buf *eb =
 		(struct entropy_buf *)(buf + 2);
 	uint64_t buflen = sizeof(struct entropy_buf) + 2 * sizeof(uint64_t);
@@ -786,7 +826,8 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	for (;;) {
 		esdm_fill_seed_buffer(eb,
 			esdm_get_seed_entropy_osr(flags &
-						  ESDM_GET_SEED_FULLY_SEEDED));
+						  ESDM_GET_SEED_FULLY_SEEDED),
+						  false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */
@@ -799,7 +840,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		    (flags & ESDM_GET_SEED_NONBLOCK))
 			break;
 
-		nanosleep(&ts, NULL);
+		nanosleep(&poll_ts, NULL);
 	}
 
 	esdm_pool_unlock();
@@ -818,6 +859,26 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 }
 
 DSO_PUBLIC
+ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *buf, size_t nbytes)
+{
+	int ret = esdm_drng_sleep_while_nonoperational(1);
+
+	if (ret)
+		return ret;
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+}
+
+DSO_PUBLIC
+ssize_t esdm_get_random_bytes_full_noblock(uint8_t *buf, size_t nbytes)
+{
+	int ret = esdm_drng_sleep_while_nonoperational(1);
+
+	if (ret)
+		return ret;
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
+}
+
+DSO_PUBLIC
 ssize_t esdm_get_random_bytes_full(uint8_t *buf, size_t nbytes)
 {
 	esdm_drng_sleep_while_nonoperational(0);
@@ -827,7 +888,17 @@ ssize_t esdm_get_random_bytes_full(uint8_t *buf, size_t nbytes)
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_min(uint8_t *buf, size_t nbytes)
 {
-	esdm_drng_sleep_while_non_min_seeded();
+	esdm_drng_sleep_while_non_min_seeded(0);
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
+}
+
+DSO_PUBLIC
+ssize_t esdm_get_random_bytes_min_noblock(uint8_t *buf, size_t nbytes)
+{
+	int ret = esdm_drng_sleep_while_non_min_seeded(1);
+
+	if (ret)
+		return ret;
 	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
 }
 
