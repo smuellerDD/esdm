@@ -11,6 +11,15 @@ if get_option('esdm-server').enabled()
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
 
+	# This is just a helper for debugging - no real test
+	rpc_get_random_bytes_full = executable(
+			'rpc_get_random_bytes_full',
+			[ esdm_tester_common, 'rpc_get_random_bytes_full.c' ],
+			include_directories: include_dirs_client,
+			dependencies: [ dependencies_client ],
+			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
+		)
+
 	rpc_get_random_bytes_min_test = executable(
 			'rpc_get_random_bytes_min_test',
 			[ esdm_tester_common, 'rpc_get_random_bytes_min_test.c' ],
