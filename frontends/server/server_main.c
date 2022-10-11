@@ -278,7 +278,9 @@ int main(int argc, char *argv[])
 	parse_opts(argc, argv);
 
 	if (geteuid()) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER, "Program must start as root!");
+		logger_inc_verbosity();
+		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		       "Program must start as root!\n");
 		return 1;
 	}
 
