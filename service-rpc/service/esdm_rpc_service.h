@@ -23,6 +23,7 @@
 #include <sys/ipc.h>
 
 #include "atomic_bool.h"
+#include "config.h"
 #include "esdm_rpc_protocol.h"
 #include "priv_access.pb-c.h"
 #include "test_pertubation.h"

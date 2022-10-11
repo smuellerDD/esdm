@@ -60,6 +60,7 @@ ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
 	struct esdm_rpc_client_connection *rpc_conn = NULL;
 	struct esdm_get_seed_buf buffer;
 	ssize_t ret = 0;
+	int noblock = flags & ESDM_GET_SEED_NONBLOCK;
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
@@ -70,12 +71,24 @@ ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
 	msg.len = buflen;
 	msg.flags = flags;
 
-	unpriv_access__rpc_get_seed(&rpc_conn->service, &msg,
-				    esdm_rpcc_get_seed_cb, &buffer);
+	for (;;) {
+		unpriv_access__rpc_get_seed(&rpc_conn->service, &msg,
+					    esdm_rpcc_get_seed_cb, &buffer);
 
-	ret = buffer.ret;
-	if (ret >= 0)
-		esdm_test_shm_status_add_rpc_client_written(buffer.buflen);
+		ret = buffer.ret;
+		if (ret >= 0)
+			esdm_test_shm_status_add_rpc_client_written(
+				buffer.buflen);
+		if (noblock || ret != -EAGAIN)
+			break;
+
+		/*
+		 * The server-side always invokes the command non-blocking.
+		 * Thus, we need to loop, in case the caller did not request
+		 * non-blocking and ESDM cannot deliver data.
+		 */
+		nanosleep(&esdm_client_poll_ts, NULL);
+	}
 
 out:
 	esdm_rpcc_put_unpriv_service(rpc_conn);

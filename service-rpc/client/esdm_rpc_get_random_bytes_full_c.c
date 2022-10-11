@@ -83,6 +83,9 @@ ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 		if (buffer.ret < -255) {
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
+		} else if (buffer.ret == -EAGAIN) {
+			nanosleep(&esdm_client_poll_ts, NULL);
+			continue;
 		} else if (buffer.ret < 0) {
 			ret = buffer.ret;
 			goto out;

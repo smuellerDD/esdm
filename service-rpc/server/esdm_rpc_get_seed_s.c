@@ -46,7 +46,8 @@ void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		/* TODO: make 280 dependent on output size */
 		memset(rndval, 0, 280);
 		response.ret = esdm_get_seed(rndval, request->len,
-					     request->flags);
+					     request->flags |
+					     ESDM_GET_SEED_NONBLOCK);
 
 		if (response.ret >= 0) {
 			esdm_test_shm_status_add_rpc_server_written(rndval[0]);

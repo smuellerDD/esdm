@@ -44,8 +44,8 @@ void esdm_rpc_get_random_bytes_full(UnprivAccess_Service *service,
 		response.ret = -(int32_t)sizeof(rndval);
 		closure(&response, closure_data);
 	} else {
-		response.ret = (int)esdm_get_random_bytes_full(rndval,
-							       request->len);
+		response.ret = esdm_get_random_bytes_full_noblock(
+			rndval, request->len);
 
 		if (response.ret > 0) {
 			esdm_test_shm_status_add_rpc_server_written(
