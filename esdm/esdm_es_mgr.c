@@ -222,6 +222,13 @@ void esdm_pool_all_nodes_seeded(bool set)
 	esdm_state.all_online_nodes_seeded = set;
 	if (set)
 		thread_wake_all(&esdm_init_wait);
+
+	/*
+	 * Once all DRNGs are fully seeded, the forced seeding is not needed
+	 * any more. Thus, set the min_seeded level below the
+	 * ESDM_FORCE_FULLY_SEEDED_ATTEMPT threshold.
+	 */
+	esdm_state.esdm_min_seeded = 1;
 }
 
 bool esdm_pool_all_nodes_seeded_get(void)
