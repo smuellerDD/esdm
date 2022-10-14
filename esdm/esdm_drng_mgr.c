@@ -388,7 +388,7 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 			   collected_seedbuf;
 	uint32_t collected_entropy = 0;
-	unsigned int i;
+	unsigned int i, num_es_delivered = 0;
 	bool force = esdm_state_min_seeded() > ESDM_FORCE_FULLY_SEEDED_ATTEMPT;
 
 	for_each_esdm_es(i)
@@ -401,6 +401,9 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 	memset(&seedbuf, 0, sizeof(seedbuf));
 
 	do {
+		/* Count the number of ES which delivered entropy */
+		num_es_delivered = 0;
+
 		if (collected_entropy) {
 			logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
 			       "Force fully seeding level by repeatedly pull entropy from available entropy sources\n");
@@ -415,6 +418,7 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 		for_each_esdm_es(i) {
 			collected_seedbuf.entropy_es[i].e_bits +=
 				seedbuf.entropy_es[i].e_bits;
+			num_es_delivered += !!seedbuf.entropy_es[i].e_bits;
 		}
 
 		/* Inject seed data into DRNG */
@@ -431,14 +435,18 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for
-	 * at least one DRNG.
+	 * at least one DRNG. This operation is not continued if the
+	 * ES do not deliver entropy such that we cannot reach the fully seeded
+	 * level.
 	 *
 	 * The emergency reseeding implies that the consecutively injected
 	 * entropy can be added up. This is applicable due to the fact that
 	 * the entire operation is atomic which means that the DRNG is not
 	 * producing data while this is ongoing.
 	 */
-	} while (esdm_es_reseed_wanted() && !drng->fully_seeded);
+	} while (esdm_es_reseed_wanted() &&
+		 num_es_delivered >= (esdm_ntg1_2022_compliant() ? 2 : 1) &&
+		 !drng->fully_seeded);
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 
