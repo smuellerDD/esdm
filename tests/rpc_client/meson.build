@@ -12,9 +12,9 @@ if get_option('esdm-server').enabled()
 		)
 
 	# This is just a helper for debugging - no real test
-	rpc_get_random_bytes_full = executable(
-			'rpc_get_random_bytes_full',
-			[ esdm_tester_common, 'rpc_get_random_bytes_full.c' ],
+	esdm_rpc_invoker = executable(
+			'esdm_rpc_invoker',
+			[ esdm_tester_common, 'esdm_rpc_invoker.c' ],
 			include_directories: include_dirs_client,
 			dependencies: [ dependencies_client ],
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
