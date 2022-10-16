@@ -24,7 +24,7 @@ extern struct esdm_es_cb *esdm_es[];
 #define for_each_esdm_es(ctr)		\
 	for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
 
-unsigned int esdm_state_min_seeded(void);
+bool esdm_state_min_seeded(void);
 void esdm_debug_report_seedlevel(const char *name);
 
 extern uint32_t esdm_write_wakeup_bits;

@@ -126,11 +126,13 @@ struct esdm_drng *esdm_drng_node_instance(void)
 
 void esdm_drng_reset(struct esdm_drng *drng)
 {
-	atomic_set(&drng->requests, ESDM_DRNG_RESEED_THRESH);
+	/* Ensure reseed during next call */
+	atomic_set(&drng->requests, 1);
 	atomic_set(&drng->requests_since_fully_seeded, 0);
 	drng->last_seeded = time(NULL);
 	drng->fully_seeded = false;
-	drng->force_reseed = true;
+	/* Do not set force, as this flag is used for the emergency reseeding */
+	drng->force_reseed = false;
 	logger(LOGGER_DEBUG, LOGGER_C_DRNG, "reset DRNG\n");
 }
 
@@ -389,7 +391,7 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 			   collected_seedbuf;
 	uint32_t collected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
-	bool force = esdm_state_min_seeded() > ESDM_FORCE_FULLY_SEEDED_ATTEMPT;
+	bool forced = drng->force_reseed;
 
 	for_each_esdm_es(i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -410,7 +412,8 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 		}
 
 		esdm_fill_seed_buffer(&seedbuf,
-			esdm_get_seed_entropy_osr(drng->fully_seeded), force);
+			esdm_get_seed_entropy_osr(drng->fully_seeded),
+				      forced && !drng->fully_seeded);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
@@ -444,9 +447,8 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 	 * the entire operation is atomic which means that the DRNG is not
 	 * producing data while this is ongoing.
 	 */
-	} while (esdm_es_reseed_wanted() &&
-		 num_es_delivered >= (esdm_ntg1_2022_compliant() ? 2 : 1) &&
-		 !drng->fully_seeded);
+	} while (forced && !drng->fully_seeded &&
+		 num_es_delivered >= (esdm_ntg1_2022_compliant() ? 2 : 1));
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 
@@ -487,7 +489,7 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	}
 }
 
-static void __esdm_drng_seed_work(void)
+static void __esdm_drng_seed_work(bool force)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 
@@ -503,6 +505,7 @@ static void __esdm_drng_seed_work(void)
 			mutex_w_lock(&drng->lock);
 			if (drng && !drng->fully_seeded) {
 				/* return code does not matter */
+				drng->force_reseed |= force;
 				esdm_drng_seed_work_one(drng, node);
 				mutex_w_unlock(&drng->lock);
 				goto out;
@@ -512,6 +515,7 @@ static void __esdm_drng_seed_work(void)
 	} else {
 		if (!esdm_drng_init.fully_seeded) {
 			mutex_w_lock(&esdm_drng_init.lock);
+			esdm_drng_init.force_reseed |= force;
 			esdm_drng_seed_work_one(&esdm_drng_init, 0);
 			mutex_w_unlock(&esdm_drng_init.lock);
 			goto out;
@@ -520,6 +524,7 @@ static void __esdm_drng_seed_work(void)
 
 	if (!esdm_drng_pr.fully_seeded) {
 		mutex_w_lock(&esdm_drng_pr.lock);
+		esdm_drng_pr.force_reseed |= force;
 		esdm_drng_seed_work_one(&esdm_drng_pr, 0);
 		mutex_w_unlock(&esdm_drng_pr.lock);
 		goto out;
@@ -533,7 +538,7 @@ out:
 
 void esdm_drng_seed_work(void)
 {
-	__esdm_drng_seed_work();
+	__esdm_drng_seed_work(false);
 
 	/* Allow the seeding operation to be called again */
 	esdm_pool_unlock();
@@ -755,9 +760,25 @@ void esdm_reset(void)
 
 /******************* Generic ESDM kernel output interfaces ********************/
 
+static void esdm_force_fully_seeded(void)
+{
+	static unsigned int ctr = 0;
+
+	if (esdm_pool_all_nodes_seeded_get())
+		return;
+
+	if (ctr++ < ESDM_FORCE_FULLY_SEEDED_ATTEMPT)
+		return;
+
+	esdm_pool_lock();
+	__esdm_drng_seed_work(true);
+	esdm_pool_unlock();
+	ctr = 0;
+}
+
 static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 {
-	esdm_es_add_entropy();
+	esdm_force_fully_seeded();
 	if (esdm_pool_all_nodes_seeded_get())
 		return 0;
 	if (nonblock)
@@ -770,7 +791,7 @@ static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 
 static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 {
-	esdm_es_add_entropy();
+	esdm_force_fully_seeded();
 	if (esdm_state_operational())
 		return 0;
 	if (nonblock)
@@ -782,7 +803,7 @@ static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 
 static int esdm_drng_sleep_while_non_min_seeded(unsigned int nonblock)
 {
-	esdm_es_add_entropy();
+	esdm_force_fully_seeded();
 	if (esdm_state_min_seeded())
 		return 0;
 	if (nonblock)
