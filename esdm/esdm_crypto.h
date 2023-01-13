@@ -71,6 +71,9 @@ struct esdm_drng_cb {
  *			      hash_alloc
  *			return: 0 on success, < 0 on error
  * @hash_desc_zero	Zeroization of hash state buffer
+ * @hash_alloc		Allocate a hash context
+ *			return: 0 on success, < 0 on error
+ * @hash_dealloc	Deallocate hash context
  *
  * Assumptions:
  *
@@ -85,6 +88,8 @@ struct esdm_hash_cb {
 	int (*hash_update)(void *hash, const uint8_t *inbuf, size_t inbuflen);
 	int (*hash_final)(void *hash, uint8_t *digest);
 	void (*hash_desc_zero)(void *hash);
+	int (*hash_alloc)(void **ctx);
+	void (*hash_dealloc)(void *ctx);
 };
 
 #endif /* _ESDM_CRYPTO_H */

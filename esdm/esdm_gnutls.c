@@ -99,6 +99,17 @@ static int esdm_gnutls_hash_selftest(void)
 	return ret;
 }
 
+static int esdm_gnutls_hash_alloc(void **ctx)
+{
+	(void)ctx;
+	return 0;
+}
+
+static void esdm_gnutls_hash_dealloc(void *ctx)
+{
+	(void)ctx;
+}
+
 const struct esdm_hash_cb esdm_gnutls_hash_cb = {
 	.hash_name		= esdm_gnutls_hash_name,
 	.hash_selftest		= esdm_gnutls_hash_selftest,
@@ -107,6 +118,8 @@ const struct esdm_hash_cb esdm_gnutls_hash_cb = {
 	.hash_update		= esdm_gnutls_hash_update,
 	.hash_final		= esdm_gnutls_hash_final,
 	.hash_desc_zero		= esdm_gnutls_hash_desc_zero,
+	.hash_alloc		= esdm_gnutls_hash_alloc,
+	.hash_dealloc		= esdm_gnutls_hash_dealloc,
 };
 
 struct drbg_aes_ctx {

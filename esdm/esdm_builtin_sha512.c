@@ -26,6 +26,7 @@
 #include "esdm_builtin_sha512.h"
 #include "lc_sha512.h"
 #include "lc_sha3.h"
+#include "ret_checkers.h"
 
 static uint32_t esdm_sha512_hash_digestsize(void *hash)
 {
@@ -85,6 +86,24 @@ static void esdm_sha512_hash_desc_zero(void *hash)
 	lc_hash_zero(hash_ctx);
 }
 
+static int esdm_sha512_hash_alloc_common(const struct lc_hash *hash, void **ctx)
+{
+	struct lc_hash_ctx *ctx512;
+	int ret;
+
+	CKINT(lc_hash_alloc(hash, &ctx512));
+
+	*ctx = ctx512;
+
+out:
+	return ret;
+}
+
+static void esdm_sha512_hash_dealloc(void *ctx)
+{
+	lc_hash_zero_free(ctx);
+}
+
 #if defined(ESDM_HASH_SHA512)
 
 static int esdm_sha512_hash_selftest(void)
@@ -113,6 +132,11 @@ static int esdm_sha512_hash_selftest(void)
 
 	lc_hash_zero(ctx);
 	return ret;
+}
+
+static int esdm_sha512_hash_alloc(void **ctx)
+{
+	return (esdm_sha512_hash_alloc_common(lc_sha512, ctx));
 }
 
 #elif defined(ESDM_HASH_SHA3_512)
@@ -145,6 +169,11 @@ static int esdm_sha512_hash_selftest(void)
 	return ret;
 }
 
+static int esdm_sha512_hash_alloc(void **ctx)
+{
+	return (esdm_sha512_hash_alloc_common(lc_sha3_512, ctx));
+}
+
 #endif
 
 const struct esdm_hash_cb esdm_builtin_sha512_cb = {
@@ -155,4 +184,6 @@ const struct esdm_hash_cb esdm_builtin_sha512_cb = {
 	.hash_update		= esdm_sha512_hash_update,
 	.hash_final		= esdm_sha512_hash_final,
 	.hash_desc_zero		= esdm_sha512_hash_desc_zero,
+	.hash_alloc		= esdm_sha512_hash_alloc,
+	.hash_dealloc		= esdm_sha512_hash_dealloc
 };
