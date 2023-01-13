@@ -48,7 +48,7 @@
 static uint32_t krng_entropy = 0;
 static atomic_t esdm_krng_cancel = ATOMIC_INIT(0);
 
-static void esdm_krng_adjust_entropy(void)
+static int esdm_krng_adjust_entropy(void)
 {
 	uint32_t entropylevel;
 
@@ -62,6 +62,8 @@ static void esdm_krng_adjust_entropy(void)
 	/* Do not trigger a reseed if the DRNG manger is not available */
 	if (!esdm_get_available())
 		return 0;
+
+	return 0;
 }
 
 /*

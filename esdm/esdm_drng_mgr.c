@@ -385,7 +385,8 @@ void esdm_drng_inject(struct esdm_drng *drng,
  * Perform the seeding of the DRNG with data from entropy source.
  * The function returns the entropy injected into the DRNG in bits.
  */
-static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
+static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
+					 const char *drng_type)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 			   collected_seedbuf;
@@ -408,7 +409,8 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 
 		if (collected_entropy) {
 			logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
-			       "Force fully seeding level by repeatedly pull entropy from available entropy sources\n");
+			       "Force fully seeding level for %s DRNG by repeatedly pull entropy from available entropy sources\n",
+			       drng_type);
 		}
 
 		esdm_fill_seed_buffer(&seedbuf,
@@ -431,8 +433,14 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 						   &collected_seedbuf),
 				 "regular");
 
-		/* Set the seeding state of the ESDM */
-		esdm_init_ops(&collected_seedbuf);
+		/*
+		 * Set the seeding state of the ESDM
+		 *
+		 * Do not call lrng_init_ops(seedbuf) here as the atomic DRNG
+		 * does not serve common users.
+		 */
+		if (init_ops)
+			esdm_init_ops(&collected_seedbuf);
 
 	/*
 	 * Emergency reseeding: If we reached the min seed threshold now
@@ -455,26 +463,22 @@ static uint32_t esdm_drng_seed_es(struct esdm_drng *drng)
 	return collected_entropy;
 }
 
+static void esdm_drng_seed_es(struct esdm_drng *drng)
+{
+	mutex_w_lock(&drng->lock);
+	esdm_drng_seed_es_nolock(drng, true, "regular");
+	mutex_w_unlock(&drng->lock);
+}
+
 static void esdm_drng_seed(struct esdm_drng *drng)
 {
 	BUILD_BUG_ON(ESDM_MIN_SEED_ENTROPY_BITS >
 		     ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
-	if (esdm_get_available()) {
-		/* (Re-)Seed DRNG */
-		esdm_drng_seed_es(drng);
-		/* (Re-)Seed atomic DRNG from regular DRNG */
-		esdm_drng_atomic_seed_drng(drng);
-	} else {
-		/*
-		 * If no-one is waiting for the DRNG, seed the atomic DRNG
-		 * directly from the entropy sources.
-		 */
-		if (!thread_queue_sleeper(&esdm_init_wait))
-			esdm_drng_atomic_seed_es();
-		else
-			esdm_init_ops(NULL);
-	}
+	/* (Re-)Seed DRNG */
+	esdm_drng_seed_es(drng);
+	/* (Re-)Seed atomic DRNG from regular DRNG */
+	esdm_drng_atomic_seed_drng(drng);
 }
 
 static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
@@ -491,8 +495,32 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 
 static void __esdm_drng_seed_work(bool force)
 {
-	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
+	struct esdm_drng **esdm_drng;
 
+	/*
+	 * If the DRNG is not yet initialized, let us try to seed the atomic
+	 * DRNG.
+	 */
+	if (!esdm_get_available()) {
+		struct esdm_drng *atomic;
+
+		if (thread_queue_sleeper(&esdm_init_wait)) {
+			esdm_init_ops(NULL);
+			return;
+		}
+		atomic = esdm_get_atomic();
+		if (!atomic || atomic->fully_seeded)
+			return;
+
+		atomic->force_reseed |= force;
+		mutex_w_lock(&atomic->lock);
+		esdm_drng_seed_es_nolock(atomic, false, "atomic");
+		mutex_w_unlock(&atomic->lock);
+
+		return;
+	}
+
+	esdm_drng = esdm_drng_get_instances();
 	if (esdm_drng) {
 		uint32_t node;
 
@@ -502,31 +530,24 @@ static void __esdm_drng_seed_work(bool force)
 			if (!drng)
 				continue;
 
-			mutex_w_lock(&drng->lock);
 			if (drng && !drng->fully_seeded) {
 				/* return code does not matter */
 				drng->force_reseed |= force;
 				esdm_drng_seed_work_one(drng, node);
-				mutex_w_unlock(&drng->lock);
 				goto out;
 			}
-			mutex_w_unlock(&drng->lock);
 		}
 	} else {
 		if (!esdm_drng_init.fully_seeded) {
-			mutex_w_lock(&esdm_drng_init.lock);
 			esdm_drng_init.force_reseed |= force;
 			esdm_drng_seed_work_one(&esdm_drng_init, 0);
-			mutex_w_unlock(&esdm_drng_init.lock);
 			goto out;
 		}
 	}
 
 	if (!esdm_drng_pr.fully_seeded) {
-		mutex_w_lock(&esdm_drng_pr.lock);
 		esdm_drng_pr.force_reseed |= force;
 		esdm_drng_seed_work_one(&esdm_drng_pr, 0);
-		mutex_w_unlock(&esdm_drng_pr.lock);
 		goto out;
 	}
 
@@ -648,7 +669,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 					continue;
 				}
 
-				collected_ent_bits = esdm_drng_seed_es(drng);
+				collected_ent_bits = esdm_drng_seed_es_nolock(
+							drng, true, "regular");
 
 				esdm_pool_unlock();
 
@@ -760,20 +782,14 @@ void esdm_reset(void)
 
 /******************* Generic ESDM kernel output interfaces ********************/
 
-static void esdm_force_fully_seeded(void)
+void esdm_force_fully_seeded(void)
 {
-	static unsigned int ctr = 0;
-
 	if (esdm_pool_all_nodes_seeded_get())
-		return;
-
-	if (ctr++ < ESDM_FORCE_FULLY_SEEDED_ATTEMPT)
 		return;
 
 	esdm_pool_lock();
 	__esdm_drng_seed_work(true);
 	esdm_pool_unlock();
-	ctr = 0;
 }
 
 static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)

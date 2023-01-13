@@ -165,6 +165,8 @@ void esdm_debug_report_seedlevel(const char *name)
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "%s called without reaching minimally seeded level (available entropy %u)\n",
 		       name, esdm_avail_entropy());
+
+	esdm_force_fully_seeded();
 }
 
 /*
@@ -323,7 +325,7 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 	}
 
 	/* If sufficient entropy is available, reseed now. */
-	esdm_es_add_entropy();
+	esdm_force_fully_seeded();
 	esdm_es_mgr_monitor_wakeup();
 }
 
@@ -472,7 +474,7 @@ int esdm_es_mgr_reinitialize(void)
 		}
 	}
 
-	esdm_es_add_entropy();
+	esdm_force_fully_seeded();
 
 out:
 	return ret;
@@ -518,7 +520,7 @@ int esdm_es_mgr_initialize(void)
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
 	memset_secure(&seed, 0, sizeof(seed));
 
-	esdm_es_add_entropy();
+	esdm_force_fully_seeded();
 
 out:
 	return ret;

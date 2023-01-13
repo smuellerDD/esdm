@@ -45,8 +45,7 @@
  * implementations.
  */
 struct esdm_pool {
-						/* Aux pool: digest state */
-	LC_ALIGNED_BUFFER(aux_pool, HASH_MAX_DESCSIZE, uint64_t);
+	void *aux_pool;				/* Aux pool: digest state */
 	atomic_t aux_entropy_bits;
 	atomic_t digestsize;			/* Digest size of used hash */
 	bool initialized;			/* Aux pool initialized? */
@@ -56,6 +55,7 @@ struct esdm_pool {
 };
 
 static struct esdm_pool esdm_pool __aligned(ESDM_KCAPI_ALIGN) = {
+	.aux_pool		= NULL,
 	.aux_entropy_bits	= ATOMIC_INIT(0),
 	.digestsize		= ATOMIC_INIT(ESDM_MAX_DIGESTSIZE),
 	.initialized		= false,
@@ -114,16 +114,38 @@ static void esdm_init_wakeup_bits(void)
 
 static int esdm_aux_init(void)
 {
-#if defined(ESDM_HASH_SHA512)
-	if (sizeof(esdm_pool.aux_pool) != LC_HASH_CTX_SIZE(lc_sha512))
-#elif defined(ESDM_HASH_SHA3_512)
-	if (sizeof(esdm_pool.aux_pool) != LC_HASH_CTX_SIZE(lc_sha3_512))
-#else
-#error "Unknown hash size"
-#endif
-		return -EFAULT;
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	struct esdm_pool *pool = &esdm_pool;
+	const struct esdm_hash_cb *hash_cb;
+	int ret;
+
+	mutex_lock(&drng->hash_lock);
+	hash_cb = drng->hash_cb;
+	if (hash_cb->hash_alloc)
+		CKINT(hash_cb->hash_alloc(&pool->aux_pool));
+	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Aux ES hash allocated\n");
+	pool->initialized = false;
+
 	esdm_init_wakeup_bits();
-	return 0;
+
+out:
+	mutex_unlock(&drng->hash_lock);
+	return ret;
+}
+
+static void esdm_aux_fini(void)
+{
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	struct esdm_pool *pool = &esdm_pool;
+	const struct esdm_hash_cb *hash_cb;
+
+	mutex_lock(&drng->hash_lock);
+	hash_cb = drng->hash_cb;
+	if (hash_cb->hash_dealloc)
+		hash_cb->hash_dealloc(pool->aux_pool);
+	pool->aux_pool = NULL;
+	logger(LOGGER_DEBUG, LOGGER_C_ANY, "Aux ES hash deallocated\n");
+	mutex_unlock(&drng->hash_lock);
 }
 
 /* Obtain the digest size provided by the used hash in bits */
@@ -168,7 +190,8 @@ esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
 
 	struct esdm_drng *init_drng = esdm_drng_init_instance();
 	struct esdm_pool *pool = &esdm_pool;
-	struct hash_ctx *shash = (struct hash_ctx *)pool->aux_pool;
+	void *shash = pool->aux_pool;
+	void *nhash = NULL;
 	uint8_t digest[ESDM_MAX_DIGESTSIZE];
 	int ret;
 
@@ -179,24 +202,32 @@ esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
 	if (init_drng != drng)
 		return 0;
 
+	CKINT(new_cb->hash_alloc(&nhash));
+
 	/* Get the aux pool hash with old digest ... */
 	CKINT(old_cb->hash_final(shash, digest));
 	      /* ... re-initialize the hash with the new digest ... */
-	CKINT(new_cb->hash_init(shash));
+	CKINT(new_cb->hash_init(nhash));
 	      /*
 	       * ... feed the old hash into the new state. We may feed
 	       * uninitialized memory into the new state, but this is
 	       * considered no issue and even good as we have some more
 	       * uncertainty here.
 	       */
-	CKINT(new_cb->hash_update(shash, digest, sizeof(digest)));
+	CKINT(new_cb->hash_update(nhash, digest, sizeof(digest)));
 
-	esdm_set_digestsize(new_cb->hash_digestsize(shash));
+	/* Switch the hash state */
+	pool->aux_pool = nhash;
+	nhash = NULL;
+	old_cb->hash_dealloc(shash);
+
+	esdm_set_digestsize(new_cb->hash_digestsize(pool->aux_pool));
 	logger(LOGGER_DEBUG, LOGGER_C_ES,
 	       "Re-initialize aux entropy pool with hash %s\n",
 	       new_cb->hash_name());
 
 out:
+	new_cb->hash_dealloc(nhash);
 	memset_secure(digest, 0, sizeof(digest));
 	return ret;
 }
@@ -378,7 +409,7 @@ static bool esdm_aux_active(void)
 struct esdm_es_cb esdm_es_aux = {
 	.name			= "Auxiliary",
 	.init			= esdm_aux_init,
-	.fini			= NULL,
+	.fini			= esdm_aux_fini,
 	.monitor_es		= NULL,
 	.get_ent		= esdm_aux_get_backtrack,
 	.curr_entropy		= esdm_aux_avail_entropy,

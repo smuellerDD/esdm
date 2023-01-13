@@ -121,13 +121,6 @@
 /* Sleep time for poll operations */
 static const struct timespec poll_ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
 
-/*
- * How many attempts to reach fully seeded are allowed before trying to force
- * reseed from available entropy (pull data from entropy sources in a repeated
- * fashion allowing to sum up the entropy).
- */
-#define ESDM_FORCE_FULLY_SEEDED_ATTEMPT	5
-
 /****************************** Helper code ***********************************/
 
 static inline uint32_t esdm_fast_noise_entropylevel(uint32_t ent_bits,

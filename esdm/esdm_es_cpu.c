@@ -26,6 +26,7 @@
 #include "esdm_config.h"
 #include "esdm_crypto.h"
 #include "esdm_definitions.h"
+#include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_cpu.h"
 #include "esdm_node.h"
