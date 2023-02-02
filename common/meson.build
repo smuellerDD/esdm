@@ -79,3 +79,11 @@ if build_machine.system() == 'linux'
 endif
 
 configure_file(output: 'config.h', configuration : conf_data)
+
+# Needed to build a new RPC client as referenced in esdm_rpc_client.h
+include_user_files += files([
+	'atomic.h',
+	'bool.h',
+	'mutex_w.h',
+	'queue.h'
+])

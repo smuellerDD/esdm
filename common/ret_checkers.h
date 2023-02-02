@@ -20,6 +20,8 @@
 #ifndef RET_CHECKERS_H
 #define RET_CHECKERS_H
 
+#include "logger.h"
+
 #ifdef __cplusplus
 extern "C"
 {

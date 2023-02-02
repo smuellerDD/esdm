@@ -23,7 +23,6 @@
 #include <pthread.h>
 
 #include "bool.h"
-#include "logger.h"
 
 /**
  * @brief Reader / Writer mutex based on pthread
@@ -66,19 +65,13 @@ static inline void mutex_w_unlock(mutex_w_t *mutex)
  */
 static inline void mutex_w_init(mutex_w_t *mutex, int locked, int robust)
 {
-	int ret;
-
 	pthread_mutexattr_init(&mutex->ma);
 	mutex->ma_used = 1;
 
 	if (robust)
 		pthread_mutexattr_setrobust(&mutex->ma, PTHREAD_MUTEX_ROBUST);
 
-	ret = pthread_mutex_init(&mutex->lock, &mutex->ma);
-	if (ret) {
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Pthread lock initialization failed with %d\n", -ret);
-	}
+	pthread_mutex_init(&mutex->lock, &mutex->ma);
 
 	if (locked)
 		mutex_w_lock(mutex);

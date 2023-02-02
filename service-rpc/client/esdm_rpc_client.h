@@ -26,7 +26,6 @@
 #include <sys/types.h>
 
 #include "atomic.h"
-#include "bool.h"
 #include "mutex_w.h"
 #include "queue.h"
 
