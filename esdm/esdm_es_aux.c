@@ -117,7 +117,7 @@ static int esdm_aux_init(void)
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	struct esdm_pool *pool = &esdm_pool;
 	const struct esdm_hash_cb *hash_cb;
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
