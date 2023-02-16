@@ -38,7 +38,6 @@ ProtectSystem=strict
 ReadOnlyPaths=-/
 RemoveIPC=yes
 RestrictAddressFamilies=
-RestrictNamespaces=yes
 RestrictRealtime=yes
 UMask=0077
 
