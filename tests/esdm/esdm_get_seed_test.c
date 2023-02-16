@@ -27,6 +27,7 @@
 
 #include "esdm.h"
 #include "esdm_config.h"
+#include "esdm_node.h"
 #include "logger.h"
 #include "test_pertubation.h"
 
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
 	uint64_t buf[512 / sizeof(uint64_t)];
 	uint64_t buf2;
 	uint64_t size;
+	uint32_t cpu;
 	int ret;
 	ssize_t rc;
 	unsigned long val;
@@ -87,8 +89,19 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf),
-			   ESDM_GET_SEED_NONBLOCK | ESDM_GET_SEED_FULLY_SEEDED);
+	/*
+	 * get_seed only returns data after all DRNGs are seeded, but each
+	 * request only seeds one DRNG - thus allow requests up to the allowed
+	 * number of DRNGs.
+	 */
+	for_each_online_node(cpu) {
+		rc = esdm_get_seed(buf, sizeof(buf),
+				   ESDM_GET_SEED_NONBLOCK |
+				   ESDM_GET_SEED_FULLY_SEEDED);
+		if (rc != -EAGAIN)
+			break;
+
+	}
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
