@@ -20,10 +20,7 @@
 #ifndef BOOL_H
 #define BOOL_H
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+#ifndef __cplusplus
 
 #ifndef false
 /* Boolean variable */
@@ -31,8 +28,6 @@ enum { false, true };
 typedef _Bool bool;
 #endif
 
-#ifdef __cplusplus
-}
-#endif
+#endif /* __cplusplus */
 
 #endif /* BOOL_H */
