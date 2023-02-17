@@ -211,26 +211,26 @@ static inline int atomic_nand(atomic_t *v, int i)
  * variable is equal to the old value, set the new value)
  * @param v atomic variable
  * @param old integer value to compare with
- * @param new integer value to set atomic variable to
+ * @param newval integer value to set atomic variable to
  * @return original value if comparison is successful and new was written
  *	   To verify that the exchange was successful, the caller must compare
  *	   the return value with the old value.
  */
-static inline int atomic_cmpxchg(atomic_t *v, int old, int new)
+static inline int atomic_cmpxchg(atomic_t *v, int old, int newval)
 {
-	return __sync_val_compare_and_swap(&v->counter, old, new);
+	return __sync_val_compare_and_swap(&v->counter, old, newval);
 }
 
 /**
  * Atomic exchange operation (write the new value into the atomic variable
  * and return the old content)
  * @param v atomic variable
- * @param new integer value to set atomic variable to
+ * @param newval integer value to set atomic variable to
  * @return original value
  */
-static inline int atomic_xchg(atomic_t *v, int new)
+static inline int atomic_xchg(atomic_t *v, int newval)
 {
-	return __atomic_exchange_n(&v->counter, new, __ATOMIC_ACQUIRE);
+	return __atomic_exchange_n(&v->counter, newval, __ATOMIC_ACQUIRE);
 }
 
 /**
