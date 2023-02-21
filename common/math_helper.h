@@ -26,10 +26,14 @@ extern "C"
 #endif
 
 #define min_t(type, a, b)						       \
-	((type)a < (type)b) ? (type)a : (type)b
+	type __a = a;							       \
+	type __b = b;							       \
+	((type)__a < (type)__b) ? (type)__a : (type)__b
 
 #define max_t(type, a, b)						       \
-	((type)a > (type)b) ? (type)a : (type)b
+	type __a = a;							       \
+	type __b = b;							       \
+	((type)__a > (type)__b) ? (type)__a : (type)__b
 
 #ifdef __cplusplus
 }
