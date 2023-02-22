@@ -59,6 +59,9 @@ add_project_link_arguments('-Wl,--gc-sections', language : 'c')
 add_project_link_arguments('-Wl,-z,relro', language : 'c')
 add_project_link_arguments('-Wl,-z,now', language : 'c')
 
+# No executable stack
+add_project_link_arguments('-Wl,-z,noexecstack', language : 'c')
+
 # Only link to truly needed libraries
 add_project_link_arguments('-Wl,--as-needed', language : 'c')
 
