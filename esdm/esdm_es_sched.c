@@ -28,6 +28,7 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_sched.h"
+#include "helper.h"
 #include "logger.h"
 #include "memset_secure.h"
 #include "test_pertubation.h"

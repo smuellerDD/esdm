@@ -27,6 +27,7 @@
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_jent.h"
+#include "helper.h"
 #include "logger.h"
 #include "mutex_w.h"
 

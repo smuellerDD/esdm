@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 #include "config.h"
-#include "helper.h"
+#include "math_helper.h"
 
 uint32_t esdm_online_nodes(void)
 {
@@ -42,7 +42,8 @@ uint32_t esdm_online_nodes(void)
 			 * available - its counterpart is in function
 			 * esdm_curr_node().
 			 */
-			cpus = min_t(uint32_t, ncpus, THREADING_MAX_THREADS);
+			cpus = min_uint32((uint32_t)ncpus,
+					  THREADING_MAX_THREADS);
 		} else {
 			cpus = 1;
 		}

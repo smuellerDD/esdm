@@ -35,6 +35,7 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_krng.h"
 #include "esdm_es_sched.h"
+#include "helper.h"
 #include "logger.h"
 
 /*

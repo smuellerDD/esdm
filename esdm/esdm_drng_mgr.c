@@ -316,7 +316,7 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 		return;
 
 	/* We allow at most 1h reseed time */
-	esdm_drng_reseed_max_time = min_t(uint32_t, seconds, 60 * 60);
+	esdm_drng_reseed_max_time = min_uint32(seconds, 60 * 60);
 }
 
 /************************* Random Number Generation ***************************/
@@ -635,15 +635,15 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	if (!esdm_get_available())
 		return -EOPNOTSUPP;
 
-	outbuflen = min_t(size_t, outbuflen, SSIZE_MAX);
+	outbuflen = min_size(outbuflen, SSIZE_MAX);
 
 	if (atomic_read_u32(&drng->requests_since_fully_seeded) >
 	    esdm_config_drng_max_wo_reseed())
 		esdm_unset_fully_seeded(drng);
 
 	while (outbuflen) {
-		uint32_t todo = min_t(uint32_t, outbuflen,
-				      ESDM_DRNG_MAX_REQSIZE);
+		uint32_t todo = min_uint32((uint32_t)outbuflen,
+					   ESDM_DRNG_MAX_REQSIZE);
 		ssize_t ret;
 
 		/* In normal operation, check whether to reseed */
@@ -681,13 +681,13 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				}
 
 				/* If no new entropy was received, stop now. */
-				todo = min_t(uint32_t, todo,
-					     collected_ent_bits >> 3);
+				todo = min_uint32(todo,
+						  collected_ent_bits >> 3);
 			}
 
 			/* Do not produce more than DRNG security strength */
-			todo = min_t(uint32_t, todo,
-				     esdm_security_strength() >> 3);
+			todo = min_uint32(todo,
+					  esdm_security_strength() >> 3);
 		}
 		ret = drng->drng_cb->drng_generate(drng->drng,
 						   outbuf + processed, todo);

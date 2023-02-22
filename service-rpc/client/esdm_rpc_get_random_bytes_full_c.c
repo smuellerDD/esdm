@@ -25,7 +25,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_service.h"
-#include "helper.h"
+#include "math_helper.h"
 #include "logger.h"
 #include "ptr_err.h"
 #include "ret_checkers.h"
@@ -51,7 +51,7 @@ esdm_rpcc_get_random_bytes_full_cb(const GetRandomBytesFullResponse *response,
 		return;
 	}
 
-	buffer->ret = min_t(ssize_t, response->randval.len, buffer->buflen);
+	buffer->ret = (ssize_t)min_size(response->randval.len, buffer->buflen);
 	memcpy(buffer->buf, response->randval.data, (size_t)buffer->ret);
 
 	/* Zeroization of response is handled in esdm_rpc_client_read_handler */
@@ -74,7 +74,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 		buffer.buf = buf;
 		buffer.buflen = buflen;
 
-		msg.len = min_t(size_t, maxbuflen, buflen);
+		msg.len = min_size(maxbuflen, buflen);
 
 		unpriv_access__rpc_get_random_bytes_full(
 			&rpc_conn->service, &msg,

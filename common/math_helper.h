@@ -25,15 +25,26 @@ extern "C"
 {
 #endif
 
-#define min_t(type, a, b)						       \
-	type __a = a;							       \
-	type __b = b;							       \
-	((type)__a < (type)__b) ? (type)__a : (type)__b
+static inline uint32_t min_uint32(uint32_t a, uint32_t b)
+{
+	return a < b ? a : b;
+}
 
-#define max_t(type, a, b)						       \
-	type __a = a;							       \
-	type __b = b;							       \
-	((type)__a > (type)__b) ? (type)__a : (type)__b
+static inline uint64_t min_uint64(uint64_t a, uint64_t b)
+{
+	return a < b ? a : b;
+}
+
+static inline size_t min_size(size_t a, size_t b)
+{
+	return a < b ? a : b;
+}
+
+static inline uint32_t max_uint32(uint32_t a, uint32_t b)
+{
+	return a > b ? a : b;
+}
+
 
 #ifdef __cplusplus
 }

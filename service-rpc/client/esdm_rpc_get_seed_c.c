@@ -25,7 +25,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_service.h"
-#include "helper.h"
+#include "math_helper.h"
 #include "logger.h"
 #include "ptr_err.h"
 #include "ret_checkers.h"
@@ -46,7 +46,7 @@ esdm_rpcc_get_seed_cb(const GetSeedResponse *response, void *closure_data)
 	esdm_rpcc_error_check(response, buffer);
 
 	buffer->ret = response->ret;
-	buffer->buflen = min_t(size_t, response->randval.len, buffer->buflen);
+	buffer->buflen = min_size(response->randval.len, buffer->buflen);
 	memcpy(buffer->buf, response->randval.data, buffer->buflen);
 
 	/* Zeroization of response is handled in esdm_rpc_client_read_handler */

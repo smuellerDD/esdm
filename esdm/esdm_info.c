@@ -35,7 +35,7 @@ static inline size_t esdm_remaining_buf_len(char *buf, size_t buflen)
 {
 	size_t len = strlen(buf);
 
-	return min_t(size_t, len, buflen);
+	return min_size(len, buflen);
 }
 
 void esdm_pool_inc_node_node(void)

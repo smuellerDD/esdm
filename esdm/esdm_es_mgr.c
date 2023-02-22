@@ -385,7 +385,7 @@ void esdm_set_write_wakeup_bits(uint32_t val)
 		return;
 
 	esdm_write_wakeup_bits =
-		min_t(uint32_t, val, esdm_reduce_by_osr(esdm_get_digestsize()));
+		min_uint32(val, esdm_reduce_by_osr(esdm_get_digestsize()));
 }
 
 /*

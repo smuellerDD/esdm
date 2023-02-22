@@ -35,6 +35,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
+#include "math_helper.h"
 #include "memset_secure.h"
 #include "ptr_err.h"
 #include "ret_checkers.h"
@@ -482,13 +483,13 @@ static uint32_t esdm_rpcc_max_nodes = 0xffffffff;
 DSO_PUBLIC
 int esdm_rpcc_set_max_online_nodes(uint32_t nodes)
 {
-	esdm_rpcc_max_nodes = min_t(uint32_t, esdm_rpcc_max_nodes, nodes);
+	esdm_rpcc_max_nodes = min_uint32(esdm_rpcc_max_nodes, nodes);
 	return 0;
 }
 
 static uint32_t esdm_rpcc_get_online_nodes(void)
 {
-	return (min_t(uint32_t, esdm_rpcc_max_nodes, esdm_online_nodes()));
+	return (min_uint32(esdm_rpcc_max_nodes, esdm_online_nodes()));
 }
 
 static uint32_t esdm_rpcc_curr_node(void)

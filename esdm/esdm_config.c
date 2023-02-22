@@ -97,7 +97,7 @@ static struct esdm_config esdm_config = {
 
 static uint32_t esdm_config_entropy_rate_max(uint32_t val)
 {
-	return min_t(uint32_t, ESDM_DRNG_SECURITY_STRENGTH_BITS, val);
+	return min_uint32(ESDM_DRNG_SECURITY_STRENGTH_BITS, val);
 }
 
 DSO_PUBLIC
@@ -160,7 +160,7 @@ DSO_PUBLIC
 void esdm_config_es_krng_entropy_rate_set(uint32_t ent)
 {
 	if (esdm_irq_enabled())
-		ent = min_t(uint32_t, ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY, ent);
+		ent = min_uint32(ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY, ent);
 
 	esdm_config.esdm_es_krng_entropy_rate_bits =
 		esdm_config_entropy_rate_max(ent);
@@ -249,7 +249,7 @@ int esdm_config_fips_enabled(void)
 DSO_PUBLIC
 uint32_t esdm_config_online_nodes(void)
 {
-	return min_t(uint32_t, esdm_online_nodes(), esdm_config_max_nodes());
+	return min_uint32(esdm_online_nodes(), esdm_config_max_nodes());
 }
 
 DSO_PUBLIC

@@ -23,7 +23,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_service.h"
-#include "helper.h"
+#include "math_helper.h"
 #include "logger.h"
 #include "ptr_err.h"
 #include "ret_checkers.h"
@@ -55,7 +55,7 @@ int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
 	while (data_buf_len) {
-		size_t todo = min_t(size_t, data_buf_len, ESDM_RPC_MAX_DATA);
+		size_t todo = min_size(data_buf_len, ESDM_RPC_MAX_DATA);
 
 		buffer.ret = -ETIMEDOUT;
 

@@ -37,6 +37,7 @@
 #include "helper.h"
 #include "linux_support.h"
 #include "logger.h"
+#include "math_helper.h"
 #include "memset_secure.h"
 #include "mutex.h"
 #include "privileges.h"
@@ -409,7 +410,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     get_func_t get, int fallback_fd)
 {
 	uint8_t tmpbuf[ESDM_RPC_MAX_DATA];
-	size_t cleansize = min_t(size_t, sizeof(tmpbuf), size);
+	size_t cleansize = min_size(sizeof(tmpbuf), size);
 	ssize_t ret = 0;
 
 	(void)off;
@@ -428,7 +429,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 
 //	while (size)
 	{
-		size_t todo = min_t(size_t, sizeof(tmpbuf), size);
+		size_t todo = min_size(sizeof(tmpbuf), size);
 
 		esdm_cuse_unpriv_call_start();
 		esdm_invoke(get(tmpbuf, todo, req));

@@ -68,7 +68,7 @@ static struct esdm_pool esdm_pool __aligned(ESDM_KCAPI_ALIGN) = {
 static uint32_t esdm_aux_avail_entropy(uint32_t __unused u)
 {
 	/* Cap available entropy with max entropy */
-	uint32_t avail_bits = min_t(uint32_t, esdm_get_digestsize(),
+	uint32_t avail_bits = min_uint32(esdm_get_digestsize(),
 			       atomic_read_u32(&esdm_pool.aux_entropy_bits));
 
 	/* Consider oversampling rate due to aux pool conditioning */
@@ -101,7 +101,7 @@ static void esdm_set_digestsize(uint32_t digestsize)
 	 * In case the new digest is larger than the old one, cap the available
 	 * entropy to the old message digest used to process the existing data.
 	 */
-	ent_bits = min_t(uint32_t, ent_bits, old_digestsize);
+	ent_bits = min_uint32(ent_bits, old_digestsize);
 	atomic_add(&pool->aux_entropy_bits, (int)ent_bits);
 }
 
@@ -243,7 +243,7 @@ esdm_aux_pool_insert_locked(const uint8_t *inbuf, size_t inbuflen,
 	const struct esdm_hash_cb *hash_cb;
 	int ret;
 
-	entropy_bits = min_t(uint32_t, entropy_bits, inbuflen << 3);
+	entropy_bits = min_uint32(entropy_bits, (uint32_t)(inbuflen << 3));
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
@@ -264,8 +264,8 @@ esdm_aux_pool_insert_locked(const uint8_t *inbuf, size_t inbuflen,
 	 * SP800-90B section 3.1.5.1 table 1.
 	 */
 	entropy_bits += atomic_read_u32(&pool->aux_entropy_bits);
-	esdm_pool_set_entropy(min_t(uint32_t, entropy_bits,
-				    hash_cb->hash_digestsize(shash) << 3));
+	esdm_pool_set_entropy(min_uint32(entropy_bits,
+					 hash_cb->hash_digestsize(shash) << 3));
 
 out:
 	mutex_reader_unlock(&drng->hash_lock);
@@ -324,12 +324,13 @@ static uint32_t esdm_aux_get_pool(uint8_t *outbuf, uint32_t requested_bits)
 	esdm_cap_requested(digestsize_bits, requested_bits);
 
 	/* Ensure that no more than the size of aux_pool can be requested */
-	requested_bits = min_t(uint32_t, requested_bits, (ESDM_MAX_DIGESTSIZE << 3));
+	requested_bits = min_uint32(requested_bits, (ESDM_MAX_DIGESTSIZE << 3));
 	requested_bits_osr = requested_bits + esdm_compress_osr();
 
 	/* Cap entropy with entropy counter from aux pool and the used digest */
-	collected_ent_bits = min_t(uint32_t, digestsize_bits,
-				   atomic_xchg(&pool->aux_entropy_bits, 0));
+	collected_ent_bits =
+		min_uint32(digestsize_bits,
+			   (uint32_t)atomic_xchg(&pool->aux_entropy_bits, 0));
 
 	/* We collected too much entropy and put the overflow back */
 	if (collected_ent_bits > requested_bits_osr) {

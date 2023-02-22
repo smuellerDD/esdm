@@ -30,6 +30,7 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_cpu.h"
 #include "esdm_node.h"
+#include "helper.h"
 #include "mutex.h"
 
 static uint32_t esdm_cpu_data_multiplier = 0;
@@ -174,8 +175,8 @@ static uint32_t esdm_cpu_multiplier(void)
 		esdm_cpu_data_multiplier = 1;
 
 	/* Apply configured multiplier */
-	esdm_cpu_data_multiplier = max_t(uint32_t, esdm_cpu_data_multiplier,
-					 ESDM_CPU_FULL_ENT_MULTIPLIER);
+	esdm_cpu_data_multiplier = max_uint32(esdm_cpu_data_multiplier,
+					      ESDM_CPU_FULL_ENT_MULTIPLIER);
 
 	logger(LOGGER_DEBUG, LOGGER_C_ES, "Setting CPU ES multiplier to %u\n",
 	       esdm_cpu_data_multiplier);
@@ -203,7 +204,7 @@ esdm_cpu_switch_hash(struct esdm_drng __unused *drng, int __unused node,
 		       "Compression hash has smaller digest size than CPU entropy rate\n");
 
 	esdm_config_es_cpu_entropy_rate_set(
-		min_t(uint32_t, digestsize, curr_ent_rate));
+		min_uint32(digestsize, curr_ent_rate));
 	return 0;
 }
 

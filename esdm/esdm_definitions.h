@@ -26,7 +26,7 @@
 #include "atomic.h"
 #include "config.h"
 #include "esdm_hash_common.h"
-#include "helper.h"
+#include "math_helper.h"
 
 /*************************** General ESDM parameter ***************************/
 
@@ -129,7 +129,7 @@ static inline uint32_t esdm_fast_noise_entropylevel(uint32_t ent_bits,
 	/* Obtain entropy statement */
 	ent_bits = ent_bits * requested_bits / ESDM_DRNG_SECURITY_STRENGTH_BITS;
 	/* Cap entropy to buffer size in bits */
-	ent_bits = min_t(uint32_t, ent_bits, requested_bits);
+	ent_bits = min_uint32(ent_bits, requested_bits);
 	return ent_bits;
 }
 

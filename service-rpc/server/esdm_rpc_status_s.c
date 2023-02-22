@@ -21,7 +21,7 @@
 
 #include "esdm.h"
 #include "esdm_rpc_service.h"
-#include "helper.h"
+#include "math_helper.h"
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_status(UnprivAccess_Service *service,
@@ -37,8 +37,8 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		response.ret = -(int32_t)sizeof(status);
 		closure (&response, closure_data);
 	} else {
-		esdm_status(status, min_t(uint32_t, request->maxlen,
-					  ESDM_RPC_MAX_MSG_SIZE));
+		esdm_status(status, min_uint32(request->maxlen,
+					       ESDM_RPC_MAX_MSG_SIZE));
 		response.ret = 0;
 		response.buffer = status;
 		closure (&response, closure_data);

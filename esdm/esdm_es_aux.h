@@ -39,8 +39,7 @@ static inline uint32_t esdm_security_strength(void)
 	 * size. On the other hand the entropy cannot be larger than the
 	 * security strength of the used DRBG.
 	 */
-	return min_t(uint32_t, ESDM_FULL_SEED_ENTROPY_BITS,
-		     esdm_get_digestsize());
+	return min_uint32(ESDM_FULL_SEED_ENTROPY_BITS, esdm_get_digestsize());
 }
 
 static inline uint32_t esdm_get_seed_entropy_osr(bool fully_seeded)

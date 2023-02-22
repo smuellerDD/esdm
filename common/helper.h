@@ -31,12 +31,6 @@ extern "C"
 #define __unused	__attribute__((__unused__))
 #define __maybe_unused	__attribute__((__unused__))
 
-#define min_t(type, a, b)						\
-	((type)a < (type)b) ? (type)a : (type)b
-
-#define max_t(type, a, b)						\
-	((type)a > (type)b) ? (type)a : (type)b
-
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 #define member_to_struct(member, data_type, member_var)                 \

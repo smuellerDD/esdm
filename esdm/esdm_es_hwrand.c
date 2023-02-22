@@ -31,6 +31,7 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_hwrand.h"
 #include "esdm_node.h"
+#include "helper.h"
 #include "mutex.h"
 
 #define ESDM_ES_HWRAND_AVAIL "/sys/devices/virtual/misc/hw_random/rng_available"
