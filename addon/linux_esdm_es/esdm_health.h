@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
  */
 
 #ifndef _ESDM_HEALTH_H
@@ -47,15 +47,32 @@ config ESDM_RCT_CUTOFF
 	default 31 if !ESDM_RCT_BROKEN
 	default 1 if ESDM_RCT_BROKEN
 
+# Default taken from SP800-90B sec 4.4.1 - significance level 2^-80
+config ESDM_RCT_CUTOFF_PERMANENT
+	int
+	default 81 if !LRNG_RCT_BROKEN
+	default 2 if LRNG_RCT_BROKEN
+
 # Default taken from SP800-90B sec 4.4.2 - significance level 2^-30
 config ESDM_APT_CUTOFF
 	int
 	default 325 if !ESDM_APT_BROKEN
 	default 32 if ESDM_APT_BROKEN
+
+# Default taken from SP800-90B sec 4.4.2 - significance level 2^-80
+config ESDM_APT_CUTOFF_PERMANENT
+	int
+	default 371 if !LRNG_APT_BROKEN
+	default 33 if LRNG_APT_BROKEN
  */
 
 #define CONFIG_ESDM_RCT_CUTOFF 31
+#define CONFIG_ESDM_RCT_CUTOFF_PERMANENT 81
+
 #define CONFIG_ESDM_APT_CUTOFF 325
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT 371
+
+
 
 /******************************************************************************/
 

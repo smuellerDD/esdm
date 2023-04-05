@@ -2,7 +2,7 @@
 /*
  * ESDM entropy source manager and external interface
  *
- * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -10,13 +10,26 @@
 #include <linux/debugfs.h>
 #include <linux/module.h>
 
+#include "esdm_es_mgr.h"
 #include "esdm_es_mgr_cb.h"
 #include "esdm_es_mgr_irq.h"
 #include "esdm_es_mgr_sched.h"
 #include "esdm_es_timer_common.h"
 #include "esdm_testing.h"
 
+/* Only panic the kernel on permanent health failure if this variable is true */
+static bool esdm_panic_on_permanent_health_failure = false;
+module_param(esdm_panic_on_permanent_health_failure, bool, 0444);
+MODULE_PARM_DESC(esdm_panic_on_permanent_health_failure, "Panic on reaching permanent health failure - only required if ESDM is part of a FIPS 140-3 module\n");
+
 static struct dentry *esdm_es_mgr_debugfs_root = NULL;
+
+/********************************** Helper ***********************************/
+
+bool esdm_enforce_panic_on_permanent_health_failure(void)
+{
+	return esdm_panic_on_permanent_health_failure;
+}
 
 void esdm_reset_state(enum esdm_internal_es es)
 {

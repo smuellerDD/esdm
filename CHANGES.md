@@ -9,6 +9,13 @@ Changes 0.6.0-prerelease:
 * add "emergency seeding" when entropy sources cannot collectively deliver
   256 bits of entropy, pull data repeatedly until 256 bits are received
 
+* export esdm_rpc_client.h with all depending header files to allow external
+  clients to be developed
+
+* update IRQ/Scheduler ES health test to match LRNG
+
+* bug fix: correctly calculate memory offsets
+
 Changes 0.5.0:
 * Linux kernel entropy feeder is now always enabled
 

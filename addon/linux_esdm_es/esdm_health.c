@@ -2,7 +2,7 @@
 /*
  * Entropy Source and DRNG Manager (ESDM) Health Testing
  *
- * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -10,6 +10,7 @@
 #include <linux/fips.h>
 #include <linux/module.h>
 
+#include "esdm_es_mgr.h"
 #include "esdm_es_mgr_cb.h"
 #include "esdm_health.h"
 
@@ -161,6 +162,30 @@ static void esdm_sp80090b_runtime_failure(struct esdm_health *health,
 	es_state->sp80090b_startup_done = false;
 }
 
+static void esdm_rct_reset(struct esdm_rct *rct);
+static void esdm_apt_reset(struct esdm_apt *apt, unsigned int time_masked);
+static void esdm_apt_restart(struct esdm_apt *apt);
+static void esdm_sp80090b_permanent_failure(struct esdm_health *health,
+					    enum esdm_internal_es es)
+{
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+	struct esdm_apt *apt = &es_state->apt;
+	struct esdm_rct *rct = &es_state->rct;
+
+	if (esdm_enforce_panic_on_permanent_health_failure()) {
+		panic("SP800-90B permanent health test failure for internal entropy source %u\n",
+		      es);
+	}
+
+	pr_err("SP800-90B permanent health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
+	       es);
+	esdm_sp80090b_runtime_failure(health, es);
+
+	esdm_rct_reset(rct);
+	esdm_apt_reset(apt, 0);
+	esdm_apt_restart(apt);
+}
+
 static void esdm_sp80090b_failure(struct esdm_health *health,
 				  enum esdm_internal_es es)
 {
@@ -250,7 +275,9 @@ static void esdm_apt_insert(struct esdm_health *health,
 	if (now_time == (unsigned int)atomic_read(&apt->apt_base)) {
 		u32 apt_val = (u32)atomic_inc_return_relaxed(&apt->apt_count);
 
-		if (apt_val >= CONFIG_ESDM_APT_CUTOFF)
+		if (apt_val >= CONFIG_ESDM_APT_CUTOFF_PERMANENT)
+			esdm_sp80090b_permanent_failure(health, es);
+		else if (apt_val >= CONFIG_ESDM_APT_CUTOFF)
 			esdm_sp80090b_failure(health, es);
 	}
 
@@ -277,6 +304,12 @@ static void esdm_apt_insert(struct esdm_health *health,
  * that no data can be extracted from the entropy pool unless new entropy
  * is received.
  ***************************************************************************/
+
+static void esdm_rct_reset(struct esdm_rct *rct)
+{
+	/* Reset RCT */
+	atomic_set(&rct->rct_count, 0);
+}
 
 /*
  * Hot code path - Insert data for Repetition Count Test
@@ -307,19 +340,12 @@ static void esdm_rct(struct esdm_health *health, enum esdm_internal_es es,
 		 * Hence we need to subtract one from the cutoff value as
 		 * calculated following SP800-90B.
 		 */
-		if (rct_count >= CONFIG_ESDM_RCT_CUTOFF) {
-			atomic_set(&rct->rct_count, 0);
-
-			/*
-			 * APT must start anew as we consider all previously
-			 * recorded data to contain no entropy.
-			 */
-			esdm_apt_restart(&es_state->apt);
-
+		if (rct_count >= CONFIG_ESDM_RCT_CUTOFF_PERMANENT)
+			esdm_sp80090b_permanent_failure(health, es);
+		else if (rct_count >= CONFIG_ESDM_RCT_CUTOFF)
 			esdm_sp80090b_failure(health, es);
-		}
 	} else {
-		atomic_set(&rct->rct_count, 0);
+		esdm_rct_reset(rct);
 	}
 }
 
