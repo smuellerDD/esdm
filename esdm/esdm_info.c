@@ -47,7 +47,6 @@ DSO_PUBLIC
 void esdm_version(char *buf, size_t buflen)
 {
 	snprintf(buf, buflen, "%slibrary version: %s\n", TESTMODE_STR, VERSION);
-
 }
 
 DSO_PUBLIC
