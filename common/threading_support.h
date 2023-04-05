@@ -80,7 +80,7 @@ enum esdm_request_type {
 /**
  * @brief - Initializiation of the threading support
  *
- * @param groups [in] Number of groups of threads that are contending and
+ * @param [in] groups Number of groups of threads that are contending and
  *		      yet one thread out of each group must be available.
  *
  * @return: 0 on success, < 0 on error
@@ -109,12 +109,12 @@ int thread_wait(void);
 /**
  * @brief - Start a function in a separate thread
  *
- * @param start_routine [in] Function that is invoked in thread (the idea is
+ * @param [in] start_routine Function that is invoked in thread (the idea is
  *			     that the return code is 0 for success and != 0 for
  *			     error)
- * @param tdata [in] Argument supplied to function
- * @param thread_group [in] Which thread group the thread belongs to.
- * @param ret_ancestor [out] Return code of garbage-collected ancestor. It may
+ * @param [in] tdata Argument supplied to function
+ * @param [in] thread_group Which thread group the thread belongs to.
+ * @param [out] ret_ancestor Return code of garbage-collected ancestor. It may
  *			     be NULL if the return code is not of interest.
  *
  * @return 0 on success, < 0 on error

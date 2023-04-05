@@ -40,7 +40,7 @@ typedef struct {
 
 /**
  * Mutual exclusion lock (covering also the reader lock use case).
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  */
 static inline void mutex_w_lock(mutex_w_t *mutex)
 {
@@ -49,7 +49,7 @@ static inline void mutex_w_lock(mutex_w_t *mutex)
 
 /**
  * Unlock the lock
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  */
 static inline void mutex_w_unlock(mutex_w_t *mutex)
 {
@@ -58,10 +58,10 @@ static inline void mutex_w_unlock(mutex_w_t *mutex)
 
 /**
  * @brief Initialize a mutex
- * @param mutex [in] Lock variable to initialize.
- * @param locked [in] Specify whether the lock shall already be locked (1)
+ * @param [in] mutex Lock variable to initialize.
+ * @param [in] locked Specify whether the lock shall already be locked (1)
  *		      or unlocked (0).
- * @param robust [in] initialize a robust mutex (1) or not (0)
+ * @param [in] robust initialize a robust mutex (1) or not (0)
  */
 static inline void mutex_w_init(mutex_w_t *mutex, int locked, int robust)
 {
@@ -88,7 +88,7 @@ static inline void mutex_w_destroy(mutex_w_t *mutex)
  * Mutual exclusion lock: Attempt to take the lock. The function will never
  * block but return whether the lock was successfully taken or not.
  *
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  * @return true if lock was taken, false if lock was not taken
  */
 static inline bool mutex_w_trylock(mutex_w_t *mutex)

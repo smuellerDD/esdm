@@ -93,7 +93,7 @@ struct lc_sym_ctx {
 /**
  * @brief Initialize symmetric context
  *
- * @param sym_ctx [in] Reference to sym context implementation to be used to
+ * @param [in] sym_ctx Reference to sym context implementation to be used to
  *		       perform sym calculation with.
  *
  * The caller must provide an allocated sym_ctx. This can be achieved by
@@ -143,7 +143,7 @@ static inline void lc_sym_decrypt(struct lc_sym_ctx *ctx,
  * @brief Zeroize Hash context allocated with either LC_HASH_CTX_ON_STACK or
  *	  lc_hmac_alloc
  *
- * @param ctx [in] Hash context to be zeroized
+ * @param [in] ctx Hash context to be zeroized
  */
 static inline void lc_sym_zero(struct lc_sym_ctx *ctx)
 {
@@ -156,8 +156,8 @@ static inline void lc_sym_zero(struct lc_sym_ctx *ctx)
 /**
  * @brief Allocate stack memory for the sym context
  *
- * @param name [in] Name of the stack variable
- * @param symname [in] Pointer of type struct sym referencing the sym
+ * @param [in] name Name of the stack variable
+ * @param [in] symname Pointer of type struct sym referencing the sym
  *			 implementation to be used
  */
 #define LC_SYM_CTX_ON_STACK(name, symname)				       \

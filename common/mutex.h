@@ -36,7 +36,7 @@ typedef pthread_rwlock_t mutex_t;
 
 /**
  * Mutual exclusion lock (covering also the reader lock use case).
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  */
 static inline void mutex_lock(mutex_t *mutex)
 {
@@ -45,7 +45,7 @@ static inline void mutex_lock(mutex_t *mutex)
 
 /**
  * Unlock the lock
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  */
 static inline void mutex_unlock(mutex_t *mutex)
 {
@@ -54,8 +54,8 @@ static inline void mutex_unlock(mutex_t *mutex)
 
 /**
  * @brief Initialize a mutex
- * @param mutex [in] Lock variable to initialize.
- * @param locked [in] Specify whether the lock shall already be locked (1)
+ * @param [in] mutex Lock variable to initialize.
+ * @param [in] locked Specify whether the lock shall already be locked (1)
  *		      or unlocked (0).
  */
 static inline void mutex_init(mutex_t *mutex, int locked)
@@ -80,7 +80,7 @@ static inline void mutex_destroy(mutex_t *mutex)
 /**
  * Mutual exclusion lock when only doing a read (wait when the writer lock
  * is taken but allow parallel reader locks).
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  */
 static inline void mutex_reader_lock(mutex_t *mutex)
 {
@@ -89,7 +89,7 @@ static inline void mutex_reader_lock(mutex_t *mutex)
 
 /**
  * Unlock the reader lock
- * @param mutex [in] lock variable to lock
+ * @param [in] mutex lock variable to lock
  */
 static inline void mutex_reader_unlock(mutex_t *mutex)
 {

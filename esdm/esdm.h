@@ -213,12 +213,12 @@ enum esdm_get_seed_flags {
  * The seed buffer is the data that should be handed to the caller's DRNG as
  * seed data.
  *
- * @param buf [out] Buffer to be filled with data from the entropy sources -
+ * @param [out] buf Buffer to be filled with data from the entropy sources -
  *		    note, the buffer is marked as uint64_t to ensure it is
  *		    aligned to 64 bits.
- * @param nbytes [in] Size of the buffer allocated by the caller - this value
+ * @param [in] nbytes Size of the buffer allocated by the caller - this value
  *		      provides size of @param buf in bytes.
- * @param flags [in] Flags field to adjust the behavior
+ * @param [in] flags Flags field to adjust the behavior
  *
  * @return -EINVAL or -EMSGSIZE indicating the buffer is too small, -EAGAIN when
  *	   the call would block, but NONBLOCK is specified, > 0 the size of
@@ -230,15 +230,15 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 /**
  * @brief esdm_status() - Get status information on ESDM
  *
- * @param buf [out] Buffer to be filled with status information
- * @param buflen [in] Length of buffer
+ * @param [out] buf Buffer to be filled with status information
+ * @param [in] buflen Length of buffer
  */
 void esdm_status(char *buf, size_t buflen);
 
 /**
  * @brief esdm_status_machine() - Get status information on ESDM
  *
- * @param status [out] Buffer to be filled with status information
+ * @param [out] status Buffer to be filled with status information
  */
 struct esdm_status_st {
 	unsigned int es_irq_enabled:1;
@@ -248,8 +248,8 @@ void esdm_status_machine(struct esdm_status_st *status);
 /**
  * @brief esdm_version() - Get ESDM version information
  *
- * @param buf [out] Buffer to be filled with status information
- * @param buflen [in] Length of buffer
+ * @param [out] buf Buffer to be filled with status information
+ * @param [in] buflen Length of buffer
  */
 void esdm_version(char *buf, size_t buflen);
 
@@ -264,9 +264,9 @@ void esdm_version(char *buf, size_t buflen);
  * is set to a value > 0. When the value is 0, the data does not need to be
  * provided by an SP800-90B entropy source.
  *
- * @param inbuf [in] Buffer with the data to be inserted into the aux pool.
- * @param inbuflen [in] Size of the buffer.
- * @param entropy_bits [in] Amount of bits to be credited for the inserted
+ * @param [in] inbuf Buffer with the data to be inserted into the aux pool.
+ * @param [in] inbuflen Size of the buffer.
+ * @param [in] entropy_bits Amount of bits to be credited for the inserted
  *			    data.
  *
  * @return: 0 on success, < 0 on error
@@ -313,7 +313,7 @@ uint32_t esdm_get_digestsize(void);
 /**
  * @brief Set the entropy level of the auxiliary pool
  *
- * @param entropy_bits [in] Entropy rate in bits
+ * @param [in] entropy_bits Entropy rate in bits
  */
 void esdm_pool_set_entropy(uint32_t entropy_bits);
 

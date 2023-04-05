@@ -78,7 +78,7 @@ static const struct timespec esdm_client_poll_ts = { .tv_sec = 1,
  * requests to be processed as CPUs are available to be allocated. To limit
  * this, set maximum number of online nodes here.
  *
- * @param nodes [in] Number of maximum online nodes
+ * @param [in] nodes Number of maximum online nodes
  *
  * @return 0 on success, 0 < on error
  */
@@ -95,9 +95,9 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
  * the connection with esdm_rpc_client_fini_unpriv_service. Release the
  * connection with esdm_rpcc_put_unpriv_service.
  *
- * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ * @param [in] rpc_conn Connection handle that shall be used. This handle can be
  *		   	located on the stack.
- * @param int_data [in] Opaque data pointer used when invoking the interrupt
+ * @param [in] int_data Opaque data pointer used when invoking the interrupt
  *			function. This may be NULL.
  *
  * @return 0 on success, < 0 on error
@@ -110,7 +110,7 @@ int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
  *
  * Release for the next service request.
  *
- * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ * @param [in] rpc_conn Connection handle that shall be used. This handle can be
  *		    	located on the stack.
  */
 void esdm_rpcc_put_unpriv_service(struct esdm_rpc_client_connection *rpc_conn);
@@ -118,7 +118,7 @@ void esdm_rpcc_put_unpriv_service(struct esdm_rpc_client_connection *rpc_conn);
 /**
  * @brief Initiate the memory for accessing the unprivileged RPC connection.
  *
- * @param interrupt_func [in] Function pointer invoked to check when the
+ * @param [in] interrupt_func Function pointer invoked to check when the
  *			      operation shall be interrupted.
  *
  * @return 0 on success, < 0 on error
@@ -141,9 +141,9 @@ void esdm_rpcc_fini_unpriv_service(void);
  * the connection with esdm_rpc_client_fini_priv_service. Release the
  * connection with esdm_rpcc_put_priv_service.
  *
- * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ * @param [in] rpc_conn Connection handle that shall be used. This handle can be
  *		    	located on the stack.
- * @param int_data [in] Opaque data pointer used when invoking the interrupt
+ * @param [in] int_data Opaque data pointer used when invoking the interrupt
  *			function. This may be NULL.
  *
  * @return 0 on success, < 0 on error
@@ -156,7 +156,7 @@ int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
  *
  * Release for the next service request.
  *
- * @param rpc_conn [in] Connection handle that shall be used. This handle can be
+ * @param [in] rpc_conn Connection handle that shall be used. This handle can be
  *		    	located on the stack.
  */
 void esdm_rpcc_put_priv_service(struct esdm_rpc_client_connection *rpc_conn);
@@ -164,7 +164,7 @@ void esdm_rpcc_put_priv_service(struct esdm_rpc_client_connection *rpc_conn);
 /**
  * @brief Initiate the memory for accessing the privileged RPC connection.
  *
- * @param interrupt_func [in] Function pointer invoked to check when the
+ * @param [in] interrupt_func Function pointer invoked to check when the
  *			      operation shall be interrupted.
  *
  * @return 0 on success, < 0 on error
@@ -186,9 +186,9 @@ void esdm_rpcc_fini_priv_service(void);
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
  * can be invoked by any user.
  *
- * @param buf [out] Buffer to be filled with human-readable status information.
+ * @param [out] buf Buffer to be filled with human-readable status information.
  *		    The string will be NULL-terminated.
- * @param buflen [in] Size of the buffer provided by the caller.
+ * @param [in] buflen Size of the buffer provided by the caller.
  *
  * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
  *	    and the caller may try again)
@@ -212,8 +212,8 @@ int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
  *
  * This function blocks until the ESDM is fully seeded.
  *
- * @param buf [out] Buffer to be filled with random bits.
- * @param buflen [in] Size of the buffer to be filled.
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
  *
  * @return: read data length on success, < 0 on error (-EINTR means connection
  *	    was interrupted and the caller may try again)
@@ -241,8 +241,8 @@ ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
  * no guarantee whether the DRNG initial seed level stipulated by SP800-90C is
  * reached.
  *
- * @param buf [out] Buffer to be filled with random bits.
- * @param buflen [in] Size of the buffer to be filled.
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
  *
  * @return: read data length on success, < 0 on error (-EINTR means connection
  *	    was interrupted and the caller may try again)
@@ -269,8 +269,8 @@ ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
  * the ESDM and only returns at most the amount of data equal to the entropy
  * gathered from the entropy sources.
  *
- * @param buf [out] Buffer to be filled with random bits.
- * @param buflen [in] Size of the buffer to be filled.
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
  *
  * @return: read data length on success, < 0 on error (-EINTR means connection
  *	    was interrupted and the caller may try again)
@@ -296,8 +296,8 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
  * This function never blocks and therefore provides no guarantee whether the
  * DRNG is seeded or the initial seed level stipulated by SP800-90C is reached.
  *
- * @param buf [out] Buffer to be filled with random bits.
- * @param buflen [in] Size of the buffer to be filled.
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
  *
  * @return: read data length on success, < 0 on error (-EINTR means connection
  *	    was interrupted and the caller may try again)
@@ -327,9 +327,9 @@ enum esdm_get_seed_flags {
  *
  * See esdm_get_seed for details.
  *
- * @param buf [out] Buffer to be filled with random bits.
- * @param buflen [in] Size of the buffer to be filled.
- * @param flags [in] Flags information
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
+ * @param [in] flags Flags information
  *
  * @return: read data length on success, < 0 on error (-EINTR means connection
  *	    was interrupted and the caller may try again)
@@ -352,8 +352,8 @@ ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
  * can be invoked by any user.
  *
- * @param data_buf [in] Buffer with data
- * @param data_buf_len [in] Length of data buffer
+ * @param [in] data_buf Buffer with data
+ * @param [in] data_buf_len Length of data buffer
  *
  * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
  *	    and the caller may try again)

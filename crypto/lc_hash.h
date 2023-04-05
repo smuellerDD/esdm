@@ -65,7 +65,7 @@ struct lc_hash_ctx {
 /**
  * @brief Initialize hash context
  *
- * @param hash_ctx [in] Reference to hash context implementation to be used to
+ * @param [in] hash_ctx Reference to hash context implementation to be used to
  *			perform hash calculation with.
  *
  * The caller must provide an allocated hash_ctx. This can be achieved by
@@ -81,10 +81,10 @@ static inline void lc_hash_init(struct lc_hash_ctx *hash_ctx)
 /**
  * @brief Update hash
  *
- * @param hash_ctx [in] Reference to hash context implementation to be used to
+ * @param [in] hash_ctx Reference to hash context implementation to be used to
  *			perform hash calculation with.
- * @param in [in] Buffer holding the data whose MAC shall be calculated
- * @param inlen [in] Length of the input buffer
+ * @param [in] in Buffer holding the data whose MAC shall be calculated
+ * @param [in] inlen Length of the input buffer
  */
 static inline void
 lc_hash_update(struct lc_hash_ctx *hash_ctx, const uint8_t *in, size_t inlen)
@@ -120,9 +120,9 @@ lc_hash_update(struct lc_hash_ctx *hash_ctx, const uint8_t *in, size_t inlen)
  *
  * See the test `shake_squeeze_more_tester.c` for an example.
  *
- * @param hash_ctx [in] Reference to hash context implementation to be used to
+ * @param [in] hash_ctx Reference to hash context implementation to be used to
  *			perform hash calculation with.
- * @param digest [out] Buffer with at least the size of the message digest.
+ * @param [out] digest Buffer with at least the size of the message digest.
  */
 static inline void lc_hash_final(struct lc_hash_ctx *hash_ctx, uint8_t *digest)
 {
@@ -134,9 +134,9 @@ static inline void lc_hash_final(struct lc_hash_ctx *hash_ctx, uint8_t *digest)
 /**
  * @brief Set the size of the message digest - this call is intended for SHAKE
  *
- * @param hash_ctx [in] Reference to hash context implementation to be used to
+ * @param [in] hash_ctx Reference to hash context implementation to be used to
  *			perform hash calculation with.
- * @param digestsize [in] Size of the requested digest.
+ * @param [in] digestsize Size of the requested digest.
  */
 static inline void lc_hash_set_digestsize(struct lc_hash_ctx *hash_ctx,
 				          size_t digestsize)
@@ -172,7 +172,7 @@ static inline unsigned int lc_hash_ctxsize(struct lc_hash_ctx *hash_ctx)
  * @brief Zeroize Hash context allocated with either LC_HASH_CTX_ON_STACK or
  *	  lc_hmac_alloc
  *
- * @param hash_state [in] Hash context to be zeroized
+ * @param [in] hash_state Hash context to be zeroized
  */
 static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
 {
@@ -185,8 +185,8 @@ static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
 /**
  * @brief Allocate stack memory for the hash context
  *
- * @param name [in] Name of the stack variable
- * @param hashname [in] Pointer of type struct hash referencing the hash
+ * @param [in] name Name of the stack variable
+ * @param [in] hashname Pointer of type struct hash referencing the hash
  *			 implementation to be used
  */
 #define LC_HASH_CTX_ON_STACK(name, hashname)				       \
@@ -199,9 +199,9 @@ static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
 /**
  * @brief Allocate Hash context on heap
  *
- * @param hash [in] Reference to hash implementation to be used to perform
+ * @param [in] hash Reference to hash implementation to be used to perform
  *		    hash calculation with.
- * @param hash_ctx [out] Allocated hash context
+ * @param [out] hash_ctx Allocated hash context
  *
  * @return: 0 on success, < 0 on error
  */
@@ -210,18 +210,18 @@ int lc_hash_alloc(const struct lc_hash *hash, struct lc_hash_ctx **hash_ctx);
 /**
  * @brief Zeroize and free hash context
  *
- * @param hash_ctx [in] hash context to be zeroized and freed
+ * @param [in] hash_ctx hash context to be zeroized and freed
  */
 void lc_hash_zero_free(struct lc_hash_ctx *hash_ctx);
 
 /**
  * @brief Calculate message digest - one-shot
  *
- * @param hash [in] Reference to hash implementation to be used to perform
+ * @param [in] hash Reference to hash implementation to be used to perform
  *		    hash calculation with.
- * @param in [in] Buffer holding the data whose MAC shall be calculated
- * @param inlen [in] Length of the input buffer
- * @param digest [out] Buffer with at least the size of the message digest.
+ * @param [in] in Buffer holding the data whose MAC shall be calculated
+ * @param [in] inlen Length of the input buffer
+ * @param [out] digest Buffer with at least the size of the message digest.
  *
  * The hash calculation operates entirely on the stack.
  */

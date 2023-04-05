@@ -76,7 +76,7 @@ void lc_drbg_hash_zero(struct lc_drbg_state *drbg);
 /**
  * @brief Allocate stack memory for the Hash DRBG context
  *
- * @param name [in] Name of the stack variable
+ * @param [in] name Name of the stack variable
  */
 #define LC_DRBG_HASH_CTX_ON_STACK(name)			      		       \
 	LC_ALIGNED_BUFFER(name ## _ctx_buf,				       \
@@ -90,7 +90,7 @@ void lc_drbg_hash_zero(struct lc_drbg_state *drbg);
 /**
  * @brief Allocate Hash DRBG context on heap
  *
- * @param drbg [out] Allocated Hash DRBG context
+ * @param [out] drbg Allocated Hash DRBG context
  *
  * @return: 0 on success, < 0 on error
  */

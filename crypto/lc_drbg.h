@@ -108,13 +108,13 @@ struct lc_drbg_state {
 /**
  * @brief Seeding or reseeding of the DRBG
  *
- * @param drbg [in] DRBG state struct
- * @param seedbuf [in] Buffer with seed data (when using a nonce, the nonce must
+ * @param [in] drbg DRBG state struct
+ * @param [in] seedbuf Buffer with seed data (when using a nonce, the nonce must
  *		       be concatenated past the seed by the caller)
- * @param seedlen [in] Length of seed buffer
- * @param persbuf [in] Personalization / additional information buffer - may be
+ * @param [in] seedlen Length of seed buffer
+ * @param [in] persbuf Personalization / additional information buffer - may be
  *		      NULL
- * @param perslen [in] Length of personalization / additional information buffer
+ * @param [in] perslen Length of personalization / additional information buffer
  *
  * @return 0 on success, negative error value otherwise
  */
@@ -126,13 +126,13 @@ int lc_drbg_seed(struct lc_drbg_state *drbg,
  * @brief DRBG generate function as required by SP800-90A - this function
  *	  generates random numbers of a size of at most 2^16 bytes.
  *
- * @param drbg [in] DRBG state handle
- * @param buf [out] Buffer where to store the random numbers -- the buffer must
+ * @param [in] drbg DRBG state handle
+ * @param [out] buf Buffer where to store the random numbers -- the buffer must
  *		   already be pre-allocated by caller
- * @param buflen [in] Length of output buffer - this value defines the number of
+ * @param [in] buflen Length of output buffer - this value defines the number of
  *		     random bytes pulled from DRBG
- * @param addtlbuf [in] Additional input that is mixed into state, may be NULL
- * @param addtllen [in] Additional input buffer length
+ * @param [in] addtlbuf Additional input that is mixed into state, may be NULL
+ * @param [in] addtllen Additional input buffer length
  *
  * @return generated number of bytes on success, negative error value otherwise
  */
@@ -144,7 +144,7 @@ ssize_t lc_drbg_generate(struct lc_drbg_state *drbg,
  * @brief DRBG uninstantiate function as required by SP800-90A - this function
  *	  frees all buffers and the DRBG handle
  *
- * @param drbg [in] DRBG state handle
+ * @param [in] drbg DRBG state handle
  *
  * @return: 0 on success, < 0 on error
  */
@@ -164,7 +164,7 @@ static inline void lc_drbg_zero(struct lc_drbg_state *drbg)
  * @brief Tests as defined in 11.3.2 in addition to the cipher tests: testing
  *	  of the error handling.
  *
- * @param drbg [in] DRBG state handle that is used solely for the testing. It
+ * @param [in] drbg DRBG state handle that is used solely for the testing. It
  *		    shall not be a production handle unless you call drbg_seed
  *		    on that handle afterwards.
  *

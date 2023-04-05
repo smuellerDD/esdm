@@ -28,7 +28,7 @@
  * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
  *	 than the security strength of the the applied DRNG.
  *
- * @param ent [in] Entropy rate in bits.
+ * @param [in] ent Entropy rate in bits.
  */
 void esdm_config_es_cpu_entropy_rate_set(uint32_t ent);
 
@@ -45,7 +45,7 @@ uint32_t esdm_config_es_cpu_entropy_rate(void);
  * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
  *	 than the security strength of the the applied DRNG.
  *
- * @param ent [in] Entropy rate in bits.
+ * @param [in] ent Entropy rate in bits.
  */
 void esdm_config_es_jent_entropy_rate_set(uint32_t ent);
 
@@ -62,7 +62,7 @@ uint32_t esdm_config_es_jent_entropy_rate(void);
  * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
  *	 than the security strength of the the applied DRNG.
  *
- * @param ent [in] Entropy rate in bits.
+ * @param [in] ent Entropy rate in bits.
  */
 void esdm_config_es_irq_entropy_rate_set(uint32_t ent);
 
@@ -87,7 +87,7 @@ uint32_t esdm_config_es_irq_entropy_rate(void);
  *	 the scheduler ES is enabled. This is due to the fact that both ES
  *	 potentially have a dependency.
  *
- * @param ent [in] Entropy rate in bits.
+ * @param [in] ent Entropy rate in bits.
  */
 void esdm_config_es_krng_entropy_rate_set(uint32_t ent);
 
@@ -107,7 +107,7 @@ uint32_t esdm_config_es_krng_entropy_rate(void);
  * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
  *	 than the security strength of the the applied DRNG.
  *
- * @param ent [in] Entropy rate in bits.
+ * @param [in] ent Entropy rate in bits.
  */
 void esdm_config_es_sched_entropy_rate_set(uint32_t ent);
 
@@ -124,7 +124,7 @@ uint32_t esdm_config_es_sched_entropy_rate(void);
  * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
  *	 than the security strength of the the applied DRNG.
  *
- * @param ent [in] Entropy rate in bits.
+ * @param [in] ent Entropy rate in bits.
  */
 void esdm_config_es_hwrand_entropy_rate_set(uint32_t ent);
 

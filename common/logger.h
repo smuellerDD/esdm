@@ -157,7 +157,7 @@ void logger_inc_verbosity(void);
  * Note: The status logging will always log to stderr and will be always
  *	 active if a log file is set.
  *
- * @param pathname [in] Path name of log file
+ * @param [in] pathname Path name of log file
  * @return 0 on success, < 0 on error
  */
 int logger_set_file(const char *pathname);
