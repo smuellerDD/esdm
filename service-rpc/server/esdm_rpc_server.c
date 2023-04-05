@@ -44,7 +44,7 @@
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_server_linux.h"
 #include "esdm_rpc_service.h"
-#include "helper.c"
+#include "helper.h"
 #include "linux_support.h"
 #include "logger.h"
 #include "memset_secure.h"
