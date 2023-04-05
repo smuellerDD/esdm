@@ -11,7 +11,7 @@ if get_option('testmode').enabled()
 	common_src += files(['test_pertubation.c'])
 endif
 
-if build_machine.system() == 'linux'
+if host_machine.system() == 'linux'
 	common_src += files('linux_support.c')
 endif
 
