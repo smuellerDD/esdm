@@ -1,3 +1,5 @@
+KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
+
 obj-m				+= esdm_es.o
 esdm_es-y			= esdm_es_mgr.o esdm_es_timer_common.o 	\
 				  esdm_hash_kcapi.o esdm_health.o
@@ -29,7 +31,7 @@ esdm_es-y			+= esdm_es_mgr_irq.o esdm_es_irq.o
 #esdm_es-y			+= esdm_testing.o
 
 all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+	make -C $(KERNEL_DIR) M=$(PWD) modules
 
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	make -C $(KERNEL_DIR) M=$(PWD) clean
