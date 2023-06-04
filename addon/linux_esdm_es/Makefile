@@ -33,5 +33,8 @@ esdm_es-y			+= esdm_es_mgr_irq.o esdm_es_irq.o
 all:
 	make -C $(KERNEL_DIR) M=$(PWD) modules
 
+install:
+	make -C $(KERNEL_DIR) M=$(PWD) modules_install
+
 clean:
 	make -C $(KERNEL_DIR) M=$(PWD) clean
