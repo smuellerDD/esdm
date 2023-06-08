@@ -20,6 +20,7 @@
 #ifndef _CPU_RANDOM
 #define _CPU_RANDOM
 
+#include "cpu_random_arm.h"
 #include "cpu_random_powerpc.h"
 #include "cpu_random_riscv.h"
 #include "cpu_random_s390.h"
