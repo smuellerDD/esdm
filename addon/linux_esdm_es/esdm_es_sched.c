@@ -498,28 +498,29 @@ int __init esdm_es_sched_module_init(void)
 {
 	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
 	unsigned long flags;
+	void *tmp_hash_state;
 	int ret;
 
-	write_lock_irqsave(&esdm_hash_lock, flags);
-
-	esdm_sched_hash_state = hash_cb->hash_alloc();
-	if (IS_ERR(esdm_sched_hash_state)) {
+	tmp_hash_state = hash_cb->hash_alloc();
+	if (IS_ERR(tmp_hash_state)) {
 		pr_warn("could not allocate new ESDM pool hash (%ld)\n",
-			PTR_ERR(esdm_sched_hash_state));
-		ret = PTR_ERR(esdm_sched_hash_state);
-		goto out;
+			PTR_ERR(tmp_hash_state));
+		return PTR_ERR(tmp_hash_state);
 	}
 
+	write_lock_irqsave(&esdm_hash_lock, flags);
+	esdm_sched_hash_state = tmp_hash_state;
 	ret = esdm_sched_register(esdm_sched_randomness);
 	if (ret) {
-		hash_cb->hash_dealloc(esdm_sched_hash_state);
 		esdm_sched_hash_state = NULL;
+		write_unlock_irqrestore(&esdm_hash_lock, flags);
+		hash_cb->hash_dealloc(esdm_sched_hash_state);
+		return ret;
 	}
 
+	write_unlock_irqrestore(&esdm_hash_lock, flags);
 	pr_info("ESDM Scheduler ES registered\n");
 
-out:
-	write_unlock_irqrestore(&esdm_hash_lock, flags);
 	return ret;
 }
 
