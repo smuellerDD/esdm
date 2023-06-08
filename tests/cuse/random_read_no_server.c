@@ -52,7 +52,7 @@ static int read_complete(int fd, uint8_t *buf, size_t buflen)
 #include "env.h"
 #include "privileges.h"
 
-int read_random(const char *path, uint8_t *buf, size_t buflen)
+static int read_random(const char *path, uint8_t *buf, size_t buflen)
 {
 	int fd;
 	int ret = 0;

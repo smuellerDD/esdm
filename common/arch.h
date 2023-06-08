@@ -37,7 +37,7 @@ extern "C"
 #include "helper.h"
 #include "threading_support.h"
 
-uint32_t esdm_arch_curr_node(void)
+static inline uint32_t esdm_arch_curr_node(void)
 {
 	int cpu = sched_getcpu();
 

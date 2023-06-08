@@ -31,7 +31,7 @@ void *esdm_rpc_alloc(void *allocator_data, size_t size)
 	uint8_t *new_aligned = ALIGN_PTR_8(new, 8);
 
 	/* Add any potential alignment offset to the required size */
-	size += (unsigned long)new_aligned - (unsigned long)new ;
+	size += (unsigned long)new_aligned - (unsigned long)new;
 
 	/* If the size request overflows the available memory, return nothing */
 	if (size > (tlh->len - tlh->consumed))

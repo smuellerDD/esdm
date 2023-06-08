@@ -63,6 +63,8 @@ static void esdm_getrandom_lib_exit(void)
 ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags);
 int __real_getentropy(void *__buffer, size_t __length);
 
+/* Declare the prototype even though libc declares it internally */
+ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags);
 DSO_PUBLIC
 ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 {
@@ -127,6 +129,8 @@ ssize_t getrandom(void *buffer, size_t length, unsigned int flags)
 	return __wrap_getrandom(buffer, length, flags);
 }
 
+/* Declare the prototype even though libc declares it internally */
+int __wrap_getentropy(void *buffer, size_t length);
 DSO_PUBLIC
 int __wrap_getentropy(void *buffer, size_t length)
 {

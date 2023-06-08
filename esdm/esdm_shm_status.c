@@ -32,6 +32,7 @@
 #include "esdm_interface_dev_common.h"
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_service.h"
+#include "esdm_shm_status.h"
 #include "helper.h"
 #include "logger.h"
 #include "ret_checkers.h"

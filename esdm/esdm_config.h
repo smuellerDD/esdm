@@ -201,4 +201,7 @@ uint32_t esdm_config_online_nodes(void);
  */
 uint32_t esdm_config_curr_node(void);
 
+int esdm_config_init(void);
+int esdm_config_reinit(void);
+
 #endif /* _ESDM_CONFIG */

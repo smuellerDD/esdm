@@ -62,6 +62,7 @@ void buffer_free(struct buffer *buf)
 	buf->consumed = 0;
 }
 
+#if 0
 void buffer_free_secure(struct buffer *buf)
 {
 	if (!buf)
@@ -70,3 +71,4 @@ void buffer_free_secure(struct buffer *buf)
 		memset_secure(buf->buf, 0, buf->len);
 	buffer_free(buf);
 }
+#endif

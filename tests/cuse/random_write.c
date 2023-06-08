@@ -53,7 +53,7 @@ static int write_complete(int fd, uint8_t *buf, size_t buflen)
 	return 1;
 }
 
-int write_random(const char *path, uint8_t *buf, size_t buflen)
+static int write_random(const char *path, uint8_t *buf, size_t buflen)
 {
 	int fd;
 	int ret = 0;
