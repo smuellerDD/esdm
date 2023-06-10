@@ -24,6 +24,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
+#include "esdm_es_sched.h"
 #include "esdm_info.h"
 #include "logger.h"
 #include "test_pertubation.h"
@@ -101,4 +102,5 @@ DSO_PUBLIC
 void esdm_status_machine(struct esdm_status_st *status)
 {
 	status->es_irq_enabled = esdm_irq_enabled();
+	status->es_sched_enabled = esdm_sched_enabled();
 }
