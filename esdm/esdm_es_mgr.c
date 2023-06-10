@@ -218,12 +218,12 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd,
 				ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES));
 
 		/*
-		 * Scale down the received bits - scaling by using bytes is
-		 * appropriate as the bits value scales equally.
+		 * According to SP800-90B table 1, the truncated hash contains
+		 * the amount of entropy of the original hash capped by the
+		 * truncated size.
 		 */
-		eb_es->e_bits = large_es.e_bits *
-				ESDM_DRNG_INIT_SEED_SIZE_BYTES /
-				ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES;
+		eb_es->e_bits = min_uint32(ESDM_DRNG_INIT_SEED_SIZE_BITS,
+					   large_es.e_bits);
 
 		memset_secure(&large_es, 0, sizeof(large_es));
 
