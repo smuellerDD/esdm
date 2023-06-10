@@ -16,6 +16,8 @@ Changes 0.6.0-prerelease:
 
 * bug fix: correctly calculate memory offsets
 
+* enhancement: Sched/IRQ ES code in ESDM can handle if kernel-parts have different data structure size for sending entropy to user space
+
 Changes 0.5.0:
 * Linux kernel entropy feeder is now always enabled
 

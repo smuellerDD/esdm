@@ -36,6 +36,7 @@
 static int esdm_sched_entropy_fd = -1;
 static int esdm_sched_status_fd = -1;
 static uint32_t esdm_sched_requested_bits_set = 0;
+static enum esdm_es_data_size esdm_sched_data_size = esdm_es_data_equal;
 
 static void esdm_sched_finalize(void)
 {
@@ -57,17 +58,8 @@ bool esdm_sched_enabled(void)
 /* Only set requested bit size */
 static void esdm_sched_set_requested_bits(uint32_t requested_bits)
 {
-	if (esdm_sched_requested_bits_set != requested_bits) {
-		uint32_t data[2];
-		ssize_t ret;
-
-		data[0] = requested_bits;
-		data[1] = 0;
-		lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
-		ret = write(esdm_sched_entropy_fd, &data, sizeof(data));
-		if (ret == sizeof(requested_bits))
-			esdm_sched_requested_bits_set = requested_bits;
-	}
+	esdm_kernel_set_requested_bits(&esdm_sched_requested_bits_set,
+				       requested_bits, esdm_sched_entropy_fd);
 }
 
 /* Set requested bit size and entropy rate */
@@ -167,7 +159,19 @@ static int esdm_sched_initialize(void)
 		return -EFAULT;
 	}
 
-	if (status[0] != sizeof(struct entropy_es)) {
+	if (status[0] == sizeof(struct entropy_es)) {
+		esdm_sched_data_size = esdm_es_data_equal;
+		logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		       "Kernel entropy buffer has equal size as ESDM\n");
+	} else if (status[0] == sizeof(struct entropy_es_small)) {
+		esdm_sched_data_size = esdm_es_data_small;
+		logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		       "Kernel entropy buffer has smaller size as ESDM - Scheduler ES alone will never be able to fully seed the ESDM\n");
+	} else if (status[0] == sizeof(struct entropy_es_large)) {
+		esdm_sched_data_size = esdm_es_data_large;
+		logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		       "Kernel entropy buffer has larger size as ESDM\n");
+	} else {
 		logger(LOGGER_ERR, LOGGER_C_ES,
 		       "Kernel entropy buffer has different size\n");
 		esdm_sched_finalize();
@@ -198,32 +202,13 @@ static uint32_t esdm_sched_poolsize(void)
 static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			   bool __unused unused)
 {
-	size_t buflen;
-	ssize_t ret;
-	uint8_t *buf;
-
 	if (esdm_sched_entropy_fd < 0)
 		goto err;
 
 	esdm_sched_set_requested_bits(requested_bits);
 
-	buf = (uint8_t *)eb_es;
-	buflen = sizeof(struct entropy_es);
-	do {
-		lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
-		ret = read(esdm_sched_entropy_fd, buf, buflen);
-		if (ret > 0) {
-			buflen -= (size_t)ret;
-			buf += ret;
-		}
-	} while ((0 < ret || EINTR == errno) && buflen);
-
-	if (buflen)
-		goto err;
-
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "obtained %u bits of entropy from scheduler-based entropy source\n",
-	       eb_es->e_bits);
+	esdm_kernel_read(eb_es, esdm_sched_entropy_fd, esdm_sched_data_size,
+			 esdm_es_sched.name);
 
 	return;
 

@@ -60,6 +60,26 @@ enum esdm_external_es {
 	esdm_ext_es_last			/* MUST be the last entry */
 };
 
+enum esdm_es_data_size {
+	esdm_es_data_equal,	/* Equal to ESDM's data size */
+	esdm_es_data_large,	/* Large buffer (256 + oversample) */
+	esdm_es_data_small	/* Small buffer (256) */
+};
+
+/* Small buffer for entropy data */
+struct entropy_es_small {
+	uint8_t e[ESDM_DRNG_SECURITY_STRENGTH_BYTES];
+	uint32_t e_bits;
+};
+
+/* Large buffer for entropy data */
+#define ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES				       \
+	(ESDM_DRNG_SECURITY_STRENGTH_BYTES + 16)
+struct entropy_es_large {
+	uint8_t e[ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES];
+	uint32_t e_bits;
+};
+
 struct entropy_es {
 	uint8_t e[ESDM_DRNG_INIT_SEED_SIZE_BYTES];
 	uint32_t e_bits;
@@ -111,6 +131,14 @@ bool esdm_es_reseed_wanted(void);
 
 /* Allow entropy sources to tell the ES manager that new entropy is there */
 void esdm_es_add_entropy(void);
+
+/* Read entropy from in-kernel entroy sources */
+void esdm_kernel_read(struct entropy_es *eb_es, int fd,
+		      enum esdm_es_data_size data_size, const char *name);
+
+/* Set the requested bit size */
+void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
+				    uint32_t requested_bits, int fd);
 
 /* Cap to maximum entropy that can ever be generated with given hash */
 #define esdm_cap_requested(__digestsize_bits, __requested_bits)		\
