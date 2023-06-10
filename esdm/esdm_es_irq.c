@@ -28,6 +28,7 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_irq.h"
+#include "esdm_es_sched.h"
 #include "helper.h"
 #include "logger.h"
 #include "memset_secure.h"
@@ -100,7 +101,14 @@ static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 
 	(void)requested_bits;
 
-	if (esdm_irq_entropy_fd < 0)
+	if (esdm_irq_entropy_fd < 0 ||
+	    /*
+	     * If the scheduler-based entropy source is enabled, the IRQ ES is
+	     * claimed to not return any entropy. This is due to the fact that
+	     * interrupts may trigger scheduling events. This implies that
+	     * interrupts are not independent of interrupts.
+	     */
+	    esdm_sched_enabled())
 		return 0;
 
 	/* Set current entropy rate */
