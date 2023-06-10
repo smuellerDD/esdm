@@ -1,0 +1,131 @@
+From 9222338fab9ce63f154f5ecd2ead28736c8f9d07 Mon Sep 17 00:00:00 2001
+From: Stephan Mueller <smueller@chronox.de>
+Date: Fri, 9 Jun 2023 22:13:29 +0200
+Subject: [PATCH 1/2] ESDM: scheduler entropy source hooks
+
+The scheduler entropy source requires a hook into the scheduler which
+fires every time a scheduling event happens. To allow the entropy source
+to be compiled as a kernel module, a small framework is added which
+allows registering the callback function of the entropy source
+implementation. If no such implementation is registered, the hook is a
+noop.
+
+Signed-off-by: Stephan Mueller <smueller@chronox.de>
+---
+ drivers/misc/Makefile      |  2 ++
+ drivers/misc/esdm_sched.c  | 40 ++++++++++++++++++++++++++++++++++++++
+ include/linux/esdm_sched.h | 20 +++++++++++++++++++
+ kernel/sched/core.c        |  3 +++
+ 4 files changed, 65 insertions(+)
+ create mode 100644 drivers/misc/esdm_sched.c
+ create mode 100644 include/linux/esdm_sched.h
+
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index 56de43943cd5..7272f3c80719 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -3,6 +3,8 @@
+ # Makefile for misc devices that really don't fit anywhere else.
+ #
+ 
++obj-y				+= esdm_sched.o
++
+ obj-$(CONFIG_IBM_ASM)		+= ibmasm/
+ obj-$(CONFIG_IBMVMC)		+= ibmvmc.o
+ obj-$(CONFIG_AD525X_DPOT)	+= ad525x_dpot.o
+diff --git a/drivers/misc/esdm_sched.c b/drivers/misc/esdm_sched.c
+new file mode 100644
+index 000000000000..d42f4997b8ca
+--- /dev/null
++++ b/drivers/misc/esdm_sched.c
+@@ -0,0 +1,40 @@
++/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
++/*
++ * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
++ *
++ * ESDM entropy source user space interface.
++ */
++
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/esdm_sched.h>
++#include <linux/module.h>
++
++static esdm_sched_randomness_t esdm_sched_randomness_func = NULL;
++
++void add_sched_randomness(const struct task_struct *p, int cpu)
++{
++	if (esdm_sched_randomness_func)
++		esdm_sched_randomness_func(p, cpu);
++}
++
++int esdm_sched_register(esdm_sched_randomness_t func)
++{
++	if (!func)
++		return -EINVAL;
++
++	if (cmpxchg(&esdm_sched_randomness_func, NULL, func) != NULL)
++		return -EAGAIN;
++	return 0;
++}
++EXPORT_SYMBOL(esdm_sched_register);
++
++void esdm_sched_unregister(esdm_sched_randomness_t func)
++{
++	if (!func)
++		return;
++
++	if (cmpxchg(&esdm_sched_randomness_func, func, NULL) != func)
++		pr_warn("Cannot unregister ESDM scheduler callback\n");
++}
++EXPORT_SYMBOL(esdm_sched_unregister);
+diff --git a/include/linux/esdm_sched.h b/include/linux/esdm_sched.h
+new file mode 100644
+index 000000000000..f5935eca193a
+--- /dev/null
++++ b/include/linux/esdm_sched.h
+@@ -0,0 +1,20 @@
++/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
++/*
++ * Copyright (C) 2022, Stephan Mueller <smueller@chronox.de>
++ */
++
++#ifndef _ESDM_SCHED_H
++#define _ESDM_SCHED_H
++
++#include <linux/sched.h>
++
++typedef void (*esdm_sched_randomness_t)(const struct task_struct *p, int cpu);
++
++/* Callback for scheduler */
++extern void add_sched_randomness(const struct task_struct *p, int cpu);
++
++/* Register and unregister handler functions */
++int esdm_sched_register(esdm_sched_randomness_t func);
++void esdm_sched_unregister(esdm_sched_randomness_t func);
++
++#endif /* _ESDM_SCHED_H */
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index a68d1276bab0..1e1f82fe254d 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -6,6 +6,7 @@
+  *
+  *  Copyright (C) 1991-2002  Linus Torvalds
+  */
++#include <linux/esdm_sched.h>
+ #include <linux/highmem.h>
+ #include <linux/hrtimer_api.h>
+ #include <linux/ktime_api.h>
+@@ -3668,6 +3669,8 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
+ {
+ 	struct rq *rq;
+ 
++	add_sched_randomness(p, cpu);
++
+ 	if (!schedstat_enabled())
+ 		return;
+ 
+-- 
+2.39.2
+
