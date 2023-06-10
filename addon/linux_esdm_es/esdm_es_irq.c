@@ -748,7 +748,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	if (IS_ERR(tmp_hash_state)) {
 		pr_warn("could not allocate new ESDM pool hash (%ld)\n",
 			PTR_ERR(tmp_hash_state));
-		goto err:
+		goto err;
 	}
 
 	write_lock_irqsave(&esdm_hash_lock, flags);
@@ -758,7 +758,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 		esdm_irq_hash_state = NULL;
 		write_unlock_irqrestore(&esdm_hash_lock, flags);
 		hash_cb->hash_dealloc(tmp_hash_state);
-		goto err:
+		goto err;
 	}
 
 	write_unlock_irqrestore(&esdm_hash_lock, flags);
