@@ -480,6 +480,22 @@ out:
 	return ret;
 }
 
+static int esdm_es_mgr_init_es(struct esdm_es_cb *esdm_es_one)
+{
+	int ret = 0;
+
+	if (esdm_es_one->init) {
+		logger(LOGGER_DEBUG, LOGGER_C_ES, "Initialize ES %s\n",
+		       esdm_es_one->name);
+		CKINT_LOG(esdm_es_one->init(),
+			  "Initialization of ES %s failed: %d",
+			  esdm_es_one->name, ret);
+	}
+
+out:
+	return ret;
+}
+
 int esdm_es_mgr_initialize(void)
 {
 	struct seed {
@@ -497,15 +513,15 @@ int esdm_es_mgr_initialize(void)
 
 	esdm_set_entropy_thresh(esdm_get_seed_entropy_osr(false));
 
+	/* Initialize the auxiliary pool first */
+	CKINT(esdm_es_mgr_init_es(esdm_es[esdm_ext_es_aux]));
+
 	/* Initialize the entropy sources */
 	for_each_esdm_es(i) {
-		if (esdm_es[i]->init) {
-			logger(LOGGER_DEBUG, LOGGER_C_ES, "Initialize ES %s\n",
-			       esdm_es[i]->name);
-			CKINT_LOG(esdm_es[i]->init(),
-				  "Initialization of ES %s failed: %d",
-				  esdm_es[i]->name, ret);
-		}
+		if (i == esdm_ext_es_aux)
+			continue;
+
+		CKINT(esdm_es_mgr_init_es(esdm_es[i]));
 	}
 
 	seed.time = time(NULL);
