@@ -126,6 +126,7 @@ static int esdm_irq_seed_monitor(void)
 	if (ent >= esdm_config_es_irq_entropy_rate()) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 			"Full entropy of interrupt ES detected\n");
+		esdm_es_add_entropy();
 		esdm_test_seed_entropy(ent);
 
 		return 0;
