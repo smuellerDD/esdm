@@ -115,7 +115,7 @@ static ssize_t esdm_es_mgr_irq_ent_write(struct file *file,
 
 	requested_bits = tmp[0] & ESDM_ES_MGR_REQ_BITS_MASK;
 	if (requested_bits > 0) {
-		if (requested_bits != ESDM_DRNG_INIT_SEED_SIZE_BITS ||
+		if (requested_bits != ESDM_DRNG_INIT_SEED_SIZE_BITS &&
 		    requested_bits != ESDM_DRNG_SECURITY_STRENGTH_BITS)
 			return -EINVAL;
 		esdm_requested_irq_bits = requested_bits;
