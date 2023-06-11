@@ -62,7 +62,7 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 				return -errsv;
 			}
 
-			esdm_rpcs_linux_fd = open("/dev/random", 0);
+			esdm_rpcs_linux_fd = open("/dev/random", O_RDONLY);
 			if (esdm_rpcs_linux_fd < 0) {
 				errsv = errno;
 
@@ -81,7 +81,7 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 			return -errsv;
 		}
 	} else {
-		esdm_rpcs_linux_fd = open("/dev/esdm", 0);
+		esdm_rpcs_linux_fd = open("/dev/esdm", O_RDONLY);
 		if (esdm_rpcs_linux_fd < 0) {
 			errsv = errno;
 

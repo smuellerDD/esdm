@@ -16,6 +16,8 @@ StartLimitBurst=5
 [Service]
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/hwrng r
+DeviceAllow=/dev/random r
+DeviceAllow=/dev/esdm r
 DevicePolicy=strict
 Restart=on-failure
 RestartSec=5s
