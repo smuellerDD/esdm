@@ -20,7 +20,6 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <limits.h>
-#include <linux/random.h>
 #include <sys/random.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -47,6 +46,8 @@
  */
 #define GRND_FULLY_SEEDED	0x0020
 
+static bool initialized = false;
+
 static void esdm_getrandom_lib_init(void)
 {
 	esdm_rpcc_set_max_online_nodes(1);
@@ -61,15 +62,15 @@ static void esdm_getrandom_lib_exit(void)
 }
 
 ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags);
-int __real_getentropy(void *__buffer, size_t __length);
-
-/* Declare the prototype even though libc declares it internally */
-ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags);
 DSO_PUBLIC
-ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
+ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags)
+{
+	return syscall(__NR_getrandom, __buffer, __length, __flags);
+}
+
+static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 {
 	ssize_t ret;
-	static bool initialized = false;
 
 	if (flags & (unsigned int)(~(GRND_NONBLOCK|GRND_RANDOM|GRND_INSECURE|
 				     GRND_SEED|GRND_FULLY_SEEDED)))
@@ -123,19 +124,33 @@ ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
 	return syscall(__NR_getrandom, buffer, length, flags);
 }
 
+/* Declare the prototype even though libc declares it internally */
+ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags);
+DSO_PUBLIC
+ssize_t __wrap_getrandom(void *buffer, size_t length, unsigned int flags)
+{
+	return getrandom_common(buffer, length, flags);
+}
+
 DSO_PUBLIC
 ssize_t getrandom(void *buffer, size_t length, unsigned int flags)
 {
-	return __wrap_getrandom(buffer, length, flags);
+	return getrandom_common(buffer, length, flags);
 }
 
-/* Declare the prototype even though libc declares it internally */
-int __wrap_getentropy(void *buffer, size_t length);
+int __real_getentropy(void *__buffer, size_t __length);
 DSO_PUBLIC
-int __wrap_getentropy(void *buffer, size_t length)
+int __real_getentropy(void *__buffer, size_t __length)
+{
+	if (__length > 256)
+		return -EIO;
+
+	return (int)syscall(__NR_getrandom, __buffer, __length, 0);
+}
+
+static int getentropy_common(void *buffer, size_t length)
 {
 	ssize_t ret = -EFAULT;
-	static bool initialized = false;
 
 	if (length > 256)
 		return -EIO;
@@ -151,8 +166,16 @@ int __wrap_getentropy(void *buffer, size_t length)
 	return 0;
 }
 
+/* Declare the prototype even though libc declares it internally */
+int __wrap_getentropy(void *buffer, size_t length);
+DSO_PUBLIC
+int __wrap_getentropy(void *buffer, size_t length)
+{
+	return getentropy_common(buffer, length);
+}
+
 DSO_PUBLIC
 int getentropy(void *buffer, size_t length)
 {
-	return __wrap_getentropy(buffer, length);
+	return getentropy_common(buffer, length);
 }
