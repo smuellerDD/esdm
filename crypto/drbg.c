@@ -102,7 +102,7 @@ void lc_drbg_zero_free(struct lc_drbg_state *drbg)
 DSO_PUBLIC
 int lc_drbg_healthcheck_sanity(struct lc_drbg_state *drbg)
 {
-	unsigned char buf[16];
+	unsigned char buf[16] = { 0 };
 	size_t max_addtllen, max_request_bytes;
 	ssize_t len = 0;
 	int ret = -EFAULT;
