@@ -1,13 +1,19 @@
 # Scheduler-based Entropy Source
 
-The code in this directory provides the scheduler-based entropy source for
-the Linux kernel. Porting of the code to other kernels is considered to
-be feasible.
+The code in this directory provides the scheduler-based as well as the
+interrupt-based entropy source for the Linux kernel. Porting of the code to
+other kernels is considered to be feasible.
 
 The root cause of the entropy that is used by the entropy source is the timing
-of scheduling events. Every time the scheduler performs a context switch,
-the high-resolution time stamp of that context switch is used as raw entropy
-data.
+of scheduling events as well as interrupt events. Every time the scheduler
+performs a context switch, the high-resolution time stamp of that context
+switch is used as raw entropy data. Similarly, every time an interrupt is
+received, its high-resolution time stamp is used as raw entropy.
+
+Yet, if both entropy sources are enabled at the same time, the interrupt-based
+entropy source is always credited with zero bits of entropy, because both
+entropy sources show a dependency because a scheduling event may also cause
+an interrupt event at the same time.
 
 This entropy source maintains a per-CPU entropy pool using SHA-512 which
 is constantly updated with the raw entropy data. All raw entropy data is
@@ -29,15 +35,17 @@ couple of cycles.
 
 ## Installation
 
-To use the entropy source, the kernel patch
-`0001-ESDM-scheduler-entropy-source-hooks*.patch` must be applied and the Linux
+To use the entropy source, the kernel patches
+`0001-ESDM-scheduler-entropy-source-hooks*.patch` as well as
+`0002-ESDM-interrupt-entropy-source-hooks.patch` must be applied and the Linux
 kernel compiled. This patch adds a small framework that allows a kernel
 module to be inserted into the kernel at runtime that will provide the
 entropy source implementation.
 
-The scheduler-based entropy source must be compiled by invoking `make`. This
-generates a kernel module `esdm_es.ko` that can now be inserted into the
-kernel at any time.
+Both entropy sources must be compiled by invoking `make`. Specific options
+can be set in the corresponding `Makefile` allowing selectively disabling
+either entropy source. This generates a kernel module `esdm_es.ko` that can now
+be inserted into the kernel at any time.
 
 ## Usage
 
