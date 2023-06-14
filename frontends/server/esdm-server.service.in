@@ -38,6 +38,7 @@ ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectSystem=strict
 ReadOnlyPaths=-/
+ReadWritePaths=-/sys/kernel/debug/esdm_es
 RemoveIPC=yes
 RestrictAddressFamilies=
 RestrictRealtime=yes
