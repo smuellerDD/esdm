@@ -1,3 +1,5 @@
+pkg = import('pkgconfig')
+
 # for i in $(ls *.c | sort); do echo "'$i',"; done
 client_rpc_src = files([
 	'esdm_rpc_get_min_reseed_secs_c.c',
@@ -29,6 +31,7 @@ esdm_rpc_client_lib = library('esdm_rpc_client',
 	soversion: version_array[0],
 	install: true
 	)
+pkg.generate(esdm_rpc_client_lib)
 
 include_user_files += files([
 	'esdm_rpc_client.h'
