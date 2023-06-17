@@ -20,6 +20,9 @@
 #ifndef _ESDM_ES_IRQ_H
 #define _ESDM_ES_IRQ_H
 
+#include <linux/ioctl.h>
+#include <sys/types.h>
+
 #include "config.h"
 #include "esdm_es_mgr_cb.h"
 
@@ -32,6 +35,35 @@
 #define ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY	4
 
 #ifdef ESDM_ES_IRQ
+
+#define ESDMIO	0xE0
+
+/* IOCTLs to interact with the kernel ESDM ES */
+
+/* IRQ ES: return available entropy */
+#define ESDM_IRQ_AVAIL_ENTROPY		_IOR(ESDMIO, 0x00, uint32_t )
+
+/* IRQ ES: return size of entropy buffer struct and ES number */
+#define ESDM_IRQ_ENT_BUF_SIZE		_IOR(ESDMIO, 0x01, uint32_t [2] )
+
+/* IRQ ES: read size sizeof(eb): entropy value */
+#define ESDM_IRQ_ENT_BUF		_IOR(ESDMIO, 0x02, struct entropy_es )
+
+/*
+ * IRQ ES: configure entropy source with the following protocol
+ *
+ * 1. When writing 2 * sizeof(u32): the first 4 bits are interpreted as a bit
+ *    field with:
+ * 	ESDM_ES_MGR_RESET_BIT set -> reset entropy source
+ * 	ESDM_ES_MGR_REQ_BITS_MASK: amount of requested entropy in bits
+ *    The second 4 bits are interpreted as entropy rate.
+ *
+ * Any other value is treated as an error.
+ */
+#define ESDM_IRQ_CONF			_IOW(ESDMIO, 0x03, uint32_t [2] )
+
+/* IRQ ES: read status information */
+#define ESDM_IRQ_STATUS			_IOR(ESDMIO, 0x04, char [250] )
 
 bool esdm_irq_enabled(void);
 extern struct esdm_es_cb esdm_es_irq;

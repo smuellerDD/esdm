@@ -133,12 +133,13 @@ bool esdm_es_reseed_wanted(void);
 void esdm_es_add_entropy(void);
 
 /* Read entropy from in-kernel entroy sources */
-void esdm_kernel_read(struct entropy_es *eb_es, int fd,
+void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 		      enum esdm_es_data_size data_size, const char *name);
 
 /* Set the requested bit size */
 void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
-				    uint32_t requested_bits, int fd);
+				    uint32_t requested_bits, int fd,
+				    unsigned int ioctl_cmd);
 
 /* Cap to maximum entropy that can ever be generated with given hash */
 #define esdm_cap_requested(__digestsize_bits, __requested_bits)		\

@@ -21,6 +21,7 @@
 
 #define _POSIX_C_SOURCE 200112L
 #include <errno.h>
+#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -161,12 +162,11 @@ int esdm_es_mgr_monitor_initialize(void)
 
 /******************************** Read Helper *********************************/
 
-void esdm_kernel_read(struct entropy_es *eb_es, int fd,
+void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 		      enum esdm_es_data_size data_size, const char *name)
 {
 	struct entropy_es_small small_es;
 	struct entropy_es_large large_es;
-	size_t buflen;
 	ssize_t ret;
 	uint8_t *buf;
 
@@ -176,30 +176,19 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd,
 	switch (data_size) {
 	case esdm_es_data_equal:
 		buf = (uint8_t *)eb_es;
-		buflen = sizeof(struct entropy_es);
 		break;
 	case esdm_es_data_large:
 		buf = (uint8_t *)&large_es;
-		buflen = sizeof(struct entropy_es_large);
 		break;
 	case esdm_es_data_small:
 		buf = (uint8_t *)&small_es;
-		buflen = sizeof(struct entropy_es_small);
 		break;
 	default:
 		goto err;
 	}
 
-	do {
-		lseek(fd, 0, SEEK_SET);
-		ret = read(fd, buf, buflen);
-		if (ret > 0) {
-			buflen -= (size_t)ret;
-			buf += ret;
-		}
-	} while ((0 < ret || EINTR == errno) && buflen);
-
-	if (buflen)
+	ret = ioctl(fd, ioctl_cmd, buf);
+	if (ret < 0)
 		goto err;
 
 	switch (data_size) {
@@ -247,7 +236,8 @@ err:
 }
 
 void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
-				    uint32_t requested_bits, int fd)
+				    uint32_t requested_bits, int fd,
+				    unsigned int ioctl_cmd)
 {
 	if (*configured_bits != requested_bits && fd >= 0) {
 		uint32_t data[2];
@@ -255,9 +245,8 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 
 		data[0] = requested_bits;
 		data[1] = 0;
-		lseek(fd, 0, SEEK_SET);
-		ret = write(fd, data, sizeof(data));
-		if (ret == sizeof(data)) {
+		ret = ioctl(fd, ioctl_cmd, &data);
+		if (ret >= 0) {
 			*configured_bits = requested_bits;
 			logger(LOGGER_DEBUG, LOGGER_C_ES,
 			       "Set requested %u bits with kernel\n",

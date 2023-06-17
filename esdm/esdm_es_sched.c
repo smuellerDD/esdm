@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "esdm_config.h"
@@ -34,7 +35,6 @@
 #include "test_pertubation.h"
 
 static int esdm_sched_entropy_fd = -1;
-static int esdm_sched_status_fd = -1;
 static uint32_t esdm_sched_requested_bits_set = 0;
 static enum esdm_es_data_size esdm_sched_data_size = esdm_es_data_equal;
 
@@ -43,10 +43,6 @@ static void esdm_sched_finalize(void)
 	if (esdm_sched_entropy_fd >= 0)
 		close(esdm_sched_entropy_fd);
 	esdm_sched_entropy_fd = -1;
-
-	if (esdm_sched_status_fd >= 0)
-		close(esdm_sched_status_fd);
-	esdm_sched_status_fd = -1;
 }
 
 bool esdm_sched_enabled(void)
@@ -59,14 +55,18 @@ bool esdm_sched_enabled(void)
 static void esdm_sched_set_requested_bits(uint32_t requested_bits)
 {
 	esdm_kernel_set_requested_bits(&esdm_sched_requested_bits_set,
-				       requested_bits, esdm_sched_entropy_fd);
+				       requested_bits, esdm_sched_entropy_fd,
+				       ESDM_SCHED_CONF);
 }
 
 /* Set requested bit size and entropy rate */
 static int esdm_sched_set_entropy_rate(uint32_t requested_bits)
 {
 	uint32_t entropy[2];
-	ssize_t writelen;
+	int ret;
+
+	if (esdm_sched_entropy_fd < 0)
+		return -EOPNOTSUPP;
 
 	if (esdm_sched_requested_bits_set != requested_bits)
 		entropy[0] = requested_bits;
@@ -83,10 +83,8 @@ static int esdm_sched_set_entropy_rate(uint32_t requested_bits)
 	}
 
 	/* Set current entropy rate */
-	lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
-
-	writelen = write(esdm_sched_entropy_fd, &entropy, sizeof(entropy));
-	if (writelen != sizeof(entropy))
+	ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_CONF, &entropy);
+	if (ret < 0)
 		return -EINVAL;
 
 	esdm_sched_requested_bits_set = requested_bits;
@@ -96,9 +94,14 @@ static int esdm_sched_set_entropy_rate(uint32_t requested_bits)
 static uint32_t esdm_sched_entropylevel(uint32_t requested_bits)
 {
 	uint32_t entropy;
-	ssize_t readlen;
+	int ret;
 
 	(void)requested_bits;
+
+	/*
+	 * Note, due to esdm_config_es_sched_entropy_rate_set, IRQ and Sched ES
+	 * together are not allowed to deliver entropy.
+	 */
 
 	if (esdm_sched_entropy_fd < 0)
 		return 0;
@@ -108,10 +111,8 @@ static uint32_t esdm_sched_entropylevel(uint32_t requested_bits)
 		return 0;
 
 	/* Read entropy level */
-	lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
-	readlen = read(esdm_sched_entropy_fd, &entropy, sizeof(entropy));
-
-	if (readlen != sizeof(entropy))
+	ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_AVAIL_ENTROPY, &entropy);
+	if (ret < 0)
 		return 0;
 
 	return entropy;
@@ -138,21 +139,20 @@ static int esdm_sched_seed_monitor(void)
 static int esdm_sched_initialize(void)
 {
 	uint32_t status[2];
-	ssize_t readlen;
+	int ret;
 
 	/* Allow the init function to be called multiple times */
 	esdm_sched_finalize();
 
-	esdm_sched_entropy_fd = open("/sys/kernel/debug/esdm_es/entropy_sched",
-				     O_RDWR);
+	esdm_sched_entropy_fd = open("/dev/esdm_es", O_RDWR);
 	if (esdm_sched_entropy_fd < 0) {
 		logger(LOGGER_WARN, LOGGER_C_ES,
 		       "Disabling scheduler-based entropy source which is not present in kernel\n")
 		return 0;
 	}
 
-	readlen = read(esdm_sched_entropy_fd, &status, sizeof(status));
-	if (readlen != sizeof(status)) {
+	ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_ENT_BUF_SIZE, &status);
+	if (ret < 0) {
 		logger(LOGGER_ERR, LOGGER_C_ES,
 		       "Failure to obtain scheduler entropy source status from kernel\n");
 		esdm_sched_finalize();
@@ -178,13 +178,6 @@ static int esdm_sched_initialize(void)
 		return -EFAULT;
 	}
 
-	esdm_sched_status_fd = open("/sys/kernel/debug/esdm_es/status_sched",
-				    O_RDWR);
-	if (esdm_sched_entropy_fd < 0) {
-		esdm_sched_finalize();
-		return 0;
-	}
-
 	return 0;
 }
 
@@ -207,8 +200,8 @@ static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 	esdm_sched_set_requested_bits(requested_bits);
 
-	esdm_kernel_read(eb_es, esdm_sched_entropy_fd, esdm_sched_data_size,
-			 esdm_es_sched.name);
+	esdm_kernel_read(eb_es, esdm_sched_entropy_fd, ESDM_SCHED_ENT_BUF,
+			 esdm_sched_data_size, esdm_es_sched.name);
 
 	return;
 
@@ -218,19 +211,21 @@ err:
 
 static void esdm_sched_es_state(char *buf, size_t buflen)
 {
-	if (esdm_sched_status_fd >= 0) {
+	char status[250], *status_p = (buflen < sizeof(status)) ? status : buf;
+
+	if (esdm_sched_entropy_fd >= 0) {
 		ssize_t ret;
 
 		esdm_sched_set_entropy_rate(esdm_sched_requested_bits_set);
 
-		lseek(esdm_sched_status_fd, 0, SEEK_SET);
-		do {
-			ret = read(esdm_sched_status_fd, buf, buflen);
-			if (ret > 0) {
-				buflen -= (size_t)ret;
-				buf += ret;
-			}
-		} while ((0 < ret || EINTR == errno) && buflen);
+		ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_STATUS,
+			    status_p);
+		if (ret < 0) {
+			snprintf(buf, buflen,
+				 " failure in reading kernel status\n");
+		} else if (buflen < sizeof(status)) {
+			snprintf(buf, buflen, "%s", status_p);
+		}
 	} else {
 		snprintf(buf, buflen, " disabled - missing kernel support\n");
 	}
@@ -244,12 +239,9 @@ static void esdm_sched_reset(void)
 	reset[1] = 0;
 
 	if (esdm_sched_entropy_fd >= 0) {
-		ssize_t ret;
+		int ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_CONF, reset);
 
-		lseek(esdm_sched_entropy_fd, 0, SEEK_SET);
-		ret = write(esdm_sched_entropy_fd, &reset, sizeof(reset));
-
-		if (ret != sizeof(reset)) {
+		if (ret < 0) {
 			logger(LOGGER_ERR, LOGGER_C_ES,
 			       "Reset of scheduler entropy source failed\n");
 		}

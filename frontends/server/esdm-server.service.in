@@ -18,6 +18,7 @@ DeviceAllow=/dev/null rw
 DeviceAllow=/dev/hwrng r
 DeviceAllow=/dev/random r
 DeviceAllow=/dev/esdm r
+DeviceAllow=/dev/esdm_es r
 DevicePolicy=strict
 Restart=on-failure
 RestartSec=5s

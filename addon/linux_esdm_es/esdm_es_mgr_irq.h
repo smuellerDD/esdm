@@ -9,11 +9,19 @@
 
 #ifdef ESDM_ES_IRQ
 
+int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg);
 void esdm_es_mgr_irq_reset(void);
 int __init esdm_es_mgr_irq_init(struct dentry *root);
 void esdm_es_mgr_irq_exit(void);
 
 #else /* ESDM_ES_IRQ */
+
+static inline int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg)
+{
+	(void)cmd;
+	(void)arg;
+	return -ENOIOCTLCMD;
+}
 
 static inline void esdm_es_mgr_irq_reset(void) { }
 

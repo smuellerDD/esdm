@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "esdm_config.h"
@@ -35,7 +36,6 @@
 #include "test_pertubation.h"
 
 static int esdm_irq_entropy_fd = -1;
-static int esdm_irq_status_fd = -1;
 static uint32_t esdm_irq_requested_bits_set = 0;
 static enum esdm_es_data_size esdm_irq_data_size = esdm_es_data_equal;
 
@@ -44,10 +44,6 @@ static void esdm_irq_finalize(void)
 	if (esdm_irq_entropy_fd >= 0)
 		close(esdm_irq_entropy_fd);
 	esdm_irq_entropy_fd = -1;
-
-	if (esdm_irq_status_fd >= 0)
-		close(esdm_irq_status_fd);
-	esdm_irq_status_fd = -1;
 }
 
 bool esdm_irq_enabled(void)
@@ -60,14 +56,18 @@ bool esdm_irq_enabled(void)
 static void esdm_irq_set_requested_bits(uint32_t requested_bits)
 {
 	esdm_kernel_set_requested_bits(&esdm_irq_requested_bits_set,
-				       requested_bits, esdm_irq_entropy_fd);
+				       requested_bits, esdm_irq_entropy_fd,
+				       ESDM_IRQ_CONF);
 }
 
 /* Set requested bit size and entropy rate */
 static int esdm_irq_set_entropy_rate(uint32_t requested_bits)
 {
 	uint32_t entropy[2];
-	ssize_t writelen;
+	int ret;
+
+	if (esdm_irq_entropy_fd < 0)
+		return -EOPNOTSUPP;
 
 	if (esdm_irq_requested_bits_set != requested_bits)
 		entropy[0] = requested_bits;
@@ -84,10 +84,8 @@ static int esdm_irq_set_entropy_rate(uint32_t requested_bits)
 	}
 
 	/* Set current entropy rate */
-	lseek(esdm_irq_entropy_fd, 0, SEEK_SET);
-
-	writelen = write(esdm_irq_entropy_fd, &entropy, sizeof(entropy));
-	if (writelen != sizeof(entropy))
+	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_CONF, &entropy);
+	if (ret < 0)
 		return -EINVAL;
 
 	esdm_irq_requested_bits_set = requested_bits;
@@ -97,18 +95,16 @@ static int esdm_irq_set_entropy_rate(uint32_t requested_bits)
 static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 {
 	uint32_t entropy;
-	ssize_t readlen;
+	int ret;
 
 	(void)requested_bits;
 
-	if (esdm_irq_entropy_fd < 0 ||
-	    /*
-	     * If the scheduler-based entropy source is enabled, the IRQ ES is
-	     * claimed to not return any entropy. This is due to the fact that
-	     * interrupts may trigger scheduling events. This implies that
-	     * interrupts are not independent of interrupts.
-	     */
-	    esdm_sched_enabled())
+	/*
+	 * Note, due to esdm_config_es_sched_entropy_rate_set, IRQ and Sched ES
+	 * together are not allowed to deliver entropy.
+	 */
+
+	if (esdm_irq_entropy_fd < 0)
 		return 0;
 
 	/* Set current entropy rate */
@@ -116,9 +112,8 @@ static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 		return 0;
 
 	/* Read entropy level */
-	lseek(esdm_irq_entropy_fd, 0, SEEK_SET);
-	readlen = read(esdm_irq_entropy_fd, &entropy, sizeof(entropy));
-	if (readlen != sizeof(entropy))
+	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_AVAIL_ENTROPY, &entropy);
+	if (ret < 0)
 		return 0;
 
 	return entropy;
@@ -145,21 +140,20 @@ static int esdm_irq_seed_monitor(void)
 static int esdm_irq_initialize(void)
 {
 	uint32_t status[2];
-	ssize_t readlen;
+	int ret;
 
 	/* Allow the init function to be called multiple times */
 	esdm_irq_finalize();
 
-	esdm_irq_entropy_fd = open("/sys/kernel/debug/esdm_es/entropy_irq",
-				   O_RDWR);
+	esdm_irq_entropy_fd = open("/dev/esdm_es", O_RDWR);
 	if (esdm_irq_entropy_fd < 0) {
 		logger(LOGGER_WARN, LOGGER_C_ES,
 		       "Disabling interrupt-based entropy source which is not present in kernel\n")
 		return 0;
 	}
 
-	readlen = read(esdm_irq_entropy_fd, &status, sizeof(status));
-	if (readlen != sizeof(status)) {
+	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_ENT_BUF_SIZE, &status);
+	if (ret < 0) {
 		logger(LOGGER_ERR, LOGGER_C_ES,
 		       "Failure to obtain interrupt entropy source status from kernel\n");
 		esdm_irq_finalize();
@@ -183,13 +177,6 @@ static int esdm_irq_initialize(void)
 		       "Kernel entropy buffer has different size\n");
 		esdm_irq_finalize();
 		return -EFAULT;
-	}
-
-	esdm_irq_status_fd = open("/sys/kernel/debug/esdm_es/status_irq",
-				  O_RDWR);
-	if (esdm_irq_entropy_fd < 0) {
-		esdm_irq_finalize();
-		return 0;
 	}
 
 	/*
@@ -223,8 +210,8 @@ static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 	esdm_irq_set_requested_bits(requested_bits);
 
-	esdm_kernel_read(eb_es, esdm_irq_entropy_fd, esdm_irq_data_size,
-			 esdm_es_irq.name);
+	esdm_kernel_read(eb_es, esdm_irq_entropy_fd, ESDM_IRQ_ENT_BUF,
+			 esdm_irq_data_size, esdm_es_irq.name);
 
 	return;
 
@@ -234,19 +221,20 @@ err:
 
 static void esdm_irq_es_state(char *buf, size_t buflen)
 {
-	if (esdm_irq_status_fd >= 0) {
+	char status[250], *status_p = (buflen < sizeof(status)) ? status : buf;
+
+	if (esdm_irq_entropy_fd >= 0) {
 		ssize_t ret;
 
 		esdm_irq_set_entropy_rate(esdm_irq_requested_bits_set);
 
-		lseek(esdm_irq_status_fd, 0, SEEK_SET);
-		do {
-			ret = read(esdm_irq_status_fd, buf, buflen);
-			if (ret > 0) {
-				buflen -= (size_t)ret;
-				buf += ret;
-			}
-		} while ((0 < ret || EINTR == errno) && buflen);
+		ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_STATUS, status_p);
+		if (ret < 0) {
+			snprintf(buf, buflen,
+				 " failure in reading kernel status\n");
+		} else if (buflen < sizeof(status)) {
+			snprintf(buf, buflen, "%s", status_p);
+		}
 	} else {
 		snprintf(buf, buflen, " disabled - missing kernel support\n");
 	}
@@ -260,12 +248,9 @@ static void esdm_irq_reset(void)
 	reset[1] = 0;
 
 	if (esdm_irq_entropy_fd >= 0) {
-		ssize_t ret;
+		int ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_CONF, reset);
 
-		lseek(esdm_irq_entropy_fd, 0, SEEK_SET);
-		ret = write(esdm_irq_entropy_fd, &reset, sizeof(reset));
-
-		if (ret != sizeof(reset)) {
+		if (ret < 0) {
 			logger(LOGGER_ERR, LOGGER_C_ES,
 			       "Reset of interrupt entropy source failed\n");
 		}
