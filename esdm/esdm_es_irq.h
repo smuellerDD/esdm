@@ -48,6 +48,10 @@
 
 /* IRQ ES: read size sizeof(eb): entropy value */
 #define ESDM_IRQ_ENT_BUF		_IOR(ESDMIO, 0x02, struct entropy_es )
+#define ESDM_IRQ_ENT_BUF_LARGE		_IOR(ESDMIO, 0x02,		       \
+					     struct entropy_es_large )
+#define ESDM_IRQ_ENT_BUF_SMALL		_IOR(ESDMIO, 0x02,		       \
+					     struct entropy_es_small )
 
 /*
  * IRQ ES: configure entropy source with the following protocol

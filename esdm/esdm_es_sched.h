@@ -38,6 +38,10 @@
 
 /* SCHED ES: read size sizeof(eb): entropy value */
 #define ESDM_SCHED_ENT_BUF		_IOR(ESDMIO, 0x07, struct entropy_es )
+#define ESDM_SCHED_ENT_BUF_LARGE	_IOR(ESDMIO, 0x07,		       \
+					     struct entropy_es_large )
+#define ESDM_SCHED_ENT_BUF_SMALL	_IOR(ESDMIO, 0x07,		       \
+					     struct entropy_es_small )
 
 /*
  * SCHED ES: configure entropy source with the following protocol

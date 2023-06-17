@@ -195,12 +195,29 @@ static uint32_t esdm_sched_poolsize(void)
 static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			   bool __unused unused)
 {
+	unsigned int ioctl_cmd;
+
 	if (esdm_sched_entropy_fd < 0)
 		goto err;
 
+	switch (esdm_sched_data_size) {
+	case esdm_es_data_equal:
+		ioctl_cmd = ESDM_SCHED_ENT_BUF;
+		break;
+	case esdm_es_data_large:
+		ioctl_cmd = ESDM_SCHED_ENT_BUF_LARGE;
+		break;
+	case esdm_es_data_small:
+		ioctl_cmd = ESDM_SCHED_ENT_BUF_SMALL;
+		break;
+	default:
+		goto err;
+	}
+
 	esdm_sched_set_requested_bits(requested_bits);
 
-	esdm_kernel_read(eb_es, esdm_sched_entropy_fd, ESDM_SCHED_ENT_BUF,
+
+	esdm_kernel_read(eb_es, esdm_sched_entropy_fd, ioctl_cmd,
 			 esdm_sched_data_size, esdm_es_sched.name);
 
 	return;
