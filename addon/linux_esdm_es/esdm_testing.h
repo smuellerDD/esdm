@@ -312,12 +312,15 @@ static inline bool esdm_sched_perf_time(u32 start) { return false; }
 #endif /*CONFIG_ESDM_SCHED_PERF */
 
 #ifdef ESDM_TESTING
-int __init esdm_test_init(struct dentry *esdm_raw_debugfs_root);
+
+int __init esdm_test_init(void);
+void __exit esdm_test_exit(void);
+
 #else
-static inline int __init esdm_test_init(struct dentry *esdm_raw_debugfs_root)
-{
-	return 0;
-}
+
+static inline int __init esdm_test_init(void) { return 0; }
+static inline void __exit esdm_test_exit(void) { }
+
 #endif
 
 #endif /* _ESDM_TESTING_H */

@@ -755,8 +755,13 @@ static const struct file_operations esdm_raw_sched_nvcsw_fops = {
  * Debugfs interface
  **************************************************************************/
 
+static struct dentry *esdm_raw_debugfs_root = NULL;
+
 int __init esdm_test_init(struct dentry *esdm_raw_debugfs_root)
 {
+
+	esdm_raw_debugfs_root = debugfs_create_dir(KBUILD_MODNAME, NULL);
+
 #ifdef CONFIG_ESDM_RAW_HIRES_ENTROPY
 	debugfs_create_file_unsafe("esdm_raw_hires", 0400,
 				   esdm_raw_debugfs_root, NULL,
@@ -817,4 +822,9 @@ int __init esdm_test_init(struct dentry *esdm_raw_debugfs_root)
 #endif
 
 	return 0;
+}
+
+void __exit esdm_test_exit(void)
+{
+	debugfs_remove_recursive(esdm_raw_debugfs_root);
 }

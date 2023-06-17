@@ -11,25 +11,18 @@
 
 int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg);
 void esdm_es_mgr_sched_reset(void);
-int __init esdm_es_mgr_sched_init(struct dentry *root);
+int __init esdm_es_mgr_sched_init(void);
 void esdm_es_mgr_sched_exit(void);
 
 #else /* ESDM_ES_SCHED */
 
 static inline int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg)
 {
-	(void)cmd;
-	(void)arg;
 	return -ENOIOCTLCMD;
 }
 
 static inline void esdm_es_mgr_sched_reset(void) { }
-
-static inline int __init esdm_es_mgr_sched_init(struct dentry *root)
-{
-	return 0;
-};
-
+static inline int __init esdm_es_mgr_sched_init(void) { return 0; }
 static inline void esdm_es_mgr_sched_exit(void) { }
 
 #endif /* ESDM_ES_SCHED */

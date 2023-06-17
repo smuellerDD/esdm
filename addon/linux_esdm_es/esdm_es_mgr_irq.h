@@ -11,25 +11,18 @@
 
 int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg);
 void esdm_es_mgr_irq_reset(void);
-int __init esdm_es_mgr_irq_init(struct dentry *root);
+int __init esdm_es_mgr_irq_init(void);
 void esdm_es_mgr_irq_exit(void);
 
 #else /* ESDM_ES_IRQ */
 
 static inline int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg)
 {
-	(void)cmd;
-	(void)arg;
 	return -ENOIOCTLCMD;
 }
 
 static inline void esdm_es_mgr_irq_reset(void) { }
-
-static inline int __init esdm_es_mgr_irq_init(struct dentry *root)
-{
-	return 0;
-};
-
+static inline int __init esdm_es_mgr_irq_init(void) { return 0; }
 static inline void esdm_es_mgr_irq_exit(void) { }
 
 #endif /* ESDM_ES_IRQ */

@@ -188,8 +188,12 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 	}
 
 	ret = ioctl(fd, ioctl_cmd, buf);
-	if (ret < 0)
+	if (ret < 0) {
+		logger(LOGGER_WARN, LOGGER_C_ES,
+		       "failed to obtain entropy from ES %s, error %d\n", name,
+		       errno);
 		goto err;
+	}
 
 	switch (data_size) {
 	case esdm_es_data_equal:

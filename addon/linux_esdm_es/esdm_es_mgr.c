@@ -26,8 +26,6 @@ static bool esdm_panic_on_permanent_health_failure = false;
 module_param(esdm_panic_on_permanent_health_failure, bool, 0444);
 MODULE_PARM_DESC(esdm_panic_on_permanent_health_failure, "Panic on reaching permanent health failure - only required if ESDM is part of a FIPS 140-3 module\n");
 
-static struct dentry *esdm_es_mgr_debugfs_root = NULL;
-
 static int esdm_major = 0;
 module_param(esdm_major, int, 0);
 MODULE_PARM_DESC(esdm_major, "ESDM major device number");
@@ -54,11 +52,6 @@ void esdm_reset_state(enum esdm_internal_es es)
 }
 
 /* Module init: allocate memory, register the debugfs files */
-static int esdm_es_mgr_debugfs_init(void)
-{
-	esdm_es_mgr_debugfs_root = debugfs_create_dir(KBUILD_MODNAME, NULL);
-	return 0;
-}
 
 static int esdm_cdev_open(struct inode *inode, struct file *file)
 {
@@ -193,30 +186,24 @@ static int __init esdm_es_mgr_init(void)
 	if (ret)
 		goto out;
 
-	ret = esdm_es_mgr_debugfs_init();
+	ret = esdm_es_mgr_irq_init();
 	if (ret)
 		goto out;
 
-	ret = esdm_es_mgr_irq_init(esdm_es_mgr_debugfs_root);
+	ret = esdm_es_mgr_sched_init();
 	if (ret)
-		goto outfs;
+		goto out;
 
-	ret = esdm_es_mgr_sched_init(esdm_es_mgr_debugfs_root);
+	ret = esdm_test_init();
 	if (ret)
-		goto outfs;
-
-	ret = esdm_test_init(esdm_es_mgr_debugfs_root);
-	if (ret)
-		goto outfs;
+		goto out;
 
 	ret = esdm_es_mgr_dev_init();
 	if (ret)
-		goto outfs;
+		goto out;
 
 	return 0;
 
-outfs:
-	debugfs_remove_recursive(esdm_es_mgr_debugfs_root);
 out:
 	esdm_es_mgr_irq_exit();
 	esdm_es_mgr_sched_exit();
@@ -226,7 +213,7 @@ out:
 static void __exit esdm_es_mgr_exit(void)
 {
 	esdm_es_mgr_dev_fini();
-	debugfs_remove_recursive(esdm_es_mgr_debugfs_root);
+	esdm_test_exit();
 	esdm_es_mgr_sched_exit();
 	esdm_es_mgr_irq_exit();
 }
