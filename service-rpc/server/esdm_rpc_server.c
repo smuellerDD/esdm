@@ -450,6 +450,11 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	socklen_t addr_len = sizeof (addr);
 	int ret;
 
+#ifdef DEBUG
+	logger(LOGGER_WARN, LOGGER_C_RPC,
+	       "Debug mode enabled, RPC server executes single threaded\n");
+#endif
+
 	if (proto->server_listening_fd < 0)
 		return -EINVAL;
 	CKNULL(proto->service, -EINVAL);
