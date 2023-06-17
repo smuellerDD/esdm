@@ -144,7 +144,7 @@ static int esdm_sched_initialize(void)
 	/* Allow the init function to be called multiple times */
 	esdm_sched_finalize();
 
-	esdm_sched_entropy_fd = open("/dev/esdm_es", O_RDWR);
+	esdm_sched_entropy_fd = open("/dev/esdm_es", O_RDONLY);
 	if (esdm_sched_entropy_fd < 0) {
 		logger(LOGGER_WARN, LOGGER_C_ES,
 		       "Disabling scheduler-based entropy source which is not present in kernel\n")
