@@ -12,6 +12,7 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/module.h>
+#include <linux/version.h>
 
 #include "esdm_es_ioctl.h"
 #include "esdm_es_mgr.h"
@@ -48,7 +49,7 @@ void esdm_reset_state(enum esdm_internal_es es)
 		esdm_es_mgr_irq_reset();
 	if (es == esdm_int_es_sched)
 		esdm_es_mgr_sched_reset();
-        pr_debug("reset ESDM ES %u\n", es);
+	pr_debug("reset ESDM ES %u\n", es);
 }
 
 /* Module init: allocate memory, register the debugfs files */
@@ -123,9 +124,13 @@ static int __init esdm_es_mgr_dev_init(void)
 	struct device *device;
 	int ret;
 
-	esdm_es_class = class_create(/* THIS_MODULE, */KBUILD_MODNAME);
-        if (IS_ERR(esdm_es_class))
-                return PTR_ERR(esdm_es_class);
+	esdm_es_class = class_create(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,4,0)
+				     THIS_MODULE,
+#endif
+			             KBUILD_MODNAME);
+	if (IS_ERR(esdm_es_class))
+		return PTR_ERR(esdm_es_class);
 
 	if (esdm_major) {
 		dev = MKDEV(esdm_major, 0);
@@ -141,10 +146,10 @@ static int __init esdm_es_mgr_dev_init(void)
 		goto err;
 
 	cdev_init(&esdm_cdev, &esdm_cdev_fops);
-        cdev_add(&esdm_cdev, dev, ESDM_MAX_MINORS);
+	cdev_add(&esdm_cdev, dev, ESDM_MAX_MINORS);
 
-        device = device_create(esdm_es_class, NULL, dev, NULL, KBUILD_MODNAME);
-        if (IS_ERR(device)) {
+	device = device_create(esdm_es_class, NULL, dev, NULL, KBUILD_MODNAME);
+	if (IS_ERR(device)) {
 		ret = PTR_ERR(device);
 		goto err_cdev;
 	}
@@ -169,7 +174,7 @@ static void __exit esdm_es_mgr_dev_fini(void)
 	device_destroy(esdm_es_class, MKDEV(esdm_major, 0));
 
 	cdev_del(&esdm_cdev);
-        /* cdev_put(&esdm_cdev); */
+	/* cdev_put(&esdm_cdev); */
 
 	unregister_chrdev_region(MKDEV(esdm_major, 0), ESDM_MAX_MINORS);
 	class_destroy(esdm_es_class);

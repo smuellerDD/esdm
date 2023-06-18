@@ -34,24 +34,24 @@ int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case ESDM_SCHED_AVAIL_ENTROPY:
 		data = esdm_avail_entropy_sched(esdm_requested_sched_bits);
-                if (put_user(data, p))
-                        return -EFAULT;
-                return 0;
+		if (put_user(data, p))
+			return -EFAULT;
+		return 0;
 
 	case ESDM_SCHED_ENT_BUF_SIZE:
 		data = sizeof(eb);
-                if (put_user(data, p++))
-                        return -EFAULT;
+		if (put_user(data, p++))
+			return -EFAULT;
 		data = esdm_int_es_sched;
-                if (put_user(data, p))
-                        return -EFAULT;
-                return 0;
+		if (put_user(data, p))
+			return -EFAULT;
+		return 0;
 
 	case ESDM_SCHED_ENT_BUF:
 		memset(&eb, 0, sizeof(eb));
 		esdm_es_sched.get_ent(&eb, esdm_requested_sched_bits);
 		if (copy_to_user(argp, &eb, sizeof(eb)))
-                        ret = -EFAULT;
+			ret = -EFAULT;
 		memzero_explicit(&eb, sizeof(eb));
 		break;
 
