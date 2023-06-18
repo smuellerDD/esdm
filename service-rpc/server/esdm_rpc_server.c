@@ -448,7 +448,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	struct esdm_rpcs_connection *rpc_conn = NULL;
 	struct sockaddr addr;
 	socklen_t addr_len = sizeof (addr);
-	int ret;
+	int ret = 0;
 
 #ifdef DEBUG
 	logger(LOGGER_WARN, LOGGER_C_RPC,
@@ -459,7 +459,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		return -EINVAL;
 	CKNULL(proto->service, -EINVAL);
 
-	for (;;) {
+	while(atomic_read(&server_exit) == 0) {
 		/*
 		 * Allocate the memory for the thread invocation. This is done
 		 * before the accept() call as now we should have time but
