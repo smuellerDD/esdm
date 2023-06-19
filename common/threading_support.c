@@ -294,6 +294,32 @@ err:
 	return ret;
 }
 
+void thread_send_signal(uint32_t thread_group, int signal)
+{
+	pthread_t self = pthread_self();
+	unsigned int i, upper;
+	unsigned int special_slot = thread_get_special_slot(thread_group);
+
+	/* Get the range of slots of the thread_group */
+	if (special_slot) {
+		i = special_slot;
+		upper = special_slot + 1;
+	} else {
+		i = thread_group * threads_per_threadgroup;
+		upper = (thread_group + 1) * threads_per_threadgroup;
+	}
+
+	for (; i < upper; i++) {
+		/*
+		 * Only send signal to thread if work is present and do not send
+		 * signal to ourselves.
+		 */
+		if (threads[i].start_routine &&
+		    !pthread_equal(threads[i].parent, self))
+			pthread_kill(threads[i].thread_id, signal);
+	}
+}
+
 /* Find free pthread slot and schedule the job */
 static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			   uint32_t thread_group, int *ret_ancestor)

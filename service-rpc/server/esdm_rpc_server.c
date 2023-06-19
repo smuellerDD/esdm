@@ -483,6 +483,11 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		/* Wait for incoming connection */
 		rpc_conn->child_fd = accept(proto->server_listening_fd, &addr,
 					    &addr_len);
+
+		/* If server is requested to terminate, do that */
+		if (atomic_read(&server_exit))
+			break;
+
 		if (rpc_conn->child_fd < 0) {
 			free(rpc_conn);
 			logger(LOGGER_WARN, LOGGER_C_ANY,
@@ -695,7 +700,7 @@ static int esdm_rpcs_interfaces_init(const char *username)
 
 	/* Spawn the thread handling the unprivileged interface */
 	CKINT_LOG(thread_start(esdm_rpcs_unpriv_init, NULL,
-			      ESDM_THREAD_RPC_UNPRIV_GROUP, NULL),
+			       ESDM_THREAD_RPC_UNPRIV_GROUP, NULL),
 		  "Starting server thread failed\n");
 
 	/* Wait for the unprivileged thread to complete initialization. */
@@ -885,6 +890,9 @@ void esdm_rpc_server_fini(void)
 
 	atomic_set(&server_exit, 1);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
+
+	/* Unblock the accept() in the server loop */
+	thread_send_signal(ESDM_THREAD_RPC_UNPRIV_GROUP, SIGUSR1);
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();

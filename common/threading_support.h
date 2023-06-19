@@ -130,6 +130,14 @@ int thread_set_name(enum esdm_request_type type, uint32_t id);
 int thread_get_name(char *name, size_t len);
 
 /**
+ * @brief - Send signal to thread group
+ *
+ * @param [in] thread_group Thread group to send signal to
+ * @param [in] signal Signal to send
+ */
+void thread_send_signal(uint32_t thread_group, int signal);
+
+/**
  * @brief - Stop spawning new threads
  */
 void thread_stop_spawning(void);
