@@ -32,6 +32,7 @@
 #include "esdm_node.h"
 #include "helper.h"
 #include "mutex.h"
+#include "ret_checkers.h"
 
 static uint32_t esdm_cpu_data_multiplier = 0;
 
@@ -85,7 +86,16 @@ static uint32_t
 esdm_get_cpu_data_compress(uint8_t *outbuf, uint32_t requested_bits,
 			   uint32_t multiplier)
 {
+#if defined(ESDM_HASH_SHA512)
 	LC_HASH_CTX_ON_STACK(shash, lc_sha512);
+	bool shash_free = false;
+#elif defined(ESDM_HASH_SHA3_512)
+	LC_HASH_CTX_ON_STACK(shash, lc_sha3_512);
+	bool shash_free = false;
+#else
+	void *shash;
+	bool shash_free = true;
+#endif
 	const struct esdm_hash_cb *hash_cb;
 	struct esdm_drng *drng = esdm_drng_node_instance();
 	uint32_t ent_bits = 0, i, partial_bits = 0, digestsize, digestsize_bits,
@@ -93,6 +103,13 @@ esdm_get_cpu_data_compress(uint8_t *outbuf, uint32_t requested_bits,
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
+
+	if (shash_free) {
+		if (hash_cb->hash_alloc) {
+			if (hash_cb->hash_alloc((void **)&shash))
+				goto err;
+		}
+	}
 
 	digestsize = hash_cb->hash_digestsize(shash);
 	digestsize_bits = digestsize << 3;
@@ -149,7 +166,10 @@ esdm_get_cpu_data_compress(uint8_t *outbuf, uint32_t requested_bits,
 	}
 
 out:
-	hash_cb->hash_desc_zero(shash);
+	if (shash)
+		hash_cb->hash_desc_zero(shash);
+	if (shash_free && shash)
+		hash_cb->hash_dealloc(shash);
 	mutex_reader_unlock(&drng->hash_lock);
 	esdm_drng_put_instances();
 	return ent_bits;
