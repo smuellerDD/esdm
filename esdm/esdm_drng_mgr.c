@@ -559,7 +559,9 @@ out:
 
 void esdm_drng_seed_work(void)
 {
-	__esdm_drng_seed_work(false);
+	do {
+		__esdm_drng_seed_work(false);
+	} while (esdm_es_reseed_wanted());
 
 	/* Allow the seeding operation to be called again */
 	esdm_pool_unlock();
