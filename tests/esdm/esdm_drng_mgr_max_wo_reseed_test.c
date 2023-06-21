@@ -71,6 +71,9 @@ static int esdm_drng_mgr_max_wo_reseed_test(bool success)
 	esdm_config_es_cpu_entropy_rate_set(0);
 	esdm_config_es_jent_entropy_rate_set(0);
 	esdm_config_es_krng_entropy_rate_set(0);
+	esdm_config_es_hwrand_entropy_rate_set(0);
+	esdm_config_es_irq_entropy_rate_set(0);
+	esdm_config_es_sched_entropy_rate_set(0);
 
 	if (!esdm_state_operational()) {
 		printf("failed to remain in operational mode\n");
