@@ -489,7 +489,8 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			break;
 
 		if (rpc_conn->child_fd < 0) {
-			free(rpc_conn);
+			esdm_rpcs_release_conn(rpc_conn);
+			rpc_conn = NULL;
 			logger(LOGGER_WARN, LOGGER_C_ANY,
 			       "Accepting incoming connections failed: %s\n",
 			       strerror(errno));
@@ -506,6 +507,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			       "Error setting timeout on socket: %s\n",
 			       strerror(errsv));
 			esdm_rpcs_release_conn(rpc_conn);
+			rpc_conn = NULL;
 			continue;
 		}
 
@@ -525,6 +527,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			logger(LOGGER_ERR, LOGGER_C_RPC,
 			       "Starting new thread for incoming connection failed\n");
 			esdm_rpcs_release_conn(rpc_conn);
+			rpc_conn = NULL;
 			continue;
 		}
 #endif /* DEBUG */
