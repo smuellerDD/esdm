@@ -21,6 +21,7 @@
 #include "build_bug_on.h"
 #include "config.h"
 #include "esdm_config.h"
+#include "esdm_config_internal.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_irq.h"
