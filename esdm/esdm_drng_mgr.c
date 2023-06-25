@@ -559,9 +559,7 @@ out:
 
 void esdm_drng_seed_work(void)
 {
-	do {
-		__esdm_drng_seed_work(false);
-	} while (esdm_es_reseed_wanted());
+	__esdm_drng_seed_work(false);
 
 	/* Allow the seeding operation to be called again */
 	esdm_pool_unlock();
@@ -784,6 +782,7 @@ void esdm_reset(void)
 
 /******************* Generic ESDM kernel output interfaces ********************/
 
+/* Force one DRBG to be fully seeded */
 void esdm_force_fully_seeded(void)
 {
 	if (esdm_pool_all_nodes_seeded_get())
@@ -794,9 +793,22 @@ void esdm_force_fully_seeded(void)
 	esdm_pool_unlock();
 }
 
+/* Force all DRBG to be fully seeded */
+void esdm_force_fully_seeded_all_drbgs(void)
+{
+	if (esdm_pool_all_nodes_seeded_get())
+		return;
+
+	esdm_pool_lock();
+	do {
+		__esdm_drng_seed_work(true);
+	} while (esdm_es_reseed_wanted());
+	esdm_pool_unlock();
+}
+
 static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 {
-	esdm_force_fully_seeded();
+	esdm_force_fully_seeded_all_drbgs();
 	if (esdm_pool_all_nodes_seeded_get())
 		return 0;
 	if (nonblock)
