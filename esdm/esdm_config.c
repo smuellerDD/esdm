@@ -292,27 +292,10 @@ int esdm_config_init(void)
 			esdm_config.esdm_es_hwrand_entropy_rate_bits);
 	complete_entropy_rate += esdm_config.esdm_es_hwrand_entropy_rate_bits;
 
-	if (complete_entropy_rate < esdm_get_seed_entropy_osr(true)) {
+	if (!complete_entropy_rate) {
 		logger_status(LOGGER_C_ES,
 			      "All entropy sources managed by ESDM collectively cannot satisfy seed requirement - ensure to use an external entropy provider to fill up auxiliary pool!\n");
 	}
-
-#if 0
-	/*
-	 * In FIPS mode, the Jitter RNG is defined to have full of entropy
-	 * unless a different value has been specified at the command line
-	 * (i.e. the user overrides the default), and the default value is
-	 * larger than zero (if it is zero, it is assumed that an RBG2(P) or
-	 * RBG2(NP) construction is attempted that intends to exclude the
-	 * Jitter RNG).
-	 */
-	if (esdm_config_fips_enabled() &&
-	    ESDM_JENT_ENTROPY_RATE > 0 &&
-	    esdm_config_es_jent_entropy_rate() ==
-	     ESDM_JENT_ENTROPY_RATE)
-		esdm_config_es_jent_entropy_rate_set(
-			ESDM_DRNG_SECURITY_STRENGTH_BITS);
-#endif
 
 	return 0;
 }
