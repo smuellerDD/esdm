@@ -81,6 +81,7 @@ void esdm_drng_inject(struct esdm_drng *drng,
 		      bool fully_seeded, const char *drng_type);
 void esdm_drng_seed_work(void);
 void esdm_force_fully_seeded(void);
+void esdm_force_fully_seeded_all_drbgs(void);
 
 static inline uint32_t esdm_compress_osr(void)
 {

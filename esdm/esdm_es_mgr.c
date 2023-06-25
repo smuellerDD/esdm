@@ -123,8 +123,7 @@ static void esdm_es_mgr_monitor_wakeup(void)
 int esdm_es_mgr_monitor_initialize(void)
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
-	uint64_t i;
-	unsigned int avail = 0;
+	unsigned int i, avail = 0;
 
 	for_each_esdm_es(i) {
 		if (esdm_es[i]->active())
@@ -139,7 +138,6 @@ int esdm_es_mgr_monitor_initialize(void)
 
 	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
 
-#define secs(x) ((uint64_t)(((uint64_t)1UL<<30) / ((uint64_t)ts.tv_nsec) * x))
 	while (!atomic_read(&esdm_es_mgr_terminate)) {
 		unsigned int j;
 
@@ -154,7 +152,6 @@ int esdm_es_mgr_monitor_initialize(void)
 
 		nanosleep(&ts, NULL);
 	}
-#undef secs
 
 	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Stopping entropy monitor\n");
 	return 0;
@@ -162,6 +159,17 @@ int esdm_es_mgr_monitor_initialize(void)
 
 /******************************** Read Helper *********************************/
 
+/**
+ * Common read function to obtain data from the kernel entropy sources
+ * such as IRQ / Sched ES.
+ *
+ * @param [out] eb_es entropy buffer to be filled
+ * @param [in] fd file descriptor to the entropy source
+ * @param [in] ioctl_cmd IOCTL command to be used with the FD
+ * @param [in] data_size Specification of the data size detected during
+ *			 initialization of the ES
+ * @param [in] name Entropy source name
+ */
 void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 		      enum esdm_es_data_size data_size, const char *name)
 {
@@ -239,6 +247,15 @@ err:
 	eb_es->e_bits = 0;
 }
 
+/**
+ * Common service function to set the requested amount of bits with the kernel
+ * entropy sources.
+ *
+ * @param [in/out] configured_bits Currently and newly configured bit size
+ * @param [in] requested_bits Bit size to be configured
+ * @param [in] fd file descriptor to the entropy source
+ * @param [in] ioctl_cmd IOCTL command to be used with the FD
+ */
 void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 				    uint32_t requested_bits, int fd,
 				    unsigned int ioctl_cmd)
@@ -494,7 +511,7 @@ void esdm_set_write_wakeup_bits(uint32_t val)
 		min_uint32(val, esdm_reduce_by_osr(esdm_get_digestsize()));
 }
 
-/*
+/**
  * esdm_init_ops() - Set seed stages of ESDM
  *
  * Set the slow noise source reseed trigger threshold. The initial threshold
@@ -502,8 +519,9 @@ void esdm_set_write_wakeup_bits(uint32_t val)
  * reaching this value, the next seed threshold of 128 bits is set followed
  * by 256 bits.
  *
- * @eb: buffer containing the size of entropy currently injected into DRNG - if
- *	NULL, the function obtains the available entropy from the ES.
+ * @param [in] eb buffer containing the size of entropy currently injected into
+ *		  DRNG - if NULL, the function obtains the available entropy
+ *		  from the ES.
  */
 void esdm_init_ops(struct entropy_buf *eb)
 {
@@ -642,7 +660,7 @@ int esdm_es_mgr_initialize(void)
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
 	memset_secure(&seed, 0, sizeof(seed));
 
-	esdm_force_fully_seeded();
+	esdm_force_fully_seeded_all_drbgs();
 
 out:
 	return ret;
