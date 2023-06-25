@@ -490,6 +490,9 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 	case es_kernel_feeder:
 		snprintf(name, sizeof(name), "ESDM krnl_feed");
 		break;
+	case es_jent_collector:
+		snprintf(name, sizeof(name), "ESDM Jent ES");
+		break;
 	default:
 		snprintf(name, sizeof(name), "ESDM %u", id);
 		break;
