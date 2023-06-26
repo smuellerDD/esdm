@@ -1,4 +1,4 @@
-Changes 0.6.0-prerelease:
+Changes 0.6.0:
 * Move ESDM apps into separate namespaces to limit their privilege even further (e.g. no possibility to create network connections)
 
 * Add German AIS 20/31 (draft 2022) NTG.1 compliance support
