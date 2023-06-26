@@ -124,6 +124,11 @@ struct esdm_drng *esdm_drng_node_instance(void)
 	return esdm_drng_init_instance();
 }
 
+/*
+ * Reset the DRNG by clearing all meta data, but leave the state (which implies)
+ * the state is credited with zero entropy, but is used to have a state other
+ * than zero).
+ */
 void esdm_drng_reset(struct esdm_drng *drng)
 {
 	/* Ensure reseed during next call */
@@ -216,7 +221,7 @@ out:
 	return ret;
 }
 
-/* Initialize the default DRNG during boot and perform its seeding */
+/* Initialize the default DRNG during start time and perform its seeding */
 int esdm_drng_mgr_initialize(void)
 {
 	int ret;
@@ -384,6 +389,8 @@ void esdm_drng_inject(struct esdm_drng *drng,
 /*
  * Perform the seeding of the DRNG with data from entropy source.
  * The function returns the entropy injected into the DRNG in bits.
+ *
+ * The caller must hold the DRNG lock.
  */
 static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 					 const char *drng_type)
@@ -493,6 +500,14 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	}
 }
 
+/**
+ * @brief Seeding of one not yet fully seeded DRNG
+ *
+ * Perform the seeding of a DRNG. The code seeds one DRNG that is currently
+ * not (fully) seeded. The logic picks the DRNG to be seeded.
+ *
+ * @param [in] force Apply the forced seeding operation.
+ */
 static void __esdm_drng_seed_work(bool force)
 {
 	struct esdm_drng **esdm_drng;
@@ -612,14 +627,13 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 }
 
 /**
- * esdm_drng_get() - Get random data out of the DRNG which is reseeded
- * frequently.
+ * @brief Get random data out of the DRNG which is reseeded frequently.
  *
- * @drng: DRNG instance
- * @outbuf: buffer for storing random data
- * @outbuflen: length of outbuf
+ * @param [in] drng DRNG instance
+ * @param [in] outbuf buffer for storing random data
+ * @param [in] outbuflen length of outbuf
  *
- * @return:
+ * @return
  * * < 0 in error case (DRNG generation or update failed)
  * * >=0 returning the returned number of bytes
  */
@@ -637,10 +651,19 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 	outbuflen = min_size(outbuflen, SSIZE_MAX);
 
+	/*
+	 * If the entire ESDM ran without full reseed for too long,
+	 * revert to the unseeded state.
+	 *
+	 * Note a reseed requested by drng->force_reseed or esdm_drng_seed()
+	 * does not imply that sufficient entropy was received to fill the DRNG.
+	 * If this state persists, then the following check applies.
+	 */
 	if (atomic_read_u32(&drng->requests_since_fully_seeded) >
 	    esdm_config_drng_max_wo_reseed())
 		esdm_unset_fully_seeded(drng);
 
+	/* Loop to collect random bits for the caller. */
 	while (outbuflen) {
 		uint32_t todo = min_uint32((uint32_t)outbuflen,
 					   ESDM_DRNG_MAX_REQSIZE);
@@ -649,8 +672,14 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		/* In normal operation, check whether to reseed */
 		if (!pr && esdm_drng_must_reseed(drng)) {
 			if (!esdm_pool_trylock()) {
+				/*
+				 * Entropy pool cannot be locked, try to reseed
+				 * next time, but continue to generate random
+				 * bits.
+				 */
 				drng->force_reseed = true;
 			} else {
+				/* Perform synchronous reseed */
 				esdm_drng_seed(drng);
 				esdm_pool_unlock();
 			}
@@ -658,6 +687,17 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 		mutex_w_lock(&drng->lock);
 
+		/*
+		 * Handle prediction resistance requests.
+		 *
+		 * Note, as we do not reseed before the generate call, it
+		 * implies that this code path is only truly producing
+		 * prediction resistance bits following the definition of
+		 * SP800-90A with a separate DRBG instance that is dedicated to
+		 * the PR operation. A DRBG instance that would be both used for
+		 * non-PR and PR behavior would not comply with the definition
+		 * of SP800-90A.
+		 */
 		if (pr) {
 			/* If async reseed did not deliver entropy, try now */
 			if (!drng->fully_seeded) {
@@ -685,10 +725,12 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 						  collected_ent_bits >> 3);
 			}
 
-			/* Do not produce more than DRNG security strength */
+			/* Do not produce more than DRNG security strength. */
 			todo = min_uint32(todo,
 					  esdm_security_strength() >> 3);
 		}
+
+		/* Now, generate random bits from the properly seeded DRNG. */
 		ret = drng->drng_cb->drng_generate(drng->drng,
 						   outbuf + processed, todo);
 		mutex_w_unlock(&drng->lock);
