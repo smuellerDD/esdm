@@ -757,10 +757,16 @@ static const struct file_operations esdm_raw_sched_nvcsw_fops = {
 
 static struct dentry *esdm_raw_debugfs_root = NULL;
 
-int __init esdm_test_init(struct dentry *esdm_raw_debugfs_root)
+int __init esdm_test_init(void)
 {
 
 	esdm_raw_debugfs_root = debugfs_create_dir(KBUILD_MODNAME, NULL);
+	if (!esdm_raw_debugfs_root) {
+		pr_warn("ESDM testing debugfs creation failed: %s\n", KBUILD_MODNAME);
+		return -ENOENT;
+	} else {
+		pr_info("ESDM testing debugfs created: %s\n", KBUILD_MODNAME);
+	}
 
 #ifdef CONFIG_ESDM_RAW_HIRES_ENTROPY
 	debugfs_create_file_unsafe("esdm_raw_hires", 0400,
