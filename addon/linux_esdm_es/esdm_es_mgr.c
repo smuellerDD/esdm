@@ -52,8 +52,7 @@ void esdm_reset_state(enum esdm_internal_es es)
 	pr_debug("reset ESDM ES %u\n", es);
 }
 
-/* Module init: allocate memory, register the debugfs files */
-
+/* Module init: allocate memory, register the device file */
 static int esdm_cdev_open(struct inode *inode, struct file *file)
 {
 	unsigned m = iminor(inode);
