@@ -61,8 +61,8 @@
  * CRm: 0b0100
  * op2: 0b001
  */
-#define RNDR_INSTR (3 << 19 | 3 << 16 | 2 << 12 | 4 << 8 | 0 << 5)
-#define RNDRRS_INSTR (3 << 19 | 3 << 16 | 2 << 12 | 4 << 8 | 1 << 5)
+#define RNDR_INSTR "s3_3_c2_c4_0"
+#define RNDRRS_INSTR "s3_3_c2_c4_1"
 
 /*
  * Read the feature register ID_AA64ISAR0_EL1
@@ -97,7 +97,7 @@ static inline bool arm_id_aa64isar0_el1_feature(unsigned long feature)
 			return false;
 	}
 
-        return (id_aa64isar0_el1_val & feature) true : false;
+        return (id_aa64isar0_el1_val & feature) ? true : false;
 }
 
 static inline bool arm_seed(unsigned long *data)
@@ -112,7 +112,7 @@ static inline bool arm_seed(unsigned long *data)
 	 * data value returned is 0.
 	 */
 	__asm__ __volatile__(
-		"mrs_s %0 " RNDRRS_INSTR "\n"
+		"mrs %0, " RNDRRS_INSTR "\n"
 		"cset %w1, ne\n"
 		: "=r" (*data), "=r" (success)
 		:
