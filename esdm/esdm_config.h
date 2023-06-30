@@ -74,6 +74,22 @@ void esdm_config_es_irq_entropy_rate_set(uint32_t ent);
 uint32_t esdm_config_es_irq_entropy_rate(void);
 
 /**
+ * @brief Interrupt ES configuration: shall the ESDM retry to access the
+ *	  kernel?
+ *
+ * @return Entropy rate in bits
+ */
+uint32_t esdm_config_es_irq_retry(void);
+
+/**
+ * @brief Interrupt ES configuration: Configure whether the ESDM shall retry
+ *	  to access the kernel.
+ *
+ * @param [in] setting Boolean to enable the behavior
+ */
+void esdm_config_es_irq_retry_set(int setting);
+
+/**
  * @brief Kernel RNG ES configuration: set the entropy rate
  *
  * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
@@ -117,6 +133,22 @@ void esdm_config_es_sched_entropy_rate_set(uint32_t ent);
  * @return Entropy rate in bits
  */
 uint32_t esdm_config_es_sched_entropy_rate(void);
+
+/**
+ * @brief Scheduler ES configuration: shall the ESDM retry to access the
+ *	  kernel?
+ *
+ * @return Entropy rate in bits
+ */
+uint32_t esdm_config_es_sched_retry(void);
+
+/**
+ * @brief Scheduler ES configuration: Configure whether the ESDM shall retry
+ *	  to access the kernel.
+ *
+ * @param [in] setting Boolean to enable the behavior
+ */
+void esdm_config_es_sched_retry_set(int setting);
 
 /**
  * @brief /dev/hwrng ES configuration: set the entropy rate

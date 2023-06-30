@@ -28,6 +28,7 @@
 
 #include "binhexbin.h"
 #include "esdm.h"
+#include "esdm_config.h"
 #include "esdm_rpc_server.h"
 #include "logger.h"
 #include "ret_checkers.h"
@@ -60,6 +61,10 @@ static void usage(void)
 	fprintf(stderr, "\t-p --pid\tWrite daemon PID to file\n");
 	fprintf(stderr, "\t-u --username\tUnprivileged user name to switch to (default: \"nobody\")\n");
 	fprintf(stderr, "\t-f --foreground\tExecute in foreground\n");
+	fprintf(stderr, "\t-i --force_irqes\tForce to enable IRQ ES where the ESDM\n");
+	fprintf(stderr, "\t\t\t\tretries enabling it\n");
+	fprintf(stderr, "\t-s --force_schedes\tForce to enable Sched ES where the ESDM\n");
+	fprintf(stderr, "\t\t\t\tretries enabling it\n");
 	exit(1);
 }
 
@@ -77,34 +82,52 @@ static void parse_opts(int argc, char *argv[])
 			{"version", 0, 0, 0},
 			{"username", 0, 0, 0},
 			{"foreground", 0, 0, 0},
+			{"force_irqes", 0, 0, 0},
+			{"force_schedes", 0, 0, 0},
 			{0, 0, 0, 0}
 		};
-		c = getopt_long(argc, argv, "hvp:u:f", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fis", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
 		case 0:
 			switch (opt_index) {
 			case 0:
+				/* verbose */
 				verbosity++;
 				break;
 			case 1:
+				/* pid */
 				pidfile = optarg;
 				break;
 			case 2:
+				/* help */
 				usage();
 				break;
 			case 3:
+				/* version */
 				esdm_version(version, sizeof(version));
 				fprintf(stderr, "%s\n", version);
 				exit(0);
 				break;
 			case 4:
+				/* username */
 				username = optarg;
 				break;
 			case 5:
+				/* foreground */
 				foreground = 1;
 				break;
+
+			case 6:
+				/* force_irqes */
+				esdm_config_es_irq_retry_set(1);
+				break;
+			case 7:
+				/* force_schedes */
+				esdm_config_es_sched_retry_set(1);
+				break;
+
 			default:
 				usage();
 			}
@@ -123,6 +146,15 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'f':
 			foreground = 1;
+			break;
+
+		case 'i':
+			/* force_irqes */
+			esdm_config_es_irq_retry_set(1);
+			break;
+		case 's':
+			/* force_schedes */
+			esdm_config_es_sched_retry_set(1);
 			break;
 
 		default:

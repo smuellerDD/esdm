@@ -41,6 +41,9 @@ struct esdm_config {
 	uint32_t esdm_drng_max_wo_reseed;
 	uint32_t esdm_max_nodes;
 	enum esdm_config_force_fips force_fips;
+
+	bool esdm_es_irq_retry;
+	bool esdm_es_sched_retry;
 };
 
 static struct esdm_config esdm_config = {
@@ -94,6 +97,12 @@ static struct esdm_config esdm_config = {
 
 	/* Shall the FIPS mode be forcefully set/unset? */
 	.force_fips = esdm_config_force_fips_unset,
+
+	/* Retry to access the IRQ ES during initialization */
+	.esdm_es_irq_retry = false,
+
+	/* Retry to access the Sched ES during initialization */
+	.esdm_es_sched_retry = false,
 };
 
 static uint32_t esdm_config_entropy_rate_max(uint32_t val)
@@ -152,6 +161,18 @@ void esdm_config_es_irq_entropy_rate_set(uint32_t ent)
 }
 
 DSO_PUBLIC
+uint32_t esdm_config_es_irq_retry(void)
+{
+	return esdm_config.esdm_es_irq_retry;
+}
+
+DSO_PUBLIC
+void esdm_config_es_irq_retry_set(int setting)
+{
+	esdm_config.esdm_es_irq_retry = !!setting;
+}
+
+DSO_PUBLIC
 uint32_t esdm_config_es_krng_entropy_rate(void)
 {
 	return esdm_config.esdm_es_krng_entropy_rate_bits;
@@ -188,6 +209,18 @@ void esdm_config_es_sched_entropy_rate_set(uint32_t ent)
 
 	esdm_config.esdm_es_sched_entropy_rate_bits = val;
 	esdm_es_add_entropy();
+}
+
+DSO_PUBLIC
+uint32_t esdm_config_es_sched_retry(void)
+{
+	return esdm_config.esdm_es_sched_retry;
+}
+
+DSO_PUBLIC
+void esdm_config_es_sched_retry_set(int setting)
+{
+	esdm_config.esdm_es_sched_retry = !!setting;
 }
 
 DSO_PUBLIC

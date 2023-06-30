@@ -140,14 +140,15 @@ int esdm_es_mgr_monitor_initialize(void)
 
 	while (!atomic_read(&esdm_es_mgr_terminate)) {
 		unsigned int j;
+		int ret = 0;
 
 		for_each_esdm_es(j) {
 			if (esdm_es[j]->monitor_es)
-				esdm_es[j]->monitor_es();
+				ret |= esdm_es[j]->monitor_es();
 		}
 
 		thread_wait_event(&esdm_init_wait,
-				  !esdm_pool_all_nodes_seeded_get() &&
+				  (ret || !esdm_pool_all_nodes_seeded_get()) &&
 				  !atomic_read(&esdm_es_mgr_terminate));
 
 		nanosleep(&ts, NULL);

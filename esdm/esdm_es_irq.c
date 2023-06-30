@@ -119,45 +119,28 @@ static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 	return entropy;
 }
 
-static int esdm_irq_seed_monitor(void)
-{
-	uint32_t ent = esdm_irq_entropylevel(esdm_security_strength());
-
-	if (!esdm_config_es_irq_entropy_rate())
-		return 0;
-
-	if (ent >= esdm_config_es_irq_entropy_rate()) {
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-			"Full entropy of interrupt ES detected\n");
-		esdm_es_add_entropy();
-		esdm_test_seed_entropy(ent);
-
-		return 0;
-	}
-	return -EAGAIN;
-}
-
 static int esdm_irq_initialize(void)
 {
 	uint32_t status[2];
-	int ret;
+	int ret, fd;
 
 	/* Allow the init function to be called multiple times */
 	esdm_irq_finalize();
 
-	esdm_irq_entropy_fd = open("/dev/esdm_es", O_RDONLY);
-	if (esdm_irq_entropy_fd < 0) {
-		logger(LOGGER_WARN, LOGGER_C_ES,
+	fd = open("/dev/esdm_es", O_RDONLY);
+	if (fd < 0) {
+		logger(esdm_config_es_irq_retry() ? LOGGER_VERBOSE : LOGGER_WARN,
+		       LOGGER_C_ES,
 		       "Disabling interrupt-based entropy source which is not present in kernel\n")
 		return 0;
 	}
 
-	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_ENT_BUF_SIZE, &status);
+	ret = ioctl(fd, ESDM_IRQ_ENT_BUF_SIZE, &status);
 	if (ret < 0) {
 		logger(LOGGER_ERR, LOGGER_C_ES,
 		       "Failure to obtain interrupt entropy source status from kernel\n");
-		esdm_irq_finalize();
-		return -EFAULT;
+		close(fd);
+		return -EAGAIN;
 	}
 
 	if (status[0] == sizeof(struct entropy_es)) {
@@ -175,9 +158,11 @@ static int esdm_irq_initialize(void)
 	} else {
 		logger(LOGGER_ERR, LOGGER_C_ES,
 		       "Kernel entropy buffer has different size\n");
-		esdm_irq_finalize();
+		close(fd);
 		return -EFAULT;
 	}
+
+	esdm_irq_entropy_fd = fd;
 
 	/*
 	 * The presence of the interrupt entropy source implies that the main
@@ -187,6 +172,39 @@ static int esdm_irq_initialize(void)
 		ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY);
 
 	esdm_es_add_entropy();
+
+	return 0;
+}
+
+static int esdm_irq_seed_monitor(void)
+{
+	uint32_t ent;
+
+	if (esdm_config_es_irq_retry() && esdm_irq_entropy_fd < 0) {
+		int ret = esdm_irq_initialize();
+
+		/* Return error */
+		if (ret)
+			return ret;
+
+		if (esdm_irq_entropy_fd < 0)
+			return -EAGAIN;
+	}
+
+	if (esdm_irq_entropy_fd < 0)
+		return 0;
+
+	ent = esdm_irq_entropylevel(esdm_security_strength());
+
+	if (!esdm_config_es_irq_entropy_rate())
+		return 0;
+
+	if (ent >= esdm_config_es_irq_entropy_rate()) {
+		logger(LOGGER_DEBUG, LOGGER_C_ES,
+			"Full entropy of interrupt ES detected\n");
+		esdm_es_add_entropy();
+		esdm_test_seed_entropy(ent);
+	}
 
 	return 0;
 }
@@ -275,7 +293,7 @@ static void esdm_irq_reset(void)
 
 static bool esdm_irq_active(void)
 {
-	return (esdm_irq_entropy_fd != -1);
+	return esdm_config_es_irq_retry() || (esdm_irq_entropy_fd != -1);
 }
 
 struct esdm_es_cb esdm_es_irq = {
