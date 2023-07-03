@@ -21,6 +21,7 @@
 
 #define _POSIX_C_SOURCE 200112L
 #include <errno.h>
+#include <stdint.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
@@ -512,6 +513,16 @@ void esdm_set_write_wakeup_bits(uint32_t val)
 		min_uint32(val, esdm_reduce_by_osr(esdm_get_digestsize()));
 }
 
+static uint32_t esdm_init_entropy_level(bool fully_seeded)
+{
+	return esdm_ntg1_2022_compliant() ?
+		/* Approximation so that two ES should deliver 220 bits each */
+		(2 * ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
+		/* Apply SP800-90C oversampling if applicable */
+		esdm_get_seed_entropy_osr(fully_seeded);
+
+}
+
 /**
  * esdm_init_ops() - Set seed stages of ESDM
  *
@@ -532,11 +543,8 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (state->esdm_operational)
 		return;
 
-	requested_bits = esdm_ntg1_2022_compliant() ?
-		/* Approximation so that two ES should deliver 220 bits each */
-		(esdm_avail_entropy() + ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
-		/* Apply SP800-90C oversampling if applicable */
-		esdm_get_seed_entropy_osr(state->all_online_nodes_seeded);
+	requested_bits = esdm_init_entropy_level(
+						state->all_online_nodes_seeded);
 
 	if (eb) {
 		seed_bits = esdm_entropy_rate_eb(eb);
@@ -586,7 +594,7 @@ int esdm_es_mgr_reinitialize(void)
 	unsigned int i;
 	int ret = 0;
 
-	esdm_set_entropy_thresh(esdm_get_seed_entropy_osr(false));
+	esdm_set_entropy_thresh(esdm_init_entropy_level(false));
 
 	/* Initialize the entropy sources */
 	for_each_esdm_es(i) {
@@ -636,7 +644,7 @@ int esdm_es_mgr_initialize(void)
 
 	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Initialize ES manager\n");
 
-	esdm_set_entropy_thresh(esdm_get_seed_entropy_osr(false));
+	esdm_set_entropy_thresh(esdm_init_entropy_level(false));
 
 	/* Initialize the auxiliary pool first */
 	CKINT(esdm_es_mgr_init_es(esdm_es[esdm_ext_es_aux]));
@@ -661,7 +669,10 @@ int esdm_es_mgr_initialize(void)
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
 	memset_secure(&seed, 0, sizeof(seed));
 
+	logger(LOGGER_VERBOSE, LOGGER_C_ES,
+	       "Force fully seeding of all DRBGs\n");
 	esdm_force_fully_seeded_all_drbgs();
+	logger(LOGGER_VERBOSE, LOGGER_C_ES, "All DRBGs fully seeded\n");
 
 out:
 	return ret;
