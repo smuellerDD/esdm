@@ -171,7 +171,15 @@ static int esdm_sched_seed_monitor(void)
 	uint32_t ent;
 
 	if (esdm_config_es_sched_retry() && esdm_sched_entropy_fd < 0) {
-		int ret = esdm_sched_initialize();
+		int ret;
+
+		if (getuid()) {
+			logger(LOGGER_WARN, LOGGER_C_ES,
+			       "Scheduler ES cannot initialize as privileges are missing!\n");
+			return 0;
+		}
+
+		ret = esdm_sched_initialize();
 
 		/* Return error */
 		if (ret)

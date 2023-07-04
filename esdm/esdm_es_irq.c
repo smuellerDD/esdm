@@ -181,7 +181,15 @@ static int esdm_irq_seed_monitor(void)
 	uint32_t ent;
 
 	if (esdm_config_es_irq_retry() && esdm_irq_entropy_fd < 0) {
-		int ret = esdm_irq_initialize();
+		int ret;
+
+		if (getuid()) {
+			logger(LOGGER_WARN, LOGGER_C_ES,
+			       "Interrupt ES cannot initialize as privileges are missing!\n");
+			return 0;
+		}
+
+		ret = esdm_irq_initialize();
 
 		/* Return error */
 		if (ret)
