@@ -121,12 +121,15 @@ static uint32_t esdm_sched_entropylevel(uint32_t requested_bits)
 static int esdm_sched_initialize(void)
 {
 	uint32_t status[2];
-	int ret, fd;
+	int ret, fd = esdm_sched_entropy_fd;
 
-	/* Allow the init function to be called multiple times */
-	esdm_sched_finalize();
+	/*
+	 * We are not closing an available file descriptor as we may not have
+	 * the privileges any more to do so.
+	 */
+	if (fd < 0)
+		fd = open("/dev/esdm_es", O_RDONLY);
 
-	fd = open("/dev/esdm_es", O_RDONLY);
 	if (fd < 0) {
 		logger(esdm_config_es_sched_retry() ?
 		       LOGGER_VERBOSE : LOGGER_WARN, LOGGER_C_ES,
