@@ -73,6 +73,7 @@ struct esdm_rpcs_write_buf {
 
 enum esdm_rpcs_init_state {
 	esdm_rpcs_state_uninitialized,
+	esdm_rpcs_state_priv_init_complete,
 	esdm_rpcs_state_unpriv_init,
 	esdm_rpcs_state_perm_dropped,
 };
@@ -646,6 +647,11 @@ static int esdm_rpcs_unpriv_init(void *args)
 		goto out;
 	}
 
+	/* Wait for the privileged initialization to complete. */
+	thread_wait_event(&esdm_rpc_thread_init_wait,
+			  (atomic_read(&esdm_rpc_init_state) ==
+			   esdm_rpcs_state_priv_init_complete));
+
 	/* Notify the mother that the unprivileged thread is initialized. */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_unpriv_init);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
@@ -813,11 +819,23 @@ static void esdm_rpcs_cleanup_term(int sig)
 		kill(server_pid, sig);
 }
 
+static void esdm_rpc_priv_init_complete(void)
+{
+	if (atomic_read(&esdm_rpc_init_state) != esdm_rpcs_state_uninitialized)
+		return;
+
+	logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+	       "Privileged intiialization complete\n");
+	/* Notification that the privileged initialization is complete. */
+	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_priv_init_complete);
+	thread_wake_all(&esdm_rpc_thread_init_wait);
+}
+
 static int esdm_rpc_server_es_monitor(void __unused *unused)
 {
 	thread_set_name(es_monitor, 0);
 
-	return esdm_init_monitor();
+	return esdm_init_monitor(esdm_rpc_priv_init_complete);
 }
 
 int esdm_rpc_server_init(const char *username)

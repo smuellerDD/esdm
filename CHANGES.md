@@ -1,3 +1,8 @@
+Changes 0.7.0-prerelease:
+* fix (re)initialization of ESDM to set correct entropy level
+
+* IRQ/Sched ES: add support to retry accessing the kernel with -i and -s flags
+
 Changes 0.6.0:
 * Move ESDM apps into separate namespaces to limit their privilege even further (e.g. no possibility to create network connections)
 

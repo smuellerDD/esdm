@@ -121,7 +121,7 @@ static void esdm_es_mgr_monitor_wakeup(void)
 }
 
 /* ES monitor worker loop */
-int esdm_es_mgr_monitor_initialize(void)
+int esdm_es_mgr_monitor_initialize(void(*priv_init_completion)(void))
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
 	unsigned int i, avail = 0;
@@ -134,6 +134,9 @@ int esdm_es_mgr_monitor_initialize(void)
 	if (!avail) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 		       "Full entropy monitor not started as no slow entropy sources present\n");
+		if (priv_init_completion)
+			priv_init_completion();
+
 		return 0;
 	}
 
@@ -142,11 +145,26 @@ int esdm_es_mgr_monitor_initialize(void)
 	while (!atomic_read(&esdm_es_mgr_terminate)) {
 		unsigned int j;
 		int ret = 0;
+		bool priv_init_complete = true;
 
 		for_each_esdm_es(j) {
-			if (esdm_es[j]->monitor_es)
-				ret |= esdm_es[j]->monitor_es();
+			if (esdm_es[j]->monitor_es) {
+				int rc = esdm_es[j]->monitor_es();
+
+				/*
+				 * If the caller returns -EAGAIN, it blocks
+				 * the initialization process as it requires
+				 * root privileges until completed.
+				 */
+				if (rc == -EAGAIN)
+					priv_init_complete = false;
+
+				ret |= rc;
+			}
 		}
+
+		if (priv_init_complete && priv_init_completion)
+			priv_init_completion();
 
 		thread_wait_event(&esdm_init_wait,
 				  (ret || !esdm_pool_all_nodes_seeded_get()) &&
