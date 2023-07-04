@@ -48,7 +48,7 @@ conf_data.set('ESDM_CPU_ENTROPY_RATE',
 conf_data.set('ESDM_CPU_FULL_ENT_MULTIPLIER',
 	      get_option('es_cpu_multiplier'))
 
-conf_data.set('ESDM_ES_IRQ', get_option('es_sched').enabled())
+conf_data.set('ESDM_ES_IRQ', get_option('es_irq').enabled())
 conf_data.set('ESDM_IRQ_ENTROPY_RATE',
 	      get_option('es_irq_entropy_rate'))
 
