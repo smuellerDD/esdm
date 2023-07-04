@@ -3,7 +3,25 @@
 # The ESDM server does not depend on any other system
 # services. Furthermore, we want to start it as early as possible
 # in the boot cycle so that other services requiring
-# random numbers (like SSHD, TLS-based services) benefit from it
+# random numbers (like SSHD, TLS-based services) benefit from it.
+#
+# Note on dependencies:
+#
+# The ESDM must be started after the generic kernel module loading target
+# because the esdm_es.ko may be inserted. As this kernel module creates
+# /dev/esdm_es and systemd can only define an access rule with DeviceAllow
+# when this device is present, the ESDM must be started after the module
+# loading call.
+#
+# Note: ESDM could be started as early as possible and already collect precious
+# entropy during the early boot cycle, because with the -i and/or -s flags,
+# it can wait until the /dev/esdm_es becomes available. Yet, this is currently
+# not possible with a strict systemd device policy. If this changes, remove
+# the marked Wants and After lines below.
+#
+# Also, if you are sure you do not want or need the esdm_es.ko module, you
+# can also remove the marked Wants and After lines below to start the ESDM as
+# early as possible.
 
 [Unit]
 Description=Entropy Source and DRNG Manager Daemon
@@ -12,6 +30,10 @@ After=local-fs.target
 Before=sysinit.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
+
+# Required to wait for insmod of esdm_es.ko - comment out if not needed
+Wants=systemd-modules-load.service
+After=systemd-modules-load.service
 
 [Service]
 DeviceAllow=/dev/null rw
