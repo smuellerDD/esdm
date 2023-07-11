@@ -48,6 +48,7 @@ void esdm_init_ops(struct entropy_buf *eb);
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
 int esdm_es_mgr_monitor_initialize(void(*priv_init_completion)(void));
+void esdm_es_mgr_monitor_wakeup(void);
 void esdm_es_mgr_finalize(void);
 
 #endif /* _ESDM_ES_MGR_H */

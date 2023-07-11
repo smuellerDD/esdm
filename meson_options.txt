@@ -18,6 +18,24 @@ data obtained from the Jitter RNG entropy source. The ESDM enforces the
 limit that this value must be in the range between 0 and 256.
 ''')
 
+# Option for: ESDM_JENT_ENTROPY_BLOCKS
+option('es_jent_entropy_blocks', type: 'integer', value: 128,
+       description:'''Jitter RNG entropy buffer size
+
+The Jitter RNG as an entropy buffer that is filled with a separate thread
+using the Jitter RNG. This shall ensure that data from the Jitter RNG is readily
+available when needed by the ESDM. When using this buffer is enabled via
+runtime option, the thread is started. Otherwise the Jitter RNG is asked to
+produce random numbers when the caller needs it.
+
+This option sets the size of the buffer in term of Jitter RNG blocks.
+
+This value must be a power of 2 which is checked during compilation!
+
+When set to zero, the Jitter RNG entropy buffer is not compiled which implies
+a synchronous generation of data from the Jitter RNG.
+''')
+
 ################################################################################
 # CPU-based Entropy Source configuration options
 ################################################################################

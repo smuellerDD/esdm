@@ -66,8 +66,7 @@ extern "C" {
 #define ESDM_THREAD_CUSE_POLL_GROUP ((uint32_t)-1)
 #define ESDM_THREAD_ES_MONITOR ((uint32_t)-2)
 #define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t)-3)
-#define ESDM_THREAD_JITTER_RNG_MONITOR_GROUP ((uint32_t)-4)
-#define ESDM_THREAD_MAX_SPECIAL_GROUPS 4
+#define ESDM_THREAD_MAX_SPECIAL_GROUPS 3
 
 enum esdm_request_type {
 	es_monitor,
@@ -76,7 +75,6 @@ enum esdm_request_type {
 	rpc_priv_server,
 	rpc_handler,
 	cuse_poll,
-	es_jent_collector,
 };
 
 /**

@@ -42,6 +42,15 @@ conf_data.set('ESDM_ES_JENT', get_option('es_jent').enabled())
 conf_data.set('ESDM_JENT_ENTROPY_RATE',
 	      get_option('es_jent_entropy_rate'))
 
+# In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
+# need to result in a value larger than zero
+if get_option('es_jent_entropy_blocks') >= 4
+	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS',
+		      get_option('es_jent_entropy_blocks'))
+else
+	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS', 0)
+endif
+
 conf_data.set('ESDM_ES_CPU', get_option('es_cpu').enabled())
 conf_data.set('ESDM_CPU_ENTROPY_RATE',
 	      get_option('es_cpu_entropy_rate'))

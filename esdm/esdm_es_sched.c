@@ -173,6 +173,11 @@ static int esdm_sched_seed_monitor(void)
 {
 	uint32_t ent;
 
+	if (esdm_pool_all_nodes_seeded_get())
+		return 0;
+
+	logger(LOGGER_DEBUG, LOGGER_C_ES, "Scheduler ES monitor check\n");
+
 	if (esdm_config_es_sched_retry() && esdm_sched_entropy_fd < 0) {
 		int ret = esdm_sched_initialize();
 

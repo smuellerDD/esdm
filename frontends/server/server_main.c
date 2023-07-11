@@ -65,6 +65,7 @@ static void usage(void)
 	fprintf(stderr, "\t\t\t\tretries enabling it\n");
 	fprintf(stderr, "\t-s --force_schedes\tForce to enable Sched ES where the ESDM\n");
 	fprintf(stderr, "\t\t\t\tretries enabling it\n");
+	fprintf(stderr, "\t   --jent_block_disable\tDisable Jitter RNG block collection\n");
 	exit(1);
 }
 
@@ -84,6 +85,7 @@ static void parse_opts(int argc, char *argv[])
 			{"foreground", 0, 0, 0},
 			{"force_irqes", 0, 0, 0},
 			{"force_schedes", 0, 0, 0},
+			{"jent_block_disable", 0, 0, 0},
 			{0, 0, 0, 0}
 		};
 		c = getopt_long(argc, argv, "hvp:u:fis", opts, &opt_index);
@@ -126,6 +128,11 @@ static void parse_opts(int argc, char *argv[])
 			case 7:
 				/* force_schedes */
 				esdm_config_es_sched_retry_set(1);
+				break;
+
+			case 8:
+				/* jent_block_disable */
+				esdm_config_es_jent_buffer_enabled_set(0);
 				break;
 
 			default:

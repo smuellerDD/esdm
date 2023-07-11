@@ -115,7 +115,7 @@ struct esdm_es_cb *esdm_es[] = {
 /******************************** ES monitor **********************************/
 
 /* Restart the ES monitor if it is sleeping */
-static void esdm_es_mgr_monitor_wakeup(void)
+void esdm_es_mgr_monitor_wakeup(void)
 {
 	thread_wake_all(&esdm_monitor_wait);
 }
@@ -166,9 +166,9 @@ int esdm_es_mgr_monitor_initialize(void(*priv_init_completion)(void))
 		if (priv_init_complete && priv_init_completion)
 			priv_init_completion();
 
-		thread_wait_event(&esdm_init_wait,
-				  (ret || !esdm_pool_all_nodes_seeded_get()) &&
-				  !atomic_read(&esdm_es_mgr_terminate));
+		if (!ret && esdm_pool_all_nodes_seeded_get()) {
+			thread_wait_no_event(&esdm_monitor_wait);
+		}
 
 		nanosleep(&ts, NULL);
 	}

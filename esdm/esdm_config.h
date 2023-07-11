@@ -50,6 +50,20 @@ uint32_t esdm_config_es_cpu_entropy_rate(void);
 void esdm_config_es_jent_entropy_rate_set(uint32_t ent);
 
 /**
+ * @brief Obtain setting about Jitter RNG block filling
+ *
+ * @return Boolean indicating whether Jitter RNG block filling is enable
+ */
+uint32_t esdm_config_es_jent_buffer_enabled(void);
+
+/**
+ * @brief Enable or disable the Jitter RNG block filling
+ *
+ * @param [in] setting Boolean to enable the behavior
+ */
+void esdm_config_es_jent_buffer_enabled_set(int setting);
+
+/**
  * @brief JENT ES configuration: get the entropy rate
  *
  * @return Entropy rate in bits
@@ -77,7 +91,7 @@ uint32_t esdm_config_es_irq_entropy_rate(void);
  * @brief Interrupt ES configuration: shall the ESDM retry to access the
  *	  kernel?
  *
- * @return Entropy rate in bits
+ * @return boolean whether to retry or not
  */
 uint32_t esdm_config_es_irq_retry(void);
 
