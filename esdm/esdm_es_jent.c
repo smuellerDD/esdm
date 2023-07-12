@@ -54,8 +54,6 @@ enum esdm_jent_entropy_buffer_state {
 };
 static volatile enum esdm_jent_entropy_buffer_state
 esdm_jent_entropy_buffer_set[ESDM_JENT_ENTROPY_BLOCKS];
-
-static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_entropy_buffer_lock);
 #endif
 
 static uint32_t esdm_jent_entropylevel(uint32_t requested_bits)
@@ -132,13 +130,10 @@ static int esdm_jent_entropy_buffer_monitor(void)
 	       "Jitter RNG block filling started\n");
 
 	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++) {
-		mutex_w_lock(&esdm_jent_entropy_buffer_lock);
-
 		if (__sync_val_compare_and_swap(
 				&esdm_jent_entropy_buffer_set[i],
 				buffer_empty, buffer_filling) !=
 				buffer_empty) {
-			mutex_w_unlock(&esdm_jent_entropy_buffer_lock);
 			continue;
 		}
 
@@ -147,11 +142,9 @@ static int esdm_jent_entropy_buffer_monitor(void)
 		 * potential oversampling factor.
 		 */
 		esdm_jent_get(&esdm_jent_entropy_buffer[i],
-			      esdm_get_seed_entropy_osr(false) >> 3, false);
+			      esdm_get_seed_entropy_osr(true) >> 3, false);
 
 		esdm_jent_entropy_buffer_set[i] = buffer_filled;
-
-		mutex_w_unlock(&esdm_jent_entropy_buffer_lock);
 
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 			"Jitter RNG ES monitor: filled slot %u\n", i);
@@ -167,8 +160,6 @@ static bool __esdm_jent_entropy_buffer_get(struct entropy_es *eb_es,
 	unsigned int slot, i;
 
 	(void)requested_bits;
-
-	mutex_w_lock(&esdm_jent_entropy_buffer_lock);
 
 	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++) {
 		slot = (i + idx) & ESDM_JENT_ENTROPY_BLOCKS_MASK;
@@ -195,8 +186,6 @@ static bool __esdm_jent_entropy_buffer_get(struct entropy_es *eb_es,
 
 	idx = slot + 1;
 
-	mutex_w_unlock(&esdm_jent_entropy_buffer_lock);
-
 	if (!(slot % (ESDM_JENT_ENTROPY_BLOCKS / 4)) && slot)
 		esdm_es_mgr_monitor_wakeup();
 
@@ -218,7 +207,8 @@ static void esdm_jent_entropy_buffer_get(struct entropy_es *eb_es,
 static void esdm_jent_get_check(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
-	if (esdm_config_es_jent_buffer_enabled()) {
+	if (esdm_config_es_jent_buffer_enabled() &&
+	    (requested_bits == esdm_get_seed_entropy_osr(true))) {
 		esdm_jent_entropy_buffer_get(eb_es, requested_bits, unused);
 	} else {
 		esdm_jent_get(eb_es, requested_bits, unused);
@@ -229,19 +219,15 @@ static void esdm_jent_entropy_buffer_init(void)
 {
 	unsigned int i;
 
-	mutex_w_lock(&esdm_jent_entropy_buffer_lock);
 	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++)
 		esdm_jent_entropy_buffer_set[i] = buffer_empty;
-	mutex_w_unlock(&esdm_jent_entropy_buffer_lock);
 }
 
 static void esdm_jent_entropy_buffer_fini(void)
 {
 	/* Reset state */
-	mutex_w_lock(&esdm_jent_entropy_buffer_lock);
 	memset_secure(esdm_jent_entropy_buffer, 0,
 		      sizeof(esdm_jent_entropy_buffer));
-	mutex_w_unlock(&esdm_jent_entropy_buffer_lock);
 }
 
 #else
@@ -264,6 +250,7 @@ static void esdm_jent_finalize(void)
 		return;
 
 	atomic_set(&esdm_jent_initialized, 0);
+	esdm_es_mgr_monitor_wakeup();
 
 	esdm_jent_entropy_buffer_fini();
 
