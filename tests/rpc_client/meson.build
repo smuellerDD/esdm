@@ -11,6 +11,14 @@ if get_option('esdm-server').enabled()
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
 
+	rpc_get_random_bytes_pr_test = executable(
+			'rpc_get_random_bytes_pr_test',
+			[ esdm_tester_common, 'rpc_get_random_bytes_pr_test.c' ],
+			include_directories: include_dirs_client,
+			dependencies: [ dependencies_client ],
+			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
+		)
+
 	# This is just a helper for debugging - no real test
 	esdm_rpc_invoker = executable(
 			'esdm_rpc_invoker',
@@ -62,6 +70,10 @@ if get_option('esdm-server').enabled()
 		]
 
 	test('RPC call get_random_bytes_full_test', rpc_get_random_bytes_full_test,
+		env: [ tester_esdm_env ],
+		is_parallel: false)
+
+	test('RPC call get_random_bytes_pr_test', rpc_get_random_bytes_pr_test,
 		env: [ tester_esdm_env ],
 		is_parallel: false)
 

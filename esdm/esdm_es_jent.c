@@ -118,7 +118,7 @@ err:
 
 static int esdm_jent_entropy_buffer_monitor(void)
 {
-	unsigned int i;
+	unsigned int i, requested_bits = esdm_get_seed_entropy_osr(true);
 
 	/* ESDM_JENT_ENTROPY_BLOCKS must be a power of 2 */
 	ESDM_IS_POWER_OF_2(ESDM_JENT_ENTROPY_BLOCKS);
@@ -136,72 +136,61 @@ static int esdm_jent_entropy_buffer_monitor(void)
 				buffer_empty) {
 			continue;
 		}
-
 		/*
 		 * Always gather entropy data including
 		 * potential oversampling factor.
 		 */
-		esdm_jent_get(&esdm_jent_entropy_buffer[i],
-			      esdm_get_seed_entropy_osr(true) >> 3, false);
+		esdm_jent_get(&esdm_jent_entropy_buffer[i], requested_bits,
+			      false);
 
 		esdm_jent_entropy_buffer_set[i] = buffer_filled;
 
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
-			"Jitter RNG ES monitor: filled slot %u\n", i);
+			"Jitter RNG ES monitor: filled slot %u with %u bits of entropy\n",
+		        i, requested_bits);
 	}
+
+	logger(LOGGER_DEBUG, LOGGER_C_ES,
+	       "Jitter RNG block filling completed\n");
 
 	return 0;
-}
-
-static bool __esdm_jent_entropy_buffer_get(struct entropy_es *eb_es,
-					   uint32_t requested_bits)
-{
-	static unsigned int idx = 0;
-	unsigned int slot, i;
-
-	(void)requested_bits;
-
-	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++) {
-		slot = (i + idx) & ESDM_JENT_ENTROPY_BLOCKS_MASK;
-
-		if (__sync_val_compare_and_swap(
-				&esdm_jent_entropy_buffer_set[slot],
-				buffer_filled, buffer_reading) !=
-				buffer_filled)
-			continue;
-
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-		       "Jitter RNG ES monitor: used slot %u\n", slot);
-		memcpy(eb_es->e, esdm_jent_entropy_buffer[slot].e,
-		       ESDM_DRNG_INIT_SEED_SIZE_BYTES);
-		eb_es->e_bits = esdm_jent_entropy_buffer[slot].e_bits;
-
-		memset_secure(&esdm_jent_entropy_buffer[slot], 0,
-			      sizeof(struct entropy_es));
-
-		esdm_jent_entropy_buffer_set[slot] = buffer_empty;
-
-		break;
-	}
-
-	idx = slot + 1;
-
-	if (!(slot % (ESDM_JENT_ENTROPY_BLOCKS / 4)) && slot)
-		esdm_es_mgr_monitor_wakeup();
-
-	return (i >= ESDM_JENT_ENTROPY_BLOCKS) ? false : true;
 }
 
 static void esdm_jent_entropy_buffer_get(struct entropy_es *eb_es,
 					 uint32_t requested_bits,
 					 bool __unused unused)
 {
-	/*
-	 * Try to get data from the pool, if this does not work, resort back
-	 * to using the synchronous data generation.
-	 */
-	if (!__esdm_jent_entropy_buffer_get(eb_es, requested_bits))
+	static atomic_t idx = ATOMIC_INIT(-1);
+	unsigned int slot;
+
+	(void)requested_bits;
+
+	slot = ((unsigned int)atomic_inc(&idx)) & ESDM_JENT_ENTROPY_BLOCKS_MASK;
+
+	if (__sync_val_compare_and_swap(&esdm_jent_entropy_buffer_set[slot],
+					buffer_filled, buffer_reading) !=
+					buffer_filled) {
+		logger(LOGGER_DEBUG, LOGGER_C_ES,
+		       "Jitter RNG ES monitor: buffer slot %u exhausted\n",
+		       slot);
 		esdm_jent_get(eb_es, requested_bits, unused);
+		esdm_es_mgr_monitor_wakeup();
+		return;
+	}
+
+	logger(LOGGER_DEBUG, LOGGER_C_ES,
+		"Jitter RNG ES monitor: used slot %u\n", slot);
+	memcpy(eb_es->e, esdm_jent_entropy_buffer[slot].e,
+		ESDM_DRNG_INIT_SEED_SIZE_BYTES);
+	eb_es->e_bits = esdm_jent_entropy_buffer[slot].e_bits;
+
+	memset_secure(&esdm_jent_entropy_buffer[slot], 0,
+			sizeof(struct entropy_es));
+
+	esdm_jent_entropy_buffer_set[slot] = buffer_empty;
+
+	if (!(slot % (ESDM_JENT_ENTROPY_BLOCKS / 4)) && slot)
+		esdm_es_mgr_monitor_wakeup();
 }
 
 static void esdm_jent_get_check(struct entropy_es *eb_es,
