@@ -77,6 +77,8 @@ meson.add_dist_script(dist_script, meson.project_version())
 cc = meson.get_compiler('c')
 dependencies = [ dependency('libprotobuf-c'), dependency('threads') ]
 
+pkgconfig = import('pkgconfig')
+
 include_user_files = [ ]
 
 include_dirs_server = include_directories([ 'esdm',

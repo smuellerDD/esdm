@@ -12,6 +12,7 @@ esdm_getrandom_lib = library(
 		link_with: esdm_rpc_client_lib,
 		install: true
 		)
+pkgconfig.generate(esdm_getrandom_lib)
 
 esdm_getrandom_dep = declare_dependency(
 		link_with: esdm_getrandom_lib,
