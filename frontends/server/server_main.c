@@ -132,7 +132,7 @@ static void parse_opts(int argc, char *argv[])
 
 			case 8:
 				/* jent_block_disable */
-				esdm_config_es_jent_buffer_enabled_set(0);
+				esdm_config_es_jent_async_enabled_set(0);
 				break;
 
 			default:

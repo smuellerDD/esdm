@@ -50,18 +50,18 @@ uint32_t esdm_config_es_cpu_entropy_rate(void);
 void esdm_config_es_jent_entropy_rate_set(uint32_t ent);
 
 /**
- * @brief Obtain setting about Jitter RNG block filling
+ * @brief Obtain setting about Jitter RNG async block filling
  *
  * @return Boolean indicating whether Jitter RNG block filling is enable
  */
-uint32_t esdm_config_es_jent_buffer_enabled(void);
+uint32_t esdm_config_es_jent_async_enabled(void);
 
 /**
- * @brief Enable or disable the Jitter RNG block filling
+ * @brief Enable or disable the Jitter RNG async block filling
  *
  * @param [in] setting Boolean to enable the behavior
  */
-void esdm_config_es_jent_buffer_enabled_set(int setting);
+void esdm_config_es_jent_async_enabled_set(int setting);
 
 /**
  * @brief JENT ES configuration: get the entropy rate

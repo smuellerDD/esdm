@@ -44,7 +44,7 @@ struct esdm_config {
 
 	bool esdm_es_irq_retry;
 	bool esdm_es_sched_retry;
-	bool esdm_jent_entropy_buffer_enable;
+	bool esdm_jent_entropy_async_enable;
 };
 
 static struct esdm_config esdm_config = {
@@ -106,7 +106,7 @@ static struct esdm_config esdm_config = {
 	.esdm_es_sched_retry = false,
 
 	/* Enable the Jitter RNG buffer filling */
-	.esdm_jent_entropy_buffer_enable = true,
+	.esdm_jent_entropy_async_enable = true,
 };
 
 static uint32_t esdm_config_entropy_rate_max(uint32_t val)
@@ -143,15 +143,15 @@ void esdm_config_es_jent_entropy_rate_set(uint32_t ent)
 }
 
 DSO_PUBLIC
-uint32_t esdm_config_es_jent_buffer_enabled(void)
+uint32_t esdm_config_es_jent_async_enabled(void)
 {
-	return esdm_config.esdm_jent_entropy_buffer_enable;
+	return esdm_config.esdm_jent_entropy_async_enable;
 }
 
 DSO_PUBLIC
-void esdm_config_es_jent_buffer_enabled_set(int setting)
+void esdm_config_es_jent_async_enabled_set(int setting)
 {
-	esdm_config.esdm_jent_entropy_buffer_enable = !!setting;
+	esdm_config.esdm_jent_entropy_async_enable = !!setting;
 }
 
 DSO_PUBLIC
