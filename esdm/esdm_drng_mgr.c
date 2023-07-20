@@ -65,7 +65,12 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
  * kernel start. It must not perform any memory allocation operation, but
  * simply perform the hash calculation.
  */
-const struct esdm_hash_cb *esdm_default_hash_cb = &esdm_builtin_sha512_cb;
+const struct esdm_hash_cb *esdm_default_hash_cb =
+#if defined(ESDM_GNUTLS)
+	&esdm_gnutls_hash_cb;
+#else
+	&esdm_builtin_sha512_cb;
+#endif
 
 /*
  * Default DRNG callback that provides the crypto primitive which is
@@ -200,7 +205,7 @@ static int esdm_drng_mgr_selftest(void)
 	if (drng_cb->drng_selftest)
 		ret = drng_cb->drng_selftest();
 	else
-		logger(LOGGER_WARN, LOGGER_C_DRNG, "DRMG self test missing\n");
+		logger(LOGGER_WARN, LOGGER_C_DRNG, "DRNG self test missing\n");
 	mutex_w_unlock(&drng->lock);
 	CKINT_LOG(ret, "DRNG self test failed: %d\n", ret);
 	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
