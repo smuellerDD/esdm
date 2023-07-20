@@ -34,9 +34,9 @@ int main(int argc, char *argv[])
 	(void)argc;
 	(void)argv;
 
-//	ret = env_init();
-//	if (ret)
-//		return ret;
+	ret = env_init();
+	if (ret)
+		return ret;
 
 	ret = esdm_rpcc_init_unpriv_service(NULL);
 	if (ret) {
