@@ -102,6 +102,10 @@ if get_option('esdm-server').disabled() and get_option('linux-getrandom').enable
 	error('Linux getrandom support requires the ESDM server')
 endif
 
+if get_option('esdm-server').disabled() and get_option('openssl-rand-provider').enabled()
+	error('OpenSSL RAND provider support requires the ESDM server')
+endif
+
 if get_option('crypto_backend') == 'builtin'
 	if get_option('drng_hash_drbg').enabled() and \
 	   get_option('drng_chacha20').enabled()
@@ -124,6 +128,11 @@ endif
 
 if get_option('linux-getrandom').enabled()
 	subdirs += [ 'frontends/getrandom' ]
+endif
+
+if get_option('openssl-rand-provider').enabled()
+	openssl_dep = dependency('openssl', required: true, version : '>=3.0')
+	subdirs += [ 'frontends/openssl-provider' ]
 endif
 
 foreach n : subdirs
