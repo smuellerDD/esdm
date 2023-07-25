@@ -358,6 +358,9 @@ cryptographic primitives for usage inside ESDM, this enables support for a small
 frontend library providing an ESDM-based RNG class for the Botan crypto library.
 ''')
 
+option('openssl-rand-provider', type: 'feature', value: 'disabled',
+       description: 'Enable the OpenSSL >= 3 RAND/SEED-SRC provider support.')
+
 option('esdm-server', type: 'feature', value: 'enabled',
        description: 'Enable the ESDM server')
 
