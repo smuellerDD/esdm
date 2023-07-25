@@ -158,6 +158,11 @@ testdirs = [
 	#'tests/misc',
 	'tests/rpc_client',
 	]
+if get_option('botan-rng').enabled()
+	testdirs += [
+		'tests/botan-rng',
+	]
+endif
 foreach n : testdirs
 	subdir(n)
 endforeach
