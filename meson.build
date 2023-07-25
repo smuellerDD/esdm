@@ -174,6 +174,11 @@ if get_option('botan-rng').enabled()
 		'tests/botan-rng',
 	]
 endif
+if get_option('openssl-rand-provider').enabled()
+testdirs += [
+	'tests/openssl-rand-provider',
+]
+endif
 foreach n : testdirs
 	subdir(n)
 endforeach
