@@ -154,6 +154,11 @@ testdirs = [
 	#'tests/misc',
 	'tests/rpc_client',
 	]
+if get_option('openssl-rand-provider').enabled()
+testdirs += [
+	'tests/openssl-rand-provider',
+]
+endif
 foreach n : testdirs
 	subdir(n)
 endforeach
