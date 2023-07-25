@@ -19,6 +19,8 @@ project('esdm', 'c',
 		'b_lto=true',
 		'b_staticpic=true',
 		'b_pie=true',
+		# set the C++ std for the botan frontend here, C++ only gets used if botan-rng is enabled
+		'cpp_std=c++20',
 	])
 
 ################################################################################
@@ -34,7 +36,7 @@ add_global_arguments([ '-fstack-protector-strong',
 		       '-Wcast-align',
 		       '-Wmissing-field-initializers',
 		       '-Wshadow',
-                       '-Wmissing-prototypes',
+		       '-Wmissing-prototypes',
 		       '-Wswitch-enum' ],
 		       language : 'c')
 
@@ -104,6 +106,10 @@ if get_option('esdm-server').disabled() and get_option('linux-getrandom').enable
 	error('Linux getrandom support requires the ESDM server')
 endif
 
+if get_option('esdm-server').disabled() and get_option('botan-rng').enabled()
+	error('Botan RNG support requires the ESDM server')
+endif
+
 if get_option('crypto_backend') == 'builtin'
 	if get_option('drng_hash_drbg').enabled() and \
 	   get_option('drng_chacha20').enabled()
@@ -126,6 +132,13 @@ endif
 
 if get_option('linux-getrandom').enabled()
 	subdirs += [ 'frontends/getrandom' ]
+endif
+
+if get_option('botan-rng').enabled()
+	add_languages('cpp', required: true)
+	botan_dep = dependency('botan-3', required: true)
+	subdirs += [ 'frontends/botan-rng' ]
+	include_dirs_botan_rng = [ include_directories('frontends/botan-rng') ]
 endif
 
 foreach n : subdirs

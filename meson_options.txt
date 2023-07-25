@@ -350,6 +350,14 @@ Using CUSE, the device files are provided.
 option('linux-getrandom', type: 'feature', value: 'enabled',
        description: 'Enable the Linux getrandom system call support.')
 
+option('botan-rng', type: 'feature', value: 'disabled',
+       description: '''Enable the Botan >= 3 RNG support.
+
+In contrast to crypto backends, e.g. for leancrypto or OpenSSL, which provide
+cryptographic primitives for usage inside ESDM, this enables support for a small
+frontend library providing an ESDM-based RNG class for the Botan crypto library.
+''')
+
 option('esdm-server', type: 'feature', value: 'enabled',
        description: 'Enable the ESDM server')
 
