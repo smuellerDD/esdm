@@ -38,9 +38,7 @@ static uint32_t esdm_gnutls_hash_digestsize(void *hash)
 
 static int esdm_gnutls_hash_init(void *hash)
 {
-	gnutls_hash_hd_t hd = (gnutls_hash_hd_t)hash;
-
-	gnutls_hash_init(&hd, ESDM_GNUTLS_HASH);
+	(void)hash;
 	return 0;
 }
 
@@ -57,8 +55,24 @@ static int esdm_gnutls_hash_final(void *hash, uint8_t *digest)
 {
 	gnutls_hash_hd_t hd = (gnutls_hash_hd_t)hash;
 
-	gnutls_hash_deinit(hd, digest);
+	gnutls_hash_output(hd, digest);
 	return 0;
+}
+
+static int esdm_gnutls_hash_alloc(void **ctx)
+{
+	gnutls_hash_hd_t *hd = (gnutls_hash_hd_t *)ctx;
+
+	gnutls_hash_init(hd, ESDM_GNUTLS_HASH);
+	return 0;
+}
+
+static void esdm_gnutls_hash_dealloc(void *ctx)
+{
+	gnutls_hash_hd_t hd = (gnutls_hash_hd_t)ctx;
+
+	if (hd)
+		gnutls_hash_deinit(hd, NULL);
 }
 
 static const char *esdm_gnutls_hash_name(void)
@@ -73,7 +87,7 @@ static void esdm_gnutls_hash_desc_zero(void *hash)
 
 static int esdm_gnutls_hash_selftest(void)
 {
-	gnutls_hash_hd_t hd = NULL;
+	void *hd = NULL;
 	static const uint8_t msg_512[] = { 0x7F, 0xAD, 0x12 };
 	static const uint8_t exp_512[] = { 0x53, 0x35, 0x98, 0xe5, 0x29, 0x49,
 					   0x18, 0xa0, 0xaf, 0x4b, 0x3a, 0x62,
@@ -89,25 +103,15 @@ static int esdm_gnutls_hash_selftest(void)
 	uint8_t act[sizeof(exp_512)];
 	int ret = 0;
 
-	esdm_gnutls_hash_init(hd);
+	esdm_gnutls_hash_alloc(&hd);
 	esdm_gnutls_hash_update(hd, msg_512, 3);
 	esdm_gnutls_hash_final(hd, act);
+	esdm_gnutls_hash_dealloc(hd);
 	if (memcmp(act, exp_512, sizeof(exp_512)))
 		ret = -EFAULT;
 
 	esdm_gnutls_hash_desc_zero(hd);
 	return ret;
-}
-
-static int esdm_gnutls_hash_alloc(void **ctx)
-{
-	(void)ctx;
-	return 0;
-}
-
-static void esdm_gnutls_hash_dealloc(void *ctx)
-{
-	(void)ctx;
 }
 
 const struct esdm_hash_cb esdm_gnutls_hash_cb = {
@@ -153,9 +157,10 @@ static int esdm_gnutls_drbg_seed(void *drng, const uint8_t *inbuf,
 
 	if (drbg->seeded)
 		return drbg_aes_reseed(drbg, (unsigned int)inbuflen, inbuf,
-				       0, NULL);
+				       0, NULL) ? 0 : -EFAULT;
 
-	return drbg_aes_init(drbg, (unsigned int)inbuflen, inbuf, 0, NULL);
+	return drbg_aes_init(drbg, (unsigned int)inbuflen, inbuf, 0, NULL) ?
+	       0 : -EFAULT;
 }
 
 static ssize_t esdm_gnutls_drbg_generate(void *drng, uint8_t *outbuf,
@@ -164,7 +169,7 @@ static ssize_t esdm_gnutls_drbg_generate(void *drng, uint8_t *outbuf,
 	struct drbg_aes_ctx *drbg = (struct drbg_aes_ctx *)drng;
 
 	return drbg_aes_generate(drbg, (unsigned int)outbuflen, outbuf,
-				 0, NULL);
+				 0, NULL) ? (ssize_t)outbuflen : -EFAULT;
 }
 
 static int esdm_gnutls_drbg_alloc(void **drng, uint32_t sec_strength)
@@ -187,7 +192,11 @@ static void esdm_gnutls_drbg_dealloc(void *drng)
 {
 	struct drbg_aes_ctx *drbg = (struct drbg_aes_ctx *)drng;
 
+	if (!drbg)
+		return;
+
 	gnutls_memset(drbg, 0, sizeof(*drbg));
+	free(drbg);
 	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 	       "CTR DRBG core zeroized and freed\n");
 }
@@ -256,19 +265,19 @@ static int esdm_gnutls_drbg_selftest(void)
 	int ret = -EFAULT;
 
 	if (drbg_aes_init(&drbg, sizeof(ent_nonce), ent_nonce,
-			  sizeof(pers), pers))
+			  sizeof(pers), pers) == 0)
 		goto out;
 
 	if (drbg_aes_reseed(&drbg, sizeof(reseed_ent), reseed_ent,
-			    sizeof(reseed_addtl), reseed_addtl))
+			    sizeof(reseed_addtl), reseed_addtl) == 0)
 		goto out;
 
 	if (drbg_aes_generate(&drbg, sizeof(act), act,
-			      sizeof(addtl1), addtl1) < 0)
+			      sizeof(addtl1), addtl1) == 0)
 		goto out;
 
 	if (drbg_aes_generate(&drbg, sizeof(act), act,
-			      sizeof(addtl2), addtl2) < 0)
+			      sizeof(addtl2), addtl2) == 0)
 		goto out;
 
 	if (!memcmp(act, exp, sizeof(exp)))
