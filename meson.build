@@ -102,20 +102,16 @@ if get_option('esdm-server').disabled() and get_option('linux-getrandom').enable
 	error('Linux getrandom support requires the ESDM server')
 endif
 
-if get_option('drng_hash_drbg').enabled() and get_option('drng_chacha20').enabled()
-	error('Only one DRNG can be enabled')
-endif
+if get_option('crypto_backend') == 'builtin'
+	if get_option('drng_hash_drbg').enabled() and \
+	   get_option('drng_chacha20').enabled()
+		error('Only one DRNG can be enabled')
+	endif
 
-if get_option('hash_sha512').enabled() and get_option('hash_sha3_512').enabled()
-	error('Only one conditioning hash can be enabled')
-endif
-
-if get_option('gnutls').enabled()
-	error('GnuTLS support currently not available as GnuTLS cannot handle hash context on stack')
-endif
-
-if get_option('gnutls').enabled() and (get_option('drng_hash_drbg').enabled() or get_option('drng_chacha20').enabled() or get_option('hash_sha512').enabled() or get_option('hash_sha3_512').enabled())
-	error('GnuTLS support requires disabling of built-in crypto support')
+	if get_option('hash_sha512').enabled() and \
+	   get_option('hash_sha3_512').enabled()
+		error('Only one conditioning hash can be enabled')
+	endif
 endif
 
 if get_option('esdm-server').enabled()

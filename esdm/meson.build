@@ -45,21 +45,30 @@ if get_option('fips140').enabled()
 	esdm_src += files([ 'fips.c', 'fips_integrity.c' ])
 endif
 
-if get_option('drng_hash_drbg').enabled()
-	esdm_src += files([ 'esdm_builtin_hash_drbg.c' ])
-endif
+if get_option('crypto_backend') == 'builtin'
+	if get_option('drng_hash_drbg').enabled()
+		esdm_src += files([ 'esdm_builtin_hash_drbg.c' ])
+	endif
 
-if get_option('drng_chacha20').enabled()
-	esdm_src += files([ 'esdm_builtin_chacha20.c' ])
-endif
+	if get_option('drng_chacha20').enabled()
+		esdm_src += files([ 'esdm_builtin_chacha20.c' ])
+	endif
 
-if get_option('hash_sha512').enabled() or get_option('hash_sha3_512').enabled()
-	esdm_src += files([ 'esdm_builtin_sha512.c' ])
-endif
-
-if get_option('gnutls').enabled()
+	if get_option('hash_sha512').enabled() or \
+	   get_option('hash_sha3_512').enabled()
+		esdm_src += files([ 'esdm_builtin_sha512.c' ])
+	endif
+elif get_option('crypto_backend') == 'gnutls'
 	esdm_src += files([ 'esdm_gnutls.c' ])
-	dependencies_esdm_lib = [ dependency('gnutls') ]
+	dependencies_esdm_lib += [ dependency('gnutls') ]
+elif get_option('crypto_backend') == 'leancrypto'
+	esdm_src += files([ 'esdm_leancrypto.c' ])
+	dependencies_esdm_lib += [ cc.find_library( 'leancrypto' ) ]
+elif get_option('crypto_backend') == 'openssl'
+	esdm_src += files([ 'esdm_openssl.c' ])
+	dependencies_esdm_lib += [ dependency('openssl') ]
+else
+	error('Unknown crypto backend')
 endif
 
 esdm_common_static_lib = static_library('esdm_common_static',

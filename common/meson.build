@@ -28,11 +28,35 @@ else
 	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 0)
 endif
 
-conf_data.set('ESDM_DRNG_HASH_DRBG', get_option('drng_hash_drbg').enabled())
-conf_data.set('ESDM_DRNG_CHACHA20', get_option('drng_chacha20').enabled())
-conf_data.set('ESDM_HASH_SHA512', get_option('hash_sha512').enabled())
-conf_data.set('ESDM_HASH_SHA3_512', get_option('hash_sha3_512').enabled())
-conf_data.set('ESDM_GNUTLS', get_option('gnutls').enabled())
+if get_option('crypto_backend') == 'builtin'
+	conf_data.set('ESDM_DRNG_HASH_DRBG', get_option('drng_hash_drbg').enabled())
+	conf_data.set('ESDM_DRNG_CHACHA20', get_option('drng_chacha20').enabled())
+	conf_data.set('ESDM_HASH_SHA512', get_option('hash_sha512').enabled())
+	conf_data.set('ESDM_HASH_SHA3_512', get_option('hash_sha3_512').enabled())
+else
+	conf_data.set('ESDM_DRNG_HASH_DRBG', false)
+	conf_data.set('ESDM_DRNG_CHACHA20', false)
+	conf_data.set('ESDM_HASH_SHA512', false)
+	conf_data.set('ESDM_HASH_SHA3_512', false)
+endif
+
+if get_option('crypto_backend') == 'gnutls'
+	conf_data.set('ESDM_GNUTLS', true)
+else
+	conf_data.set('ESDM_GNUTLS', false)
+endif
+
+if get_option('crypto_backend') == 'leancrypto'
+	conf_data.set('ESDM_LEANCRYPTO', true)
+else
+	conf_data.set('ESDM_LEANCRYPTO', false)
+endif
+
+if get_option('crypto_backend') == 'openssl'
+	conf_data.set('ESDM_OPENSSL', true)
+else
+	conf_data.set('ESDM_OPENSSL', false)
+endif
 
 # This option currently is not configurable!
 conf_data.set('CONFIG_ESDM_USE_PTHREAD', true)

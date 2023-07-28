@@ -37,7 +37,9 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "esdm_gnutls.h"
+#include "esdm_leancrypto.h"
 #include "esdm_node.h"
+#include "esdm_openssl.h"
 #include "helper.h"
 #include "queue.h"
 #include "ret_checkers.h"
@@ -65,11 +67,16 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
  * kernel start. It must not perform any memory allocation operation, but
  * simply perform the hash calculation.
  */
-const struct esdm_hash_cb *esdm_default_hash_cb =
-#if defined(ESDM_GNUTLS)
-	&esdm_gnutls_hash_cb;
+#if (defined(ESDM_HASH_SHA512) || defined(ESDM_HASH_SHA3_512))
+# define ESDM_DEFAULT_HASH_CB	&esdm_builtin_sha512_cb
+#elif defined(ESDM_GNUTLS)
+# define ESDM_DEFAULT_HASH_CB	&esdm_gnutls_hash_cb
+#elif defined(ESDM_LEANCRYPTO)
+# define ESDM_DEFAULT_HASH_CB	&esdm_leancrypto_hash_cb
+#elif defined(ESDM_OPENSSL)
+# define ESDM_DEFAULT_HASH_CB	&esdm_openssl_hash_cb
 #else
-	&esdm_builtin_sha512_cb;
+#error "Unknown default DRNG selected"
 #endif
 
 /*
@@ -84,20 +91,22 @@ const struct esdm_drng_cb *esdm_default_drng_cb =
 	&esdm_builtin_chacha20_cb;
 #elif defined(ESDM_GNUTLS)
 	&esdm_gnutls_drbg_cb;
+#elif defined(ESDM_LEANCRYPTO)
+	&esdm_leancrypto_drbg_cb;
+#elif defined(ESDM_OPENSSL)
+	&esdm_openssl_drbg_cb;
 #else
 #error "Unknown default DRNG selected"
 #endif
 
 /* DRNG for non-atomic use cases */
 static struct esdm_drng esdm_drng_init = {
-	ESDM_DRNG_STATE_INIT(esdm_drng_init, NULL, NULL,
-			     &esdm_builtin_sha512_cb)
+	ESDM_DRNG_STATE_INIT(esdm_drng_init, NULL, NULL, ESDM_DEFAULT_HASH_CB)
 };
 
 /* Prediction-resistance DRNG: only deliver as much data as received entropy */
 static struct esdm_drng esdm_drng_pr = {
-	ESDM_DRNG_STATE_INIT(esdm_drng_pr, NULL, NULL,
-			     &esdm_builtin_sha512_cb)
+	ESDM_DRNG_STATE_INIT(esdm_drng_pr, NULL, NULL, ESDM_DEFAULT_HASH_CB)
 };
 
 /* Wait queue to wait until the ESDM is initialized - can freely be used */
@@ -237,12 +246,6 @@ int esdm_drng_mgr_initialize(void)
 	 */
 	if (atomic_cmpxchg(&esdm_avail, 0, 1) != 0)
 		return 0;
-
-	/* Catch programming error */
-	if (esdm_drng_init.hash_cb != esdm_default_hash_cb) {
-		logger(LOGGER_ERR, LOGGER_C_DRNG, "Programming bug at %s\n",
-		       __func__);
-	}
 
 	/* Initialize the PR DRNG inside init lock as it guards esdm_avail. */
 	mutex_w_init(&esdm_drng_pr.lock, 1, 1);

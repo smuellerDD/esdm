@@ -310,8 +310,18 @@ option('hash_sha512', type: 'feature', value: 'enabled',
 option('hash_sha3_512', type: 'feature', value: 'disabled',
        description: 'Enable SHA3-512 conditioning hash')
 
-option('gnutls', type: 'feature', value: 'disabled',
-       description: 'Enable GnuTLS backend to provide cryptographic primitives')
+option('crypto_backend', type: 'combo', value: 'builtin',
+       choices: ['builtin',
+		 'leancrypto',
+		 'openssl',
+		 # 'gnutls' - GnuTLS disabled as DRBG only runs without DF
+		],
+       description: '''Select the cryptographic backend
+
+The cryptographic backend provides the cryptographic primitives used by the
+ESDM for the conditioning operation as well as random number generation. Only
+one backend can be enabled.
+''')
 
 ################################################################################
 # Linux Interface Configuration
