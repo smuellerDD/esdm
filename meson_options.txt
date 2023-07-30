@@ -359,7 +359,13 @@ frontend library providing an ESDM-based RNG class for the Botan crypto library.
 ''')
 
 option('openssl-rand-provider', type: 'feature', value: 'disabled',
-       description: 'Enable the OpenSSL >= 3 RAND/SEED-SRC provider support.')
+       description: '''Enable the OpenSSL >= 3 RAND/SEED-SRC provider support.
+
+Please note, that this is a ESDM frontend, which can provide random numbers
+originated in ESDM to applications based on OpenSSL. Use -Dcrypto_backend=openssl
+if you want to use the OpenSSL as a provider for ESDM-internal crypto algorithms,
+like hash algorithms.
+''')
 
 option('esdm-server', type: 'feature', value: 'enabled',
        description: 'Enable the ESDM server')
