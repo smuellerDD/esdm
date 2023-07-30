@@ -31,51 +31,56 @@
 
 bool performTest(std::shared_ptr<Botan::RandomNumberGenerator>& rng)
 {
-    std::vector<uint8_t> bytes(300);
-    try {
-        rng->randomize(bytes);
-        Botan::ECDSA_PrivateKey key_ecdsa(*rng, Botan::EC_Group("secp521r1"));
-        Botan::RSA_PrivateKey key_rsa(*rng, 2048);
-    } catch(const Botan::System_Error& err) {
-        std::cerr << "Got Botan error, ESDM may did not deliver random bits: " << err.what() << std::endl;
-        return false;
-    } catch(...) {
-        return false;
-    }
+	std::vector<uint8_t> bytes(300);
+	try {
+		rng->randomize(bytes);
+		Botan::ECDSA_PrivateKey key_ecdsa(*rng, Botan::EC_Group("secp521r1"));
+		Botan::RSA_PrivateKey key_rsa(*rng, 2048);
+	} catch(const Botan::System_Error& err) {
+		std::cerr << "Got Botan error, ESDM may did not deliver random bits: " << err.what() << std::endl;
+		return false;
+	} catch(...) {
+		return false;
+	}
 
-    return true;
+	return true;
 }
 
 int main(void)
 {
-    int ret = env_init();
-    if (ret)
-        return ret;
+	int ret = env_init();
+	if (ret)
+		return ret;
 
-    std::shared_ptr<Botan::RandomNumberGenerator> rng_pr;
-    std::shared_ptr<Botan::RandomNumberGenerator> rng_full;
+	std::shared_ptr<Botan::RandomNumberGenerator> rng_pr;
+	std::shared_ptr<Botan::RandomNumberGenerator> rng_full;
 
-    try {
-        rng_pr.reset(new ESDM_RNG(true));
-        rng_full.reset(new ESDM_RNG(false));
-    } catch(const Botan::System_Error& err) {
-        std::cerr << "Cannot initialize ESDM connection" << std::endl;
-        goto out_err;
-    }
-    assert(rng_pr->name() == "esdm_pr");
-    assert(rng_full->name() == "esdm_full");
+	try {
+		rng_pr.reset(new ESDM_RNG(true));
+		rng_full.reset(new ESDM_RNG(false));
+	} catch(const Botan::System_Error& err) {
+		std::cerr << "Cannot initialize ESDM connection" << std::endl;
+		goto out_err;
+	}
 
-    if(!performTest(rng_pr)) {
-        goto out_err;
-    }
-    if(!performTest(rng_full)) {
-        goto out_err;
-    }
+	if(rng_pr->name() != "esdm_pr") {
+		goto out_err;
+	}
+	if(rng_full->name() != "esdm_full") {
+		goto out_err;
+	}
 
-    env_fini();
-    return EXIT_SUCCESS;
+	if(!performTest(rng_pr)) {
+		goto out_err;
+	}
+	if(!performTest(rng_full)) {
+		goto out_err;
+	}
+
+	env_fini();
+	return EXIT_SUCCESS;
 
 out_err:
-    env_fini();
-    return EXIT_FAILURE;
+	env_fini();
+	return EXIT_FAILURE;
 }
