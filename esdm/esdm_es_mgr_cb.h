@@ -56,6 +56,9 @@ enum esdm_external_es {
 #ifdef ESDM_ES_HWRAND
 	esdm_ext_es_hwrand, /* Linux /dev/hwrng */
 #endif
+#ifdef ESDM_ES_JENT_KERNEL
+	esdm_ext_es_jent_kernel, /* Linux jitterentropy in kernel */
+#endif
 	esdm_ext_es_aux, /* MUST BE LAST ES! */
 	esdm_ext_es_last /* MUST be the last entry */
 };

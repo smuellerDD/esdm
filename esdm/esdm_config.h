@@ -182,6 +182,23 @@ void esdm_config_es_hwrand_entropy_rate_set(uint32_t ent);
 uint32_t esdm_config_es_hwrand_entropy_rate(void);
 
 /**
+ * @brief JENT Kernel ES configuration: set the entropy rate
+ *
+ * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
+ *	 than the security strength of the the applied DRNG.
+ *
+ * @param [in] ent Entropy rate in bits.
+ */
+void esdm_config_es_jent_kernel_entropy_rate_set(uint32_t ent);
+
+/**
+ * @brief JENT Kernel ES configuration: get the entropy rate
+ *
+ * @return Entropy rate in bits
+ */
+uint32_t esdm_config_es_jent_kernel_entropy_rate(void);
+
+/**
  * @brief DRNG Manager configuration: get maximum value without successful
  *	  reseed
  *
