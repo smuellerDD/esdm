@@ -320,6 +320,8 @@ static void esdm_openssl_drbg_dealloc(void *drng)
 
 	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 	       "DRBG core zeroized and freed\n");
+
+	free(state);
 }
 
 static const char *esdm_openssl_drbg_name(void)
