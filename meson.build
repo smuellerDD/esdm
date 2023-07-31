@@ -19,6 +19,8 @@ project('esdm', 'c',
 		'b_lto=true',
 		'b_staticpic=true',
 		'b_pie=true',
+		# only used for botan, no effect without
+		'cpp_std=c++20',
 	])
 
 ################################################################################

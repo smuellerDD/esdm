@@ -58,6 +58,12 @@ else
 	conf_data.set('ESDM_OPENSSL', false)
 endif
 
+if get_option('crypto_backend') == 'botan'
+	conf_data.set('ESDM_BOTAN', true)
+else
+	conf_data.set('ESDM_BOTAN', false)
+endif
+
 # This option currently is not configurable!
 conf_data.set('CONFIG_ESDM_USE_PTHREAD', true)
 conf_data.set('THREADING_MAX_THREADS', get_option('threading_max_threads'))

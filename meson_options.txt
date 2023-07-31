@@ -314,6 +314,7 @@ option('crypto_backend', type: 'combo', value: 'builtin',
        choices: ['builtin',
 		 'leancrypto',
 		 'openssl',
+		 'botan',
 		 # 'gnutls' - GnuTLS disabled as DRBG only runs without DF
 		],
        description: '''Select the cryptographic backend
