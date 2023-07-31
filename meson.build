@@ -126,6 +126,10 @@ if get_option('crypto_backend') == 'builtin'
 	endif
 endif
 
+if get_option('es_jent_kernel').enabled()
+	dependencies_server += [ dependency('libkcapi', required: true) ]
+endif
+
 if get_option('esdm-server').enabled()
 	subdirs += [ 'frontends/server' ]
 endif

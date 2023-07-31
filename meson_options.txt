@@ -225,6 +225,27 @@ When configuring this value to 0, the CPU entropy source will provide
 ''')
 
 ################################################################################
+# Linux-kernel jitterentropy Entropy Source
+################################################################################
+
+option('es_jent_kernel', type: 'feature', value: 'disabled',
+       description: '''Enable support for jitterentropy-based entropy source
+       (in-kernel).
+''')
+
+# Option for: ESDM_JENT_KERNEL_ENTROPY_RATE
+option('es_jent_kernel_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+       description:'''kernel-based jitter entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256
+bits of data obtained from the kernel jitter entropy source. The ESDM
+enforces the limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the kernel jitter entropy source will provide
+256 bits of data without being credited to contain entropy.
+''')
+
+################################################################################
 # Common Options
 ################################################################################
 

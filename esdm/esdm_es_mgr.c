@@ -35,6 +35,7 @@
 #include "esdm_es_hwrand.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_jent.h"
+#include "esdm_es_jent_kernel.h"
 #include "esdm_es_krng.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_sched.h"
@@ -111,6 +112,9 @@ struct esdm_es_cb *esdm_es[] = {
 #endif
 #ifdef ESDM_ES_HWRAND
 	&esdm_es_hwrand,
+#endif
+#ifdef ESDM_ES_JENT_KERNEL
+	&esdm_es_jent_kernel,
 #endif
 	&esdm_es_aux
 };
