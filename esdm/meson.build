@@ -58,6 +58,10 @@ if get_option('crypto_backend') == 'builtin'
 	   get_option('hash_sha3_512').enabled()
 		esdm_src += files([ 'esdm_builtin_sha512.c' ])
 	endif
+elif get_option('crypto_backend') == 'botan'
+	add_languages('cpp')
+	esdm_src += files([ 'esdm_botan.cpp' ])
+	dependencies_esdm_lib += [ dependency('botan', version: '>=3.0', required: true) ]
 elif get_option('crypto_backend') == 'gnutls'
 	esdm_src += files([ 'esdm_gnutls.c' ])
 	dependencies_esdm_lib += [ dependency('gnutls') ]

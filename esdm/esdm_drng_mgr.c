@@ -36,6 +36,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "esdm_botan.h"
 #include "esdm_gnutls.h"
 #include "esdm_leancrypto.h"
 #include "esdm_node.h"
@@ -69,6 +70,8 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
  */
 #if (defined(ESDM_HASH_SHA512) || defined(ESDM_HASH_SHA3_512))
 # define ESDM_DEFAULT_HASH_CB	&esdm_builtin_sha512_cb
+#elif defined(ESDM_BOTAN)
+# define ESDM_DEFAULT_HASH_CB	&esdm_botan_hash_cb
 #elif defined(ESDM_GNUTLS)
 # define ESDM_DEFAULT_HASH_CB	&esdm_gnutls_hash_cb
 #elif defined(ESDM_LEANCRYPTO)
@@ -87,6 +90,8 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
 const struct esdm_drng_cb *esdm_default_drng_cb =
 #if defined(ESDM_DRNG_HASH_DRBG)
 	&esdm_builtin_hash_drbg_cb;
+#elif defined(ESDM_BOTAN)
+	&esdm_botan_drbg_cb;
 #elif defined(ESDM_DRNG_CHACHA20)
 	&esdm_builtin_chacha20_cb;
 #elif defined(ESDM_GNUTLS)
