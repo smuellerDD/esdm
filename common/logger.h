@@ -54,11 +54,11 @@ enum logger_class {
 
 /* Helper that is not intended to be called directly */
 void _logger(const enum logger_verbosity severity,
-	     const enum logger_class class, const char *file, const char *func,
+	     const enum logger_class class_, const char *file, const char *func,
 	     const uint32_t line, const char *fmt, ...)
 	__attribute__((format(printf, 6, 7)));
 void _logger_binary(const enum logger_verbosity severity,
-		    const enum logger_class class, const unsigned char *bin,
+		    const enum logger_class class_, const unsigned char *bin,
 		    const uint32_t binlen, const char *str, const char *file,
 		    const char *func, const uint32_t line);
 
@@ -75,11 +75,11 @@ void _logger_binary(const enum logger_verbosity severity,
 #else
 # pragma GCC diagnostic ignored "-Wvariadic-macros"
 #endif
-#define logger(severity, class, fmt...)                                        \
+#define logger(severity, class_, fmt...)                                        \
 	do {                                                                   \
 		_Pragma("GCC diagnostic push")                                 \
 			_Pragma("GCC diagnostic ignored \"-Wpedantic\"")       \
-				_logger(severity, class, __FILE__,             \
+				_logger(severity, class_, __FILE__,             \
 					__FUNCTION__, __LINE__, ##fmt);        \
 		_Pragma("GCC diagnostic pop")                                  \
 	} while (0);
@@ -97,7 +97,7 @@ void _logger_binary(const enum logger_verbosity severity,
 #else
 # pragma GCC diagnostic ignored "-Wvariadic-macros"
 #endif
-#define logger_status(class, fmt...) logger(LOGGER_STATUS, class, ##fmt)
+#define logger_status(class_, fmt...) logger(LOGGER_STATUS, class_, ##fmt)
 #pragma GCC diagnostic pop
 
 /**
@@ -108,11 +108,11 @@ void _logger_binary(const enum logger_verbosity severity,
  * @param binlen length of binary string
  * @param str string that is prepended to hex-converted binary string
  */
-#define logger_binary(severity, class, bin, binlen, str)                       \
+#define logger_binary(severity, class_, bin, binlen, str)                       \
 	do {                                                                   \
 		_Pragma("GCC diagnostic push")                                 \
 			_Pragma("GCC diagnostic ignored \"-Wpedantic\"")       \
-				_logger_binary(severity, class, bin, binlen,   \
+				_logger_binary(severity, class_, bin, binlen,   \
 					       str, __FILE__, __FUNCTION__,    \
 					       __LINE__);                      \
 		_Pragma("GCC diagnostic pop")                                  \
@@ -134,7 +134,7 @@ void logger_set_verbosity(const enum logger_verbosity level);
 /**
  * logger_set_class - set logging class
  */
-int logger_set_class(const enum logger_class class);
+int logger_set_class(const enum logger_class class_);
 
 /**
  * logger_get_class - List all logging classes to file descriptor
@@ -144,7 +144,7 @@ void logger_get_class(const int fd);
 /**
  * logger_get_verbosity - get verbosity level for given class
  */
-enum logger_verbosity logger_get_verbosity(const enum logger_class class);
+enum logger_verbosity logger_get_verbosity(const enum logger_class class_);
 
 /**
  * logger_inc_verbosity - increase verbosity level by one
