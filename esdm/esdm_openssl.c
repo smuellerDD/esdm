@@ -309,7 +309,6 @@ out:
 	if (ret)
 		esdm_openssl_drbg_dealloc_internal(state);
 
-return 0;
 	return ret;
 }
 
