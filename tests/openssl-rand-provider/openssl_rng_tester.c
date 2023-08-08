@@ -134,13 +134,14 @@ int main(int argc, char **argv)
 	bool success;
 	char *test;
 	char *type;
+	int ret;
 
 	assert(argc == 4);
 	provider_search_path = argv[1];
 	test = argv[2];
 	type = argv[3];
 
-	int ret = env_init();
+	env_init();
 	if (ret)
 		return ret;
 
