@@ -23,17 +23,16 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_get_write_wakeup_thresh(
-				UnprivAccess_Service *service,
-				const GetWriteWakeupThreshRequest *request,
-				GetWriteWakeupThreshResponse_Closure closure,
-				void *closure_data)
+	UnprivAccess_Service *service,
+	const GetWriteWakeupThreshRequest *request,
+	GetWriteWakeupThreshResponse_Closure closure, void *closure_data)
 {
 	GetWriteWakeupThreshResponse response =
-					GET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
+		GET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 
 	response.wakeup = esdm_get_write_wakeup_bits();
 	response.ret = 0;
-	closure (&response, closure_data);
+	closure(&response, closure_data);
 }

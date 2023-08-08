@@ -10,7 +10,7 @@
 #ifndef VISIBILITY_H
 #define VISIBILITY_H
 
-#define DSO_PUBLIC __attribute__ ((visibility ("default")))
-#define DSO_LOCAL  __attribute__ ((visibility ("hidden")))
+#define DSO_PUBLIC __attribute__((visibility("default")))
+#define DSO_LOCAL __attribute__((visibility("hidden")))
 
 #endif /* VISIBILITY_H */

@@ -20,6 +20,6 @@
 #ifndef _BUILD_BUG_ON_H
 #define _BUILD_BUG_ON_H
 
-#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2 * !!(condition)]))
 
 #endif /* _BUILD_BUG_ON_H */

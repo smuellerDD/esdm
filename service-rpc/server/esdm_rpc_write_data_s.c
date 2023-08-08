@@ -27,15 +27,14 @@
 
 void esdm_rpc_write_data(UnprivAccess_Service *service,
 			 const WriteDataRequest *request,
-			 WriteDataResponse_Closure closure,
-			 void *closure_data)
+			 WriteDataResponse_Closure closure, void *closure_data)
 {
 	WriteDataResponse response = WRITE_DATA_RESPONSE__INIT;
 	(void)service;
 
 	if (request == NULL || request->data.data == NULL) {
 		response.ret = -EFAULT;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	} else {
 		esdm_test_shm_status_add_rpc_server_written(request->data.len);
 		response.ret = esdm_pool_insert_aux(request->data.data,
@@ -48,6 +47,6 @@ void esdm_rpc_write_data(UnprivAccess_Service *service,
 		 */
 		esdm_drng_force_reseed();
 
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	}
 }

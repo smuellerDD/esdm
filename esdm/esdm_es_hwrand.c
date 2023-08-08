@@ -35,7 +35,7 @@
 #include "mutex.h"
 
 #define ESDM_ES_HWRAND_AVAIL "/sys/devices/virtual/misc/hw_random/rng_available"
-#define ESDM_ES_HWRAND_IF    "/dev/hwrng"
+#define ESDM_ES_HWRAND_IF "/dev/hwrng"
 
 static int esdm_hwrand_fd = -1;
 
@@ -67,7 +67,7 @@ static int esdm_hwrand_init(void)
 	fd = open(ESDM_ES_HWRAND_AVAIL, O_RDONLY);
 	if (fd >= 0) {
 		if (esdm_safe_read(fd, (uint8_t *)buf, buflen) &&
-	            buf[0] == '\n') {
+		    buf[0] == '\n') {
 			logger(LOGGER_WARN, LOGGER_C_ES,
 			       "Disabling /dev/hwrng-based entropy source as it has no backing device\n");
 			close(esdm_hwrand_fd);
@@ -122,8 +122,7 @@ static void esdm_hwrand_es_state(char *buf, size_t buflen)
 	snprintf(buf, buflen,
 		 " Available entropy: %u\n"
 		 " Entropy Rate per 256 data bits: %u\n",
-		 esdm_hwrand_poolsize(),
-		 esdm_hwrand_entropylevel(256));
+		 esdm_hwrand_poolsize(), esdm_hwrand_entropylevel(256));
 }
 
 static bool esdm_hwrand_active(void)
@@ -132,15 +131,15 @@ static bool esdm_hwrand_active(void)
 }
 
 struct esdm_es_cb esdm_es_hwrand = {
-	.name			= "LinuxHWRand",
-	.init			= esdm_hwrand_init,
-	.fini			= esdm_hwrand_finalize,
-	.monitor_es		= NULL,
-	.get_ent		= esdm_hwrand_get,
-	.curr_entropy		= esdm_hwrand_entropylevel,
-	.max_entropy		= esdm_hwrand_poolsize,
-	.state			= esdm_hwrand_es_state,
-	.reset			= NULL,
-	.active			= esdm_hwrand_active,
-	.switch_hash		= NULL,
+	.name = "LinuxHWRand",
+	.init = esdm_hwrand_init,
+	.fini = esdm_hwrand_finalize,
+	.monitor_es = NULL,
+	.get_ent = esdm_hwrand_get,
+	.curr_entropy = esdm_hwrand_entropylevel,
+	.max_entropy = esdm_hwrand_poolsize,
+	.state = esdm_hwrand_es_state,
+	.reset = NULL,
+	.active = esdm_hwrand_active,
+	.switch_hash = NULL,
 };

@@ -25,8 +25,7 @@
 #include <unistd.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 static inline void set_privileges(uid_t uid, gid_t gid)

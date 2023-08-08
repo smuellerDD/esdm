@@ -75,7 +75,7 @@ config ESDM_COLLECTION_SIZE
 /*************************** General ESDM parameter ***************************/
 
 /* Helper to concatenate a macro with an integer type */
-#define ESDM_PASTER(x, y) x ## y
+#define ESDM_PASTER(x, y) x##y
 #define ESDM_UINT32_C(x) ESDM_PASTER(x, U)
 
 bool esdm_gcd_tested(void);
@@ -92,23 +92,22 @@ bool esdm_highres_timer(void);
  */
 
 /* Store multiple integers in one u32 */
-#define ESDM_DATA_SLOTSIZE_BITS		(8)
-#define ESDM_DATA_SLOTSIZE_MASK		((1 << ESDM_DATA_SLOTSIZE_BITS) - 1)
-#define ESDM_DATA_ARRAY_MEMBER_BITS	(4 << 3) /* ((sizeof(u32)) << 3) */
-#define ESDM_DATA_SLOTS_PER_UINT	(ESDM_DATA_ARRAY_MEMBER_BITS / \
-					 ESDM_DATA_SLOTSIZE_BITS)
+#define ESDM_DATA_SLOTSIZE_BITS (8)
+#define ESDM_DATA_SLOTSIZE_MASK ((1 << ESDM_DATA_SLOTSIZE_BITS) - 1)
+#define ESDM_DATA_ARRAY_MEMBER_BITS (4 << 3) /* ((sizeof(u32)) << 3) */
+#define ESDM_DATA_SLOTS_PER_UINT                                               \
+	(ESDM_DATA_ARRAY_MEMBER_BITS / ESDM_DATA_SLOTSIZE_BITS)
 
 /*
  * Number of time values to store in the array - in small environments
  * only one atomic_t variable per CPU is used.
  */
-#define ESDM_DATA_NUM_VALUES		(CONFIG_ESDM_COLLECTION_SIZE)
+#define ESDM_DATA_NUM_VALUES (CONFIG_ESDM_COLLECTION_SIZE)
 /* Mask of LSB of time stamp to store */
-#define ESDM_DATA_WORD_MASK		(ESDM_DATA_NUM_VALUES - 1)
+#define ESDM_DATA_WORD_MASK (ESDM_DATA_NUM_VALUES - 1)
 
-#define ESDM_DATA_SLOTS_MASK		(ESDM_DATA_SLOTS_PER_UINT - 1)
-#define ESDM_DATA_ARRAY_SIZE		(ESDM_DATA_NUM_VALUES /	\
-					 ESDM_DATA_SLOTS_PER_UINT)
+#define ESDM_DATA_SLOTS_MASK (ESDM_DATA_SLOTS_PER_UINT - 1)
+#define ESDM_DATA_ARRAY_SIZE (ESDM_DATA_NUM_VALUES / ESDM_DATA_SLOTS_PER_UINT)
 
 /* Starting bit index of slot */
 static inline unsigned int esdm_data_slot2bitindex(unsigned int slot)
@@ -147,7 +146,8 @@ static inline void esdm_data_split_u32(u32 *ptr, u32 *pre_ptr, u32 *mask)
 
 	/* mask to split data into the two parts for the two units */
 	*mask = ((1 << (*pre_ptr & (ESDM_DATA_SLOTS_PER_UINT - 1)) *
-			ESDM_DATA_SLOTSIZE_BITS)) - 1;
+			       ESDM_DATA_SLOTSIZE_BITS)) -
+		1;
 }
 
 int __init esdm_init_time_source(void);

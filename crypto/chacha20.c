@@ -41,52 +41,84 @@ void cc20_block(struct lc_sym_state *state, uint32_t *stream)
 
 	for (i = 0; i < 10; i++) {
 		/* Quarterround 1 */
-		ws[0]  += ws[4];  ws[12] = rol32(ws[12] ^ ws[0],  16);
-		ws[8]  += ws[12]; ws[4]  = rol32(ws[4]  ^ ws[8],  12);
-		ws[0]  += ws[4];  ws[12] = rol32(ws[12] ^ ws[0],   8);
-		ws[8]  += ws[12]; ws[4]  = rol32(ws[4]  ^ ws[8],   7);
+		ws[0] += ws[4];
+		ws[12] = rol32(ws[12] ^ ws[0], 16);
+		ws[8] += ws[12];
+		ws[4] = rol32(ws[4] ^ ws[8], 12);
+		ws[0] += ws[4];
+		ws[12] = rol32(ws[12] ^ ws[0], 8);
+		ws[8] += ws[12];
+		ws[4] = rol32(ws[4] ^ ws[8], 7);
 
 		/* Quarterround 2 */
-		ws[1]  += ws[5];  ws[13] = rol32(ws[13] ^ ws[1],  16);
-		ws[9]  += ws[13]; ws[5]  = rol32(ws[5]  ^ ws[9],  12);
-		ws[1]  += ws[5];  ws[13] = rol32(ws[13] ^ ws[1],   8);
-		ws[9]  += ws[13]; ws[5]  = rol32(ws[5]  ^ ws[9],   7);
+		ws[1] += ws[5];
+		ws[13] = rol32(ws[13] ^ ws[1], 16);
+		ws[9] += ws[13];
+		ws[5] = rol32(ws[5] ^ ws[9], 12);
+		ws[1] += ws[5];
+		ws[13] = rol32(ws[13] ^ ws[1], 8);
+		ws[9] += ws[13];
+		ws[5] = rol32(ws[5] ^ ws[9], 7);
 
 		/* Quarterround 3 */
-		ws[2]  += ws[6];  ws[14] = rol32(ws[14] ^ ws[2],  16);
-		ws[10] += ws[14]; ws[6]  = rol32(ws[6]  ^ ws[10], 12);
-		ws[2]  += ws[6];  ws[14] = rol32(ws[14] ^ ws[2],   8);
-		ws[10] += ws[14]; ws[6]  = rol32(ws[6]  ^ ws[10],  7);
+		ws[2] += ws[6];
+		ws[14] = rol32(ws[14] ^ ws[2], 16);
+		ws[10] += ws[14];
+		ws[6] = rol32(ws[6] ^ ws[10], 12);
+		ws[2] += ws[6];
+		ws[14] = rol32(ws[14] ^ ws[2], 8);
+		ws[10] += ws[14];
+		ws[6] = rol32(ws[6] ^ ws[10], 7);
 
 		/* Quarterround 4 */
-		ws[3]  += ws[7];  ws[15] = rol32(ws[15] ^ ws[3],  16);
-		ws[11] += ws[15]; ws[7]  = rol32(ws[7]  ^ ws[11], 12);
-		ws[3]  += ws[7];  ws[15] = rol32(ws[15] ^ ws[3],   8);
-		ws[11] += ws[15]; ws[7]  = rol32(ws[7]  ^ ws[11],  7);
+		ws[3] += ws[7];
+		ws[15] = rol32(ws[15] ^ ws[3], 16);
+		ws[11] += ws[15];
+		ws[7] = rol32(ws[7] ^ ws[11], 12);
+		ws[3] += ws[7];
+		ws[15] = rol32(ws[15] ^ ws[3], 8);
+		ws[11] += ws[15];
+		ws[7] = rol32(ws[7] ^ ws[11], 7);
 
 		/* Quarterround 5 */
-		ws[0]  += ws[5];  ws[15] = rol32(ws[15] ^ ws[0],  16);
-		ws[10] += ws[15]; ws[5]  = rol32(ws[5]  ^ ws[10], 12);
-		ws[0]  += ws[5];  ws[15] = rol32(ws[15] ^ ws[0],   8);
-		ws[10] += ws[15]; ws[5]  = rol32(ws[5]  ^ ws[10],  7);
+		ws[0] += ws[5];
+		ws[15] = rol32(ws[15] ^ ws[0], 16);
+		ws[10] += ws[15];
+		ws[5] = rol32(ws[5] ^ ws[10], 12);
+		ws[0] += ws[5];
+		ws[15] = rol32(ws[15] ^ ws[0], 8);
+		ws[10] += ws[15];
+		ws[5] = rol32(ws[5] ^ ws[10], 7);
 
 		/* Quarterround 6 */
-		ws[1]  += ws[6];  ws[12] = rol32(ws[12] ^ ws[1],  16);
-		ws[11] += ws[12]; ws[6]  = rol32(ws[6]  ^ ws[11], 12);
-		ws[1]  += ws[6];  ws[12] = rol32(ws[12] ^ ws[1],   8);
-		ws[11] += ws[12]; ws[6]  = rol32(ws[6]  ^ ws[11],  7);
+		ws[1] += ws[6];
+		ws[12] = rol32(ws[12] ^ ws[1], 16);
+		ws[11] += ws[12];
+		ws[6] = rol32(ws[6] ^ ws[11], 12);
+		ws[1] += ws[6];
+		ws[12] = rol32(ws[12] ^ ws[1], 8);
+		ws[11] += ws[12];
+		ws[6] = rol32(ws[6] ^ ws[11], 7);
 
 		/* Quarterround 7 */
-		ws[2]  += ws[7];  ws[13] = rol32(ws[13] ^ ws[2],  16);
-		ws[8]  += ws[13]; ws[7]  = rol32(ws[7]  ^ ws[8],  12);
-		ws[2]  += ws[7];  ws[13] = rol32(ws[13] ^ ws[2],   8);
-		ws[8]  += ws[13]; ws[7]  = rol32(ws[7]  ^ ws[8],   7);
+		ws[2] += ws[7];
+		ws[13] = rol32(ws[13] ^ ws[2], 16);
+		ws[8] += ws[13];
+		ws[7] = rol32(ws[7] ^ ws[8], 12);
+		ws[2] += ws[7];
+		ws[13] = rol32(ws[13] ^ ws[2], 8);
+		ws[8] += ws[13];
+		ws[7] = rol32(ws[7] ^ ws[8], 7);
 
 		/* Quarterround 8 */
-		ws[3]  += ws[4];  ws[14] = rol32(ws[14] ^ ws[3],  16);
-		ws[9]  += ws[14]; ws[4]  = rol32(ws[4]  ^ ws[9],  12);
-		ws[3]  += ws[4];  ws[14] = rol32(ws[14] ^ ws[3],   8);
-		ws[9]  += ws[14]; ws[4]  = rol32(ws[4]  ^ ws[9],   7);
+		ws[3] += ws[4];
+		ws[14] = rol32(ws[14] ^ ws[3], 16);
+		ws[9] += ws[14];
+		ws[4] = rol32(ws[4] ^ ws[9], 12);
+		ws[3] += ws[4];
+		ws[14] = rol32(ws[14] ^ ws[3], 8);
+		ws[9] += ws[14];
+		ws[4] = rol32(ws[4] ^ ws[9], 7);
 	}
 
 	for (i = 0; i < LC_CC20_BLOCK_SIZE_WORDS; i++)
@@ -102,7 +134,7 @@ static void cc20_init(struct lc_sym_state *ctx)
 	ctx->constants[1] = 0x3320646e;
 	ctx->constants[2] = 0x79622d32;
 	ctx->constants[3] = 0x6b206574;
-	ctx->counter 	  = 1;
+	ctx->counter = 1;
 }
 
 static int cc20_setkey(struct lc_sym_state *ctx, uint8_t *key, size_t keylen)
@@ -133,14 +165,13 @@ static int cc20_setiv(struct lc_sym_state *ctx, uint8_t *iv, size_t ivlen)
 	ctx->nonce[2] = ptr_to_32(iv + sizeof(uint32_t) * 2);
 
 	return 0;
-
 }
 
-static void cc20_crypt(struct lc_sym_state *ctx,
-		       const uint8_t *in, uint8_t *out, size_t len)
+static void cc20_crypt(struct lc_sym_state *ctx, const uint8_t *in,
+		       uint8_t *out, size_t len)
 {
 	uint32_t keystream[LC_CC20_BLOCK_SIZE_WORDS]
-				__attribute__((aligned(sizeof(uint64_t))));
+		__attribute__((aligned(sizeof(uint64_t))));
 
 	while (len) {
 		size_t todo = min_size(len, sizeof(keystream));
@@ -161,12 +192,12 @@ static void cc20_crypt(struct lc_sym_state *ctx,
 }
 
 static struct lc_sym _lc_chacha20 = {
-	.init		= cc20_init,
-	.setkey		= cc20_setkey,
-	.setiv		= cc20_setiv,
-	.encrypt	= cc20_crypt,
-	.decrypt	= cc20_crypt,
-	.statesize	= LC_CC20_BLOCK_SIZE,
-	.blocksize	= LC_CC20_BLOCK_SIZE,
+	.init = cc20_init,
+	.setkey = cc20_setkey,
+	.setiv = cc20_setiv,
+	.encrypt = cc20_crypt,
+	.decrypt = cc20_crypt,
+	.statesize = LC_CC20_BLOCK_SIZE,
+	.blocksize = LC_CC20_BLOCK_SIZE,
 };
 DSO_PUBLIC const struct lc_sym *lc_chacha20 = &_lc_chacha20;

@@ -42,7 +42,7 @@ esdm_rpcc_get_random_bytes_cb(const GetRandomBytesResponse *response,
 			      void *closure_data)
 {
 	struct esdm_get_random_bytes_buf *buffer =
-			(struct esdm_get_random_bytes_buf *)closure_data;
+		(struct esdm_get_random_bytes_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 
@@ -77,8 +77,8 @@ ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 		msg.len = min_size(maxbuflen, buflen);
 
 		unpriv_access__rpc_get_random_bytes(
-			&rpc_conn->service, &msg,
-			esdm_rpcc_get_random_bytes_cb, &buffer);
+			&rpc_conn->service, &msg, esdm_rpcc_get_random_bytes_cb,
+			&buffer);
 
 		if (buffer.ret < -255) {
 			maxbuflen = (size_t)(-buffer.ret);

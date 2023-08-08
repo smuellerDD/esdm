@@ -73,31 +73,29 @@
  * 
  * Documentation: https://developer.arm.com/documentation/ddi0595/2021-06/AArch64-Registers/ID-AA64ISAR0-EL1--AArch64-Instruction-Set-Attribute-Register-0?lang=en
  */
-#define ARM8_RNDR_FEATURE	(UINT64_C(0xf)<<60)
-#define ARM8_SM4_FEATURE	(UINT64_C(0xf)<<40)
-#define ARM8_SM3_FEATURE	(UINT64_C(0xf)<<36)
-#define ARM8_SHA3_FEATURE	(UINT64_C(0xf)<<32)
-#define ARM8_SHA2_FEATURE	(UINT64_C(0xf)<<32)
-#define ARM8_SHA256_FEATURE	(UINT64_C(0x1)<<32)	/* SHA256 */
-#define ARM8_SHA256512_FEATURE	(UINT64_C(0x1)<<33)	/* SHA256 and SHA512 */
-#define ARM8_SHA1_FEATURE	(UINT64_C(0xf)<<8)
-#define ARM8_PMULL_FEATURE	(UINT64_C(0x1)<<5)
-#define ARM8_AES_FEATURE	(UINT64_C(0x1)<<4)
+#define ARM8_RNDR_FEATURE (UINT64_C(0xf) << 60)
+#define ARM8_SM4_FEATURE (UINT64_C(0xf) << 40)
+#define ARM8_SM3_FEATURE (UINT64_C(0xf) << 36)
+#define ARM8_SHA3_FEATURE (UINT64_C(0xf) << 32)
+#define ARM8_SHA2_FEATURE (UINT64_C(0xf) << 32)
+#define ARM8_SHA256_FEATURE (UINT64_C(0x1) << 32) /* SHA256 */
+#define ARM8_SHA256512_FEATURE (UINT64_C(0x1) << 33) /* SHA256 and SHA512 */
+#define ARM8_SHA1_FEATURE (UINT64_C(0xf) << 8)
+#define ARM8_PMULL_FEATURE (UINT64_C(0x1) << 5)
+#define ARM8_AES_FEATURE (UINT64_C(0x1) << 4)
 static inline bool arm_id_aa64isar0_el1_feature(unsigned long feature)
 {
 	static unsigned long id_aa64isar0_el1_val = 0xffffffffffffffff;
 
 	if (id_aa64isar0_el1_val == 0xffffffffffffffff) {
-		__asm__ __volatile__(
-			"mrs %0, id_aa64isar0_el1"
-			: "=r" (id_aa64isar0_el1_val)
-		);
+		__asm__ __volatile__("mrs %0, id_aa64isar0_el1"
+				     : "=r"(id_aa64isar0_el1_val));
 
 		if (id_aa64isar0_el1_val == 0xffffffffffffffff)
 			return false;
 	}
 
-        return (id_aa64isar0_el1_val & feature) ? true : false;
+	return (id_aa64isar0_el1_val & feature) ? true : false;
 }
 
 static inline bool arm_seed(unsigned long *data)
@@ -111,13 +109,11 @@ static inline bool arm_seed(unsigned long *data)
 	 * reasonable period of time, PSTATE.NZCV is set to 0b0100 and the
 	 * data value returned is 0.
 	 */
-	__asm__ __volatile__(
-		"mrs %0, " RNDRRS_INSTR "\n"
-		"cset %w1, ne\n"
-		: "=r" (*data), "=r" (success)
-		:
-		: "cc"
-	);
+	__asm__ __volatile__("mrs %0, " RNDRRS_INSTR "\n"
+			     "cset %w1, ne\n"
+			     : "=r"(*data), "=r"(success)
+			     :
+			     : "cc");
 
 	return success;
 }

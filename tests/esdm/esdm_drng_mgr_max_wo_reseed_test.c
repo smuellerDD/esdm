@@ -58,8 +58,7 @@ static int esdm_drng_mgr_max_wo_reseed_test(bool success)
 	}
 
 	for (i = 0; i < 10; i++) {
-		if (esdm_get_random_bytes(buf, sizeof(buf)) !=
-		    sizeof(buf)) {
+		if (esdm_get_random_bytes(buf, sizeof(buf)) != sizeof(buf)) {
 			printf("cannot obtain random data\n");
 			goto err;
 		}

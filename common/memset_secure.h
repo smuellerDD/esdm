@@ -79,7 +79,7 @@
 static inline void memset_secure(void *s, int c, size_t n)
 {
 	memset(s, c, n);
-	__asm__ __volatile__("" : : "r" (s) : "memory");
+	__asm__ __volatile__("" : : "r"(s) : "memory");
 }
 
 #if 0

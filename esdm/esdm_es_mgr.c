@@ -50,10 +50,10 @@
 #include "visibility.h"
 
 struct esdm_state {
-	bool esdm_operational;		/* Is DRNG operational? */
-	bool esdm_fully_seeded;		/* Is DRNG fully seeded? */
-	bool esdm_min_seeded;		/* Is DRNG minimally seeded? */
-	bool all_online_nodes_seeded;	/* All DRNGs nodes seeded? */
+	bool esdm_operational; /* Is DRNG operational? */
+	bool esdm_fully_seeded; /* Is DRNG fully seeded? */
+	bool esdm_min_seeded; /* Is DRNG minimally seeded? */
+	bool all_online_nodes_seeded; /* All DRNGs nodes seeded? */
 
 	/*
 	 * To ensure that external entropy providers cannot dominate the
@@ -64,14 +64,17 @@ struct esdm_state {
 	 * entropy pool has sufficient entropy.
 	 */
 
-	atomic_t boot_entropy_thresh;	/* Reseed threshold */
-	mutex_w_t reseed_in_progress;	/* Flag for on executing reseed */
+	atomic_t boot_entropy_thresh; /* Reseed threshold */
+	mutex_w_t reseed_in_progress; /* Flag for on executing reseed */
 };
 
 static struct esdm_state esdm_state = {
-	false, false, false, false,
-	.boot_entropy_thresh	= ATOMIC_INIT(ESDM_FULL_SEED_ENTROPY_BITS),
-	.reseed_in_progress	= MUTEX_W_UNLOCKED,
+	false,
+	false,
+	false,
+	false,
+	.boot_entropy_thresh = ATOMIC_INIT(ESDM_FULL_SEED_ENTROPY_BITS),
+	.reseed_in_progress = MUTEX_W_UNLOCKED,
 };
 
 /*
@@ -121,12 +124,13 @@ void esdm_es_mgr_monitor_wakeup(void)
 }
 
 /* ES monitor worker loop */
-int esdm_es_mgr_monitor_initialize(void(*priv_init_completion)(void))
+int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 29 };
 	unsigned int i, avail = 0;
 
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		if (esdm_es[i]->active())
 			avail += !!esdm_es[i]->monitor_es;
 	}
@@ -147,7 +151,8 @@ int esdm_es_mgr_monitor_initialize(void(*priv_init_completion)(void))
 		int ret = 0;
 		bool priv_init_complete = true;
 
-		for_each_esdm_es(j) {
+		for_each_esdm_es(j)
+		{
 			if (esdm_es[j]->monitor_es) {
 				int rc = esdm_es[j]->monitor_es();
 
@@ -347,7 +352,8 @@ void esdm_reset_state(void)
 {
 	uint32_t i;
 
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		if (esdm_es[i]->reset)
 			esdm_es[i]->reset();
 	}
@@ -407,8 +413,7 @@ static uint32_t esdm_avail_entropy_thresh(void)
 	 * Apply oversampling during initialization according to SP800-90C as
 	 * we request a larger buffer from the ES.
 	 */
-	if (esdm_sp80090c_compliant() &&
-	    !esdm_state.all_online_nodes_seeded)
+	if (esdm_sp80090c_compliant() && !esdm_state.all_online_nodes_seeded)
 		ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
 
 	return ent_thresh;
@@ -420,12 +425,13 @@ bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 	/* AIS20/31 NTG.1: two entropy sources with each delivering 220 bits */
 	if (esdm_ntg1_2022_compliant()) {
 		uint32_t i, result = 0,
-			 ent_thresh = esdm_avail_entropy_thresh();
+			    ent_thresh = esdm_avail_entropy_thresh();
 
-		for_each_esdm_es(i) {
+		for_each_esdm_es(i)
+		{
 			result += (eb ? eb->entropy_es[i].e_bits :
 					esdm_es[i]->curr_entropy(ent_thresh)) >=
-				   ESDM_AIS2031_NPTRNG_MIN_ENTROPY;
+				  ESDM_AIS2031_NPTRNG_MIN_ENTROPY;
 		}
 
 		return (result >= 2);
@@ -438,8 +444,7 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 {
 	uint32_t i, collected_entropy = 0;
 
-	for_each_esdm_es(i)
-		collected_entropy += eb->entropy_es[i].e_bits;
+	for_each_esdm_es(i) collected_entropy += eb->entropy_es[i].e_bits;
 
 	esdm_test_seed_entropy(collected_entropy);
 
@@ -485,7 +490,7 @@ static void esdm_set_operational(void)
 		esdm_state.esdm_operational = true;
 		esdm_init_wakeup();
 		esdm_shm_status_set_operational(true);
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,"ESDM fully operational\n");
+		logger(LOGGER_VERBOSE, LOGGER_C_ES, "ESDM fully operational\n");
 	}
 }
 
@@ -496,8 +501,7 @@ uint32_t esdm_avail_entropy(void)
 	uint32_t i, ent = 0, ent_thresh = esdm_avail_entropy_thresh();
 
 	BUILD_BUG_ON(ARRAY_SIZE(esdm_es) != esdm_ext_es_last);
-	for_each_esdm_es(i)
-		ent += esdm_es[i]->curr_entropy(ent_thresh);
+	for_each_esdm_es(i) ent += esdm_es[i]->curr_entropy(ent_thresh);
 	return ent;
 }
 
@@ -534,11 +538,10 @@ void esdm_set_write_wakeup_bits(uint32_t val)
 static uint32_t esdm_init_entropy_level(bool fully_seeded)
 {
 	return esdm_ntg1_2022_compliant() ?
-		/* Approximation so that two ES should deliver 220 bits each */
-		(2 * ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
-		/* Apply SP800-90C oversampling if applicable */
-		esdm_get_seed_entropy_osr(fully_seeded);
-
+		       /* Approximation so that two ES should deliver 220 bits each */
+		       (2 * ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
+		       /* Apply SP800-90C oversampling if applicable */
+		       esdm_get_seed_entropy_osr(fully_seeded);
 }
 
 /**
@@ -561,47 +564,46 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (state->esdm_operational)
 		return;
 
-	requested_bits = esdm_init_entropy_level(
-						state->all_online_nodes_seeded);
+	requested_bits =
+		esdm_init_entropy_level(state->all_online_nodes_seeded);
 
 	if (eb) {
 		seed_bits = esdm_entropy_rate_eb(eb);
 	} else {
 		uint32_t ent_thresh = esdm_avail_entropy_thresh();
 
-		for_each_esdm_es(i)
-			seed_bits += esdm_es[i]->curr_entropy(ent_thresh);
+		for_each_esdm_es(i) seed_bits +=
+			esdm_es[i]->curr_entropy(ent_thresh);
 	}
 
 	/* DRNG is seeded with full security strength */
 	if (state->esdm_fully_seeded) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
-	} else if (esdm_fully_seeded(state->all_online_nodes_seeded,
-				     seed_bits, eb)) {
+	} else if (esdm_fully_seeded(state->all_online_nodes_seeded, seed_bits,
+				     eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
 		state->esdm_min_seeded = true;
 		logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		       "ESDM fully seeded with %u bits of entropy\n",
-			seed_bits);
+		       seed_bits);
 		esdm_set_entropy_thresh(requested_bits);
 	} else if (!state->esdm_min_seeded) {
-
 		/* DRNG is seeded with at least 128 bits of entropy */
 		if (seed_bits >= ESDM_MIN_SEED_ENTROPY_BITS) {
 			state->esdm_min_seeded = true;
 			logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			       "ESDM minimally seeded with %u bits of entropy\n",
-				seed_bits);
+			       seed_bits);
 			esdm_set_entropy_thresh(requested_bits);
 			esdm_init_wakeup();
 
-		/* DRNG is seeded with at least ESDM_INIT_ENTROPY_BITS bits */
+			/* DRNG is seeded with at least ESDM_INIT_ENTROPY_BITS bits */
 		} else if (seed_bits >= ESDM_INIT_ENTROPY_BITS) {
 			logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			       "ESDM initial entropy level %u bits of entropy\n",
-				seed_bits);
+			       seed_bits);
 			esdm_set_entropy_thresh(ESDM_MIN_SEED_ENTROPY_BITS);
 		}
 	}
@@ -615,10 +617,11 @@ int esdm_es_mgr_reinitialize(void)
 	esdm_set_entropy_thresh(esdm_init_entropy_level(false));
 
 	/* Initialize the entropy sources */
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		if (esdm_es[i]->init) {
-			logger(LOGGER_DEBUG, LOGGER_C_ES, "Re-initialize ES %s\n",
-			       esdm_es[i]->name);
+			logger(LOGGER_DEBUG, LOGGER_C_ES,
+			       "Re-initialize ES %s\n", esdm_es[i]->name);
 			CKINT_LOG(esdm_es[i]->init(),
 				  "Reinitialization of ES %s failed: %d",
 				  esdm_es[i]->name, ret);
@@ -651,8 +654,8 @@ int esdm_es_mgr_initialize(void)
 {
 	struct seed {
 		time_t time;
-		unsigned long data[(ESDM_MAX_DIGESTSIZE /
-				    sizeof(unsigned long))];
+		unsigned long
+			data[(ESDM_MAX_DIGESTSIZE / sizeof(unsigned long))];
 	} seed __aligned(ESDM_KCAPI_ALIGN);
 	struct timespec timeval;
 	unsigned int i;
@@ -668,7 +671,8 @@ int esdm_es_mgr_initialize(void)
 	CKINT(esdm_es_mgr_init_es(esdm_es[esdm_ext_es_aux]));
 
 	/* Initialize the entropy sources */
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		if (i == esdm_ext_es_aux)
 			continue;
 
@@ -703,7 +707,8 @@ void esdm_es_mgr_finalize(void)
 	atomic_set(&esdm_es_mgr_terminate, 1);
 	esdm_es_mgr_monitor_wakeup();
 
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		if (esdm_es[i]->fini)
 			esdm_es[i]->fini();
 	}
@@ -750,7 +755,8 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 {
 	struct esdm_state *state = &esdm_state;
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
-			  esdm_security_strength() : ESDM_MIN_SEED_ENTROPY_BITS;
+				      esdm_security_strength() :
+				      ESDM_MIN_SEED_ENTROPY_BITS;
 
 	/* Guarantee that requested bits is a multiple of bytes */
 	BUILD_BUG_ON(ESDM_DRNG_SECURITY_STRENGTH_BITS % 8);
@@ -763,16 +769,16 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
 	 */
-	if (!force &&
-	    state->esdm_fully_seeded && (esdm_avail_entropy() < req_ent)) {
-		for_each_esdm_es(i)
-			eb->entropy_es[i].e_bits = 0;
+	if (!force && state->esdm_fully_seeded &&
+	    (esdm_avail_entropy() < req_ent)) {
+		for_each_esdm_es(i) eb->entropy_es[i].e_bits = 0;
 
 		goto wakeup;
 	}
 
 	/* Concatenate the output of the entropy sources. */
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		esdm_es[i]->get_ent(&eb->entropy_es[i], requested_bits,
 				    state->esdm_fully_seeded);
 	}

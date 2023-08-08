@@ -53,8 +53,8 @@ struct esdm_hash_cb {
 	void (*hash_desc_zero)(struct shash_desc *shash);
 };
 
-#define ESDM_HASH_DIGESTSIZE_BYTES	(64)
-#define ESDM_HASH_DIGESTSIZE_BITS	(ESDM_HASH_DIGESTSIZE_BYTES << 3)
+#define ESDM_HASH_DIGESTSIZE_BYTES (64)
+#define ESDM_HASH_DIGESTSIZE_BITS (ESDM_HASH_DIGESTSIZE_BYTES << 3)
 extern const struct esdm_hash_cb *esdm_kcapi_hash_cb;
 
 #endif /* _ESDM_HASH_KCAPI_H */

@@ -59,7 +59,7 @@ static int write_random(const char *path, uint8_t *buf, size_t buflen)
 	int fd;
 	int ret = 0;
 
-	fd = open(path, O_WRONLY|O_CLOEXEC);
+	fd = open(path, O_WRONLY | O_CLOEXEC);
 	if (0 > fd)
 		return fd;
 
@@ -108,5 +108,4 @@ int main(int argc, char *argv[])
 out:
 	env_fini();
 	return ret;
-
 }

@@ -43,7 +43,8 @@ static int setent_ioctl(int fd, int exp)
 
 	ret = ioctl(fd, RNDADDTOENTCNT, &bits);
 	if (ret != exp) {
-		printf("RNDADDTOENTCNT IOCTL failed: expected result %d, returned result %d\n", exp, ret);
+		printf("RNDADDTOENTCNT IOCTL failed: expected result %d, returned result %d\n",
+		       exp, ret);
 		return 1;
 	}
 

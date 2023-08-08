@@ -29,11 +29,10 @@
 
 static int urandom_fd = -1;
 
-static void esdm_cuse_urandom_ioctl(fuse_req_t req,
-				    unsigned long cmd, void *arg,
-				    struct fuse_file_info *fi, unsigned flags,
-				    const void *in_buf, size_t in_bufsz,
-				    size_t out_bufsz)
+static void esdm_cuse_urandom_ioctl(fuse_req_t req, unsigned long cmd,
+				    void *arg, struct fuse_file_info *fi,
+				    unsigned flags, const void *in_buf,
+				    size_t in_bufsz, size_t out_bufsz)
 {
 	esdm_cuse_ioctl(urandom_fd, req, cmd, arg, fi, flags, in_buf, in_bufsz,
 			out_bufsz);
@@ -57,12 +56,12 @@ static void esdm_cuse_urandom_write(fuse_req_t req, const char *buf,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
 static const struct cuse_lowlevel_ops esdm_dev_clop = {
-	.init_done	= esdm_cuse_init_done,
-	.open		= esdm_cuse_open,
-	.read		= esdm_cuse_read_nonblock,
-	.write		= esdm_cuse_urandom_write,
-	.ioctl		= esdm_cuse_urandom_ioctl,
-	.poll		= esdm_cuse_poll,
+	.init_done = esdm_cuse_init_done,
+	.open = esdm_cuse_open,
+	.read = esdm_cuse_read_nonblock,
+	.write = esdm_cuse_urandom_write,
+	.ioctl = esdm_cuse_urandom_ioctl,
+	.poll = esdm_cuse_poll,
 };
 #pragma GCC diagnostic pop
 

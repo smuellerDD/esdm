@@ -95,8 +95,8 @@ static int es_sched_getdata(void)
 	for (loops = 0; loops < 10; loops++) {
 		memset(&eb_es, 0, sizeof(eb_es));
 		create_sched_entropy();
-		esdm_es[esdm_int_es_sched]->get_ent(&eb_es,
-			ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+		esdm_es[esdm_int_es_sched]->get_ent(
+			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
 		if (eb_es.e_bits == 0) {
 			printf("ES Scheduler - pass: get_ent did not collect data\n");
 			if (memcmp(eb_es.e, zero,
@@ -141,9 +141,11 @@ static int es_sched_poolsize(void)
 	}
 	printf("ES Scheduler - pass: max_entropy: %d\n", ret);
 
-	ret2 = esdm_es[esdm_int_es_sched]->curr_entropy(esdm_security_strength());
+	ret2 = esdm_es[esdm_int_es_sched]->curr_entropy(
+		esdm_security_strength());
 	if (ret2 > 512 * esdm_online_nodes()) {
-		printf("ES Scheduler - fail: curr_entropy too large: %u\n", ret2);
+		printf("ES Scheduler - fail: curr_entropy too large: %u\n",
+		       ret2);
 		return 1;
 	}
 	printf("ES Scheduler - pass: curr_entropy: %d\n", ret2);
@@ -207,7 +209,8 @@ static int es_sched_reset_check(void)
 
 	/* Fill up the entropy to the max */
 	create_sched_entropy();
-	ent = esdm_es[esdm_int_es_sched]->curr_entropy(esdm_security_strength());
+	ent = esdm_es[esdm_int_es_sched]->curr_entropy(
+		esdm_security_strength());
 	if (ent < ESDM_DRNG_SECURITY_STRENGTH_BITS) {
 		printf("ES Scheduler- fail: curr_entropy too low after entropy events: %u\n",
 		       ent);
@@ -222,7 +225,8 @@ static int es_sched_reset_check(void)
 	 * We allow that between the reset and the curr_entropy call some
 	 * entropy is collected.
 	 */
-	ent = esdm_es[esdm_int_es_sched]->curr_entropy(esdm_security_strength());
+	ent = esdm_es[esdm_int_es_sched]->curr_entropy(
+		esdm_security_strength());
 	if (ent > 10) {
 		printf("ES Scheduler - fail: curr_entropy after reset too large: %u\n",
 		       ent);

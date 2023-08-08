@@ -45,21 +45,21 @@
  * implementations.
  */
 struct esdm_pool {
-	void *aux_pool;				/* Aux pool: digest state */
+	void *aux_pool; /* Aux pool: digest state */
 	atomic_t aux_entropy_bits;
-	atomic_t digestsize;			/* Digest size of used hash */
-	bool initialized;			/* Aux pool initialized? */
+	atomic_t digestsize; /* Digest size of used hash */
+	bool initialized; /* Aux pool initialized? */
 
 	/* Serialize read of entropy pool and update of aux pool */
 	mutex_w_t lock;
 };
 
 static struct esdm_pool esdm_pool __aligned(ESDM_KCAPI_ALIGN) = {
-	.aux_pool		= NULL,
-	.aux_entropy_bits	= ATOMIC_INIT(0),
-	.digestsize		= ATOMIC_INIT(ESDM_MAX_DIGESTSIZE),
-	.initialized		= false,
-	.lock			= MUTEX_W_UNLOCKED,
+	.aux_pool = NULL,
+	.aux_entropy_bits = ATOMIC_INIT(0),
+	.digestsize = ATOMIC_INIT(ESDM_MAX_DIGESTSIZE),
+	.initialized = false,
+	.lock = MUTEX_W_UNLOCKED,
 };
 
 /********************************** Helper ***********************************/
@@ -68,8 +68,9 @@ static struct esdm_pool esdm_pool __aligned(ESDM_KCAPI_ALIGN) = {
 static uint32_t esdm_aux_avail_entropy(uint32_t __unused u)
 {
 	/* Cap available entropy with max entropy */
-	uint32_t avail_bits = min_uint32(esdm_get_digestsize(),
-			       atomic_read_u32(&esdm_pool.aux_entropy_bits));
+	uint32_t avail_bits =
+		min_uint32(esdm_get_digestsize(),
+			   atomic_read_u32(&esdm_pool.aux_entropy_bits));
 
 	/* Consider oversampling rate due to aux pool conditioning */
 	return esdm_reduce_by_osr(avail_bits);
@@ -179,10 +180,9 @@ static void esdm_aux_reset(void)
  * Assumption: the caller must guarantee that the new_cb is available during the
  * entire operation (e.g. it must hold the write lock against pointer updating).
  */
-static int
-esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
-		     const struct esdm_hash_cb *new_cb,
-		     const struct esdm_hash_cb *old_cb)
+static int esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
+				const struct esdm_hash_cb *new_cb,
+				const struct esdm_hash_cb *old_cb)
 {
 #ifndef ESDM_CRYPTO_SWITCH
 	return -EOPNOTSUPP;
@@ -206,9 +206,9 @@ esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
 
 	/* Get the aux pool hash with old digest ... */
 	CKINT(old_cb->hash_final(shash, digest));
-	      /* ... re-initialize the hash with the new digest ... */
+	/* ... re-initialize the hash with the new digest ... */
 	CKINT(new_cb->hash_init(nhash));
-	      /*
+	/*
 	       * ... feed the old hash into the new state. We may feed
 	       * uninitialized memory into the new state, but this is
 	       * considered no issue and even good as we have some more
@@ -233,9 +233,8 @@ out:
 }
 
 /* Insert data into auxiliary pool by using the hash update function. */
-static int
-esdm_aux_pool_insert_locked(const uint8_t *inbuf, size_t inbuflen,
-			    uint32_t entropy_bits)
+static int esdm_aux_pool_insert_locked(const uint8_t *inbuf, size_t inbuflen,
+				       uint32_t entropy_bits)
 {
 	struct esdm_pool *pool = &esdm_pool;
 	struct hash_ctx *shash = (struct hash_ctx *)pool->aux_pool;
@@ -264,8 +263,8 @@ esdm_aux_pool_insert_locked(const uint8_t *inbuf, size_t inbuflen,
 	 * SP800-90B section 3.1.5.1 table 1.
 	 */
 	entropy_bits += atomic_read_u32(&pool->aux_entropy_bits);
-	esdm_pool_set_entropy(min_uint32(entropy_bits,
-					 hash_cb->hash_digestsize(shash) << 3));
+	esdm_pool_set_entropy(
+		min_uint32(entropy_bits, hash_cb->hash_digestsize(shash) << 3));
 
 out:
 	mutex_reader_unlock(&drng->hash_lock);
@@ -307,8 +306,9 @@ static uint32_t esdm_aux_get_pool(uint8_t *outbuf, uint32_t requested_bits)
 	struct hash_ctx *shash = (struct hash_ctx *)pool->aux_pool;
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	const struct esdm_hash_cb *hash_cb;
-	uint32_t collected_ent_bits, returned_ent_bits, unused_bits = 0,
-	    digestsize, digestsize_bits, requested_bits_osr;
+	uint32_t collected_ent_bits, returned_ent_bits,
+		unused_bits = 0, digestsize, digestsize_bits,
+		requested_bits_osr;
 	uint8_t aux_output[ESDM_MAX_DIGESTSIZE];
 
 	if (!pool->initialized)
@@ -345,8 +345,9 @@ static uint32_t esdm_aux_get_pool(uint8_t *outbuf, uint32_t requested_bits)
 	/* Apply oversampling: discount requested oversampling rate */
 	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "obtained %u bits by collecting %u bits of entropy from aux pool, %u bits of entropy remaining\n",
-		 returned_ent_bits, collected_ent_bits, unused_bits);
+	logger(LOGGER_DEBUG, LOGGER_C_ES,
+	       "obtained %u bits by collecting %u bits of entropy from aux pool, %u bits of entropy remaining\n",
+	       returned_ent_bits, collected_ent_bits, unused_bits);
 
 	/* Get the digest for the aux pool to be returned to the caller ... */
 	if (hash_cb->hash_final(shash, aux_output) ||
@@ -408,15 +409,15 @@ static bool esdm_aux_active(void)
 }
 
 struct esdm_es_cb esdm_es_aux = {
-	.name			= "Auxiliary",
-	.init			= esdm_aux_init,
-	.fini			= esdm_aux_fini,
-	.monitor_es		= NULL,
-	.get_ent		= esdm_aux_get_backtrack,
-	.curr_entropy		= esdm_aux_avail_entropy,
-	.max_entropy		= esdm_get_digestsize,
-	.state			= esdm_aux_es_state,
-	.reset			= esdm_aux_reset,
-	.active			= esdm_aux_active,
-	.switch_hash		= esdm_aux_switch_hash,
+	.name = "Auxiliary",
+	.init = esdm_aux_init,
+	.fini = esdm_aux_fini,
+	.monitor_es = NULL,
+	.get_ent = esdm_aux_get_backtrack,
+	.curr_entropy = esdm_aux_avail_entropy,
+	.max_entropy = esdm_get_digestsize,
+	.state = esdm_aux_es_state,
+	.reset = esdm_aux_reset,
+	.active = esdm_aux_active,
+	.switch_hash = esdm_aux_switch_hash,
 };

@@ -72,7 +72,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		} else {
-			printf("PASS: amount of client data requested matches received data (%zu)\n", len);
+			printf("PASS: amount of client data requested matches received data (%zu)\n",
+			       len);
 		}
 
 		if (len != esdm_test_shm_status_get_rpc_server_written()) {
@@ -82,7 +83,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		} else {
-			printf("PASS: amount of generated server data matches written data (%zu)\n", len);
+			printf("PASS: amount of generated server data matches written data (%zu)\n",
+			       len);
 		}
 		esdm_test_shm_status_reset();
 #endif

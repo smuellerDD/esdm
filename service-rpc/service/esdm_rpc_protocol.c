@@ -57,16 +57,15 @@ void esdm_rpc_free(void *allocator_data, void *data)
 
 void set_fd_nonblocking(int fd)
 {
-	int flags = fcntl (fd, F_GETFL);
+	int flags = fcntl(fd, F_GETFL);
 
 	if (flags >= 0)
-		fcntl (fd, F_SETFL, flags | O_NONBLOCK);
+		fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-int
-esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
-			      const struct esdm_rpc_proto_cs *received_data,
-			      const ProtobufCMessageDescriptor **desc)
+int esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
+				  const struct esdm_rpc_proto_cs *received_data,
+				  const ProtobufCMessageDescriptor **desc)
 {
 	const struct esdm_rpc_proto_cs_header *header = &received_data->header;
 	uint32_t method_index = header->method_index;
@@ -74,6 +73,6 @@ esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
 	if (method_index >= service->descriptor->n_methods)
 		return -EINVAL;
 
-   	*desc = service->descriptor->methods[method_index].input;
+	*desc = service->descriptor->methods[method_index].input;
 	return 0;
 }

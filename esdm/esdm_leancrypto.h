@@ -21,8 +21,7 @@
 #define ESDM_LEANCRYPTO_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 extern const struct esdm_hash_cb esdm_leancrypto_hash_cb;

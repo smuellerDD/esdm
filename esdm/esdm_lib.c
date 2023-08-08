@@ -92,7 +92,7 @@ void esdm_fini(void)
 }
 
 DSO_PUBLIC
-int esdm_init_monitor(void(*priv_init_completion)(void))
+int esdm_init_monitor(void (*priv_init_completion)(void))
 {
 	return esdm_es_mgr_monitor_initialize(priv_init_completion);
 }

@@ -42,7 +42,8 @@ static int reseed_ioctl(int fd, int exp)
 
 	ret = ioctl(fd, RNDRESEEDCRNG);
 	if (ret != exp) {
-		printf("RNDRESEEDCRNG IOCTL failed: expected result %d, returned result %d\n", exp, ret);
+		printf("RNDRESEEDCRNG IOCTL failed: expected result %d, returned result %d\n",
+		       exp, ret);
 		return 1;
 	}
 

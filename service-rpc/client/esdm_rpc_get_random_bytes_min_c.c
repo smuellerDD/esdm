@@ -42,7 +42,7 @@ esdm_rpcc_get_random_bytes_min_cb(const GetRandomBytesMinResponse *response,
 				  void *closure_data)
 {
 	struct esdm_get_random_bytes_min_buf *buffer =
-			(struct esdm_get_random_bytes_min_buf *)closure_data;
+		(struct esdm_get_random_bytes_min_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 

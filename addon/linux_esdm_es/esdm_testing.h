@@ -237,78 +237,110 @@ config LRNG_SCHED_PERF
 
 #ifdef CONFIG_ESDM_RAW_HIRES_ENTROPY
 bool esdm_raw_hires_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_HIRES_ENTROPY */
-static inline bool esdm_raw_hires_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_HIRES_ENTROPY */
+#else /* CONFIG_ESDM_RAW_HIRES_ENTROPY */
+static inline bool esdm_raw_hires_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_HIRES_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_JIFFIES_ENTROPY
 bool esdm_raw_jiffies_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_JIFFIES_ENTROPY */
-static inline bool esdm_raw_jiffies_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_JIFFIES_ENTROPY */
+#else /* CONFIG_ESDM_RAW_JIFFIES_ENTROPY */
+static inline bool esdm_raw_jiffies_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_JIFFIES_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_IRQ_ENTROPY
 bool esdm_raw_irq_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_IRQ_ENTROPY */
-static inline bool esdm_raw_irq_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_IRQ_ENTROPY */
+#else /* CONFIG_ESDM_RAW_IRQ_ENTROPY */
+static inline bool esdm_raw_irq_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_IRQ_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_RETIP_ENTROPY
 bool esdm_raw_retip_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_RETIP_ENTROPY */
-static inline bool esdm_raw_retip_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_RETIP_ENTROPY */
+#else /* CONFIG_ESDM_RAW_RETIP_ENTROPY */
+static inline bool esdm_raw_retip_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_RETIP_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_REGS_ENTROPY
 bool esdm_raw_regs_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_REGS_ENTROPY */
-static inline bool esdm_raw_regs_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_REGS_ENTROPY */
+#else /* CONFIG_ESDM_RAW_REGS_ENTROPY */
+static inline bool esdm_raw_regs_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_REGS_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_ARRAY
 bool esdm_raw_array_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_ARRAY */
-static inline bool esdm_raw_array_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_ARRAY */
+#else /* CONFIG_ESDM_RAW_ARRAY */
+static inline bool esdm_raw_array_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_ARRAY */
 
 #ifdef CONFIG_ESDM_IRQ_PERF
 bool esdm_perf_time(u32 start);
 #else /* CONFIG_ESDM_IRQ_PERF */
-static inline bool esdm_perf_time(u32 start) { return false; }
+static inline bool esdm_perf_time(u32 start)
+{
+	return false;
+}
 #endif /*CONFIG_ESDM_IRQ_PERF */
 
 #ifdef CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
 bool esdm_raw_sched_hires_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
-static inline bool
-esdm_raw_sched_hires_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
+#else /* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
+static inline bool esdm_raw_sched_hires_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_SCHED_PID_ENTROPY
 bool esdm_raw_sched_pid_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_SCHED_PID_ENTROPY */
-static inline bool
-esdm_raw_sched_pid_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_SCHED_PID_ENTROPY */
+#else /* CONFIG_ESDM_RAW_SCHED_PID_ENTROPY */
+static inline bool esdm_raw_sched_pid_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_SCHED_PID_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY
 bool esdm_raw_sched_starttime_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY */
-static inline bool
-esdm_raw_sched_starttime_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY */
+#else /* CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY */
+static inline bool esdm_raw_sched_starttime_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY
 bool esdm_raw_sched_nvcsw_entropy_store(u32 value);
-#else	/* CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY */
-static inline bool
-esdm_raw_sched_nvcsw_entropy_store(u32 value) { return false; }
-#endif	/* CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY */
+#else /* CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY */
+static inline bool esdm_raw_sched_nvcsw_entropy_store(u32 value)
+{
+	return false;
+}
+#endif /* CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY */
 
 #ifdef CONFIG_ESDM_SCHED_PERF
 bool esdm_sched_perf_time(u32 start);
 #else /* CONFIG_ESDM_SCHED_PERF */
-static inline bool esdm_sched_perf_time(u32 start) { return false; }
+static inline bool esdm_sched_perf_time(u32 start)
+{
+	return false;
+}
 #endif /*CONFIG_ESDM_SCHED_PERF */
 
 #ifdef ESDM_TESTING
@@ -318,8 +350,13 @@ void __exit esdm_test_exit(void);
 
 #else
 
-static inline int __init esdm_test_init(void) { return 0; }
-static inline void __exit esdm_test_exit(void) { }
+static inline int __init esdm_test_init(void)
+{
+	return 0;
+}
+static inline void __exit esdm_test_exit(void)
+{
+}
 
 #endif
 

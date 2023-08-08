@@ -14,9 +14,9 @@
 #include "esdm_hash_kcapi.h"
 
 enum esdm_internal_es {
-	esdm_int_es_irq,			/* Interrupt entropy source */
-	esdm_int_es_sched,			/* Scheduler entropy source */
-	esdm_int_es_last,			/* MUST be the last entry */
+	esdm_int_es_irq, /* Interrupt entropy source */
+	esdm_int_es_sched, /* Scheduler entropy source */
+	esdm_int_es_last, /* MUST be the last entry */
 };
 
 struct entropy_buf {
@@ -50,13 +50,14 @@ struct esdm_es_cb {
 };
 
 /* Cap to maximum entropy that can ever be generated with given hash */
-#define esdm_cap_requested(__digestsize_bits, __requested_bits)		\
-	do {								\
-		if (__digestsize_bits < __requested_bits) {		\
-			pr_debug("Cannot satisfy requested entropy %u due to insufficient hash size %u\n",\
-				 __requested_bits, __digestsize_bits);	\
-			__requested_bits = __digestsize_bits;		\
-		}							\
+#define esdm_cap_requested(__digestsize_bits, __requested_bits)                                           \
+	do {                                                                                              \
+		if (__digestsize_bits < __requested_bits) {                                               \
+			pr_debug(                                                                         \
+				"Cannot satisfy requested entropy %u due to insufficient hash size %u\n", \
+				__requested_bits, __digestsize_bits);                                     \
+			__requested_bits = __digestsize_bits;                                             \
+		}                                                                                         \
 	} while (0)
 
 #endif /* _ESDM_ES_MGR_CB_H */

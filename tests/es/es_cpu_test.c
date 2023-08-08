@@ -63,16 +63,16 @@ static int es_cpu_getdata(uint32_t expected_ent_level)
 
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(&zero, 0, sizeof(zero));
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es,
-					  ESDM_DRNG_INIT_SEED_SIZE_BITS,
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS,
 					  true);
-	if (eb_es.e_bits != esdm_fast_noise_entropylevel(
-				expected_ent_level,
-				ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
+	if (eb_es.e_bits !=
+	    esdm_fast_noise_entropylevel(expected_ent_level,
+					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
 		printf("ES CPU - fail: get_ent failed to deliver requested data (expected %u, received %u bits)\n",
-		        esdm_fast_noise_entropylevel(
-				expected_ent_level,
-				ESDM_DRNG_INIT_SEED_SIZE_BITS), eb_es.e_bits);
+		       esdm_fast_noise_entropylevel(
+			       expected_ent_level,
+			       ESDM_DRNG_INIT_SEED_SIZE_BITS),
+		       eb_es.e_bits);
 		return 1;
 	}
 	printf("ES CPU - pass: get_ent delivered requested entropy\n");
@@ -103,21 +103,19 @@ static int es_cpu_poolsize(uint32_t expected_ent_level)
 	esdm_config_es_cpu_entropy_rate_set(expected_ent_level);
 
 	ret = esdm_es[esdm_ext_es_cpu]->max_entropy();
-	if (ret != esdm_fast_noise_entropylevel(
-		expected_ent_level,
-		esdm_security_strength())) {
+	if (ret != esdm_fast_noise_entropylevel(expected_ent_level,
+						esdm_security_strength())) {
 		printf("ES CPU - fail: max_entropy failed: %d\n", ret);
 		return 1;
 	}
 	printf("ES CPU - pass: max_entropy: %d\n", ret);
 
-	if (expected_ent_level != esdm_fast_noise_entropylevel(
-		expected_ent_level,
-		esdm_security_strength())) {
+	if (expected_ent_level !=
+	    esdm_fast_noise_entropylevel(expected_ent_level,
+					 esdm_security_strength())) {
 		printf("ES CPU - fail: esdm_fast_noise_entropylevel returned unexpected value: %u\n",
-		       esdm_fast_noise_entropylevel(
-				expected_ent_level,
-				esdm_security_strength()));
+		       esdm_fast_noise_entropylevel(expected_ent_level,
+						    esdm_security_strength()));
 		return 1;
 	}
 	printf("ES CPU - pass: max_entropy shows expected value: %d\n", ret);

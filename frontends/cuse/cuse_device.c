@@ -66,9 +66,10 @@ static int esdm_cuse_shm_status_avail(void)
 
 	if (ret && !initialized) {
 		initialized = 1;
-		logger_status(LOGGER_C_CUSE,
-			      "CUSE client started detected ESDM server with properties:\n%s\n",
-			      esdm_cuse_shm_status->info);
+		logger_status(
+			LOGGER_C_CUSE,
+			"CUSE client started detected ESDM server with properties:\n%s\n",
+			esdm_cuse_shm_status->info);
 	}
 
 	return ret;
@@ -93,11 +94,10 @@ static int esdm_cuse_shm_status_create_shm(void)
 				 S_IRUSR | S_IRGRP | S_IROTH);
 	if (esdm_cuse_shmid < 0) {
 		if (errno == ENOENT) {
-			esdm_cuse_shmid = shmget(key,
-						 sizeof(struct esdm_shm_status),
-						 IPC_CREAT |
-						 S_IRUSR | S_IWUSR |
-						 S_IRGRP | S_IROTH);
+			esdm_cuse_shmid =
+				shmget(key, sizeof(struct esdm_shm_status),
+				       IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP |
+					       S_IROTH);
 			if (esdm_cuse_shmid < 0) {
 				errsv = errno;
 				logger(LOGGER_ERR, LOGGER_C_ANY,
@@ -147,7 +147,6 @@ static void esdm_cuse_shm_status_down(void)
 	if (sem_wait(esdm_cuse_semid))
 		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
 }
-
 
 static void esdm_cuse_shm_status_close_sem(void)
 {
@@ -406,8 +405,8 @@ static bool esdm_cuse_interrupt(void *data)
 }
 
 void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
-			     struct fuse_file_info *fi,
-			     get_func_t get, int fallback_fd)
+			     struct fuse_file_info *fi, get_func_t get,
+			     int fallback_fd)
 {
 	uint8_t tmpbuf[ESDM_RPC_MAX_DATA];
 	size_t cleansize = min_size(sizeof(tmpbuf), size);
@@ -427,7 +426,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 		size = sizeof(tmpbuf);
 	}
 
-//	while (size)
+	//	while (size)
 	{
 		size_t todo = min_size(sizeof(tmpbuf), size);
 
@@ -469,11 +468,10 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 		 */
 		ret = fuse_reply_buf(req, (const char *)tmpbuf, todo);
 
-
-// 		if (ret < 0)
-// 			goto out;
-//
-// 		size -= todo;
+		// 		if (ret < 0)
+		// 			goto out;
+		//
+		// 		size -= todo;
 	}
 
 out:
@@ -509,8 +507,8 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 	 */
 	if (ret < 0 && fallback_fd > -1) {
 		logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-			"Use fallback to provide data due to RPC error code %zd\n",
-			ret);
+		       "Use fallback to provide data due to RPC error code %zd\n",
+		       ret);
 		do {
 			ret = write(fallback_fd, buf, size);
 			written += (size_t)ret;
@@ -523,11 +521,9 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 		fuse_reply_write(req, written);
 }
 
-void esdm_cuse_ioctl(int backend_fd,
-		     fuse_req_t req, unsigned long cmd, void *arg,
-		     struct fuse_file_info *fi, unsigned flags,
-		     const void *in_buf, size_t in_bufsz,
-		     size_t out_bufsz)
+void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
+		     void *arg, struct fuse_file_info *fi, unsigned flags,
+		     const void *in_buf, size_t in_bufsz, size_t out_bufsz)
 {
 	const struct rand_pool_info *rpi;
 	uint32_t ent_count_bits;
@@ -598,18 +594,19 @@ void esdm_cuse_ioctl(int backend_fd,
 		rpi = (const struct rand_pool_info *)in_buf;
 
 		if (in_bufsz < sizeof(struct rand_pool_info)) {
-			struct iovec iov = {arg, sizeof(struct rand_pool_info)};
+			struct iovec iov = { arg,
+					     sizeof(struct rand_pool_info) };
 
 			fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
 		} else if (rpi->buf_size < 0) {
 			fuse_reply_err(req, EINVAL);
 		} else if ((size_t)rpi->buf_size !=
 			   in_bufsz - sizeof(struct rand_pool_info)) {
-				struct iovec iov = { arg,
-					sizeof(struct rand_pool_info) +
-					(size_t)rpi->buf_size};
+			struct iovec iov = { arg,
+					     sizeof(struct rand_pool_info) +
+						     (size_t)rpi->buf_size };
 
-				fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
+			fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
 		} else {
 			/*
 			 * This operation requires privileges. Thus, raise the
@@ -622,10 +619,9 @@ void esdm_cuse_ioctl(int backend_fd,
 			esdm_cuse_raise_privilege_transient(req);
 
 			esdm_invoke(esdm_rpcc_rnd_add_entropy_int(
-						(const uint8_t *)rpi->buf,
-						(size_t)rpi->buf_size,
-						(uint32_t)rpi->entropy_count,
-						req));
+				(const uint8_t *)rpi->buf,
+				(size_t)rpi->buf_size,
+				(uint32_t)rpi->entropy_count, req));
 
 			/* In case of an error, update the kernel */
 			if (ret) {
@@ -706,18 +702,19 @@ void esdm_cuse_ioctl(int backend_fd,
 		rpi = (const struct rand_pool_info *)in_buf;
 
 		if (in_bufsz < sizeof(struct rand_pool_info)) {
-			struct iovec iov = {arg, sizeof(struct rand_pool_info)};
+			struct iovec iov = { arg,
+					     sizeof(struct rand_pool_info) };
 
 			fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
 		} else if (rpi->buf_size < 0) {
 			fuse_reply_err(req, EINVAL);
 		} else if ((size_t)rpi->buf_size !=
 			   in_bufsz - sizeof(struct rand_pool_info)) {
-				struct iovec iov = { arg,
-					sizeof(struct rand_pool_info) +
-					(size_t)rpi->buf_size};
+			struct iovec iov = { arg,
+					     sizeof(struct rand_pool_info) +
+						     (size_t)rpi->buf_size };
 
-				fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
+			fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
 		} else {
 			/*
 			 * This operation requires privileges. Thus, raise the
@@ -750,7 +747,7 @@ void esdm_cuse_ioctl(int backend_fd,
  * Poll system call handler
  ******************************************************************************/
 
-#define ESDM_CUSE_MAX_PH			16
+#define ESDM_CUSE_MAX_PH 16
 struct esdm_cuse_poll {
 	uint64_t fh;
 	struct fuse_pollhandle *ph;
@@ -874,9 +871,8 @@ void esdm_cuse_init_done(void *userdata)
 	(void)userdata;
 
 	if (mount_src) {
-		if (chmod(mount_src, S_IRUSR | S_IWUSR |
-				     S_IRGRP | S_IWGRP |
-				     S_IROTH | S_IWOTH) < 0) {
+		if (chmod(mount_src, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
+					     S_IROTH | S_IWOTH) < 0) {
 			logger(LOGGER_ERR, LOGGER_C_CUSE,
 			       "Changing permissions to world-writeable failed: %s",
 			       strerror(errno));
@@ -902,53 +898,56 @@ out:
 }
 
 struct esdm_cuse_param {
-	unsigned int	major;
-	unsigned int	minor;
-	char		*dev_name;
-	char		*username;
-	unsigned int	verbosity;
-	int		is_help;
-	int		disable_fallback;
+	unsigned int major;
+	unsigned int minor;
+	char *dev_name;
+	char *username;
+	unsigned int verbosity;
+	int is_help;
+	int disable_fallback;
 };
 
-#define ESDM_CUSE_OPT(t, p) { t, offsetof(struct esdm_cuse_param, p), 1 }
+#define ESDM_CUSE_OPT(t, p)                                                    \
+	{                                                                      \
+		t, offsetof(struct esdm_cuse_param, p), 1                      \
+	}
 
 static const char *usage =
-"usage: esdm_cuse [options]\n"
-"\n"
-"options:\n"
-"    --help|-h               print this help message\n"
-"    --maj=MAJ|-M MAJ        device major number\n"
-"    --min=MIN|-m MIN        device minor number\n"
-"    --name=NAME|-n NAME     device name (mandatory)\n"
-"    --verbosity=NUM|-v NUM  verbosity level\n"
-"    --username=USER|-v USER unprivileged user name (default: \"nobody\")\n"
-"    -d   -o debug           enable debug output (implies -f)\n"
-"    -f                      foreground operation\n"
-"    -s                      disable multi-threaded operation\n"
-"\n";
+	"usage: esdm_cuse [options]\n"
+	"\n"
+	"options:\n"
+	"    --help|-h               print this help message\n"
+	"    --maj=MAJ|-M MAJ        device major number\n"
+	"    --min=MIN|-m MIN        device minor number\n"
+	"    --name=NAME|-n NAME     device name (mandatory)\n"
+	"    --verbosity=NUM|-v NUM  verbosity level\n"
+	"    --username=USER|-v USER unprivileged user name (default: \"nobody\")\n"
+	"    -d   -o debug           enable debug output (implies -f)\n"
+	"    -f                      foreground operation\n"
+	"    -s                      disable multi-threaded operation\n"
+	"\n";
 
 /* The CUSE code seems to have a conversion issue with FUSE_OPT_KEY */
 #pragma GCC diagnostic push
 #ifdef __clang__
-# pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
+#pragma GCC diagnostic ignored "-Wimplicit-int-conversion"
 #endif
 static const struct fuse_opt esdm_cuse_opts[] = {
-	ESDM_CUSE_OPT("-M %u",			major),
-	ESDM_CUSE_OPT("--maj=%u",		major),
-	ESDM_CUSE_OPT("-m %u",			minor),
-	ESDM_CUSE_OPT("--min=%u",		minor),
-	ESDM_CUSE_OPT("-n %s",			dev_name),
-	ESDM_CUSE_OPT("--name=%s",		dev_name),
-	ESDM_CUSE_OPT("-v %u",			verbosity),
-	ESDM_CUSE_OPT("--verbosity=%u"	,	verbosity),
-	ESDM_CUSE_OPT("-u %s",			username),
-	ESDM_CUSE_OPT("--username %s",		username),
+	ESDM_CUSE_OPT("-M %u", major),
+	ESDM_CUSE_OPT("--maj=%u", major),
+	ESDM_CUSE_OPT("-m %u", minor),
+	ESDM_CUSE_OPT("--min=%u", minor),
+	ESDM_CUSE_OPT("-n %s", dev_name),
+	ESDM_CUSE_OPT("--name=%s", dev_name),
+	ESDM_CUSE_OPT("-v %u", verbosity),
+	ESDM_CUSE_OPT("--verbosity=%u", verbosity),
+	ESDM_CUSE_OPT("-u %s", username),
+	ESDM_CUSE_OPT("--username %s", username),
 #ifdef ESDM_TESTMODE
-	ESDM_CUSE_OPT("--disable_fallback=%d",	disable_fallback),
+	ESDM_CUSE_OPT("--disable_fallback=%d", disable_fallback),
 #endif
-	FUSE_OPT_KEY("-h",		0),
-	FUSE_OPT_KEY("--help",		0),
+	FUSE_OPT_KEY("-h", 0),
+	FUSE_OPT_KEY("--help", 0),
 	FUSE_OPT_END
 };
 #pragma GCC diagnostic pop
@@ -972,8 +971,7 @@ static int esdm_cuse_process_arg(void *data, const char *arg, int key,
 }
 
 int main_common(const char *devname, const char *target,
-		const struct cuse_lowlevel_ops *clop,
-		int argc, char **argv)
+		const struct cuse_lowlevel_ops *clop, int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0 };
@@ -1035,9 +1033,9 @@ int main_common(const char *devname, const char *target,
 	}
 
 	CKINT_LOG(esdm_rpcc_init_unpriv_service(esdm_cuse_interrupt),
-                  "Initialization of dispatcher failed\n");
+		  "Initialization of dispatcher failed\n");
 	CKINT_LOG(esdm_rpcc_init_priv_service(esdm_cuse_interrupt),
-                  "Initialization of dispatcher failed\n");
+		  "Initialization of dispatcher failed\n");
 
 	/* Enter PID namespace */
 	CKINT(linux_isolate_namespace_prefork());

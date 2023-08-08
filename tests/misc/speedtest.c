@@ -55,9 +55,9 @@ struct opts {
 static inline void cpusetup(void)
 {
 #ifdef __X8664___
-	asm volatile("cpuid"::"a" (0), "c" (0): "memory");
-	asm volatile("cpuid"::"a" (0), "c" (0): "memory");
-	asm volatile("cpuid"::"a" (0), "c" (0): "memory");
+	asm volatile("cpuid" ::"a"(0), "c"(0) : "memory");
+	asm volatile("cpuid" ::"a"(0), "c"(0) : "memory");
+	asm volatile("cpuid" ::"a"(0), "c"(0) : "memory");
 #endif
 }
 
@@ -82,7 +82,6 @@ static inline void end_time(struct timespec *ts)
 {
 	get_nstime(ts);
 }
-
 
 /*
  * Convert an integer value into a string value that displays the integer
@@ -115,8 +114,8 @@ static void bytes2string(uint64_t bytes, uint64_t ns, char *str, size_t strlen)
 	str[strlen - 1] = '\0';
 }
 
-static int print_status(struct opts *opts,
-			uint64_t processed_bytes, uint64_t totaltime)
+static int print_status(struct opts *opts, uint64_t processed_bytes,
+			uint64_t totaltime)
 {
 #define VALLEN 20
 	char byteseconds[VALLEN + 1];
@@ -171,7 +170,7 @@ out:
 
 int main(int argc, char *argv[])
 {
-#define MAXLEN	16
+#define MAXLEN 16
 	struct opts opts;
 	size_t buflens[MAXLEN];
 	unsigned int i, lens = 0;
@@ -180,33 +179,28 @@ int main(int argc, char *argv[])
 	opts.exectime = 2;
 	opts.buflen = 4096;
 
-	while (1)
-	{
+	while (1) {
 		int opt_index = 0;
-		static struct option options[] =
-		{
-			{"exectime", 1, 0, 'e'},
-			{"buflen", 1, 0, 'b'},
-			{0, 0, 0, 0}
-		};
+		static struct option options[] = { { "exectime", 1, 0, 'e' },
+						   { "buflen", 1, 0, 'b' },
+						   { 0, 0, 0, 0 } };
 		c = getopt_long(argc, argv, "e:b:", options, &opt_index);
-		if(-1 == c)
+		if (-1 == c)
 			break;
-		switch (c)
-		{
-			case 'e':
-				opts.exectime = strtoul(optarg, NULL, 10);
-				if (opts.exectime == ULONG_MAX)
-					return -EINVAL;
-				break;
-			case 'b':
-				buflens[lens] = strtoul(optarg, NULL, 10);
-				lens++;
-				if (lens >= MAXLEN)
-					return -EINVAL;
-				break;
-			default:
+		switch (c) {
+		case 'e':
+			opts.exectime = strtoul(optarg, NULL, 10);
+			if (opts.exectime == ULONG_MAX)
 				return -EINVAL;
+			break;
+		case 'b':
+			buflens[lens] = strtoul(optarg, NULL, 10);
+			lens++;
+			if (lens >= MAXLEN)
+				return -EINVAL;
+			break;
+		default:
+			return -EINVAL;
 		}
 	}
 

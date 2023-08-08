@@ -57,7 +57,7 @@ static int read_random(const char *path, uint8_t *buf, size_t buflen)
 	int fd;
 	int ret = 0;
 
-	fd = open(path, O_RDONLY|O_CLOEXEC);
+	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (0 > fd)
 		return fd;
 
@@ -65,7 +65,6 @@ static int read_random(const char *path, uint8_t *buf, size_t buflen)
 	close(fd);
 	return ret;
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -111,5 +110,4 @@ int main(int argc, char *argv[])
 out:
 	env_fini();
 	return ret;
-
 }

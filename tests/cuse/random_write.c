@@ -58,7 +58,7 @@ static int write_random(const char *path, uint8_t *buf, size_t buflen)
 	int fd;
 	int ret = 0;
 
-	fd = open(path, O_WRONLY|O_CLOEXEC);
+	fd = open(path, O_WRONLY | O_CLOEXEC);
 	if (0 > fd)
 		return fd;
 
@@ -99,7 +99,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		} else {
-			printf("PASS: amount of client data written matches written data (%zu)\n", len);
+			printf("PASS: amount of client data written matches written data (%zu)\n",
+			       len);
 		}
 
 		if (len != esdm_test_shm_status_get_rpc_server_written()) {
@@ -109,7 +110,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		} else {
-			printf("PASS: amount of server data written matches written data (%zu)\n", len);
+			printf("PASS: amount of server data written matches written data (%zu)\n",
+			       len);
 		}
 		esdm_test_shm_status_reset();
 #endif
@@ -121,5 +123,4 @@ int main(int argc, char *argv[])
 out:
 	env_fini();
 	return ret;
-
 }

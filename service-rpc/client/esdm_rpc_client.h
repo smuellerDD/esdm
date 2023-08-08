@@ -30,8 +30,7 @@
 #include "queue.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 enum {
@@ -219,7 +218,6 @@ int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
  *	    was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen);
-
 
 /**
  * @brief See esdm_rpcc_get_random_bytes_full
@@ -607,14 +605,14 @@ int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data);
  * This macro is intended to be used with the RPC calls above to repeat a call
  * when the connection cannot be initially established.
  */
-#define esdm_invoke(x)							       \
-	do {								       \
-		unsigned int __ctr = 0;					       \
-									       \
-		do {							       \
-			ret = x;					       \
-		} while (ret == -EINTR && __ctr++ < 5);			       \
-	} while(0)
+#define esdm_invoke(x)                                                         \
+	do {                                                                   \
+		unsigned int __ctr = 0;                                        \
+                                                                               \
+		do {                                                           \
+			ret = x;                                               \
+		} while (ret == -EINTR && __ctr++ < 5);                        \
+	} while (0)
 
 #ifdef __cplusplus
 }

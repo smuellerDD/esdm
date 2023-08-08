@@ -23,16 +23,21 @@
 #include "config.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #ifdef ESDM_LINUX
 int linux_isolate_namespace(void);
 int linux_isolate_namespace_prefork(void);
 #else
-static inline int linux_isolate_namespace(void) { return 0; }
-static inline int linux_isolate_namespace_prefork(void) { return 0; }
+static inline int linux_isolate_namespace(void)
+{
+	return 0;
+}
+static inline int linux_isolate_namespace_prefork(void)
+{
+	return 0;
+}
 #endif
 
 #ifdef __cplusplus

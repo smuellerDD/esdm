@@ -60,7 +60,6 @@ int drop_privileges_permanent(const char *user)
 		       "Cannot clear supplemental groups: %s\n",
 		       strerror(errno));
 		return ret;
-
 	}
 
 	/* Drop privileged group */

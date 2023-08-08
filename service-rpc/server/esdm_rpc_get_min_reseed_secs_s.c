@@ -33,5 +33,5 @@ void esdm_rpc_get_min_reseed_secs(UnprivAccess_Service *service,
 
 	response.seconds = esdm_get_reseed_max_time();
 	response.ret = 0;
-	closure (&response, closure_data);
+	closure(&response, closure_data);
 }

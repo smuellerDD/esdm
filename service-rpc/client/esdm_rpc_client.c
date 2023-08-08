@@ -70,8 +70,8 @@ static int
 esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 {
 	const char *socketname = rpc_conn->socketname;
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U<<28 };
-	struct timeval tv = { .tv_sec = 0, .tv_usec = (ts.tv_nsec)>>10 };
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 28 };
+	struct timeval tv = { .tv_sec = 0, .tv_usec = (ts.tv_nsec) >> 10 };
 	struct stat statbuf;
 	struct sockaddr_un addr;
 	unsigned int attempts = 0;
@@ -96,8 +96,7 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 	}
 
 	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		"Attempting to access ESDM server interface %s\n",
-		socketname);
+	       "Attempting to access ESDM server interface %s\n", socketname);
 
 	/* Connect to the Unix domain socket */
 	addr.sun_family = AF_UNIX;
@@ -106,16 +105,16 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-			"Error creating socket: %s\n", strerror(errsv));
+		logger(LOGGER_ERR, LOGGER_C_RPC, "Error creating socket: %s\n",
+		       strerror(errsv));
 		return -errsv;
 	}
 
 	/* Set timeout on socket */
-	if (setsockopt(rpc_conn->fd, SOL_SOCKET, SO_RCVTIMEO,
-		       (const char*)&tv, sizeof(tv)) < 0 ||
-	    setsockopt(rpc_conn->fd, SOL_SOCKET, SO_SNDTIMEO,
-		       (const char*)&tv, sizeof(tv)) < 0) {
+	if (setsockopt(rpc_conn->fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv,
+		       sizeof(tv)) < 0 ||
+	    setsockopt(rpc_conn->fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv,
+		       sizeof(tv)) < 0) {
 		errsv = errno;
 
 		logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -140,8 +139,8 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 		} else {
 			errsv = 0;
 		}
-	} while (attempts < 10 && (errsv == EAGAIN || errsv == ECONNREFUSED ||
-				   errsv == EINTR));
+	} while (attempts < 10 &&
+		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR));
 
 	if (errsv) {
 		logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -192,11 +191,10 @@ esdm_rpc_client_write_data(struct esdm_rpc_client_connection *rpc_conn,
 	return 0;
 }
 
-static void
-esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
-			   const uint8_t *data)
+static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
+					const uint8_t *data)
 {
-	struct esdm_rpcc_write_buf *buf = (struct esdm_rpcc_write_buf *) buffer;
+	struct esdm_rpcc_write_buf *buf = (struct esdm_rpcc_write_buf *)buffer;
 	int ret = esdm_rpc_client_write_data(buf->rpc_conn, data, len);
 
 	if (ret < 0)
@@ -205,10 +203,9 @@ esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 		       ret);
 }
 
-static int
-esdm_rpc_client_pack(const ProtobufCMessage *message,
-		     unsigned int method_index,
-		     struct esdm_rpc_client_connection *rpc_conn)
+static int esdm_rpc_client_pack(const ProtobufCMessage *message,
+				unsigned int method_index,
+				struct esdm_rpc_client_connection *rpc_conn)
 {
 	struct esdm_rpc_proto_cs_header cs_header;
 	struct esdm_rpcc_write_buf tmp = { 0 };
@@ -228,8 +225,7 @@ esdm_rpc_client_pack(const ProtobufCMessage *message,
 	       cs_header.message_length, cs_header.method_index,
 	       cs_header.request_id);
 
-	CKINT_LOG(esdm_rpc_client_write_data(rpc_conn,
-					     (uint8_t *)&cs_header,
+	CKINT_LOG(esdm_rpc_client_write_data(rpc_conn, (uint8_t *)&cs_header,
 					     sizeof(cs_header)),
 		  "Submission of header data failed with error %d\n", ret);
 
@@ -257,10 +253,10 @@ esdm_rpc_client_read_handler(struct esdm_rpc_client_connection *rpc_conn,
 	BUFFER_INIT(tls);
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)]
-						__aligned(sizeof(uint64_t));
-	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128]
-						__aligned(sizeof(uint64_t));
+	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)] __aligned(
+		sizeof(uint64_t));
+	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128] __aligned(
+		sizeof(uint64_t));
 	size_t total_received = 0;
 	ssize_t received;
 	uint32_t data_to_fetch = 0;
@@ -280,15 +276,15 @@ esdm_rpc_client_read_handler(struct esdm_rpc_client_connection *rpc_conn,
 
 	/* Read the data into the local buffer storage */
 	do {
-		received = read(rpc_conn->fd, buf_p,
-				sizeof(buf) - total_received);
+		received =
+			read(rpc_conn->fd, buf_p, sizeof(buf) - total_received);
 		if (received < 0) {
 			/* Handle a read timeout due to SO_RCVTIMEO */
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				/* Does the caller wants us to interrupt? */
 				if (rpc_conn->interrupt_func &&
 				    rpc_conn->interrupt_func(
-					rpc_conn->interrupt_data)) {
+					    rpc_conn->interrupt_data)) {
 					interrupted = true;
 					break;
 				}
@@ -402,10 +398,10 @@ out:
 	return ret;
 }
 
-static void
-esdm_client_invoke(ProtobufCService *service, unsigned int method_index,
-                   const ProtobufCMessage *input, ProtobufCClosure closure,
-                   void *closure_data)
+static void esdm_client_invoke(ProtobufCService *service,
+			       unsigned int method_index,
+			       const ProtobufCMessage *input,
+			       ProtobufCClosure closure, void *closure_data)
 {
 	const ProtobufCServiceDescriptor *desc = service->descriptor;
 	const ProtobufCMethodDescriptor *method = desc->methods + method_index;
@@ -456,8 +452,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	CKNULL(rpc_conn, -EINVAL);
 	service = &rpc_conn->service;
 
-	strncpy(rpc_conn->socketname, socketname,
-		sizeof(rpc_conn->socketname));
+	strncpy(rpc_conn->socketname, socketname, sizeof(rpc_conn->socketname));
 	rpc_conn->socketname[sizeof(rpc_conn->socketname) - 1] = '\0';
 	rpc_conn->interrupt_func = interrupt_func;
 
@@ -494,11 +489,10 @@ static uint32_t esdm_rpcc_get_online_nodes(void)
 
 static uint32_t esdm_rpcc_curr_node(void)
 {
-        return (esdm_curr_node() % esdm_rpcc_max_nodes);
+	return (esdm_curr_node() % esdm_rpcc_max_nodes);
 }
 
-static void
-esdm_rpcc_fini_service(struct esdm_rpc_client_connection **rpc_conn)
+static void esdm_rpcc_fini_service(struct esdm_rpc_client_connection **rpc_conn)
 {
 	struct esdm_rpc_client_connection *rpc_conn_array = *rpc_conn;
 	struct esdm_rpc_client_connection *rpc_conn_p = rpc_conn_array;
@@ -528,11 +522,10 @@ esdm_rpcc_fini_service(struct esdm_rpc_client_connection **rpc_conn)
 	*rpc_conn = NULL;
 }
 
-static int
-esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
-		       const char *socketname,
-		       esdm_rpcc_interrupt_func_t interrupt_func,
-		       struct esdm_rpc_client_connection **rpc_conn)
+static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
+				  const char *socketname,
+				  esdm_rpcc_interrupt_func_t interrupt_func,
+				  struct esdm_rpc_client_connection **rpc_conn)
 {
 	struct esdm_rpc_client_connection *tmp, *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
@@ -600,8 +593,7 @@ out:
 	return ret;
 }
 
-static void
-esdm_rpcc_put_service(struct esdm_rpc_client_connection *rpc_conn)
+static void esdm_rpcc_put_service(struct esdm_rpc_client_connection *rpc_conn)
 {
 	if (!rpc_conn)
 		return;

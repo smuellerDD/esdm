@@ -25,8 +25,7 @@
 #include "memset_secure.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 struct lc_hash_state;
@@ -46,20 +45,19 @@ struct lc_hash_ctx {
 	struct lc_hash_state *hash_state;
 };
 
-#define LC_ALIGNED_BUFFER(name, size, type)				       \
-	type name[(size + sizeof(type)-1) / sizeof(type)]		       \
-					__attribute__((aligned(sizeof(type))))
+#define LC_ALIGNED_BUFFER(name, size, type)                                    \
+	type name[(size + sizeof(type) - 1) / sizeof(type)]                    \
+		__attribute__((aligned(sizeof(type))))
 
-#define LC_SHA_MAX_SIZE_DIGEST	64
-#define LC_HASH_STATE_SIZE(x)	(x->statesize)
-#define LC_HASH_CTX_SIZE(x)	(sizeof(struct lc_hash_ctx) +		       \
-				 LC_HASH_STATE_SIZE(x))
+#define LC_SHA_MAX_SIZE_DIGEST 64
+#define LC_HASH_STATE_SIZE(x) (x->statesize)
+#define LC_HASH_CTX_SIZE(x) (sizeof(struct lc_hash_ctx) + LC_HASH_STATE_SIZE(x))
 
-#define _LC_HASH_SET_CTX(name, hashname, ctx, offset)			       \
+#define _LC_HASH_SET_CTX(name, hashname, ctx, offset)                          \
 	name->hash_state = (struct lc_hash_state *)((uint8_t *)ctx + offset);  \
-        name->hash = hashname
+	name->hash = hashname
 
-#define LC_HASH_SET_CTX(name, hashname)					       \
+#define LC_HASH_SET_CTX(name, hashname)                                        \
 	_LC_HASH_SET_CTX(name, hashname, name, sizeof(struct lc_hash_ctx))
 
 /**
@@ -86,8 +84,8 @@ static inline void lc_hash_init(struct lc_hash_ctx *hash_ctx)
  * @param [in] in Buffer holding the data whose MAC shall be calculated
  * @param [in] inlen Length of the input buffer
  */
-static inline void
-lc_hash_update(struct lc_hash_ctx *hash_ctx, const uint8_t *in, size_t inlen)
+static inline void lc_hash_update(struct lc_hash_ctx *hash_ctx,
+				  const uint8_t *in, size_t inlen)
 {
 	const struct lc_hash *hash = hash_ctx->hash;
 
@@ -139,7 +137,7 @@ static inline void lc_hash_final(struct lc_hash_ctx *hash_ctx, uint8_t *digest)
  * @param [in] digestsize Size of the requested digest.
  */
 static inline void lc_hash_set_digestsize(struct lc_hash_ctx *hash_ctx,
-				          size_t digestsize)
+					  size_t digestsize)
 {
 	const struct lc_hash *hash = hash_ctx->hash;
 
@@ -189,11 +187,11 @@ static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
  * @param [in] hashname Pointer of type struct hash referencing the hash
  *			 implementation to be used
  */
-#define LC_HASH_CTX_ON_STACK(name, hashname)				       \
-	LC_ALIGNED_BUFFER(name ## _ctx_buf, LC_HASH_CTX_SIZE(hashname),        \
-			  uint64_t);					       \
-	struct lc_hash_ctx *name = (struct lc_hash_ctx *) name ## _ctx_buf;    \
-	LC_HASH_SET_CTX(name, hashname);				       \
+#define LC_HASH_CTX_ON_STACK(name, hashname)                                   \
+	LC_ALIGNED_BUFFER(name##_ctx_buf, LC_HASH_CTX_SIZE(hashname),          \
+			  uint64_t);                                           \
+	struct lc_hash_ctx *name = (struct lc_hash_ctx *)name##_ctx_buf;       \
+	LC_HASH_SET_CTX(name, hashname);                                       \
 	lc_hash_zero(name)
 
 /**
@@ -225,9 +223,8 @@ void lc_hash_zero_free(struct lc_hash_ctx *hash_ctx);
  *
  * The hash calculation operates entirely on the stack.
  */
-static inline void lc_hash(const struct lc_hash *hash,
-			   const uint8_t *in, size_t inlen,
-			   uint8_t *digest)
+static inline void lc_hash(const struct lc_hash *hash, const uint8_t *in,
+			   size_t inlen, uint8_t *digest)
 {
 	LC_HASH_CTX_ON_STACK(hash_ctx, hash);
 

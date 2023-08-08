@@ -131,10 +131,10 @@ static int esdm_sched_initialize(void)
 		fd = open("/dev/esdm_es", O_RDONLY);
 
 	if (fd < 0) {
-		logger(esdm_config_es_sched_retry() ?
-		       LOGGER_VERBOSE : LOGGER_WARN, LOGGER_C_ES,
-		       "Disabling scheduler-based entropy source which is not present in kernel\n")
-		return 0;
+		logger(esdm_config_es_sched_retry() ? LOGGER_VERBOSE :
+						      LOGGER_WARN,
+		       LOGGER_C_ES,
+		       "Disabling scheduler-based entropy source which is not present in kernel\n") return 0;
 	}
 
 	ret = ioctl(fd, ESDM_SCHED_ENT_BUF_SIZE, &status);
@@ -206,7 +206,7 @@ static int esdm_sched_seed_monitor(void)
 
 	if (ent >= esdm_config_es_sched_entropy_rate()) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
-			"Full entropy of scheduler ES detected\n");
+		       "Full entropy of scheduler ES detected\n");
 		esdm_es_add_entropy();
 		esdm_test_seed_entropy(ent);
 	}
@@ -249,7 +249,6 @@ static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 	esdm_sched_set_requested_bits(requested_bits);
 
-
 	esdm_kernel_read(eb_es, esdm_sched_entropy_fd, ioctl_cmd,
 			 esdm_sched_data_size, esdm_es_sched.name);
 
@@ -268,8 +267,7 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 
 		esdm_sched_set_entropy_rate(esdm_sched_requested_bits_set);
 
-		ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_STATUS,
-			    status_p);
+		ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_STATUS, status_p);
 		if (ret < 0) {
 			snprintf(buf, buflen,
 				 " failure in reading kernel status\n");
@@ -304,15 +302,15 @@ static bool esdm_sched_active(void)
 }
 
 struct esdm_es_cb esdm_es_sched = {
-	.name			= "Scheduler",
-	.init			= esdm_sched_initialize,
-	.fini			= esdm_sched_finalize,
-	.monitor_es		= esdm_sched_seed_monitor,
-	.get_ent		= esdm_sched_get,
-	.curr_entropy		= esdm_sched_entropylevel,
-	.max_entropy		= esdm_sched_poolsize,
-	.state			= esdm_sched_es_state,
-	.reset			= esdm_sched_reset,
-	.active			= esdm_sched_active,
-	.switch_hash		= NULL,
+	.name = "Scheduler",
+	.init = esdm_sched_initialize,
+	.fini = esdm_sched_finalize,
+	.monitor_es = esdm_sched_seed_monitor,
+	.get_ent = esdm_sched_get,
+	.curr_entropy = esdm_sched_entropylevel,
+	.max_entropy = esdm_sched_poolsize,
+	.state = esdm_sched_es_state,
+	.reset = esdm_sched_reset,
+	.active = esdm_sched_active,
+	.switch_hash = NULL,
 };

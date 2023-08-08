@@ -61,7 +61,8 @@ static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
 	if (!drngs)
 		return;
 
-	for_each_online_node(node) {
+	for_each_online_node(node)
+	{
 		struct esdm_drng *drng = drngs[node];
 
 		if (drng == esdm_drng_init)
@@ -100,7 +101,8 @@ void esdm_drngs_node_alloc(void)
 	if (!drngs)
 		goto unlock;
 
-	for_each_online_node(node) {
+	for_each_online_node(node)
+	{
 		struct esdm_drng *drng;
 
 		if (!init_drng_used) {

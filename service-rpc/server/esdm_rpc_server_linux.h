@@ -23,14 +23,16 @@
 #include "config.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #ifdef ESDM_ES_IRQ
 int esdm_rpcs_linux_init_feeder(void);
 #else
-static inline int esdm_rpcs_linux_init_feeder(void) { return 0; }
+static inline int esdm_rpcs_linux_init_feeder(void)
+{
+	return 0;
+}
 #endif
 
 #ifdef __cplusplus

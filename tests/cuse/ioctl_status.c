@@ -61,7 +61,7 @@ static int test_ioctl(const char *path)
 		return -ret;
 	}
 
-	ret  = status_ioctl(fd);
+	ret = status_ioctl(fd);
 
 	if (fd >= 0)
 		close(fd);

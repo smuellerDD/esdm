@@ -57,10 +57,11 @@ static OSSL_FUNC_rand_gettable_ctx_params_fn esdm_rand_gettable_ctx_params;
 static OSSL_FUNC_rand_get_ctx_params_fn esdm_rand_get_ctx_params;
 
 static void *esdm_rand_newctx(void *provctx, void *parent __unused,
-                              const OSSL_DISPATCH *parent_calls __unused)
+			      const OSSL_DISPATCH *parent_calls __unused)
 {
 	struct esdm_provider_ctx *cprov = provctx;
-	struct esdm_rand_ctx *rand = OPENSSL_secure_zalloc(sizeof(struct esdm_rand_ctx));
+	struct esdm_rand_ctx *rand =
+		OPENSSL_secure_zalloc(sizeof(struct esdm_rand_ctx));
 
 	if (rand == NULL) {
 		goto err;
@@ -86,24 +87,24 @@ static void esdm_rand_freectx(void *ctx)
 }
 
 static int esdm_rand_instantiate(void *ctx __unused,
-								unsigned int strength __unused,
-								int prediction_resistance __unused,
-								const unsigned char *pstr __unused,
-								size_t pstr_len __unused,
-								const OSSL_PARAM params[] __unused)
+				 unsigned int strength __unused,
+				 int prediction_resistance __unused,
+				 const unsigned char *pstr __unused,
+				 size_t pstr_len __unused,
+				 const OSSL_PARAM params[] __unused)
 {
-  return 1;
+	return 1;
 }
 
 static int esdm_rand_uninstantiate(void *ctx __unused)
 {
-  return 1;
+	return 1;
 }
 
 static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
-							  size_t outlen, unsigned int strength __unused,
-							  int prediction_resistance,
-							  const unsigned char *addin, size_t addin_len)
+			      size_t outlen, unsigned int strength __unused,
+			      int prediction_resistance,
+			      const unsigned char *addin, size_t addin_len)
 {
 	ssize_t ret;
 
@@ -111,9 +112,9 @@ static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 		goto err;
 
 	if (addin && addin_len > 0) {
-	esdm_invoke(esdm_rpcc_write_data(addin, addin_len));
-	if (ret != 0)
-		goto err;
+		esdm_invoke(esdm_rpcc_write_data(addin, addin_len));
+		if (ret != 0)
+			goto err;
 	}
 
 	if (prediction_resistance) {
@@ -131,9 +132,9 @@ err:
 }
 
 static int esdm_rand_reseed(void *ctx __unused,
-							int prediction_resistance __unused,
-							const unsigned char *ent, size_t ent_len,
-							const unsigned char *addin, size_t addin_len)
+			    int prediction_resistance __unused,
+			    const unsigned char *ent, size_t ent_len,
+			    const unsigned char *addin, size_t addin_len)
 {
 	ssize_t ret;
 
@@ -147,8 +148,8 @@ static int esdm_rand_reseed(void *ctx __unused,
 }
 
 static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
-							  unsigned int outlen, size_t min_noncelen __unused,
-							  size_t max_noncelen __unused)
+			      unsigned int outlen, size_t min_noncelen __unused,
+			      size_t max_noncelen __unused)
 {
 	ssize_t ret;
 
@@ -164,10 +165,10 @@ static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
 }
 
 static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
-								 int entropy_bits, size_t min_len __unused,
-								 size_t max_len __unused,
-								 int prediction_resistance __unused,
-								 const unsigned char *addin, size_t addin_len)
+				 int entropy_bits, size_t min_len __unused,
+				 size_t max_len __unused,
+				 int prediction_resistance __unused,
+				 const unsigned char *addin, size_t addin_len)
 {
 	const size_t entropy_buffer_size = 2048;
 	struct esdm_seed_buffer {
@@ -181,14 +182,14 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 	ssize_t ret;
 
 	if (entropy_buffer_size < min_len)
-	goto err;
+		goto err;
 	if (entropy_buffer_size >= max_len)
-	goto err;
+		goto err;
 
 	if (addin && addin_len > 0) {
 		esdm_invoke(esdm_rpcc_write_data(addin, addin_len));
-	if (ret != 0)
-		goto err;
+		if (ret != 0)
+			goto err;
 	}
 
 	seed_buffer = OPENSSL_secure_zalloc(seed_buffer_size);
@@ -212,7 +213,7 @@ err:
 }
 
 static void esdm_rand_clear_seed(void *ctx __unused, unsigned char *buffer,
-								 size_t b_len)
+				 size_t b_len)
 {
 	OPENSSL_secure_clear_free(buffer, b_len);
 }
@@ -249,13 +250,12 @@ static void esdm_rand_unlock(void *ctx)
 }
 
 static const OSSL_PARAM *esdm_rand_gettable_ctx_params(void *ctx __unused,
-                                                       void *provctx __unused)
+						       void *provctx __unused)
 {
 	static const OSSL_PARAM known_gettable_ctx_params[] = {
 		OSSL_PARAM_size_t(OSSL_RAND_PARAM_MAX_REQUEST, 0),
 		OSSL_PARAM_uint(OSSL_RAND_PARAM_STRENGTH, 0),
-		OSSL_PARAM_int(OSSL_RAND_PARAM_STATE, 0),
-		OSSL_PARAM_END
+		OSSL_PARAM_int(OSSL_RAND_PARAM_STATE, 0), OSSL_PARAM_END
 	};
 	return known_gettable_ctx_params;
 }
@@ -284,30 +284,34 @@ static int esdm_rand_get_ctx_params(void *ctx __unused, OSSL_PARAM params[])
 
 const OSSL_DISPATCH esdm_rand_functions[] = {
 	/* Context management */
-	{OSSL_FUNC_RAND_NEWCTX, (void (*)(void))esdm_rand_newctx},
-	{OSSL_FUNC_RAND_FREECTX, (void (*)(void))esdm_rand_freectx},
+	{ OSSL_FUNC_RAND_NEWCTX, (void (*)(void))esdm_rand_newctx },
+	{ OSSL_FUNC_RAND_FREECTX, (void (*)(void))esdm_rand_freectx },
 	/* Random number generator functions: NIST */
-	{OSSL_FUNC_RAND_INSTANTIATE, (void (*)(void))esdm_rand_instantiate},
-	{OSSL_FUNC_RAND_UNINSTANTIATE, (void (*)(void))esdm_rand_uninstantiate},
-	{OSSL_FUNC_RAND_GENERATE, (void (*)(void))esdm_rand_generate},
-	{OSSL_FUNC_RAND_RESEED, (void (*)(void))esdm_rand_reseed},
+	{ OSSL_FUNC_RAND_INSTANTIATE, (void (*)(void))esdm_rand_instantiate },
+	{ OSSL_FUNC_RAND_UNINSTANTIATE,
+	  (void (*)(void))esdm_rand_uninstantiate },
+	{ OSSL_FUNC_RAND_GENERATE, (void (*)(void))esdm_rand_generate },
+	{ OSSL_FUNC_RAND_RESEED, (void (*)(void))esdm_rand_reseed },
 	/* Random number generator functions: additional */
-	{OSSL_FUNC_RAND_NONCE, (void (*)(void))esdm_rand_nonce},
-	{OSSL_FUNC_RAND_GET_SEED, (void (*)(void))esdm_rand_get_seed},
-	{OSSL_FUNC_RAND_CLEAR_SEED, (void (*)(void))esdm_rand_clear_seed},
-	{OSSL_FUNC_RAND_VERIFY_ZEROIZATION, (void (*)(void))esdm_rand_verify_zeroization},
+	{ OSSL_FUNC_RAND_NONCE, (void (*)(void))esdm_rand_nonce },
+	{ OSSL_FUNC_RAND_GET_SEED, (void (*)(void))esdm_rand_get_seed },
+	{ OSSL_FUNC_RAND_CLEAR_SEED, (void (*)(void))esdm_rand_clear_seed },
+	{ OSSL_FUNC_RAND_VERIFY_ZEROIZATION,
+	  (void (*)(void))esdm_rand_verify_zeroization },
 	/* Context Locking */
-	{OSSL_FUNC_RAND_ENABLE_LOCKING, (void (*)(void))esdm_rand_enable_locking},
-	{OSSL_FUNC_RAND_LOCK, (void (*)(void))esdm_rand_lock},
-	{OSSL_FUNC_RAND_UNLOCK, (void (*)(void))esdm_rand_unlock},
+	{ OSSL_FUNC_RAND_ENABLE_LOCKING,
+	  (void (*)(void))esdm_rand_enable_locking },
+	{ OSSL_FUNC_RAND_LOCK, (void (*)(void))esdm_rand_lock },
+	{ OSSL_FUNC_RAND_UNLOCK, (void (*)(void))esdm_rand_unlock },
 	/* RAND parameter descriptors */
-	{OSSL_FUNC_RAND_GETTABLE_CTX_PARAMS, (void (*)(void))esdm_rand_gettable_ctx_params},
+	{ OSSL_FUNC_RAND_GETTABLE_CTX_PARAMS,
+	  (void (*)(void))esdm_rand_gettable_ctx_params },
 	/* RAND parameters */
-	{OSSL_FUNC_RAND_GET_CTX_PARAMS, (void (*)(void))esdm_rand_get_ctx_params},
+	{ OSSL_FUNC_RAND_GET_CTX_PARAMS,
+	  (void (*)(void))esdm_rand_get_ctx_params },
 	/* Delimiter */
-	{0, NULL}
+	{ 0, NULL }
 };
-
 
 /******************************
  * General Provider functions *
@@ -316,10 +320,14 @@ const OSSL_DISPATCH esdm_rand_functions[] = {
 static const OSSL_PARAM *esdm_gettable_params(void *provctx __unused)
 {
 	static const OSSL_PARAM param_types[] = {
-		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_NAME, OSSL_PARAM_UTF8_PTR, NULL, 0),
-		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_VERSION, OSSL_PARAM_UTF8_PTR, NULL, 0),
-		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_BUILDINFO, OSSL_PARAM_UTF8_PTR, NULL, 0),
-		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_STATUS, OSSL_PARAM_INTEGER, NULL, 0),
+		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_NAME, OSSL_PARAM_UTF8_PTR, NULL,
+				0),
+		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_VERSION, OSSL_PARAM_UTF8_PTR,
+				NULL, 0),
+		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_BUILDINFO, OSSL_PARAM_UTF8_PTR,
+				NULL, 0),
+		OSSL_PARAM_DEFN(OSSL_PROV_PARAM_STATUS, OSSL_PARAM_INTEGER,
+				NULL, 0),
 		OSSL_PARAM_END
 	};
 
@@ -340,7 +348,8 @@ static int esdm_get_params(void *provctx __unused, OSSL_PARAM params[])
 	if (p != NULL && !OSSL_PARAM_set_utf8_ptr(p, ESDM_PROV_BUILDINFO))
 		return 0;
 	p = OSSL_PARAM_locate(params, OSSL_PROV_PARAM_STATUS);
-	if (p != NULL && !OSSL_PARAM_set_int(p, 1)) /* always in running state */
+	if (p != NULL &&
+	    !OSSL_PARAM_set_int(p, 1)) /* always in running state */
 		return 0;
 
 	return 1;
@@ -360,12 +369,14 @@ esdm_query_operation(void *provctx __unused, int operation_id, int *no_cache)
 }
 
 static void esdm_unquery_operation(void *provctx __unused,
-								   int operation_id __unused,
-								   const OSSL_ALGORITHM *alg __unused) {}
+				   int operation_id __unused,
+				   const OSSL_ALGORITHM *alg __unused)
+{
+}
 
 static const OSSL_ITEM *esdm_get_reason_strings(void *provctx __unused)
 {
-	static const OSSL_ITEM reason_strings[] = {{0, NULL}};
+	static const OSSL_ITEM reason_strings[] = { { 0, NULL } };
 
 	return reason_strings;
 }
@@ -391,22 +402,28 @@ static void esdm_teardown(void *provctx)
 }
 
 static const OSSL_DISPATCH esdm_dispatch_table[] = {
-	{OSSL_FUNC_PROVIDER_GETTABLE_PARAMS, (void (*)(void))esdm_gettable_params},
-	{OSSL_FUNC_PROVIDER_GET_PARAMS, (void (*)(void))esdm_get_params},
-	{OSSL_FUNC_PROVIDER_QUERY_OPERATION, (void (*)(void))esdm_query_operation},
-	{OSSL_FUNC_PROVIDER_UNQUERY_OPERATION, (void (*)(void))esdm_unquery_operation},
-	{OSSL_FUNC_PROVIDER_GET_REASON_STRINGS, (void (*)(void))esdm_get_reason_strings},
-	{OSSL_FUNC_PROVIDER_SELF_TEST, (void (*)(void))esdm_self_test},
-	{OSSL_FUNC_PROVIDER_TEARDOWN, (void (*)(void))esdm_teardown},
-	{0, NULL}
+	{ OSSL_FUNC_PROVIDER_GETTABLE_PARAMS,
+	  (void (*)(void))esdm_gettable_params },
+	{ OSSL_FUNC_PROVIDER_GET_PARAMS, (void (*)(void))esdm_get_params },
+	{ OSSL_FUNC_PROVIDER_QUERY_OPERATION,
+	  (void (*)(void))esdm_query_operation },
+	{ OSSL_FUNC_PROVIDER_UNQUERY_OPERATION,
+	  (void (*)(void))esdm_unquery_operation },
+	{ OSSL_FUNC_PROVIDER_GET_REASON_STRINGS,
+	  (void (*)(void))esdm_get_reason_strings },
+	{ OSSL_FUNC_PROVIDER_SELF_TEST, (void (*)(void))esdm_self_test },
+	{ OSSL_FUNC_PROVIDER_TEARDOWN, (void (*)(void))esdm_teardown },
+	{ 0, NULL }
 };
 
 DSO_PUBLIC int OSSL_provider_init(const OSSL_CORE_HANDLE *handle,
-								  const OSSL_DISPATCH *in,
-								  const OSSL_DISPATCH **out, void **provctx) {
+				  const OSSL_DISPATCH *in,
+				  const OSSL_DISPATCH **out, void **provctx)
+{
 	struct esdm_provider_ctx *cprov = NULL;
 
-	if ((cprov = OPENSSL_secure_zalloc(sizeof(struct esdm_provider_ctx))) == NULL)
+	if ((cprov = OPENSSL_secure_zalloc(sizeof(struct esdm_provider_ctx))) ==
+	    NULL)
 		return 0;
 
 	esdm_rpcc_init_unpriv_service(NULL);

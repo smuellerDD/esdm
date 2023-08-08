@@ -42,7 +42,7 @@ esdm_rpcc_get_random_bytes_full_cb(const GetRandomBytesFullResponse *response,
 				   void *closure_data)
 {
 	struct esdm_get_random_bytes_full_buf *buffer =
-			(struct esdm_get_random_bytes_full_buf *)closure_data;
+		(struct esdm_get_random_bytes_full_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 

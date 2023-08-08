@@ -33,5 +33,5 @@ void esdm_rpc_get_poolsize(UnprivAccess_Service *service,
 
 	response.poolsize = esdm_avail_poolsize_aux();
 	response.ret = 0;
-	closure (&response, closure_data);
+	closure(&response, closure_data);
 }

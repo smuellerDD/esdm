@@ -21,8 +21,7 @@
 #define ESDM_INFO_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 void esdm_pool_inc_node_node(void);

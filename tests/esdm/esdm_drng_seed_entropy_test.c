@@ -71,25 +71,26 @@ static int esdm_drng_seed_entropy_test(void)
 		if (reseed)
 			break;
 
-		printf("Entropy value for %u. seed operation: %u\n",
-		       i, seed_entropy[i]);
+		printf("Entropy value for %u. seed operation: %u\n", i,
+		       seed_entropy[i]);
 
 		if (prev < ESDM_DRNG_SECURITY_STRENGTH_BITS &&
 		    prev > seed_entropy[i]) {
 			printf("Initial seedding is not monotonically increasing entropy rate (previous %u, current %u)\n",
-			prev, seed_entropy[i]);
+			       prev, seed_entropy[i]);
 			goto err;
 		}
 		prev = seed_entropy[i];
 
 		if (!fully_seeded) {
 			if (esdm_sp80090c_compliant() &&
-			seed_entropy[i] >=
-			(ESDM_DRNG_SECURITY_STRENGTH_BITS * 3 / 2)) {
+			    seed_entropy[i] >=
+				    (ESDM_DRNG_SECURITY_STRENGTH_BITS * 3 /
+				     2)) {
 				fully_seeded = true;
 				continue;
 			} else if (seed_entropy[i] >=
-				ESDM_DRNG_SECURITY_STRENGTH_BITS) {
+				   ESDM_DRNG_SECURITY_STRENGTH_BITS) {
 				fully_seeded = true;
 				continue;
 			}
@@ -169,20 +170,22 @@ int main(int argc, char *argv[])
 
 	/* Now set specific entropy rates */
 	switch (val) {
-		case 0:
+	case 0:
 		/* Use default configuration */
 		break;
 	case 1:
 		/* JENT: fully seeded */
 		esdm_config_es_cpu_entropy_rate_set(0);
-		esdm_config_es_jent_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		esdm_config_es_jent_entropy_rate_set(
+			ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_krng_entropy_rate_set(0);
 		esdm_config_es_sched_entropy_rate_set(0);
 		esdm_config_es_irq_entropy_rate_set(0);
 		break;
 	case 2:
 		/* CPU ES: fully seeded */
-		esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		esdm_config_es_cpu_entropy_rate_set(
+			ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_jent_entropy_rate_set(0);
 		esdm_config_es_krng_entropy_rate_set(0);
 		esdm_config_es_sched_entropy_rate_set(0);
@@ -196,17 +199,19 @@ int main(int argc, char *argv[])
 		/* Kernel ES: fully seeded */
 		esdm_config_es_cpu_entropy_rate_set(0);
 		esdm_config_es_jent_entropy_rate_set(0);
-		esdm_config_es_krng_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		esdm_config_es_krng_entropy_rate_set(
+			ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_sched_entropy_rate_set(0);
 		esdm_config_es_irq_entropy_rate_set(0);
-printf("========= %u\n", esdm_config_es_irq_entropy_rate());
+		printf("========= %u\n", esdm_config_es_irq_entropy_rate());
 		break;
 	case 4:
 		/* Scheduler ES fully seeded */
 		esdm_config_es_cpu_entropy_rate_set(0);
 		esdm_config_es_jent_entropy_rate_set(0);
 		esdm_config_es_krng_entropy_rate_set(0);
-		esdm_config_es_sched_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		esdm_config_es_sched_entropy_rate_set(
+			ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_irq_entropy_rate_set(0);
 		only_sched = 1;
 		break;

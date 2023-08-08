@@ -26,8 +26,8 @@
 #include "lc_hmac.h"
 #include "visibility.h"
 
-#define IPAD	0x36
-#define OPAD	0x5c
+#define IPAD 0x36
+#define OPAD 0x5c
 
 DSO_PUBLIC
 void lc_hmac_reinit(struct lc_hmac_ctx *hmac_ctx)
@@ -39,7 +39,8 @@ void lc_hmac_reinit(struct lc_hmac_ctx *hmac_ctx)
 }
 
 DSO_PUBLIC
-void lc_hmac_init(struct lc_hmac_ctx *hmac_ctx, const uint8_t *key, size_t keylen)
+void lc_hmac_init(struct lc_hmac_ctx *hmac_ctx, const uint8_t *key,
+		  size_t keylen)
 {
 	struct lc_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
 	const struct lc_hash *hash = hash_ctx->hash;
@@ -60,7 +61,7 @@ void lc_hmac_init(struct lc_hmac_ctx *hmac_ctx, const uint8_t *key, size_t keyle
 		lc_hash_final(hash_ctx, k_opad);
 		memset(k_opad + lc_hash_digestsize(hash_ctx), 0,
 		       lc_hash_blocksize(hash_ctx) -
-		       lc_hash_digestsize(hash_ctx));
+			       lc_hash_digestsize(hash_ctx));
 	} else {
 		memcpy(k_opad, key, keylen);
 		memset(k_opad + keylen, 0,
@@ -77,7 +78,8 @@ void lc_hmac_init(struct lc_hmac_ctx *hmac_ctx, const uint8_t *key, size_t keyle
 }
 
 DSO_PUBLIC
-void lc_hmac_update(struct lc_hmac_ctx *hmac_ctx, const uint8_t *in, size_t inlen)
+void lc_hmac_update(struct lc_hmac_ctx *hmac_ctx, const uint8_t *in,
+		    size_t inlen)
 {
 	struct lc_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
 

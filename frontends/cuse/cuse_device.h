@@ -28,8 +28,7 @@
 #include "esdm_rpc_client.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 typedef ssize_t (*get_func_t)(uint8_t *buf, size_t buflen, void *int_data);
@@ -37,21 +36,18 @@ typedef ssize_t (*get_func_t)(uint8_t *buf, size_t buflen, void *int_data);
 void esdm_cuse_init_done(void *userdata);
 void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi);
 void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
-			     struct fuse_file_info *fi,
-			     get_func_t get, int fallback_fd);
+			     struct fuse_file_info *fi, get_func_t get,
+			     int fallback_fd);
 void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 			      off_t off, struct fuse_file_info *fi,
 			      int fallback_fd);
-void esdm_cuse_ioctl(int backend_fd,
-		     fuse_req_t req, unsigned long cmd, void *arg,
-		     struct fuse_file_info *fi, unsigned flags,
-		     const void *in_buf, size_t in_bufsz,
-		     size_t out_bufsz);
+void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
+		     void *arg, struct fuse_file_info *fi, unsigned flags,
+		     const void *in_buf, size_t in_bufsz, size_t out_bufsz);
 void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		    struct fuse_pollhandle *ph);
 int main_common(const char *devname, const char *target,
-		const struct cuse_lowlevel_ops *clop,
-		int argc, char **argv);
+		const struct cuse_lowlevel_ops *clop, int argc, char **argv);
 
 #ifdef __cplusplus
 }

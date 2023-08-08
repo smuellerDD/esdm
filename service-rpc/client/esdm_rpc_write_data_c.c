@@ -33,11 +33,11 @@ struct esdm_write_data_buf {
 	int ret;
 };
 
-static void
-esdm_rpcc_write_data_cb(const WriteDataResponse *response, void *closure_data)
+static void esdm_rpcc_write_data_cb(const WriteDataResponse *response,
+				    void *closure_data)
 {
 	struct esdm_write_data_buf *buffer =
-			(struct esdm_write_data_buf *)closure_data;
+		(struct esdm_write_data_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;

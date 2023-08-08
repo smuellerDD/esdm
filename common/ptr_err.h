@@ -21,25 +21,24 @@
 #define PTR_ERR_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-#define PTR_MAX_ERRNO	255
+#define PTR_MAX_ERRNO 255
 
-#define IS_ERR_VALUE(x)							\
+#define IS_ERR_VALUE(x)                                                        \
 	((unsigned long)(void *)(x) >= (unsigned long)-PTR_MAX_ERRNO)
 
 /* Convert error value to pointer */
 static inline void *ERR_PTR(long error)
 {
-	return (void *) error;
+	return (void *)error;
 }
 
 /* Convert pointer into error code */
 static inline long PTR_ERR(const void *ptr)
 {
-	return (long) ptr;
+	return (long)ptr;
 }
 
 /* Is the pointer including an error? */

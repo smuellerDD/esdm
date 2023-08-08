@@ -23,14 +23,12 @@
 #include "lc_sha512.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-#if defined(LC_DRBG_HASH_STATELEN) ||					\
-    defined(LC_DRBG_HASH_BLOCKLEN) ||					\
-    defined(LC_DRBG_HASH_CORE)
-# error "You have included more than one DRBG header file!"
+#if defined(LC_DRBG_HASH_STATELEN) || defined(LC_DRBG_HASH_BLOCKLEN) ||        \
+	defined(LC_DRBG_HASH_CORE)
+#error "You have included more than one DRBG header file!"
 #endif
 
 #define LC_DRBG_HASH_STATELEN 111

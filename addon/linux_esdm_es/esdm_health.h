@@ -72,14 +72,12 @@ config ESDM_APT_CUTOFF_PERMANENT
 #define CONFIG_ESDM_APT_CUTOFF 325
 #define CONFIG_ESDM_APT_CUTOFF_PERMANENT 371
 
-
-
 /******************************************************************************/
 
 enum esdm_health_res {
-	esdm_health_pass,		/* Health test passes on time stamp */
-	esdm_health_fail_use,		/* Time stamp unhealthy, but mix in */
-	esdm_health_fail_drop		/* Time stamp unhealthy, drop it */
+	esdm_health_pass, /* Health test passes on time stamp */
+	esdm_health_fail_use, /* Time stamp unhealthy, but mix in */
+	esdm_health_fail_drop /* Time stamp unhealthy, drop it */
 };
 
 bool esdm_sp80090b_startup_complete_es(enum esdm_internal_es es);

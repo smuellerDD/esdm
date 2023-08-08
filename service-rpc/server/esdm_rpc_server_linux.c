@@ -58,7 +58,8 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 				errsv = errno;
 
 				logger(LOGGER_ERR, LOGGER_C_SERVER,
-				       "Error in accessing /dev/random: %s\n", strerror(errsv));
+				       "Error in accessing /dev/random: %s\n",
+				       strerror(errsv));
 				return -errsv;
 			}
 
@@ -67,7 +68,8 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 				errsv = errno;
 
 				logger(LOGGER_ERR, LOGGER_C_SERVER,
-				       "Error in opening /dev/random: %s\n", strerror(errsv));
+				       "Error in opening /dev/random: %s\n",
+				       strerror(errsv));
 				return -errsv;
 			}
 			logger(LOGGER_DEBUG, LOGGER_C_SERVER,
@@ -86,7 +88,8 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 			errsv = errno;
 
 			logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "Error in opening /dev/esdm: %s\n", strerror(errsv));
+			       "Error in opening /dev/esdm: %s\n",
+			       strerror(errsv));
 			return -errsv;
 		}
 		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
@@ -121,11 +124,11 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
  */
 static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 {
-#define ESDM_SERVER_LINUX_ENTROPY_BYTES	32
+#define ESDM_SERVER_LINUX_ENTROPY_BYTES 32
 
-	uint8_t rpi_buf[sizeof(struct rand_pool_info) +
-			ESDM_SERVER_LINUX_ENTROPY_BYTES]
-						__aligned(sizeof(uint32_t));
+	uint8_t rpi_buf
+		[sizeof(struct rand_pool_info) +
+		 ESDM_SERVER_LINUX_ENTROPY_BYTES] __aligned(sizeof(uint32_t));
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
 	struct esdm_status_st status;
 

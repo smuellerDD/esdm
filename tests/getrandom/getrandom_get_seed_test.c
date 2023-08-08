@@ -57,19 +57,23 @@ int main(int argc, char *argv[])
 
 	rc = getrandom_seed_initial_n((uint8_t *)&buf2, 1);
 	if (rc > 0 || errno != EINVAL) {
-		printf("esdm_get_seed does not indicate that the buffer is too small:%d\n", errno);
+		printf("esdm_get_seed does not indicate that the buffer is too small:%d\n",
+		       errno);
 		ret = 1;
 		goto out;
 	}
 
 	rc = getrandom_seed_initial_n((uint8_t *)&size, sizeof(size));
 	if (rc > 0 || errno != EMSGSIZE) {
-		printf("esdm_get_seed does not indicate that the buffer is too small %d\n", errno);
+		printf("esdm_get_seed does not indicate that the buffer is too small %d\n",
+		       errno);
 		ret = 1;
 		goto out;
 	}
 	if (size > sizeof(buf)) {
-		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64 "\n", size);
+		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64
+		       "\n",
+		       size);
 		ret = 1;
 		goto out;
 	}
@@ -88,18 +92,22 @@ int main(int argc, char *argv[])
 	}
 
 	if (buf[0] > sizeof(buf)) {
-		printf("esdm_get_seed returned a strange size value %" PRIu64 "\n",
+		printf("esdm_get_seed returned a strange size value %" PRIu64
+		       "\n",
 		       buf[0]);
 		ret = 1;
 		goto out;
 	}
 
 	if (buf[1] < 128) {
-		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
+		printf("esdm_get_seed returned insufficient seed: %" PRIu64
+		       "\n",
+		       buf[1]);
 		ret = 1;
 		goto out;
 	} else {
-		printf("esdm_get_seed returned proper seed size value %" PRIu64 " bytes and entropy value %" PRIu64 " bits\n",
+		printf("esdm_get_seed returned proper seed size value %" PRIu64
+		       " bytes and entropy value %" PRIu64 " bits\n",
 		       buf[0], buf[1]);
 	}
 
@@ -117,11 +125,14 @@ int main(int argc, char *argv[])
 	}
 
 	if (buf[1] < 128) {
-		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
+		printf("esdm_get_seed returned insufficient seed: %" PRIu64
+		       "\n",
+		       buf[1]);
 		ret = 1;
 		goto out;
 	} else {
-		printf("esdm_get_seed returned proper seed size value %" PRIu64 " bytes and entropy value %" PRIu64 " bits\n",
+		printf("esdm_get_seed returned proper seed size value %" PRIu64
+		       " bytes and entropy value %" PRIu64 " bits\n",
 		       buf[0], buf[1]);
 	}
 

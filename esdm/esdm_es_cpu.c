@@ -59,13 +59,11 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 
 	/* operate on full blocks */
 	BUILD_BUG_ON(ESDM_DRNG_SECURITY_STRENGTH_BYTES % sizeof(unsigned long));
-	BUILD_BUG_ON(ESDM_SEED_BUFFER_INIT_ADD_BITS %
-		     sizeof(unsigned long));
+	BUILD_BUG_ON(ESDM_SEED_BUFFER_INIT_ADD_BITS % sizeof(unsigned long));
 	/* ensure we have aligned buffers */
 	BUILD_BUG_ON(ESDM_KCAPI_ALIGN % sizeof(unsigned long));
 
-	for (i = 0; i < (requested_bits >> 3);
-	     i += sizeof(unsigned long)) {
+	for (i = 0; i < (requested_bits >> 3); i += sizeof(unsigned long)) {
 		/*
 		 * The cast is appropriate as the thread local heap is aligned
 		 * to ESDM_KCAPI_ALIGN bits
@@ -82,9 +80,9 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 	return requested_bits;
 }
 
-static uint32_t
-esdm_get_cpu_data_compress(uint8_t *outbuf, uint32_t requested_bits,
-			   uint32_t multiplier)
+static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
+					   uint32_t requested_bits,
+					   uint32_t multiplier)
 {
 #if defined(ESDM_HASH_SHA512)
 	LC_HASH_CTX_ON_STACK(shash, lc_sha512);
@@ -99,7 +97,7 @@ esdm_get_cpu_data_compress(uint8_t *outbuf, uint32_t requested_bits,
 	const struct esdm_hash_cb *hash_cb;
 	struct esdm_drng *drng = esdm_drng_node_instance();
 	uint32_t ent_bits = 0, i, partial_bits = 0, digestsize, digestsize_bits,
-	    full_bits;
+		 full_bits;
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
@@ -142,8 +140,7 @@ esdm_get_cpu_data_compress(uint8_t *outbuf, uint32_t requested_bits,
 
 	/* Hash partial block, if applicable */
 	ent_bits = esdm_get_cpu_data(outbuf, partial_bits);
-	if (ent_bits &&
-	    hash_cb->hash_update(shash, outbuf, ent_bits >> 3))
+	if (ent_bits && hash_cb->hash_update(shash, outbuf, ent_bits >> 3))
 		goto err;
 
 	logger(LOGGER_DEBUG, LOGGER_C_ES,
@@ -204,10 +201,10 @@ static uint32_t esdm_cpu_multiplier(void)
 	return esdm_cpu_data_multiplier;
 }
 
-static int
-esdm_cpu_switch_hash(struct esdm_drng __unused *drng, int __unused node,
-		     const struct esdm_hash_cb __unused *new_cb,
-		     const struct esdm_hash_cb __unused *old_cb)
+static int esdm_cpu_switch_hash(struct esdm_drng __unused *drng,
+				int __unused node,
+				const struct esdm_hash_cb __unused *new_cb,
+				const struct esdm_hash_cb __unused *old_cb)
 {
 	uint32_t digestsize, multiplier, curr_ent_rate;
 
@@ -249,7 +246,7 @@ static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits,
 	ent_bits = esdm_cpu_entropylevel(ent_bits);
 	logger(LOGGER_DEBUG, LOGGER_C_ES,
 	       "obtained %u bits of entropy from CPU RNG entropy source\n",
-		 ent_bits);
+	       ent_bits);
 	eb_es->e_bits = ent_bits;
 }
 
@@ -263,10 +260,9 @@ static void esdm_cpu_es_state(char *buf, size_t buflen)
 		 " Hash for compressing data: %s\n"
 		 " Available entropy: %u\n"
 		 " Data multiplier: %u\n",
-		 (multiplier <= 1) ?
-			"N/A" : esdm_drng_init->hash_cb->hash_name(),
-		 esdm_cpu_poolsize(),
-		 multiplier);
+		 (multiplier <= 1) ? "N/A" :
+				     esdm_drng_init->hash_cb->hash_name(),
+		 esdm_cpu_poolsize(), multiplier);
 }
 
 static bool esdm_cpu_active(void)
@@ -279,15 +275,15 @@ static bool esdm_cpu_active(void)
 }
 
 struct esdm_es_cb esdm_es_cpu = {
-	.name			= "CPU",
-	.init			= esdm_cpu_init,
-	.fini			= NULL,
-	.monitor_es		= NULL,
-	.get_ent		= esdm_cpu_get,
-	.curr_entropy		= esdm_cpu_entropylevel,
-	.max_entropy		= esdm_cpu_poolsize,
-	.state			= esdm_cpu_es_state,
-	.reset			= NULL,
-	.active			= esdm_cpu_active,
-	.switch_hash		= esdm_cpu_switch_hash,
+	.name = "CPU",
+	.init = esdm_cpu_init,
+	.fini = NULL,
+	.monitor_es = NULL,
+	.get_ent = esdm_cpu_get,
+	.curr_entropy = esdm_cpu_entropylevel,
+	.max_entropy = esdm_cpu_poolsize,
+	.state = esdm_cpu_es_state,
+	.reset = NULL,
+	.active = esdm_cpu_active,
+	.switch_hash = esdm_cpu_switch_hash,
 };

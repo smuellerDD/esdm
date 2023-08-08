@@ -33,8 +33,11 @@ typedef struct {
 	pthread_mutexattr_t ma;
 } mutex_w_t;
 
-#define MUTEX_W_UNLOCKED { .lock = PTHREAD_MUTEX_INITIALIZER, .ma_used = 0 }
-#define DEFINE_MUTEX_W_UNLOCKED(name)	mutex_w_t name = MUTEX_W_UNLOCKED
+#define MUTEX_W_UNLOCKED                                                       \
+	{                                                                      \
+		.lock = PTHREAD_MUTEX_INITIALIZER, .ma_used = 0                \
+	}
+#define DEFINE_MUTEX_W_UNLOCKED(name) mutex_w_t name = MUTEX_W_UNLOCKED
 
 #define DEFINE_MUTEX_W_LOCKED(name) error "DEFINE_MUTEX_LOCKED not implemented"
 

@@ -52,7 +52,7 @@ static const char fipscheck_hmackey[] = "orboDeJITITejsirpADONivirpUkvarP";
  */
 #pragma GCC diagnostic push
 #ifndef __clang__
-# pragma GCC diagnostic ignored "-Wstringop-truncation"
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 #endif
 static char *paste(char *dst, const char *src, size_t size)
 {
@@ -348,7 +348,7 @@ int fips_post_integrity(const char *pathname)
 			goto out;
 		}
 #else
-	selfnamesize = -1;
+		selfnamesize = -1;
 #endif
 
 		if (selfnamesize >= BUFSIZE || selfnamesize < 0) {

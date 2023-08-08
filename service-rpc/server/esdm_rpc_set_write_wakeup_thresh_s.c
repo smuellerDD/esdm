@@ -26,26 +26,24 @@
 #include "priv_access.pb-c.h"
 
 void esdm_rpc_set_write_wakeup_thresh(
-				PrivAccess_Service *service,
-				const SetWriteWakeupThreshRequest *request,
-				SetWriteWakeupThreshResponse_Closure closure,
-				void *closure_data)
+	PrivAccess_Service *service, const SetWriteWakeupThreshRequest *request,
+	SetWriteWakeupThreshResponse_Closure closure, void *closure_data)
 {
 	SetWriteWakeupThreshResponse response =
-					SET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
+		SET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 
 	if (request == NULL) {
 		response.ret = -EFAULT;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	} else if (!esdm_rpc_client_is_privileged(closure_data)) {
 		response.ret = -EPERM;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	} else {
 		esdm_set_write_wakeup_bits(request->wakeup);
 
 		response.ret = 0;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	}
 }

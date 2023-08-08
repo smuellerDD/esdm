@@ -26,7 +26,7 @@
 #include "esdm_leancrypto.h"
 #include "logger.h"
 
-#define ESDM_LEANCRYPTO_HASH	lc_sha3_512
+#define ESDM_LEANCRYPTO_HASH lc_sha3_512
 
 static uint32_t esdm_leancrypto_hash_digestsize(void *hash)
 {
@@ -43,8 +43,8 @@ static int esdm_leancrypto_hash_init(void *hash)
 	return 0;
 }
 
-static int
-esdm_leancrypto_hash_update(void *hash, const uint8_t *inbuf, size_t inbuflen)
+static int esdm_leancrypto_hash_update(void *hash, const uint8_t *inbuf,
+				       size_t inbuflen)
 {
 	struct lc_hash_ctx *hash_ctx = hash;
 
@@ -91,15 +91,15 @@ static int esdm_leancrypto_hash_selftest(void)
 }
 
 const struct esdm_hash_cb esdm_leancrypto_hash_cb = {
-	.hash_name		= esdm_leancrypto_hash_name,
-	.hash_selftest		= esdm_leancrypto_hash_selftest,
-	.hash_digestsize	= esdm_leancrypto_hash_digestsize,
-	.hash_init		= esdm_leancrypto_hash_init,
-	.hash_update		= esdm_leancrypto_hash_update,
-	.hash_final		= esdm_leancrypto_hash_final,
-	.hash_desc_zero		= esdm_leancrypto_hash_desc_zero,
-	.hash_alloc		= esdm_leancrypto_hash_alloc,
-	.hash_dealloc		= esdm_leancrypto_hash_dealloc,
+	.hash_name = esdm_leancrypto_hash_name,
+	.hash_selftest = esdm_leancrypto_hash_selftest,
+	.hash_digestsize = esdm_leancrypto_hash_digestsize,
+	.hash_init = esdm_leancrypto_hash_init,
+	.hash_update = esdm_leancrypto_hash_update,
+	.hash_final = esdm_leancrypto_hash_final,
+	.hash_desc_zero = esdm_leancrypto_hash_desc_zero,
+	.hash_alloc = esdm_leancrypto_hash_alloc,
+	.hash_dealloc = esdm_leancrypto_hash_dealloc,
 };
 
 static int esdm_leancrypto_drbg_seed(void *drng, const uint8_t *inbuf,
@@ -157,10 +157,10 @@ static int esdm_leancrypto_drbg_selftest(void)
 }
 
 const struct esdm_drng_cb esdm_leancrypto_drbg_cb = {
-	.drng_name	= esdm_leancrypto_drbg_name,
-	.drng_selftest	= esdm_leancrypto_drbg_selftest,
-	.drng_alloc	= esdm_leancrypto_drbg_alloc,
-	.drng_dealloc	= esdm_leancrypto_drbg_dealloc,
-	.drng_seed	= esdm_leancrypto_drbg_seed,
-	.drng_generate	= esdm_leancrypto_drbg_generate,
+	.drng_name = esdm_leancrypto_drbg_name,
+	.drng_selftest = esdm_leancrypto_drbg_selftest,
+	.drng_alloc = esdm_leancrypto_drbg_alloc,
+	.drng_dealloc = esdm_leancrypto_drbg_dealloc,
+	.drng_seed = esdm_leancrypto_drbg_seed,
+	.drng_generate = esdm_leancrypto_drbg_generate,
 };

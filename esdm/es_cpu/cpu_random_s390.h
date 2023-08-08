@@ -27,8 +27,8 @@
 #define ESDM_CPU_ES_IMPLEMENTED
 
 /* Function code 114 as per Principles of Operation */
-#define CPACF_PRNO_TRNG		0x72
-#define CPACF_PRNO		0xb93c		/* MSA5 */
+#define CPACF_PRNO_TRNG 0x72
+#define CPACF_PRNO 0xb93c /* MSA5 */
 
 /**
  * cpacf_trng() - executes the TRNG subfunction of the PRNO instruction
@@ -40,18 +40,18 @@
 static inline void cpacf_trng(uint8_t *ucbuf, unsigned long ucbuf_len,
 			      uint8_t *cbuf, unsigned long cbuf_len)
 {
-	register unsigned long r0 asm("0") = (unsigned long) CPACF_PRNO_TRNG;
-	register unsigned long r2 asm("2") = (unsigned long) ucbuf;
-	register unsigned long r3 asm("3") = (unsigned long) ucbuf_len;
-	register unsigned long r4 asm("4") = (unsigned long) cbuf;
-	register unsigned long r5 asm("5") = (unsigned long) cbuf_len;
+	register unsigned long r0 asm("0") = (unsigned long)CPACF_PRNO_TRNG;
+	register unsigned long r2 asm("2") = (unsigned long)ucbuf;
+	register unsigned long r3 asm("3") = (unsigned long)ucbuf_len;
+	register unsigned long r4 asm("4") = (unsigned long)cbuf;
+	register unsigned long r5 asm("5") = (unsigned long)cbuf_len;
 
-	__asm__ __volatile__ (
+	__asm__ __volatile__(
 		"0:	.insn	rre,%[opc] << 16,%[ucbuf],%[cbuf]\n"
-		"	brc	1,0b\n"	  /* handle partial completion */
-		: [ucbuf] "+a" (r2), [ucbuflen] "+d" (r3),
-		  [cbuf] "+a" (r4), [cbuflen] "+d" (r5)
-		: [fc] "d" (r0), [opc] "i" (CPACF_PRNO)
+		"	brc	1,0b\n" /* handle partial completion */
+		: [ucbuf] "+a"(r2), [ucbuflen] "+d"(r3), [cbuf] "+a"(r4),
+		  [cbuflen] "+d"(r5)
+		: [fc] "d"(r0), [opc] "i"(CPACF_PRNO)
 		: "cc", "memory");
 }
 

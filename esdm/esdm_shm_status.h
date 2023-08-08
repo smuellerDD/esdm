@@ -23,8 +23,7 @@
 #include "bool.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 void esdm_shm_status_set_operational(bool enabled);

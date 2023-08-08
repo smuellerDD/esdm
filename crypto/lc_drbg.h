@@ -24,8 +24,7 @@
 #include <sys/types.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /******************************************************************
@@ -48,8 +47,7 @@ struct lc_drbg_string {
 	struct lc_drbg_string *next;
 };
 
-enum lc_drbg_prefixes
-{
+enum lc_drbg_prefixes {
 	DRBG_PREFIX0 = 0x00,
 	DRBG_PREFIX1,
 	DRBG_PREFIX2,
@@ -81,7 +79,7 @@ static inline size_t lc_drbg_max_addtl(void)
 	 */
 	return (SIZE_MAX - 1);
 #else
-	return (1UL<<35);
+	return (1UL << 35);
 #endif
 }
 
@@ -92,17 +90,17 @@ static inline size_t lc_drbg_max_addtl(void)
 struct lc_drbg_state {
 	void (*drbg_int_seed)(struct lc_drbg_state *drbg,
 			      struct lc_drbg_string *seed);
-	size_t (*drbg_int_generate)(struct lc_drbg_state *drbg,
-				    uint8_t *buf, size_t buflen,
+	size_t (*drbg_int_generate)(struct lc_drbg_state *drbg, uint8_t *buf,
+				    size_t buflen,
 				    struct lc_drbg_string *addtl);
 	void (*drbg_int_zero)(struct lc_drbg_state *drbg);
-	unsigned int seeded:1;
+	unsigned int seeded : 1;
 };
 
-#define _LC_DRBG_SET_CTX(name, seeder, generator, zeroer)		       \
-	name->drbg_int_seed = seeder;					       \
-	name->drbg_int_generate = generator;				       \
-	name->drbg_int_zero = zeroer;					       \
+#define _LC_DRBG_SET_CTX(name, seeder, generator, zeroer)                      \
+	name->drbg_int_seed = seeder;                                          \
+	name->drbg_int_generate = generator;                                   \
+	name->drbg_int_zero = zeroer;                                          \
 	name->seeded = 0
 
 /**
@@ -118,9 +116,8 @@ struct lc_drbg_state {
  *
  * @return 0 on success, negative error value otherwise
  */
-int lc_drbg_seed(struct lc_drbg_state *drbg,
-		 const uint8_t *seedbuf, size_t seedlen,
-		 const uint8_t *persbuf, size_t perslen);
+int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
+		 size_t seedlen, const uint8_t *persbuf, size_t perslen);
 
 /**
  * @brief DRBG generate function as required by SP800-90A - this function
@@ -136,9 +133,9 @@ int lc_drbg_seed(struct lc_drbg_state *drbg,
  *
  * @return generated number of bytes on success, negative error value otherwise
  */
-ssize_t lc_drbg_generate(struct lc_drbg_state *drbg,
-			 uint8_t *buf, size_t buflen,
-			 const uint8_t *addtlbuf, size_t addtllen);
+ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
+			 size_t buflen, const uint8_t *addtlbuf,
+			 size_t addtllen);
 
 /**
  * @brief DRBG uninstantiate function as required by SP800-90A - this function

@@ -129,9 +129,10 @@ int env_init(int disable_fallback)
 	}
 	if (pid == 0) {
 		char buf[FILENAME_MAX];
-		char *random_argv[] = { buf,  "-f", "-d", "-v", "5", NULL };
-		char *random_argv_dis[]  = { buf,  "-f", "-d", "-v", "5",
-					     "--disable_fallback=1", NULL };
+		char *random_argv[] = { buf, "-f", "-d", "-v", "5", NULL };
+		char *random_argv_dis[] = { buf,  "-f", "-d",
+					    "-v", "5",	"--disable_fallback=1",
+					    NULL };
 
 		CKNULL(random, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", random);
@@ -152,14 +153,16 @@ int env_init(int disable_fallback)
 	}
 	if (pid == 0) {
 		char buf[FILENAME_MAX];
-		char *urandom_argv[] = { buf,  "-f", "-d", "-v", "5", NULL };
-		char *urandom_argv_dis[]  = { buf,  "-f", "-d", "-v", "5",
-					      "--disable_fallback=1", NULL };
+		char *urandom_argv[] = { buf, "-f", "-d", "-v", "5", NULL };
+		char *urandom_argv_dis[] = { buf,  "-f", "-d",
+					     "-v", "5",	 "--disable_fallback=1",
+					     NULL };
 
 		CKNULL(urandom, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", urandom);
-		execve(urandom, disable_fallback ?
-				urandom_argv_dis : urandom_argv, NULL);
+		execve(urandom,
+		       disable_fallback ? urandom_argv_dis : urandom_argv,
+		       NULL);
 
 		/* NOTREACHED */
 		return EFAULT;
@@ -173,7 +176,7 @@ out:
 
 void env_kill_server(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1<<29 };
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1 << 29 };
 
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);

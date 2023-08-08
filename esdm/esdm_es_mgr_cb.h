@@ -34,36 +34,36 @@
 
 enum esdm_internal_es {
 #ifdef ESDM_ES_IRQ
-	esdm_int_es_irq,			/* IRQ-based entropy source */
+	esdm_int_es_irq, /* IRQ-based entropy source */
 #endif
 #ifdef ESDM_ES_SCHED
-	esdm_int_es_sched,			/* Scheduler entropy source */
+	esdm_int_es_sched, /* Scheduler entropy source */
 #endif
-	esdm_int_es_last,			/* MUST be the last entry */
+	esdm_int_es_last, /* MUST be the last entry */
 };
 
 enum esdm_external_es {
-	esdm_ext_link = esdm_int_es_last - 1,	/* Link entry */
+	esdm_ext_link = esdm_int_es_last - 1, /* Link entry */
 #ifdef ESDM_ES_JENT
-	esdm_ext_es_jitter,			/* Jitter RNG */
+	esdm_ext_es_jitter, /* Jitter RNG */
 #endif
 #ifdef ESDM_ES_CPU
-	esdm_ext_es_cpu,			/* CPU-based, e.g. RDSEED */
+	esdm_ext_es_cpu, /* CPU-based, e.g. RDSEED */
 #endif
 #ifdef ESDM_ES_KERNEL_RNG
-	esdm_ext_es_krng,			/* random.c */
+	esdm_ext_es_krng, /* random.c */
 #endif
 #ifdef ESDM_ES_HWRAND
-	esdm_ext_es_hwrand,			/* Linux /dev/hwrng */
+	esdm_ext_es_hwrand, /* Linux /dev/hwrng */
 #endif
-	esdm_ext_es_aux,			/* MUST BE LAST ES! */
-	esdm_ext_es_last			/* MUST be the last entry */
+	esdm_ext_es_aux, /* MUST BE LAST ES! */
+	esdm_ext_es_last /* MUST be the last entry */
 };
 
 enum esdm_es_data_size {
-	esdm_es_data_equal,	/* Equal to ESDM's data size */
-	esdm_es_data_large,	/* Large buffer (256 + oversample) */
-	esdm_es_data_small	/* Small buffer (256) */
+	esdm_es_data_equal, /* Equal to ESDM's data size */
+	esdm_es_data_large, /* Large buffer (256 + oversample) */
+	esdm_es_data_small /* Small buffer (256) */
 };
 
 /* Small buffer for entropy data */
@@ -73,7 +73,7 @@ struct entropy_es_small {
 };
 
 /* Large buffer for entropy data */
-#define ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES				       \
+#define ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES                                   \
 	(ESDM_DRNG_SECURITY_STRENGTH_BYTES + 16)
 struct entropy_es_large {
 	uint8_t e[ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES];
@@ -142,17 +142,18 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 				    unsigned int ioctl_cmd);
 
 /* Cap to maximum entropy that can ever be generated with given hash */
-#define esdm_cap_requested(__digestsize_bits, __requested_bits)		\
-	do {								\
-		if (__digestsize_bits < __requested_bits) {		\
-			logger(LOGGER_DEBUG, LOGGER_C_ANY, "Cannot satisfy requested entropy %u due to insufficient hash size %u\n",\
-				 __requested_bits, __digestsize_bits);	\
-			__requested_bits = __digestsize_bits;		\
-		}							\
+#define esdm_cap_requested(__digestsize_bits, __requested_bits)                                          \
+	do {                                                                                             \
+		if (__digestsize_bits < __requested_bits) {                                              \
+			logger(LOGGER_DEBUG, LOGGER_C_ANY,                                               \
+			       "Cannot satisfy requested entropy %u due to insufficient hash size %u\n", \
+			       __requested_bits, __digestsize_bits);                                     \
+			__requested_bits = __digestsize_bits;                                            \
+		}                                                                                        \
 	} while (0)
 
 /* Kernel entropy sources */
-#define ESDM_ES_MGR_REQ_BITS_MASK	0x1ff
-#define ESDM_ES_MGR_RESET_BIT		0x80000000
+#define ESDM_ES_MGR_REQ_BITS_MASK 0x1ff
+#define ESDM_ES_MGR_RESET_BIT 0x80000000
 
 #endif /* _ESDM_ES_MGR_CB_H */

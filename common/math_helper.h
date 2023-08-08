@@ -21,8 +21,7 @@
 #define MATH_HELPER_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 static inline uint32_t min_uint32(uint32_t a, uint32_t b)
@@ -44,7 +43,6 @@ static inline uint32_t max_uint32(uint32_t a, uint32_t b)
 {
 	return a > b ? a : b;
 }
-
 
 #ifdef __cplusplus
 }

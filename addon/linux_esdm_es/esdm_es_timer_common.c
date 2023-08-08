@@ -19,7 +19,7 @@
 static bool esdm_highres_timer_val = false;
 
 /* Number of time stamps analyzed to calculate a GCD */
-#define ESDM_GCD_WINDOW_SIZE	100
+#define ESDM_GCD_WINDOW_SIZE 100
 static u32 esdm_gcd_history[ESDM_GCD_WINDOW_SIZE];
 static atomic_t esdm_gcd_history_ptr = ATOMIC_INIT(-1);
 

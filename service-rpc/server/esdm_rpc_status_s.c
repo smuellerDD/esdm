@@ -26,21 +26,20 @@
 
 void esdm_rpc_status(UnprivAccess_Service *service,
 		     const StatusRequest *request,
-		     StatusResponse_Closure closure,
-		     void *closure_data)
+		     StatusResponse_Closure closure, void *closure_data)
 {
 	StatusResponse response = STATUS_RESPONSE__INIT;
 	char status[ESDM_RPC_MAX_MSG_SIZE];
-	(void) service;
+	(void)service;
 
 	if (request == NULL) {
 		response.ret = -(int32_t)sizeof(status);
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	} else {
-		esdm_status(status, min_uint32(request->maxlen,
-					       ESDM_RPC_MAX_MSG_SIZE));
+		esdm_status(status,
+			    min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE));
 		response.ret = 0;
 		response.buffer = status;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	}
 }

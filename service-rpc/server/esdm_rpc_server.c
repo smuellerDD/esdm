@@ -78,8 +78,8 @@ enum esdm_rpcs_init_state {
 	esdm_rpcs_state_perm_dropped,
 };
 
-static atomic_t
-esdm_rpc_init_state = ATOMIC_INIT(esdm_rpcs_state_uninitialized);
+static atomic_t esdm_rpc_init_state =
+	ATOMIC_INIT(esdm_rpcs_state_uninitialized);
 static DECLARE_WAIT_QUEUE(esdm_rpc_thread_init_wait);
 
 static pid_t server_pid = -1;
@@ -101,8 +101,7 @@ static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 	if (fd < 0)
 		return;
 	set_fd_nonblocking(fd);
-	if (connect(fd, addr, addr_len) < 0)
-	{
+	if (connect(fd, addr, addr_len) < 0) {
 		if (errno == EINPROGRESS) {
 			close(fd);
 			return;
@@ -192,8 +191,7 @@ static int esdm_rpcs_pack(const ProtobufCMessage *message,
 	       sc_header.status_code, sc_header.message_length,
 	       sc_header.method_index, sc_header.request_id);
 
-	CKINT_LOG(esdm_rpcs_write_data(rpc_conn,
-				       (uint8_t *)&sc_header,
+	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, (uint8_t *)&sc_header,
 				       sizeof(sc_header)),
 		  "Submission of header data failed with error %d\n", ret);
 
@@ -225,8 +223,7 @@ bool esdm_rpc_client_is_privileged(void *closure_data)
 		return true;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY,
-	       "Remote client is not privileged\n");
+	logger(LOGGER_DEBUG, LOGGER_C_ANY, "Remote client is not privileged\n");
 	return false;
 }
 
@@ -288,10 +285,10 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	};
 	BUFFER_INIT(tls);
 	struct esdm_rpc_proto_cs *received_data;
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)]
-						__aligned(sizeof(uint64_t));
-	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128]
-						__aligned(sizeof(uint64_t));
+	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)] __aligned(
+		sizeof(uint64_t));
+	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128] __aligned(
+		sizeof(uint64_t));
 	size_t total_received = 0;
 	ssize_t received;
 	uint32_t data_to_fetch = 0;
@@ -351,8 +348,8 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 			logger(LOGGER_DEBUG, LOGGER_C_RPC,
 			       "Server received: message length %u, message index %u, request ID %u\n",
-			       header->message_length,
-			       header->method_index, header->request_id);
+			       header->message_length, header->method_index,
+			       header->request_id);
 
 			/*
 			 * Truncate the buffer length if client specified
@@ -448,7 +445,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	struct timeval tv = { .tv_sec = 2, .tv_usec = 0 };
 	struct esdm_rpcs_connection *rpc_conn = NULL;
 	struct sockaddr addr;
-	socklen_t addr_len = sizeof (addr);
+	socklen_t addr_len = sizeof(addr);
 	int ret = 0;
 
 #ifdef DEBUG
@@ -460,7 +457,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		return -EINVAL;
 	CKNULL(proto->service, -EINVAL);
 
-	while(atomic_read(&server_exit) == 0) {
+	while (atomic_read(&server_exit) == 0) {
 		/*
 		 * Allocate the memory for the thread invocation. This is done
 		 * before the accept() call as now we should have time but
@@ -482,8 +479,8 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		rpc_conn->proto = proto;
 
 		/* Wait for incoming connection */
-		rpc_conn->child_fd = accept(proto->server_listening_fd, &addr,
-					    &addr_len);
+		rpc_conn->child_fd =
+			accept(proto->server_listening_fd, &addr, &addr_len);
 
 		/* If server is requested to terminate, do that */
 		if (atomic_read(&server_exit))
@@ -499,9 +496,9 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		}
 
 		if (setsockopt(rpc_conn->child_fd, SOL_SOCKET, SO_RCVTIMEO,
-			       (const char*)&tv, sizeof(tv)) < 0 ||
+			       (const char *)&tv, sizeof(tv)) < 0 ||
 		    setsockopt(rpc_conn->child_fd, SOL_SOCKET, SO_SNDTIMEO,
-			       (const char*)&tv, sizeof(tv)) < 0) {
+			       (const char *)&tv, sizeof(tv)) < 0) {
 			int errsv = errno;
 
 			logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -542,8 +539,7 @@ out:
 
 /* Open the socket that we want to use for receiving data. */
 static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
-			   ProtobufCService *service,
-			   struct esdm_rpcs *proto)
+			   ProtobufCService *service, struct esdm_rpcs *proto)
 {
 	struct sockaddr_un addr_un;
 	struct sockaddr_in addr_in;
@@ -563,7 +559,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		esdm_rpcs_stale_socket(unix_socket, address, address_len);
 	} else if (tcp_port) {
 		protocol_family = PF_INET;
-		memset (&addr_in, 0, sizeof(addr_in));
+		memset(&addr_in, 0, sizeof(addr_in));
 		addr_in.sin_family = AF_INET;
 		addr_in.sin_port = htons(tcp_port);
 		address_len = sizeof(addr_in);
@@ -619,7 +615,7 @@ static int esdm_rpcs_unpriv_init(void *args)
 {
 	struct esdm_rpcs unpriv_proto;
 	ProtobufCService *unpriv_service =
-				(ProtobufCService *)&unpriv_access_service;
+		(ProtobufCService *)&unpriv_access_service;
 	int ret;
 
 	(void)args;
@@ -635,9 +631,8 @@ static int esdm_rpcs_unpriv_init(void *args)
 
 	/* Make unprivileged socket available for all users */
 	if (chmod(ESDM_RPC_UNPRIV_SOCKET,
-		  S_IRUSR | S_IWUSR |
-		  S_IRGRP | S_IWGRP |
-		  S_IROTH | S_IWOTH) == -1) {
+		  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) ==
+	    -1) {
 		ret = -errno;
 
 		logger(LOGGER_ERR, LOGGER_C_ANY,
@@ -684,7 +679,7 @@ static int esdm_rpcs_interfaces_init(const char *username)
 {
 	struct esdm_rpcs priv_proto;
 	ProtobufCService *priv_service =
-				(ProtobufCService *)&priv_access_service;
+		(ProtobufCService *)&priv_access_service;
 	int ret;
 
 	priv_proto.server_listening_fd = -1;
@@ -743,8 +738,8 @@ static void esdm_rpcs_cleanup(void)
 	/* Clean up all unprivileged Unix domain socket */
 	if (unlink(ESDM_RPC_UNPRIV_SOCKET) < 0) {
 		logger(LOGGER_ERR, LOGGER_C_SERVER,
-			"ESDM Unix domain socket %s cannot be deleted: %s\n",
-			ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
+		       "ESDM Unix domain socket %s cannot be deleted: %s\n",
+		       ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
 	} else {
 		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 		       "ESDM Unix domain socket %s deleted\n",

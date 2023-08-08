@@ -41,7 +41,10 @@ static inline void mb(void)
 	__sync_synchronize();
 }
 
-#define ATOMIC_INIT(i)  { (i) }
+#define ATOMIC_INIT(i)                                                         \
+	{                                                                      \
+		(i)                                                            \
+	}
 
 /**
  * Read atomic variable
@@ -52,7 +55,7 @@ static inline int atomic_read(const atomic_t *v)
 {
 	int i;
 
-	mb();	
+	mb();
 	i = ((v)->counter);
 	mb();
 
@@ -243,9 +246,9 @@ static inline int atomic_xchg(atomic_t *v, int newval)
  * @param check_func Function that returns the new value to be set. The function
  *		     is invoked with the old value as input parameter.
  */
-static inline void
-atomic_update_with_func(atomic_t *v, void *data,
-			int(*check_func)(void *data, int old))
+static inline void atomic_update_with_func(atomic_t *v, void *data,
+					   int (*check_func)(void *data,
+							     int old))
 {
 	int old;
 

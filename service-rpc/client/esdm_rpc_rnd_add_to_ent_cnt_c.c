@@ -37,10 +37,10 @@ struct esdm_rnd_add_to_ent_cnt_buf {
 
 static void
 esdm_rpcc_rnd_add_to_ent_cnt_cb(const RndAddToEntCntResponse *response,
-			        void *closure_data)
+				void *closure_data)
 {
 	struct esdm_rnd_add_to_ent_cnt_buf *buffer =
-			(struct esdm_rnd_add_to_ent_cnt_buf *)closure_data;
+		(struct esdm_rnd_add_to_ent_cnt_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
@@ -60,7 +60,8 @@ int esdm_rpcc_rnd_add_to_ent_cnt_int(unsigned int entcnt, void *int_data)
 
 	msg.entcnt = entcnt;
 	priv_access__rpc_rnd_add_to_ent_cnt(&rpc_conn->service, &msg,
-				esdm_rpcc_rnd_add_to_ent_cnt_cb, &buffer);
+					    esdm_rpcc_rnd_add_to_ent_cnt_cb,
+					    &buffer);
 
 	ret = buffer.ret;
 

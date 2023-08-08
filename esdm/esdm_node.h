@@ -31,17 +31,25 @@ void esdm_drng_put_instances(void);
 void esdm_drngs_node_alloc(void);
 void esdm_node_fini(void);
 
-#define for_each_online_node(cpu)					\
+#define for_each_online_node(cpu)                                              \
 	for (cpu = 0; cpu < esdm_config_online_nodes(); cpu++)
 
-#else	/* ESDM_NODE */
-static inline struct esdm_drng **esdm_drng_get_instances(void) { return NULL; }
-static inline void esdm_drng_put_instances(void) { }
-static inline void esdm_drngs_node_alloc(void) { }
-static inline void esdm_node_fini(void) { }
+#else /* ESDM_NODE */
+static inline struct esdm_drng **esdm_drng_get_instances(void)
+{
+	return NULL;
+}
+static inline void esdm_drng_put_instances(void)
+{
+}
+static inline void esdm_drngs_node_alloc(void)
+{
+}
+static inline void esdm_node_fini(void)
+{
+}
 
-#define for_each_online_node(cpu)					\
-	for (cpu = 0; cpu < 1; cpu++)
+#define for_each_online_node(cpu) for (cpu = 0; cpu < 1; cpu++)
 
 #endif /* ESDM_NODE */
 

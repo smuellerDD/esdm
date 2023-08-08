@@ -97,7 +97,7 @@ static int esdm_kcapi_hash_init(struct shash_desc *shash, void *hash)
 }
 
 static int esdm_kcapi_hash_update(struct shash_desc *shash, const u8 *inbuf,
-			   u32 inbuflen)
+				  u32 inbuflen)
 {
 	return crypto_shash_update(shash, inbuf, inbuflen);
 }
@@ -113,13 +113,13 @@ static void esdm_kcapi_hash_zero(struct shash_desc *shash)
 }
 
 static const struct esdm_hash_cb _esdm_kcapi_hash_cb = {
-	.hash_name		= esdm_kcapi_hash_name,
-	.hash_alloc		= esdm_kcapi_hash_name_alloc,
-	.hash_dealloc		= esdm_kcapi_hash_dealloc,
-	.hash_digestsize	= esdm_kcapi_hash_digestsize,
-	.hash_init		= esdm_kcapi_hash_init,
-	.hash_update		= esdm_kcapi_hash_update,
-	.hash_final		= esdm_kcapi_hash_final,
-	.hash_desc_zero		= esdm_kcapi_hash_zero,
+	.hash_name = esdm_kcapi_hash_name,
+	.hash_alloc = esdm_kcapi_hash_name_alloc,
+	.hash_dealloc = esdm_kcapi_hash_dealloc,
+	.hash_digestsize = esdm_kcapi_hash_digestsize,
+	.hash_init = esdm_kcapi_hash_init,
+	.hash_update = esdm_kcapi_hash_update,
+	.hash_final = esdm_kcapi_hash_final,
+	.hash_desc_zero = esdm_kcapi_hash_zero,
 };
 const struct esdm_hash_cb *esdm_kcapi_hash_cb = &_esdm_kcapi_hash_cb;

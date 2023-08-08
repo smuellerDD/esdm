@@ -56,16 +56,22 @@ static void usage(void)
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "\t-h --help\tThis help information\n");
 	fprintf(stderr, "\t   --version\tPrint version\n");
-	fprintf(stderr, "\t-v --verbose\tVerbose logging, multiple options increase verbosity\n");
-	fprintf(stderr, "\t\t\tVerbose logging implies running in foreground\n");
+	fprintf(stderr,
+		"\t-v --verbose\tVerbose logging, multiple options increase verbosity\n");
+	fprintf(stderr,
+		"\t\t\tVerbose logging implies running in foreground\n");
 	fprintf(stderr, "\t-p --pid\tWrite daemon PID to file\n");
-	fprintf(stderr, "\t-u --username\tUnprivileged user name to switch to (default: \"nobody\")\n");
+	fprintf(stderr,
+		"\t-u --username\tUnprivileged user name to switch to (default: \"nobody\")\n");
 	fprintf(stderr, "\t-f --foreground\tExecute in foreground\n");
-	fprintf(stderr, "\t-i --force_irqes\tForce to enable IRQ ES where the ESDM\n");
+	fprintf(stderr,
+		"\t-i --force_irqes\tForce to enable IRQ ES where the ESDM\n");
 	fprintf(stderr, "\t\t\t\tretries enabling it\n");
-	fprintf(stderr, "\t-s --force_schedes\tForce to enable Sched ES where the ESDM\n");
+	fprintf(stderr,
+		"\t-s --force_schedes\tForce to enable Sched ES where the ESDM\n");
 	fprintf(stderr, "\t\t\t\tretries enabling it\n");
-	fprintf(stderr, "\t   --jent_block_disable\tDisable Jitter RNG block collection\n");
+	fprintf(stderr,
+		"\t   --jent_block_disable\tDisable Jitter RNG block collection\n");
 	exit(1);
 }
 
@@ -76,18 +82,17 @@ static void parse_opts(int argc, char *argv[])
 
 	while (1) {
 		int opt_index = 0;
-		static struct option opts[] = {
-			{"verbose", 0, 0, 0},
-			{"pid", 1, 0, 0},
-			{"help", 0, 0, 0},
-			{"version", 0, 0, 0},
-			{"username", 0, 0, 0},
-			{"foreground", 0, 0, 0},
-			{"force_irqes", 0, 0, 0},
-			{"force_schedes", 0, 0, 0},
-			{"jent_block_disable", 0, 0, 0},
-			{0, 0, 0, 0}
-		};
+		static struct option opts[] = { { "verbose", 0, 0, 0 },
+						{ "pid", 1, 0, 0 },
+						{ "help", 0, 0, 0 },
+						{ "version", 0, 0, 0 },
+						{ "username", 0, 0, 0 },
+						{ "foreground", 0, 0, 0 },
+						{ "force_irqes", 0, 0, 0 },
+						{ "force_schedes", 0, 0, 0 },
+						{ "jent_block_disable", 0, 0,
+						  0 },
+						{ 0, 0, 0, 0 } };
 		c = getopt_long(argc, argv, "hvp:u:fis", opts, &opt_index);
 		if (-1 == c)
 			break;
@@ -225,7 +230,8 @@ static void sig_term(int sig)
 
 static void install_term(void)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Install termination signal handler\n");
+	logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+	       "Install termination signal handler\n");
 	signal(SIGHUP, sig_term);
 	signal(SIGINT, sig_term);
 	signal(SIGQUIT, sig_term);
@@ -234,10 +240,11 @@ static void install_term(void)
 
 static void create_pid_file(const char *pid_file)
 {
-	char pid_str[12];	/* max. integer length + '\n' + null */
+	char pid_str[12]; /* max. integer length + '\n' + null */
 
 	/* Ensure only one copy */
-	pidfile_fd = open(pid_file, O_RDWR|O_CREAT|O_EXCL, S_IRUSR|S_IWUSR);
+	pidfile_fd =
+		open(pid_file, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (pidfile_fd == -1)
 		logger(LOGGER_ERR, LOGGER_C_SERVER, "Cannot open pid file\n");
 
@@ -252,7 +259,8 @@ static void create_pid_file(const char *pid_file)
 	}
 
 	if (ftruncate(pidfile_fd, 0) == -1) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER, "Cannot truncate pid file\n");
+		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		       "Cannot truncate pid file\n");
 		exit(1);
 	}
 
@@ -260,7 +268,8 @@ static void create_pid_file(const char *pid_file)
 	snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
 	if (write(pidfile_fd, pid_str, strlen(pid_str)) !=
 	    (ssize_t)strlen(pid_str)) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER, "Cannot write to pid file\n");
+		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		       "Cannot write to pid file\n");
 		exit(1);
 	}
 }
@@ -271,11 +280,12 @@ static void daemonize(void)
 
 	/* already a daemon */
 	if (getppid() == 1)
-	       return;
+		return;
 
 	pid = fork();
 	if (pid < 0) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER, "Cannot fork to daemonize\n");
+		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		       "Cannot fork to daemonize\n");
 		exit(1);
 	}
 
@@ -296,17 +306,18 @@ static void daemonize(void)
 	/* Change the current working directory.  This prevents the current
 	 * directory from being locked; hence not being able to remove it. */
 	if ((chdir("/")) < 0)
-		logger(LOGGER_ERR, LOGGER_C_SERVER, "Cannot change directory\n");
+		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		       "Cannot change directory\n");
 
 	if (pidfile && strlen(pidfile))
 		create_pid_file(pidfile);
 
-	/* Redirect standard files to /dev/null */
+		/* Redirect standard files to /dev/null */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
-	freopen( "/dev/null", "r", stdin);
-	freopen( "/dev/null", "w", stdout);
-	freopen( "/dev/null", "w", stderr);
+	freopen("/dev/null", "r", stdin);
+	freopen("/dev/null", "w", stdout);
+	freopen("/dev/null", "w", stderr);
 #pragma GCC diagnostic pop
 }
 

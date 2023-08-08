@@ -25,12 +25,14 @@
 /* Only panic the kernel on permanent health failure if this variable is true */
 static bool esdm_panic_on_permanent_health_failure = false;
 module_param(esdm_panic_on_permanent_health_failure, bool, 0444);
-MODULE_PARM_DESC(esdm_panic_on_permanent_health_failure, "Panic on reaching permanent health failure - only required if ESDM is part of a FIPS 140-3 module\n");
+MODULE_PARM_DESC(
+	esdm_panic_on_permanent_health_failure,
+	"Panic on reaching permanent health failure - only required if ESDM is part of a FIPS 140-3 module\n");
 
 static int esdm_major = 0;
 module_param(esdm_major, int, 0);
 MODULE_PARM_DESC(esdm_major, "ESDM major device number");
-#define ESDM_MAX_MINORS	2
+#define ESDM_MAX_MINORS 2
 
 static struct class *esdm_es_class;
 static struct cdev esdm_cdev;
@@ -110,11 +112,11 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 }
 
 static const struct file_operations esdm_cdev_fops = {
-	.owner  	= THIS_MODULE,
-	.open		= esdm_cdev_open,
-	.release	= esdm_cdev_release,
-	.unlocked_ioctl	= esdm_cdev_ioctl,
-	.llseek		= no_llseek,
+	.owner = THIS_MODULE,
+	.open = esdm_cdev_open,
+	.release = esdm_cdev_release,
+	.unlocked_ioctl = esdm_cdev_ioctl,
+	.llseek = no_llseek,
 };
 
 static int __init esdm_es_mgr_dev_init(void)
@@ -124,10 +126,10 @@ static int __init esdm_es_mgr_dev_init(void)
 	int ret;
 
 	esdm_es_class = class_create(
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6,4,0)
-				     THIS_MODULE,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+		THIS_MODULE,
 #endif
-			             KBUILD_MODNAME);
+		KBUILD_MODNAME);
 	if (IS_ERR(esdm_es_class))
 		return PTR_ERR(esdm_es_class);
 

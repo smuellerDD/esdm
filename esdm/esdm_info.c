@@ -64,7 +64,7 @@ void esdm_status(char *buf, size_t buflen)
 	}
 
 	snprintf(buf, buflen, "ESDM %slibrary version: %s\n", TESTMODE_STR,
-		VERSION);
+		 VERSION);
 	len = esdm_remaining_buf_len(buf, buflen);
 
 	snprintf(buf + len, buflen - len,
@@ -75,10 +75,8 @@ void esdm_status(char *buf, size_t buflen)
 		 "ESDM minimally seeded: %s\n"
 		 "ESDM fully seeded: %s\n"
 		 "ESDM entropy level: %u\n",
-		 drng->drng_cb->drng_name(),
-		 esdm_security_strength(),
-		 esdm_nodes,
-		 esdm_sp80090c_compliant() ? "SP800-90C, " : "",
+		 drng->drng_cb->drng_name(), esdm_security_strength(),
+		 esdm_nodes, esdm_sp80090c_compliant() ? "SP800-90C, " : "",
 		 esdm_ntg1_compliant() ? "NTG.1 (2011), " : "",
 		 esdm_ntg1_2022_compliant() ? "NTG.1 (2022)" : "",
 		 esdm_state_min_seeded() ? "true" : "false",
@@ -86,7 +84,8 @@ void esdm_status(char *buf, size_t buflen)
 		 esdm_avail_entropy());
 
 	/* Concatenate the output of the entropy sources. */
-	for_each_esdm_es(i) {
+	for_each_esdm_es(i)
+	{
 		len = esdm_remaining_buf_len(buf, buflen);
 		snprintf(buf + len, buflen - len,
 			 "Entropy Source %u properties:\n"

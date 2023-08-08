@@ -130,7 +130,7 @@ void _logger(const enum logger_verbosity severity,
 	time_t now;
 	struct tm now_detail;
 	va_list args;
-	int (*fprintf_color)(FILE * stream, const char *format, ...) = &fprintf;
+	int (*fprintf_color)(FILE *stream, const char *format, ...) = &fprintf;
 	int ret;
 	char msg[4096];
 	char sev[10];
@@ -185,12 +185,11 @@ void _logger(const enum logger_verbosity severity,
 	switch (logger_verbosity_level) {
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
-		fprintf_color(
-			logger_stream,
-			"ESDM (%.2d:%.2d:%.2d) (%s) %s%s [%s:%s:%u]: ",
-			now_detail.tm_hour, now_detail.tm_min,
-			now_detail.tm_sec, thread_name, sev, c, file, func,
-			line);
+		fprintf_color(logger_stream,
+			      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s [%s:%s:%u]: ",
+			      now_detail.tm_hour, now_detail.tm_min,
+			      now_detail.tm_sec, thread_name, sev, c, file,
+			      func, line);
 		break;
 	case LOGGER_VERBOSE:
 	case LOGGER_WARN:
@@ -248,8 +247,7 @@ void _logger_binary(const enum logger_verbosity severity,
 	case LOGGER_NONE:
 	case LOGGER_MAX_LEVEL:
 	default:
-		snprintf(msg, sizeof(msg),
-			 "ESDM (%.2d:%.2d:%.2d) %s%s: %s",
+		snprintf(msg, sizeof(msg), "ESDM (%.2d:%.2d:%.2d) %s%s: %s",
 			 now_detail.tm_hour, now_detail.tm_min,
 			 now_detail.tm_sec, sev, c, str);
 		break;
@@ -362,8 +360,8 @@ void logger_get_class(const int fd)
 	for (i = 0; i < ARRAY_SIZE(logger_class_mapping); i++) {
 		dprintf(fd, "%u %s\n", logger_class_mapping[i].class,
 			logger_class_mapping[i].logdata ?
-				      logger_class_mapping[i].logdata :
-				      "(unclassified)");
+				logger_class_mapping[i].logdata :
+				"(unclassified)");
 	}
 }
 

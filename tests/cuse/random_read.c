@@ -52,13 +52,12 @@ static int read_complete(int fd, uint8_t *buf, size_t buflen)
 	return 1;
 }
 
-
 static int read_random(const char *path, uint8_t *buf, size_t buflen)
 {
 	int fd;
 	int ret = 0;
 
-	fd = open(path, O_RDONLY|O_CLOEXEC);
+	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (0 > fd)
 		return fd;
 
@@ -66,7 +65,6 @@ static int read_random(const char *path, uint8_t *buf, size_t buflen)
 	close(fd);
 	return ret;
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -108,7 +106,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		} else {
-			printf("PASS: amount of client data requested matches received data (%zu)\n", len);
+			printf("PASS: amount of client data requested matches received data (%zu)\n",
+			       len);
 		}
 
 		if (len != esdm_test_shm_status_get_rpc_server_written()) {
@@ -118,7 +117,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			goto out;
 		} else {
-			printf("PASS: amount of generated server data matches written data (%zu)\n", len);
+			printf("PASS: amount of generated server data matches written data (%zu)\n",
+			       len);
 		}
 		esdm_test_shm_status_reset();
 #endif
@@ -131,5 +131,4 @@ int main(int argc, char *argv[])
 out:
 	env_fini();
 	return ret;
-
 }

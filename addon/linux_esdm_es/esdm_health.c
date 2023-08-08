@@ -16,28 +16,28 @@
 
 /* Stuck Test */
 struct esdm_stuck_test {
-	u32 last_time;		/* Stuck test: time of previous IRQ */
-	u32 last_delta;		/* Stuck test: delta of previous IRQ */
-	u32 last_delta2;	/* Stuck test: 2. time derivation of prev IRQ */
+	u32 last_time; /* Stuck test: time of previous IRQ */
+	u32 last_delta; /* Stuck test: delta of previous IRQ */
+	u32 last_delta2; /* Stuck test: 2. time derivation of prev IRQ */
 };
 
 /* Repetition Count Test */
 struct esdm_rct {
-	atomic_t rct_count;	/* Number of stuck values */
+	atomic_t rct_count; /* Number of stuck values */
 };
 
 /* Adaptive Proportion Test */
 struct esdm_apt {
 	/* Data window size */
-#define ESDM_APT_WINDOW_SIZE	512
+#define ESDM_APT_WINDOW_SIZE 512
 	/* LSB of time stamp to process */
-#define ESDM_APT_LSB		16
-#define ESDM_APT_WORD_MASK	(ESDM_APT_LSB - 1)
-	atomic_t apt_count;		/* APT counter */
-	atomic_t apt_base;		/* APT base reference */
+#define ESDM_APT_LSB 16
+#define ESDM_APT_WORD_MASK (ESDM_APT_LSB - 1)
+	atomic_t apt_count; /* APT counter */
+	atomic_t apt_base; /* APT base reference */
 
 	atomic_t apt_trigger;
-	bool apt_base_set;	/* Is APT base set? */
+	bool apt_base_set; /* Is APT base set? */
 };
 
 /* Health data collected for one entropy source */
@@ -46,20 +46,19 @@ struct esdm_health_es_state {
 	struct esdm_apt apt;
 
 	/* SP800-90B startup health tests */
-#define ESDM_SP80090B_STARTUP_SAMPLES  1024
-#define ESDM_SP80090B_STARTUP_BLOCKS   ((ESDM_SP80090B_STARTUP_SAMPLES + \
-					 ESDM_APT_WINDOW_SIZE - 1) /    \
-					ESDM_APT_WINDOW_SIZE)
+#define ESDM_SP80090B_STARTUP_SAMPLES 1024
+#define ESDM_SP80090B_STARTUP_BLOCKS                                           \
+	((ESDM_SP80090B_STARTUP_SAMPLES + ESDM_APT_WINDOW_SIZE - 1) /          \
+	 ESDM_APT_WINDOW_SIZE)
 	bool sp80090b_startup_done;
 	atomic_t sp80090b_startup_blocks;
 };
 
-#define ESDM_HEALTH_ES_INIT(x) \
-	x.rct.rct_count = ATOMIC_INIT(0), \
-	x.apt.apt_count = ATOMIC_INIT(0), \
-	x.apt.apt_base = ATOMIC_INIT(-1), \
-	x.apt.apt_trigger = ATOMIC_INIT(ESDM_APT_WINDOW_SIZE), \
-	x.apt.apt_base_set = false, \
+#define ESDM_HEALTH_ES_INIT(x)                                                 \
+	x.rct.rct_count = ATOMIC_INIT(0), x.apt.apt_count = ATOMIC_INIT(0),    \
+	x.apt.apt_base = ATOMIC_INIT(-1),                                      \
+	x.apt.apt_trigger = ATOMIC_INIT(ESDM_APT_WINDOW_SIZE),                 \
+	x.apt.apt_base_set = false,                                            \
 	x.sp80090b_startup_blocks = ATOMIC_INIT(ESDM_SP80090B_STARTUP_BLOCKS), \
 	x.sp80090b_startup_done = false,
 
@@ -76,7 +75,7 @@ static struct esdm_health esdm_health = {
 	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_irq])
 #endif
 #ifdef ESDM_ES_SCHED
-	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
+		ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
 #endif
 };
 
@@ -192,10 +191,12 @@ static void esdm_sp80090b_failure(struct esdm_health *health,
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
 	if (es_state->sp80090b_startup_done) {
-		pr_err("SP800-90B runtime health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n", es);
+		pr_err("SP800-90B runtime health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
+		       es);
 		esdm_sp80090b_runtime_failure(health, es);
 	} else {
-		pr_err("SP800-90B startup test failure for internal entropy source %u - resetting\n", es);
+		pr_err("SP800-90B startup test failure for internal entropy source %u - resetting\n",
+		       es);
 		esdm_sp80090b_startup_failure(health, es);
 	}
 }
@@ -254,8 +255,8 @@ static void esdm_apt_restart(struct esdm_apt *apt)
  * @health [in] Reference to health state
  * @now_time [in] Time stamp to process
  */
-static void esdm_apt_insert(struct esdm_health *health,
-			    unsigned int now_time, enum esdm_internal_es es)
+static void esdm_apt_insert(struct esdm_health *health, unsigned int now_time,
+			    enum esdm_internal_es es)
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 	struct esdm_apt *apt = &es_state->apt;
@@ -432,7 +433,8 @@ enum esdm_health_res esdm_health_test(u32 now_time, enum esdm_internal_es es)
 	if (stuck) {
 		/* SP800-90B disallows using a failing health test time stamp */
 		return esdm_sp80090b_health_requested() ?
-			esdm_health_fail_drop : esdm_health_fail_use;
+			       esdm_health_fail_drop :
+			       esdm_health_fail_use;
 	}
 
 	return esdm_health_pass;

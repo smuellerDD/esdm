@@ -67,15 +67,15 @@ static int es_krng_getdata(uint32_t expected_ent_level)
 	memset(&zero, 0, sizeof(zero));
 
 	esdm_es[esdm_ext_es_krng]->get_ent(&eb_es,
-					     ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					     true);
-	if (eb_es.e_bits != esdm_fast_noise_entropylevel(
-				esdm_config_es_krng_entropy_rate(),
-				ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
+					   ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	if (eb_es.e_bits !=
+	    esdm_fast_noise_entropylevel(esdm_config_es_krng_entropy_rate(),
+					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
 		printf("ES Kernel RNG - fail: get_ent failed to deliver requested data (expected %u, received %u bits)\n",
 		       esdm_fast_noise_entropylevel(
-				esdm_config_es_krng_entropy_rate(),
-				ESDM_DRNG_INIT_SEED_SIZE_BITS), eb_es.e_bits);
+			       esdm_config_es_krng_entropy_rate(),
+			       ESDM_DRNG_INIT_SEED_SIZE_BITS),
+		       eb_es.e_bits);
 		return 1;
 	}
 
@@ -114,25 +114,25 @@ static int es_krng_poolsize(uint32_t expected_ent_level)
 	esdm_config_es_krng_entropy_rate_set(expected_ent_level);
 
 	ret = esdm_es[esdm_ext_es_krng]->max_entropy();
-	if (ret != esdm_fast_noise_entropylevel(
-		esdm_config_es_krng_entropy_rate(),
-		esdm_security_strength())) {
+	if (ret !=
+	    esdm_fast_noise_entropylevel(esdm_config_es_krng_entropy_rate(),
+					 esdm_security_strength())) {
 		printf("ES Kernel RNG - fail: max_entropy failed: %d\n", ret);
 		return 1;
 	}
 
 	if (esdm_config_es_krng_entropy_rate() !=
-	    esdm_fast_noise_entropylevel(
-		esdm_config_es_krng_entropy_rate(),
-		esdm_security_strength())) {
+	    esdm_fast_noise_entropylevel(esdm_config_es_krng_entropy_rate(),
+					 esdm_security_strength())) {
 		printf("ES Kernel RNG - fail: esdm_fast_noise_entropylevel returned unexpected value: %u\n",
 		       esdm_fast_noise_entropylevel(
-				esdm_config_es_krng_entropy_rate(),
-				esdm_security_strength()));
+			       esdm_config_es_krng_entropy_rate(),
+			       esdm_security_strength()));
 		return 1;
 	}
 
-	ret2 = esdm_es[esdm_ext_es_krng]->curr_entropy(esdm_security_strength());
+	ret2 = esdm_es[esdm_ext_es_krng]->curr_entropy(
+		esdm_security_strength());
 	if (ret != ret2) {
 		printf("ES Kernel RNG - fail: max_entropy inconsisten with curr_entropy: max_entropy %u, curr_entropy %u\n",
 		       ret, ret2);

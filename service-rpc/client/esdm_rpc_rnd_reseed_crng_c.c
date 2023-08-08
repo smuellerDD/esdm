@@ -33,12 +33,11 @@ struct esdm_rnd_reseed_crng_buf {
 	int ret;
 };
 
-static void
-esdm_rpcc_rnd_reseed_crng_cb(const RndReseedCRNGResponse *response,
-			     void *closure_data)
+static void esdm_rpcc_rnd_reseed_crng_cb(const RndReseedCRNGResponse *response,
+					 void *closure_data)
 {
 	struct esdm_rnd_reseed_crng_buf *buffer =
-			(struct esdm_rnd_reseed_crng_buf *)closure_data;
+		(struct esdm_rnd_reseed_crng_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;

@@ -21,8 +21,7 @@
 #define CUSE_HELPER_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst);

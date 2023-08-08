@@ -37,18 +37,18 @@ void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
 {
 	GetRandomBytesPrResponse response = GET_RANDOM_BYTES_PR_RESPONSE__INIT;
 	uint8_t rndval[ESDM_RPC_MAX_DATA];
-	(void) service;
+	(void)service;
 
 	if (request == NULL || request->len > sizeof(rndval)) {
 		response.ret = -(int32_t)sizeof(rndval);
 		closure(&response, closure_data);
 	} else {
-		response.ret = (int)esdm_get_random_bytes_pr(rndval,
-							     request->len);
+		response.ret =
+			(int)esdm_get_random_bytes_pr(rndval, request->len);
 
 		if (response.ret > 0) {
 			esdm_test_shm_status_add_rpc_server_written(
-							(size_t)response.ret);
+				(size_t)response.ret);
 			response.randval.data = rndval;
 			response.randval.len = (size_t)response.ret;
 		}

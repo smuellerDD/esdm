@@ -24,8 +24,7 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /*
@@ -66,8 +65,7 @@ struct esdm_rpc_proto_sc {
 } __attribute__((packed));
 
 /* Use same error codes as protobuf-c-rpc */
-typedef enum
-{
+typedef enum {
 	PROTOBUF_C_RPC_STATUS_CODE_SUCCESS,
 	PROTOBUF_C_RPC_STATUS_CODE_SERVICE_FAILED,
 	PROTOBUF_C_RPC_STATUS_CODE_TOO_MANY_PENDING
@@ -75,15 +73,13 @@ typedef enum
 
 void set_fd_nonblocking(int fd);
 
-int
-esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
-			      const struct esdm_rpc_proto_cs *received_data,
-			      const ProtobufCMessageDescriptor **desc);
+int esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
+				  const struct esdm_rpc_proto_cs *received_data,
+				  const ProtobufCMessageDescriptor **desc);
 
 /* Helpers used for protobuf-c allocator */
 void *esdm_rpc_alloc(void *allocator_data, size_t size);
 void esdm_rpc_free(void *allocator_data, void *data);
-
 
 #ifdef __cplusplus
 }

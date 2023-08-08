@@ -33,9 +33,8 @@
 /* Security strength of ESDM -- this must match DRNG security strength */
 #define ESDM_DRNG_SECURITY_STRENGTH_BYTES 32
 #define ESDM_DRNG_SECURITY_STRENGTH_BITS (ESDM_DRNG_SECURITY_STRENGTH_BYTES * 8)
-#define ESDM_DRNG_INIT_SEED_SIZE_BITS					\
-	(ESDM_DRNG_SECURITY_STRENGTH_BITS +				\
-	 ESDM_SEED_BUFFER_INIT_ADD_BITS)
+#define ESDM_DRNG_INIT_SEED_SIZE_BITS                                          \
+	(ESDM_DRNG_SECURITY_STRENGTH_BITS + ESDM_SEED_BUFFER_INIT_ADD_BITS)
 #define ESDM_DRNG_INIT_SEED_SIZE_BYTES (ESDM_DRNG_INIT_SEED_SIZE_BITS >> 3)
 
 /*
@@ -44,7 +43,7 @@
  *
  * This value is allowed to be changed.
  */
-#define ESDM_DRNG_MAX_REQSIZE		(1<<12)
+#define ESDM_DRNG_MAX_REQSIZE (1 << 12)
 
 /*
  * SP800-90A defines a maximum number of requests between reseeds of 2^48.
@@ -54,7 +53,7 @@
  *
  * This value is allowed to be changed.
  */
-#define ESDM_DRNG_RESEED_THRESH		(1<<20)
+#define ESDM_DRNG_RESEED_THRESH (1 << 20)
 
 /*
  * Maximum DRNG generation operations without reseed having full entropy
@@ -68,7 +67,7 @@
  *
  * This value is allowed to be changed.
  */
-#define ESDM_DRNG_MAX_WITHOUT_RESEED	(1<<30)
+#define ESDM_DRNG_MAX_WITHOUT_RESEED (1 << 30)
 
 /*
  * Min required seed entropy is 128 bits covering the minimum entropy
@@ -76,12 +75,12 @@
  *
  * This value is allowed to be changed.
  */
-#define ESDM_FULL_SEED_ENTROPY_BITS	ESDM_DRNG_SECURITY_STRENGTH_BITS
-#define ESDM_MIN_SEED_ENTROPY_BITS	128
-#define ESDM_INIT_ENTROPY_BITS		32
+#define ESDM_FULL_SEED_ENTROPY_BITS ESDM_DRNG_SECURITY_STRENGTH_BITS
+#define ESDM_MIN_SEED_ENTROPY_BITS 128
+#define ESDM_INIT_ENTROPY_BITS 32
 
 /* AIS20/31: NTG.1.4 minimum entropy rate for one entropy source*/
-#define ESDM_AIS2031_NPTRNG_MIN_ENTROPY	220
+#define ESDM_AIS2031_NPTRNG_MIN_ENTROPY 220
 
 /*
  * Wakeup value
@@ -89,12 +88,12 @@
  * This value is allowed to be changed but must not be larger than the
  * digest size of the hash operation used update the aux_pool.
  */
-#define ESDM_WRITE_WAKEUP_ENTROPY	SHA512_DIGEST_SIZE
+#define ESDM_WRITE_WAKEUP_ENTROPY SHA512_DIGEST_SIZE
 
 /*
  * Define the digest size for the conditioning components
  */
-#define ESDM_MAX_DIGESTSIZE		SHA512_DIGEST_SIZE
+#define ESDM_MAX_DIGESTSIZE SHA512_DIGEST_SIZE
 
 /*
  * Oversampling factor of timer-based events to obtain
@@ -107,19 +106,19 @@
  *
  * This value is allowed to be changed.
  */
-#define ESDM_ES_OVERSAMPLING_FACTOR	10
+#define ESDM_ES_OVERSAMPLING_FACTOR 10
 
 /* Alignmask that is intended to be identical to CRYPTO_MINALIGN */
-#define ESDM_KCAPI_ALIGN		8
+#define ESDM_KCAPI_ALIGN 8
 
 /*
  * This definition must provide a buffer that is equal to SHASH_DESC_ON_STACK
  * as it will be casted into a struct hash_ctx.
  */
-#define ESDM_POOL_SIZE	HASH_MAX_DESCSIZE
+#define ESDM_POOL_SIZE HASH_MAX_DESCSIZE
 
 /* Sleep time for poll operations */
-static const struct timespec poll_ts = { .tv_sec = 0, .tv_nsec = 1U<<29 };
+static const struct timespec poll_ts = { .tv_sec = 0, .tv_nsec = 1U << 29 };
 
 /****************************** Helper code ***********************************/
 

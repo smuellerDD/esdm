@@ -21,8 +21,7 @@
 #define ESDM_GNUTLS_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 extern const struct esdm_hash_cb esdm_gnutls_hash_cb;

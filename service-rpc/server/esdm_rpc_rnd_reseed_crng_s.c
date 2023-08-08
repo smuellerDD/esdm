@@ -41,10 +41,10 @@ void esdm_rpc_rnd_reseed_crng(PrivAccess_Service *service,
 	 */
 	if (!esdm_rpc_client_is_privileged(closure_data)) {
 		response.ret = -EPERM;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	} else {
 		esdm_drng_force_reseed();
 		response.ret = 0;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	}
 }

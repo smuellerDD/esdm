@@ -21,9 +21,16 @@ static inline int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg)
 	return -ENOIOCTLCMD;
 }
 
-static inline void esdm_es_mgr_irq_reset(void) { }
-static inline int __init esdm_es_mgr_irq_init(void) { return 0; }
-static inline void esdm_es_mgr_irq_exit(void) { }
+static inline void esdm_es_mgr_irq_reset(void)
+{
+}
+static inline int __init esdm_es_mgr_irq_init(void)
+{
+	return 0;
+}
+static inline void esdm_es_mgr_irq_exit(void)
+{
+}
 
 #endif /* ESDM_ES_IRQ */
 

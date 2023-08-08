@@ -40,6 +40,6 @@ void esdm_rpc_rnd_clear_pool(PrivAccess_Service *service,
 	} else {
 		esdm_pool_set_entropy(0);
 		response.ret = 0;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	}
 }

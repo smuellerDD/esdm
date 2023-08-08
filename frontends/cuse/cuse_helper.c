@@ -53,14 +53,14 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 		int errsv = errno;
 
 		umount(mount_dst);
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "Failed properly relabel %s\n",
-		       mount_dst);
+		logger(LOGGER_ERR, LOGGER_C_CUSE,
+		       "Failed properly relabel %s\n", mount_dst);
 		return -errsv;
 	}
 
 	logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-	       "Successfully created bind mount from %s to %s\n",
-	       mount_src, mount_dst);
+	       "Successfully created bind mount from %s to %s\n", mount_src,
+	       mount_dst);
 	return 0;
 }
 

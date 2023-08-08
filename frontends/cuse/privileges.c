@@ -42,20 +42,19 @@ int drop_privileges_transient(const char *user)
 	if (gid == 0 || uid == 0) {
 		pwd = getpwnam(user);
 		if (pwd == NULL) {
-			logger(LOGGER_ERR, LOGGER_C_ANY,
-			       "User %s unknown\n", user);
+			logger(LOGGER_ERR, LOGGER_C_ANY, "User %s unknown\n",
+			       user);
 			return -ENOENT;
 		}
 
 		uid = pwd->pw_uid;
 		gid = pwd->pw_gid;
 
-
 		/* Drop all supplemental groups */
 		if (setgroups(0, NULL) == -1) {
 			logger(LOGGER_ERR, LOGGER_C_ANY,
-			"Cannot clear supplemental groups: %s\n",
-			strerror(errno));
+			       "Cannot clear supplemental groups: %s\n",
+			       strerror(errno));
 		}
 	}
 
@@ -97,8 +96,8 @@ int raise_privilege_transient(uid_t uid, gid_t gid)
 	if (seteuid(uid) == -1) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot drop to user %u: %s\n", uid, strerror(errsv));
+		logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot drop to user %u: %s\n",
+		       uid, strerror(errsv));
 		return -errsv;
 	}
 

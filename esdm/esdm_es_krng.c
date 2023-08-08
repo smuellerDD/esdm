@@ -79,7 +79,7 @@ static int esdm_krng_init(void)
 
 	/* Re-invocation of init function is safe */
 
-#define DEVRANDOM	"/dev/random"
+#define DEVRANDOM "/dev/random"
 	fd = open(DEVRANDOM, O_RDONLY);
 	if (fd < 0) {
 		int errsv = errno;
@@ -134,7 +134,9 @@ static void esdm_krng_fini(void)
 
 static uint32_t krng_entropy = ESDM_KERNEL_RNG_ENTROPY_RATE;
 
-static void esdm_krng_fini(void) { }
+static void esdm_krng_fini(void)
+{
+}
 
 static int esdm_krng_init(void)
 {
@@ -160,13 +162,15 @@ static uint32_t esdm_krng_properties_entropylevel(uint32_t entropylevel)
 	 * entropy as the kernel is not SP800-90B compliant.
 	 */
 	return esdm_config_fips_enabled() ||
-	/*
+			       /*
 	 * If the scheduler-based entropy source is enabled, the kernel is
 	 * claimed to not return any entropy. This is due to the fact that
 	 * interrupts may trigger scheduling events. This implies that
 	 * interrupts are not independent of interrupts.
 	 */
-	       esdm_sched_enabled() ? 0 : entropylevel;
+			       esdm_sched_enabled() ?
+		       0 :
+		       entropylevel;
 }
 
 static uint32_t esdm_krng_entropylevel(uint32_t requested_bits)
@@ -177,8 +181,7 @@ static uint32_t esdm_krng_entropylevel(uint32_t requested_bits)
 	 * If a specific entropy value is configured, use it instead of the
 	 * heuristic.
 	 */
-	if (esdm_config_es_krng_entropy_rate() !=
-	    ESDM_KERNEL_RNG_ENTROPY_RATE)
+	if (esdm_config_es_krng_entropy_rate() != ESDM_KERNEL_RNG_ENTROPY_RATE)
 		entropylevel = esdm_config_es_krng_entropy_rate();
 	return esdm_fast_noise_entropylevel(
 		esdm_krng_properties_entropylevel(entropylevel),
@@ -213,7 +216,6 @@ static inline ssize_t __getrandom(uint8_t *buffer, size_t bufferlen,
 
 	return ((ret < 0) ? -errno : totallen);
 }
-
 
 /*
  * esdm_krng_get() - Get kernel RNG entropy
@@ -250,8 +252,7 @@ static void esdm_krng_es_state(char *buf, size_t buflen)
 	snprintf(buf, buflen,
 		 " Available entropy: %u\n"
 		 " Entropy Rate per 256 data bits: %u\n",
-		 esdm_krng_poolsize(),
-		 esdm_krng_entropylevel(256));
+		 esdm_krng_poolsize(), esdm_krng_entropylevel(256));
 }
 
 static bool esdm_krng_active(void)
@@ -260,15 +261,15 @@ static bool esdm_krng_active(void)
 }
 
 struct esdm_es_cb esdm_es_krng = {
-	.name			= "KernelRNG",
-	.init			= esdm_krng_init,
-	.fini			= esdm_krng_fini,
-	.monitor_es		= NULL,
-	.get_ent		= esdm_krng_get,
-	.curr_entropy		= esdm_krng_entropylevel,
-	.max_entropy		= esdm_krng_poolsize,
-	.state			= esdm_krng_es_state,
-	.reset			= NULL,
-	.active			= esdm_krng_active,
-	.switch_hash		= NULL,
+	.name = "KernelRNG",
+	.init = esdm_krng_init,
+	.fini = esdm_krng_fini,
+	.monitor_es = NULL,
+	.get_ent = esdm_krng_get,
+	.curr_entropy = esdm_krng_entropylevel,
+	.max_entropy = esdm_krng_poolsize,
+	.state = esdm_krng_es_state,
+	.reset = NULL,
+	.active = esdm_krng_active,
+	.switch_hash = NULL,
 };

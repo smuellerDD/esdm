@@ -37,7 +37,7 @@ static int sha256_tester(void)
 	printf("hash ctx len %lu\n", LC_HASH_CTX_SIZE(lc_sha256));
 	lc_hash(lc_sha256, msg_256, sizeof(msg_256), act);
 	if (memcmp(act, exp_256, LC_SHA256_SIZE_DIGEST))
-	    return 1;
+		return 1;
 
 	return 0;
 }

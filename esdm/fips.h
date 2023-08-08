@@ -31,7 +31,10 @@ extern "C" {
 bool fips_enabled(void);
 int fips_post_integrity(const char *pathname);
 #else /* ESDM_FIPS140 */
-bool fips_enabled(void) { return false; }
+bool fips_enabled(void)
+{
+	return false;
+}
 #endif /* ESDM_FIPS140 */
 
 #ifdef __cplusplus

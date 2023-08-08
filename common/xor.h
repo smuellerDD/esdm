@@ -24,8 +24,7 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 static inline int aligned(const uint8_t *ptr, uint32_t alignmask)

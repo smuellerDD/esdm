@@ -33,12 +33,11 @@ struct esdm_rnd_add_entropy_buf {
 	int ret;
 };
 
-static void
-esdm_rpcc_rnd_add_entropy_cb(const RndAddEntropyResponse *response,
-			     void *closure_data)
+static void esdm_rpcc_rnd_add_entropy_cb(const RndAddEntropyResponse *response,
+					 void *closure_data)
 {
 	struct esdm_rnd_add_entropy_buf *buffer =
-			(struct esdm_rnd_add_entropy_buf *)closure_data;
+		(struct esdm_rnd_add_entropy_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
@@ -46,8 +45,7 @@ esdm_rpcc_rnd_add_entropy_cb(const RndAddEntropyResponse *response,
 
 DSO_PUBLIC
 int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
-				  size_t entropy_buf_len,
-				  uint32_t entropy_cnt,
+				  size_t entropy_buf_len, uint32_t entropy_cnt,
 				  void *int_data)
 {
 	RndAddEntropyRequest msg = RND_ADD_ENTROPY_REQUEST__INIT;
@@ -75,8 +73,7 @@ out:
 
 DSO_PUBLIC
 int esdm_rpcc_rnd_add_entropy(const uint8_t *entropy_buf,
-			      size_t entropy_buf_len,
-			      uint32_t entropy_cnt)
+			      size_t entropy_buf_len, uint32_t entropy_cnt)
 {
 	return esdm_rpcc_rnd_add_entropy_int(entropy_buf, entropy_buf_len,
 					     entropy_cnt, NULL);

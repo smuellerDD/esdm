@@ -40,15 +40,15 @@
 #include "ret_checkers.h"
 #include "selinux.h"
 
-#define ESDM_PROC_UUID_LEN		38
-#define ESDM_PROC_BUF_LEN		ESDM_SHM_STATUS_INFO_SIZE
+#define ESDM_PROC_UUID_LEN 38
+#define ESDM_PROC_BUF_LEN ESDM_SHM_STATUS_INFO_SIZE
 struct esdm_proc_file {
 	const char *filename;
 	size_t filename_len;
 	mode_t perm;
 	int (*fill_data)(struct esdm_proc_file *file);
-	int (*write_data)(struct esdm_proc_file *file,
-			  const char *buf, size_t buflen);
+	int (*write_data)(struct esdm_proc_file *file, const char *buf,
+			  size_t buflen);
 	size_t vallen;
 	char valdata[ESDM_PROC_BUF_LEN];
 };
@@ -244,7 +244,8 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.write_data = NULL,
 		.vallen = 0,
 		.valdata[0] = '\0',
-	}, {
+	},
+	{
 		.filename = "uuid",
 		.filename_len = 4,
 		.perm = 0444,
@@ -252,7 +253,8 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.write_data = NULL,
 		.vallen = 0,
 		.valdata[0] = '\0',
-	}, {
+	},
+	{
 		.filename = "entropy_avail",
 		.filename_len = 13,
 		.perm = 0444,
@@ -260,7 +262,8 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.write_data = NULL,
 		.vallen = 0,
 		.valdata[0] = '\0',
-	}, {
+	},
+	{
 		.filename = "poolsize",
 		.filename_len = 8,
 		.perm = 0444,
@@ -268,7 +271,8 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.write_data = NULL,
 		.vallen = 0,
 		.valdata[0] = '\0',
-	}, {
+	},
+	{
 		.filename = "write_wakeup_threshold",
 		.filename_len = 22,
 		.perm = 0644,
@@ -276,7 +280,8 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.write_data = esdm_proc_set_write_wakeup_thresh,
 		.vallen = 0,
 		.valdata[0] = '\0',
-	}, {
+	},
+	{
 		.filename = "urandom_min_reseed_secs",
 		.filename_len = 23,
 		.perm = 0644,
@@ -284,7 +289,8 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.write_data = esdm_proc_set_min_reseed_secs,
 		.vallen = 0,
 		.valdata[0] = '\0',
-	}, {
+	},
+	{
 		.filename = "esdm_type",
 		.filename_len = 9,
 		.perm = 0444,
@@ -336,9 +342,10 @@ static int esdm_proc_pre_init(void)
 		logger(LOGGER_WARN, LOGGER_C_CUSE,
 		       "PROC client started but ESDM server not available!\n");
 	} else {
-		logger_status(LOGGER_C_CUSE,
-			      "PROC client started with ESDM server properties:\n%s\n",
-			      buf);
+		logger_status(
+			LOGGER_C_CUSE,
+			"PROC client started with ESDM server properties:\n%s\n",
+			buf);
 	}
 
 	return 0;
@@ -403,16 +410,16 @@ out:
 }
 
 static int esdm_proc_readdir(const char *path, void *buf,
-			     fuse_fill_dir_t filler,
-			     off_t offset, struct fuse_file_info *fi,
+			     fuse_fill_dir_t filler, off_t offset,
+			     struct fuse_file_info *fi,
 			     enum fuse_readdir_flags flags)
 {
 	unsigned int i;
 	int ret = 0;
 
-	(void) offset;
-	(void) fi;
-	(void) flags;
+	(void)offset;
+	(void)fi;
+	(void)flags;
 
 	CKNULL(path, -ENOENT);
 
@@ -447,7 +454,6 @@ static int esdm_proc_open(const char *path, struct fuse_file_info *fi)
 		/* pathlen is one longer than file name due to / */
 		if (pathlen == file->filename_len &&
 		    !strncmp(path + 1, file->filename, file->filename_len)) {
-
 			/* Read-access is always granted */
 			if ((fi->flags & O_ACCMODE) == O_RDONLY)
 				goto out;
@@ -480,7 +486,7 @@ static int esdm_proc_read(const char *path, char *buf, size_t size,
 	unsigned int i;
 	int ret = 0;
 
-	(void) fi;
+	(void)fi;
 
 	CKNULL(path, -ENOENT);
 	pathlen = strlen(path);
@@ -519,7 +525,7 @@ static int esdm_proc_write(const char *path, const char *buf, size_t size,
 	unsigned int i;
 	int ret = 0;
 
-	(void) fi;
+	(void)fi;
 
 	CKNULL(path, -ENOENT);
 	pathlen = strlen(path);
@@ -548,12 +554,12 @@ out:
 }
 
 static const struct fuse_operations esdm_proc_oper = {
-	.init           = esdm_proc_init,
-	.getattr	= esdm_proc_getattr,
-	.readdir	= esdm_proc_readdir,
-	.open		= esdm_proc_open,
-	.read		= esdm_proc_read,
-	.write		= esdm_proc_write,
+	.init = esdm_proc_init,
+	.getattr = esdm_proc_getattr,
+	.readdir = esdm_proc_readdir,
+	.open = esdm_proc_open,
+	.read = esdm_proc_read,
+	.write = esdm_proc_write,
 };
 
 static struct esdm_proc_options {
@@ -562,15 +568,14 @@ static struct esdm_proc_options {
 	unsigned int verbosity;
 } esdm_proc_options;
 
-#define OPTION(t, p)							\
-	{ t, offsetof(struct esdm_proc_options, p), 1 }
+#define OPTION(t, p)                                                           \
+	{                                                                      \
+		t, offsetof(struct esdm_proc_options, p), 1                    \
+	}
 static const struct fuse_opt esdm_proc_options_spec[] = {
-	OPTION("-v %u", verbosity),
-	OPTION("--verbosity=%u", verbosity),
-	OPTION("--relabel", relabel),
-	OPTION("-h", show_help),
-	OPTION("--help", show_help),
-	FUSE_OPT_END
+	OPTION("-v %u", verbosity),   OPTION("--verbosity=%u", verbosity),
+	OPTION("--relabel", relabel), OPTION("-h", show_help),
+	OPTION("--help", show_help),  FUSE_OPT_END
 };
 
 static void show_help(const char *progname)
@@ -615,9 +620,9 @@ int main(int argc, char *argv[])
 	}
 
 	CKINT_LOG(esdm_rpcc_init_unpriv_service(NULL),
-                  "Initialization of dispatcher failed\n");
+		  "Initialization of dispatcher failed\n");
 	CKINT_LOG(esdm_rpcc_init_priv_service(NULL),
-                  "Initialization of dispatcher failed\n");
+		  "Initialization of dispatcher failed\n");
 
 	CKINT(esdm_proc_pre_init());
 

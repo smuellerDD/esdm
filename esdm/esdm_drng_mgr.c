@@ -69,15 +69,15 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
  * simply perform the hash calculation.
  */
 #if (defined(ESDM_HASH_SHA512) || defined(ESDM_HASH_SHA3_512))
-# define ESDM_DEFAULT_HASH_CB	&esdm_builtin_sha512_cb
+#define ESDM_DEFAULT_HASH_CB &esdm_builtin_sha512_cb
 #elif defined(ESDM_BOTAN)
-# define ESDM_DEFAULT_HASH_CB	&esdm_botan_hash_cb
+#define ESDM_DEFAULT_HASH_CB &esdm_botan_hash_cb
 #elif defined(ESDM_GNUTLS)
-# define ESDM_DEFAULT_HASH_CB	&esdm_gnutls_hash_cb
+#define ESDM_DEFAULT_HASH_CB &esdm_gnutls_hash_cb
 #elif defined(ESDM_LEANCRYPTO)
-# define ESDM_DEFAULT_HASH_CB	&esdm_leancrypto_hash_cb
+#define ESDM_DEFAULT_HASH_CB &esdm_leancrypto_hash_cb
 #elif defined(ESDM_OPENSSL)
-# define ESDM_DEFAULT_HASH_CB	&esdm_openssl_hash_cb
+#define ESDM_DEFAULT_HASH_CB &esdm_openssl_hash_cb
 #else
 #error "Unknown default DRNG selected"
 #endif
@@ -105,14 +105,12 @@ const struct esdm_drng_cb *esdm_default_drng_cb =
 #endif
 
 /* DRNG for non-atomic use cases */
-static struct esdm_drng esdm_drng_init = {
-	ESDM_DRNG_STATE_INIT(esdm_drng_init, NULL, NULL, ESDM_DEFAULT_HASH_CB)
-};
+static struct esdm_drng esdm_drng_init = { ESDM_DRNG_STATE_INIT(
+	esdm_drng_init, NULL, NULL, ESDM_DEFAULT_HASH_CB) };
 
 /* Prediction-resistance DRNG: only deliver as much data as received entropy */
-static struct esdm_drng esdm_drng_pr = {
-	ESDM_DRNG_STATE_INIT(esdm_drng_pr, NULL, NULL, ESDM_DEFAULT_HASH_CB)
-};
+static struct esdm_drng esdm_drng_pr = { ESDM_DRNG_STATE_INIT(
+	esdm_drng_pr, NULL, NULL, ESDM_DEFAULT_HASH_CB) };
 
 /* Wait queue to wait until the ESDM is initialized - can freely be used */
 DECLARE_WAIT_QUEUE(esdm_init_wait);
@@ -318,7 +316,7 @@ int esdm_ntg1_2022_compliant(void)
 #else
 		false
 #endif
-	;
+		;
 }
 
 DSO_PUBLIC
@@ -358,13 +356,12 @@ static time_t esdm_time_after_now(time_t base)
 }
 
 /* Inject a data buffer into the DRNG - caller must hold its lock */
-void esdm_drng_inject(struct esdm_drng *drng,
-		      const uint8_t *inbuf, size_t inbuflen,
-		      bool fully_seeded, const char *drng_type)
+void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
+		      size_t inbuflen, bool fully_seeded, const char *drng_type)
 {
 	BUILD_BUG_ON(ESDM_DRNG_RESEED_THRESH > INT_MAX);
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "seeding %s DRNG with %zu bytes\n", drng_type, inbuflen);
+	logger(LOGGER_DEBUG, LOGGER_C_DRNG, "seeding %s DRNG with %zu bytes\n",
+	       drng_type, inbuflen);
 
 	if (!drng->drng)
 		return;
@@ -409,13 +406,12 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 					 const char *drng_type)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
-			   collected_seedbuf;
+		collected_seedbuf;
 	uint32_t collected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
 	bool forced = drng->force_reseed;
 
-	for_each_esdm_es(i)
-		collected_seedbuf.entropy_es[i].e_bits = 0;
+	for_each_esdm_es(i) collected_seedbuf.entropy_es[i].e_bits = 0;
 
 	/*
 	 * This clearing is not strictly needed, but it silences
@@ -433,14 +429,15 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 			       drng_type);
 		}
 
-		esdm_fill_seed_buffer(&seedbuf,
-			esdm_get_seed_entropy_osr(drng->fully_seeded),
-				      forced && !drng->fully_seeded);
+		esdm_fill_seed_buffer(
+			&seedbuf, esdm_get_seed_entropy_osr(drng->fully_seeded),
+			forced && !drng->fully_seeded);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
 		/* Sum iterations up. */
-		for_each_esdm_es(i) {
+		for_each_esdm_es(i)
+		{
 			collected_seedbuf.entropy_es[i].e_bits +=
 				seedbuf.entropy_es[i].e_bits;
 			num_es_delivered += !!seedbuf.entropy_es[i].e_bits;
@@ -462,7 +459,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		if (init_ops)
 			esdm_init_ops(&collected_seedbuf);
 
-	/*
+		/*
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for
@@ -504,8 +501,7 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 {
 	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "reseed triggered by system events for DRNG on node %d\n",
-	       node);
+	       "reseed triggered by system events for DRNG on node %d\n", node);
 	esdm_drng_seed(drng);
 	if (drng->fully_seeded) {
 		/* Prevent reseed storm */
@@ -552,7 +548,8 @@ static void __esdm_drng_seed_work(bool force)
 	if (esdm_drng) {
 		uint32_t node;
 
-		for_each_online_node(node) {
+		for_each_online_node(node)
+		{
 			struct esdm_drng *drng = esdm_drng[node];
 
 			if (!drng)
@@ -614,7 +611,8 @@ void esdm_drng_force_reseed(void)
 		goto out;
 	}
 
-	for_each_online_node(node) {
+	for_each_online_node(node)
+	{
 		struct esdm_drng *drng = esdm_drng[node];
 
 		if (!drng)
@@ -633,8 +631,7 @@ out:
 
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
-	return (atomic_dec_and_test(&drng->requests) ||
-		drng->force_reseed ||
+	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed ||
 		esdm_time_after_now(drng->last_seeded +
 				    esdm_drng_reseed_max_time));
 }
@@ -678,8 +675,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 	/* Loop to collect random bits for the caller. */
 	while (outbuflen) {
-		uint32_t todo = min_uint32((uint32_t)outbuflen,
-					   ESDM_DRNG_MAX_REQSIZE);
+		uint32_t todo =
+			min_uint32((uint32_t)outbuflen, ESDM_DRNG_MAX_REQSIZE);
 		ssize_t ret;
 
 		/* In normal operation, check whether to reseed */
@@ -723,7 +720,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				}
 
 				collected_ent_bits = esdm_drng_seed_es_nolock(
-							drng, true, "regular");
+					drng, true, "regular");
 
 				esdm_pool_unlock();
 
@@ -739,8 +736,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			}
 
 			/* Do not produce more than DRNG security strength. */
-			todo = min_uint32(todo,
-					  esdm_security_strength() >> 3);
+			todo = min_uint32(todo, esdm_security_strength() >> 3);
 		}
 
 		/* Now, generate random bits from the properly seeded DRNG. */
@@ -812,7 +808,8 @@ void esdm_reset(void)
 	} else {
 		uint32_t cpu;
 
-		for_each_online_node(cpu) {
+		for_each_online_node(cpu)
+		{
 			struct esdm_drng *drng = esdm_drng[cpu];
 
 			if (!drng)
@@ -870,7 +867,7 @@ static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 		return -EAGAIN;
 	thread_wait_event(&esdm_init_wait,
 			  esdm_pool_all_nodes_seeded_get() &&
-			  !atomic_read(&esdm_drng_mgr_terminate));
+				  !atomic_read(&esdm_drng_mgr_terminate));
 	return 0;
 }
 
@@ -881,8 +878,9 @@ static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 		return 0;
 	if (nonblock)
 		return -EAGAIN;
-	thread_wait_event(&esdm_init_wait, esdm_state_operational() &&
-			  !atomic_read(&esdm_drng_mgr_terminate));
+	thread_wait_event(&esdm_init_wait,
+			  esdm_state_operational() &&
+				  !atomic_read(&esdm_drng_mgr_terminate));
 	return 0;
 }
 
@@ -893,8 +891,9 @@ static int esdm_drng_sleep_while_non_min_seeded(unsigned int nonblock)
 		return 0;
 	if (nonblock)
 		return -EAGAIN;
-	thread_wait_event(&esdm_init_wait, esdm_state_min_seeded() &&
-			  !atomic_read(&esdm_drng_mgr_terminate));
+	thread_wait_event(&esdm_init_wait,
+			  esdm_state_min_seeded() &&
+				  !atomic_read(&esdm_drng_mgr_terminate));
 	return 0;
 }
 
@@ -902,8 +901,7 @@ DSO_PUBLIC
 ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		      enum esdm_get_seed_flags flags)
 {
-	struct entropy_buf *eb =
-		(struct entropy_buf *)(buf + 2);
+	struct entropy_buf *eb = (struct entropy_buf *)(buf + 2);
 	uint64_t buflen = sizeof(struct entropy_buf) + 2 * sizeof(uint64_t);
 	uint64_t collected_bits = 0;
 	int ret;
@@ -938,10 +936,11 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	 * esdm_init_ops.
 	 */
 	for (;;) {
-		esdm_fill_seed_buffer(eb,
+		esdm_fill_seed_buffer(
+			eb,
 			esdm_get_seed_entropy_osr(flags &
 						  ESDM_GET_SEED_FULLY_SEEDED),
-						  false);
+			false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */

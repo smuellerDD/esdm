@@ -55,12 +55,12 @@ static void esdm_cuse_random_write(fuse_req_t req, const char *buf, size_t size,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
 static const struct cuse_lowlevel_ops esdm_dev_clop = {
-	.init_done	= esdm_cuse_init_done,
-	.open		= esdm_cuse_open,
-	.read		= esdm_cuse_read_block,
-	.write		= esdm_cuse_random_write,
-	.ioctl		= esdm_cuse_random_ioctl,
-	.poll		= esdm_cuse_poll,
+	.init_done = esdm_cuse_init_done,
+	.open = esdm_cuse_open,
+	.read = esdm_cuse_read_block,
+	.write = esdm_cuse_random_write,
+	.ioctl = esdm_cuse_random_ioctl,
+	.poll = esdm_cuse_poll,
 };
 #pragma GCC diagnostic pop
 

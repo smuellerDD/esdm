@@ -84,7 +84,9 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 	if (size > sizeof(buf)) {
-		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64 "\n", size);
+		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64
+		       "\n",
+		       size);
 		ret = 1;
 		goto out;
 	}
@@ -94,13 +96,13 @@ int main(int argc, char *argv[])
 	 * request only seeds one DRNG - thus allow requests up to the allowed
 	 * number of DRNGs.
 	 */
-	for_each_online_node(cpu) {
+	for_each_online_node(cpu)
+	{
 		rc = esdm_get_seed(buf, sizeof(buf),
 				   ESDM_GET_SEED_NONBLOCK |
-				   ESDM_GET_SEED_FULLY_SEEDED);
+					   ESDM_GET_SEED_FULLY_SEEDED);
 		if (rc != -EAGAIN)
 			break;
-
 	}
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
@@ -115,18 +117,22 @@ int main(int argc, char *argv[])
 	}
 
 	if (buf[0] > sizeof(buf)) {
-		printf("esdm_get_seed returned a strange size value %" PRIu64 "\n",
+		printf("esdm_get_seed returned a strange size value %" PRIu64
+		       "\n",
 		       buf[0]);
 		ret = 1;
 		goto out;
 	}
 
 	if (buf[1] < (force_fips ? 384 : 128)) {
-		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
+		printf("esdm_get_seed returned insufficient seed: %" PRIu64
+		       "\n",
+		       buf[1]);
 		ret = 1;
 		goto out;
 	} else {
-		printf("esdm_get_seed returned proper seed size value %" PRIu64 " bytes and entropy value %" PRIu64 " bits\n",
+		printf("esdm_get_seed returned proper seed size value %" PRIu64
+		       " bytes and entropy value %" PRIu64 " bits\n",
 		       buf[0], buf[1]);
 	}
 
@@ -144,11 +150,14 @@ int main(int argc, char *argv[])
 	}
 
 	if (buf[1] < (force_fips ? 256 : 128)) {
-		printf("esdm_get_seed returned insufficient seed: %" PRIu64 "\n", buf[1]);
+		printf("esdm_get_seed returned insufficient seed: %" PRIu64
+		       "\n",
+		       buf[1]);
 		ret = 1;
 		goto out;
 	} else {
-		printf("esdm_get_seed returned proper seed size value %" PRIu64 " bytes and entropy value %" PRIu64 " bits\n",
+		printf("esdm_get_seed returned proper seed size value %" PRIu64
+		       " bytes and entropy value %" PRIu64 " bits\n",
 		       buf[0], buf[1]);
 	}
 

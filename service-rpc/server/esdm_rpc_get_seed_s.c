@@ -32,12 +32,11 @@
 
 void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		       const GetSeedRequest *request,
-		       GetSeedResponse_Closure closure,
-		       void *closure_data)
+		       GetSeedResponse_Closure closure, void *closure_data)
 {
 	GetSeedResponse response = GET_SEED_RESPONSE__INIT;
 	uint64_t rndval[ESDM_RPC_MAX_DATA / sizeof(uint64_t)];
-	(void) service;
+	(void)service;
 
 	if (request == NULL || request->len > sizeof(rndval)) {
 		response.ret = -(int32_t)sizeof(rndval);
@@ -45,9 +44,9 @@ void esdm_rpc_get_seed(UnprivAccess_Service *service,
 	} else {
 		/* TODO: make 280 dependent on output size */
 		memset(rndval, 0, 280);
-		response.ret = esdm_get_seed(rndval, request->len,
-					     request->flags |
-					     ESDM_GET_SEED_NONBLOCK);
+		response.ret =
+			esdm_get_seed(rndval, request->len,
+				      request->flags | ESDM_GET_SEED_NONBLOCK);
 
 		if (response.ret >= 0) {
 			esdm_test_shm_status_add_rpc_server_written(rndval[0]);

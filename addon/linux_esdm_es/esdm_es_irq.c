@@ -134,20 +134,20 @@ static rwlock_t esdm_hash_lock = __RW_LOCK_UNLOCKED(esdm_hash_lock);
  */
 #define ESDM_IRQ_ENTROPY_BITS ESDM_UINT32_C(CONFIG_ESDM_IRQ_ENTROPY_RATE)
 
-
 /* Number of interrupts required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
 static u32 esdm_irq_entropy_bits = ESDM_IRQ_ENTROPY_BITS;
 
 static u32 irq_entropy __read_mostly = ESDM_IRQ_ENTROPY_BITS;
 #ifdef CONFIG_ESDM_RUNTIME_ES_CONFIG
 module_param(irq_entropy, uint, 0444);
-MODULE_PARM_DESC(irq_entropy,
-		 "How many interrupts must be collected for obtaining 256 bits of entropy\n");
+MODULE_PARM_DESC(
+	irq_entropy,
+	"How many interrupts must be collected for obtaining 256 bits of entropy\n");
 #endif
 
 /* Per-CPU array holding concatenated IRQ entropy events */
-static DEFINE_PER_CPU(u32 [ESDM_DATA_ARRAY_SIZE], esdm_irq_array)
-						__aligned(ESDM_KCAPI_ALIGN);
+static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_irq_array)
+	__aligned(ESDM_KCAPI_ALIGN);
 static DEFINE_PER_CPU(u32, esdm_irq_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_irq_array_irqs) = ATOMIC_INIT(0);
 
@@ -179,12 +179,13 @@ static bool esdm_irq_continuous_compression __read_mostly =
 #else
 	false
 #endif
-;
+	;
 
 #ifdef CONFIG_ESDM_SWITCHABLE_CONTINUOUS_COMPRESSION
 module_param(esdm_irq_continuous_compression, bool, 0444);
-MODULE_PARM_DESC(esdm_irq_continuous_compression,
-		 "Perform entropy compression if per-CPU entropy data array is full\n");
+MODULE_PARM_DESC(
+	esdm_irq_continuous_compression,
+	"Perform entropy compression if per-CPU entropy data array is full\n");
 #endif
 
 /*
@@ -196,8 +197,8 @@ MODULE_PARM_DESC(esdm_irq_continuous_compression,
  * the entropy pool is released again after a hash final, the hash init must
  * be performed.
  */
-static DEFINE_PER_CPU(u8 [ESDM_POOL_SIZE], esdm_irq_pool)
-						__aligned(ESDM_KCAPI_ALIGN);
+static DEFINE_PER_CPU(u8[ESDM_POOL_SIZE], esdm_irq_pool)
+	__aligned(ESDM_KCAPI_ALIGN);
 /*
  * Lock to allow other CPUs to read the pool - as this is only done during
  * reseed which is infrequent, this lock is hardly contended.
@@ -214,9 +215,10 @@ static void __init esdm_irq_check_compression_state(void)
 {
 	/* One pool must hold sufficient entropy for disabled compression */
 	if (!esdm_irq_continuous_compression) {
-		u32 max_ent = min_t(u32, esdm_get_digestsize(),
-				    esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
-							esdm_irq_entropy_bits));
+		u32 max_ent =
+			min_t(u32, esdm_get_digestsize(),
+			      esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
+						   esdm_irq_entropy_bits));
 		if (max_ent < esdm_security_strength()) {
 			pr_warn("Force continuous compression operation to ensure ESDM can hold enough entropy\n");
 			esdm_irq_continuous_compression = true;
@@ -234,8 +236,8 @@ void __init esdm_irq_es_init(bool highres_timer)
 	} else {
 		u32 new_entropy = irq_entropy * ESDM_ES_OVERSAMPLING_FACTOR;
 
-		esdm_irq_entropy_bits = (irq_entropy < new_entropy) ?
-					 new_entropy : irq_entropy;
+		esdm_irq_entropy_bits =
+			(irq_entropy < new_entropy) ? new_entropy : irq_entropy;
 		pr_warn("operating without high-resolution timer and applying IRQ oversampling factor %u\n",
 			ESDM_ES_OVERSAMPLING_FACTOR);
 	}
@@ -266,7 +268,8 @@ static u32 esdm_irq_avail_pool_size(void)
 	if (!esdm_irq_continuous_compression)
 		max_pool = min_t(u32, max_pool, ESDM_DATA_NUM_VALUES);
 
-	for_each_online_cpu(cpu) {
+	for_each_online_cpu(cpu)
+	{
 		if (esdm_irq_pool_online(cpu))
 			max_size += max_pool;
 	}
@@ -289,26 +292,27 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 					       esdm_irq_entropy_bits);
 	if (!esdm_irq_continuous_compression) {
 		/* Cap to max. number of IRQs the array can hold */
-		digestsize_irqs = min_t(u32, digestsize_irqs,
-					ESDM_DATA_NUM_VALUES);
+		digestsize_irqs =
+			min_t(u32, digestsize_irqs, ESDM_DATA_NUM_VALUES);
 	}
 
-	for_each_online_cpu(cpu) {
+	for_each_online_cpu(cpu)
+	{
 		if (!esdm_irq_pool_online(cpu))
 			continue;
 		irq += min_t(u32, digestsize_irqs,
-			     atomic_read_u32(per_cpu_ptr(&esdm_irq_array_irqs,
-							 cpu)));
+			     atomic_read_u32(
+				     per_cpu_ptr(&esdm_irq_array_irqs, cpu)));
 	}
 
 	/* Consider oversampling rate */
-	return esdm_reduce_by_osr(esdm_data_to_entropy(irq,
-						       esdm_irq_entropy_bits));
+	return esdm_reduce_by_osr(
+		esdm_data_to_entropy(irq, esdm_irq_entropy_bits));
 }
 
-static u32
-esdm_irq_pool_hash_one(const struct esdm_hash_cb *pcpu_hash_cb,
-		       void *pcpu_hash, int cpu, u8 *digest, u32 *digestsize)
+static u32 esdm_irq_pool_hash_one(const struct esdm_hash_cb *pcpu_hash_cb,
+				  void *pcpu_hash, int cpu, u8 *digest,
+				  u32 *digestsize)
 {
 	struct shash_desc *pcpu_shash =
 		(struct shash_desc *)per_cpu_ptr(esdm_irq_pool, cpu);
@@ -320,12 +324,12 @@ esdm_irq_pool_hash_one(const struct esdm_hash_cb *pcpu_hash_cb,
 	spin_lock_irqsave(lock, flags);
 
 	*digestsize = pcpu_hash_cb->hash_digestsize(pcpu_hash);
-	digestsize_irqs = esdm_entropy_to_data(*digestsize << 3,
-					       esdm_irq_entropy_bits);
+	digestsize_irqs =
+		esdm_entropy_to_data(*digestsize << 3, esdm_irq_entropy_bits);
 
 	/* Obtain entropy statement like for the entropy pool */
-	found_irqs = atomic_xchg_relaxed(
-				per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
+	found_irqs =
+		atomic_xchg_relaxed(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
 	/* Cap to maximum amount of data we can hold in hash */
 	found_irqs = min_t(u32, found_irqs, digestsize_irqs);
 
@@ -334,15 +338,13 @@ esdm_irq_pool_hash_one(const struct esdm_hash_cb *pcpu_hash_cb,
 		found_irqs = min_t(u32, found_irqs, ESDM_DATA_NUM_VALUES);
 
 	/* Store all not-yet compressed data in data array into hash, ... */
-	if (pcpu_hash_cb->hash_update(pcpu_shash,
-				(u8 *)per_cpu_ptr(esdm_irq_array, cpu),
-				ESDM_DATA_ARRAY_SIZE * sizeof(u32)) ?:
-	    /* ... get the per-CPU pool digest, ... */
-	    pcpu_hash_cb->hash_final(pcpu_shash, digest) ?:
-	    /* ... re-initialize the hash, ... */
-	    pcpu_hash_cb->hash_init(pcpu_shash, pcpu_hash) ?:
-	    /* ... feed the old hash into the new state. */
-	    pcpu_hash_cb->hash_update(pcpu_shash, digest, *digestsize))
+	if (pcpu_hash_cb->hash_update(pcpu_shash, (u8 *)per_cpu_ptr(esdm_irq_array, cpu), ESDM_DATA_ARRAY_SIZE * sizeof(u32)) ?:
+		    /* ... get the per-CPU pool digest, ... */
+		    pcpu_hash_cb->hash_final(pcpu_shash, digest) ?:
+		    /* ... re-initialize the hash, ... */
+		    pcpu_hash_cb->hash_init(pcpu_shash, pcpu_hash) ?:
+		    /* ... feed the old hash into the new state. */
+		    pcpu_hash_cb->hash_update(pcpu_shash, digest, *digestsize))
 		found_irqs = 0;
 
 	spin_unlock_irqrestore(lock, flags);
@@ -373,7 +375,7 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	u8 digest[ESDM_MAX_DIGESTSIZE];
 	unsigned long flags;
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
-	    returned_ent_bits;
+			returned_ent_bits;
 	int ret, cpu;
 	void *hash;
 
@@ -397,23 +399,22 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 
 	/* Cap to maximum entropy that can ever be generated with given hash */
 	esdm_cap_requested(hash_cb->hash_digestsize(hash) << 3, requested_bits);
-	requested_irqs = esdm_entropy_to_data(requested_bits +
-					      esdm_compress_osr(),
-					      esdm_irq_entropy_bits);
+	requested_irqs = esdm_entropy_to_data(
+		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
 
 	/*
 	 * Harvest entropy from each per-CPU hash state - even though we may
 	 * have collected sufficient entropy, we will hash all per-CPU pools.
 	 */
-	for_each_online_cpu(cpu) {
+	for_each_online_cpu(cpu)
+	{
 		u32 digestsize, pcpu_unused_irqs = 0;
 
 		/* If pool is not online, then no entropy is present. */
 		if (!esdm_irq_pool_online(cpu))
 			continue;
 
-		found_irqs = esdm_irq_pool_hash_one(hash_cb, hash,
-						    cpu, digest,
+		found_irqs = esdm_irq_pool_hash_one(hash_cb, hash, cpu, digest,
 						    &digestsize);
 
 		/* Inject the digest into the state of all per-CPU pools */
@@ -424,25 +425,28 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		collected_irqs += found_irqs;
 		if (collected_irqs > requested_irqs) {
 			pcpu_unused_irqs = collected_irqs - requested_irqs;
-			atomic_add_return_relaxed(pcpu_unused_irqs,
+			atomic_add_return_relaxed(
+				pcpu_unused_irqs,
 				per_cpu_ptr(&esdm_irq_array_irqs, cpu));
 			collected_irqs = requested_irqs;
 		}
-		pr_debug("%u interrupts used from entropy pool of CPU %d, %u interrupts remain unused\n",
-			 found_irqs - pcpu_unused_irqs, cpu, pcpu_unused_irqs);
+		pr_debug(
+			"%u interrupts used from entropy pool of CPU %d, %u interrupts remain unused\n",
+			found_irqs - pcpu_unused_irqs, cpu, pcpu_unused_irqs);
 	}
 
 	ret = hash_cb->hash_final(shash, digest);
 	if (ret)
 		goto err;
 
-	collected_ent_bits = esdm_data_to_entropy(collected_irqs,
-						  esdm_irq_entropy_bits);
+	collected_ent_bits =
+		esdm_data_to_entropy(collected_irqs, esdm_irq_entropy_bits);
 	/* Apply oversampling: discount requested oversampling rate */
 	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
 
-	pr_debug("obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
-		 returned_ent_bits, collected_ent_bits);
+	pr_debug(
+		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
+		returned_ent_bits, collected_ent_bits);
 
 	memcpy(eb->e, digest, returned_ent_bits >> 3);
 	eb->e_bits = returned_ent_bits;
@@ -462,7 +466,7 @@ err:
 static void esdm_irq_array_compress(void)
 {
 	struct shash_desc *shash =
-			(struct shash_desc *)this_cpu_ptr(esdm_irq_pool);
+		(struct shash_desc *)this_cpu_ptr(esdm_irq_pool);
 	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
 	spinlock_t *lock = this_cpu_ptr(&esdm_irq_lock);
 	unsigned long flags, flags2;
@@ -478,9 +482,10 @@ static void esdm_irq_array_compress(void)
 		init = true;
 		spin_lock_init(lock);
 		this_cpu_write(esdm_irq_lock_init, true);
-		pr_debug("Initializing per-CPU entropy pool for CPU %d on NUMA node %d with hash %s\n",
-			 raw_smp_processor_id(), numa_node_id(),
-			 hash_cb->hash_name());
+		pr_debug(
+			"Initializing per-CPU entropy pool for CPU %d on NUMA node %d with hash %s\n",
+			raw_smp_processor_id(), numa_node_id(),
+			hash_cb->hash_name());
 	}
 
 	spin_lock_irqsave(lock, flags2);
@@ -491,8 +496,8 @@ static void esdm_irq_array_compress(void)
 	} else if (esdm_irq_continuous_compression) {
 		/* Add entire per-CPU data array content into entropy pool. */
 		if (hash_cb->hash_update(shash,
-					(u8 *)this_cpu_ptr(esdm_irq_array),
-					ESDM_DATA_ARRAY_SIZE * sizeof(u32)))
+					 (u8 *)this_cpu_ptr(esdm_irq_array),
+					 ESDM_DATA_ARRAY_SIZE * sizeof(u32)))
 			pr_warn_ratelimited("Hashing of entropy data failed\n");
 	}
 
@@ -536,8 +541,9 @@ static void esdm_irq_array_to_hash(u32 ptr)
 static void _esdm_irq_array_add_u32(u32 data)
 {
 	/* Increment pointer by number of slots taken for input value */
-	u32 pre_ptr, mask, ptr = this_cpu_add_return(esdm_irq_array_ptr,
-						     ESDM_DATA_SLOTS_PER_UINT);
+	u32 pre_ptr, mask,
+		ptr = this_cpu_add_return(esdm_irq_array_ptr,
+					  ESDM_DATA_SLOTS_PER_UINT);
 	unsigned int pre_array;
 
 	/*
@@ -566,8 +572,7 @@ static void _esdm_irq_array_add_u32(u32 data)
 		esdm_irq_array_to_hash(ESDM_DATA_WORD_MASK);
 
 	/* LSB of data go into current unit */
-	this_cpu_write(esdm_irq_array[esdm_data_idx2array(ptr)],
-		       data & mask);
+	this_cpu_write(esdm_irq_array[esdm_data_idx2array(ptr)], data & mask);
 
 	if (likely(pre_ptr <= ptr))
 		esdm_irq_array_to_hash(ptr);
@@ -577,15 +582,14 @@ static void _esdm_irq_array_add_u32(u32 data)
 static void esdm_irq_array_add_slot(u32 data)
 {
 	/* Get slot */
-	u32 ptr = this_cpu_inc_return(esdm_irq_array_ptr) &
-							ESDM_DATA_WORD_MASK;
+	u32 ptr = this_cpu_inc_return(esdm_irq_array_ptr) & ESDM_DATA_WORD_MASK;
 	unsigned int array = esdm_data_idx2array(ptr);
 	unsigned int slot = esdm_data_idx2slot(ptr);
 
 	BUILD_BUG_ON(ESDM_DATA_ARRAY_MEMBER_BITS % ESDM_DATA_SLOTSIZE_BITS);
 	/* Ensure consistency of values */
-	BUILD_BUG_ON(ESDM_DATA_ARRAY_MEMBER_BITS !=
-		     sizeof(esdm_irq_array[0]) << 3);
+	BUILD_BUG_ON(ESDM_DATA_ARRAY_MEMBER_BITS != sizeof(esdm_irq_array[0])
+							    << 3);
 
 	/* zeroization of slot to ensure the following OR adds the data */
 	this_cpu_and(esdm_irq_array[array],
@@ -597,8 +601,7 @@ static void esdm_irq_array_add_slot(u32 data)
 	esdm_irq_array_to_hash(ptr);
 }
 
-static void
-esdm_time_process_common(u32 time, void(*add_time)(u32 data))
+static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
 {
 	enum esdm_health_res health_test;
 
@@ -629,7 +632,7 @@ static void esdm_time_process(void)
 	} else {
 		/* GCD is known and applied */
 		esdm_time_process_common((now_time / esdm_gcd_get()) &
-					 ESDM_DATA_SLOTSIZE_MASK,
+						 ESDM_DATA_SLOTSIZE_MASK,
 					 esdm_irq_array_add_slot);
 	}
 
@@ -688,8 +691,7 @@ static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 		 " Standards compliance: %s\n"
 		 " High-resolution timer: %s\n"
 		 " Continuous compression: %s\n",
-		 hash_cb->hash_name(),
-		 esdm_irq_avail_entropy(0),
+		 hash_cb->hash_name(), esdm_irq_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_irq) ? "SP800-90B " : "",
 		 esdm_highres_timer() ? "true" : "false",
@@ -702,13 +704,13 @@ static void esdm_irq_set_entropy_rate(u32 rate)
 }
 
 struct esdm_es_cb esdm_es_irq = {
-	.name 			= "IRQ",
-	.get_ent		= esdm_irq_pool_hash,
-	.curr_entropy		= esdm_irq_avail_entropy,
-	.max_entropy		= esdm_irq_avail_pool_size,
-	.state			= esdm_irq_es_state,
-	.reset			= esdm_irq_reset,
-	.set_entropy_rate	= esdm_irq_set_entropy_rate,
+	.name = "IRQ",
+	.get_ent = esdm_irq_pool_hash,
+	.curr_entropy = esdm_irq_avail_entropy,
+	.max_entropy = esdm_irq_avail_pool_size,
+	.state = esdm_irq_es_state,
+	.reset = esdm_irq_reset,
+	.set_entropy_rate = esdm_irq_set_entropy_rate,
 };
 
 /************************** Registration with Kernel **************************/
@@ -739,7 +741,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	} while (ret == -ERESTARTSYS);
 
 	if (atomic_xchg(&esdm_es_irq_init_state, esdm_es_init_registered) !=
-			esdm_es_init_registering) {
+	    esdm_es_init_registering) {
 		atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);
 		return;
 	}
@@ -796,7 +798,7 @@ void esdm_es_irq_module_exit(void)
 
 	/* If we are in still in registering phase, do not process it */
 	if (atomic_xchg(&esdm_es_irq_init_state, esdm_es_init_unregistering) <
-			esdm_es_init_registered)
+	    esdm_es_init_registered)
 		return;
 
 	/*

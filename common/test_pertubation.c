@@ -97,13 +97,13 @@ static int esdm_test_shm_status_create_shm(void)
 
 	esdm_test_shmid = shmget(key, sizeof(struct esdm_test_shm_status),
 				 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
-				 S_IROTH | S_IWOTH);
+					 S_IROTH | S_IWOTH);
 	if (esdm_test_shmid < 0) {
 		if (errno == ENOENT) {
 			esdm_test_shmid =
 				shmget(key, sizeof(struct esdm_test_shm_status),
 				       IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP |
-				       S_IWGRP | S_IROTH | S_IWOTH);
+					       S_IWGRP | S_IROTH | S_IWOTH);
 			errsv = errno;
 
 			if (esdm_test_shmid) {
@@ -113,7 +113,7 @@ static int esdm_test_shm_status_create_shm(void)
 			}
 		}
 		CKNULL_LOG(esdm_test_shmid, -errsv,
-		           "ESDM test shared memory segment creation failed\n");
+			   "ESDM test shared memory segment creation failed\n");
 	}
 
 	tmp = shmat(esdm_test_shmid, NULL, 0);

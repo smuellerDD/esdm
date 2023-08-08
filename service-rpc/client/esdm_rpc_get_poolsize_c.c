@@ -34,12 +34,11 @@ struct esdm_poolsize_buf {
 	unsigned int poolsize;
 };
 
-static void
-esdm_rpcc_get_poolsize_cb(const GetPoolsizeResponse *response,
-			  void *closure_data)
+static void esdm_rpcc_get_poolsize_cb(const GetPoolsizeResponse *response,
+				      void *closure_data)
 {
 	struct esdm_poolsize_buf *buffer =
-				(struct esdm_poolsize_buf *)closure_data;
+		(struct esdm_poolsize_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;

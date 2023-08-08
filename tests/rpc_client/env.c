@@ -102,7 +102,7 @@ out:
 
 void env_kill_server(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1<<29 };
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1 << 29 };
 
 	esdm_test_shm_status_fini();
 

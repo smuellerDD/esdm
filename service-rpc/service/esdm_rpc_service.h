@@ -30,8 +30,7 @@
 #include "unpriv_access.pb-c.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /******************************************************************************
@@ -40,30 +39,30 @@ extern "C"
 
 #ifdef ESDM_TESTMODE
 
-# define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv-testmode.socket"
+#define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv-testmode.socket"
 
-# define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv-testmode.socket"
+#define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv-testmode.socket"
 
-# define ESDM_SHM_NAME "/"
-# define ESDM_SHM_STATUS 0x6573646d
+#define ESDM_SHM_NAME "/"
+#define ESDM_SHM_STATUS 0x6573646d
 
-# define ESDM_SEM_NAME "esdm-shm-status-semaphore-testmode"
+#define ESDM_SEM_NAME "esdm-shm-status-semaphore-testmode"
 
 #else /* ESDM_TESTMODE */
 
-# define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv.socket"
+#define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv.socket"
 
-# define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv.socket"
+#define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv.socket"
 
-# define ESDM_SHM_NAME "/"
-# define ESDM_SHM_STATUS 0x6d647365
+#define ESDM_SHM_NAME "/"
+#define ESDM_SHM_STATUS 0x6d647365
 
-# define ESDM_SEM_NAME "esdm-shm-status-semaphore"
+#define ESDM_SEM_NAME "esdm-shm-status-semaphore"
 
 #endif /* ESDM_TESTMODE */
 
-#define ESDM_SHM_STATUS_VERSION	1
-#define ESDM_SHM_STATUS_INFO_SIZE	1536
+#define ESDM_SHM_STATUS_VERSION 1
+#define ESDM_SHM_STATUS_INFO_SIZE 1536
 
 struct esdm_shm_status {
 	/* Monotonic increasing version */
@@ -95,8 +94,7 @@ static inline key_t esdm_ftok(const char *pathname, int proj_id)
 
 void esdm_rpc_status(UnprivAccess_Service *service,
 		     const StatusRequest *request,
-		     StatusResponse_Closure closure,
-		     void *closure_data);
+		     StatusResponse_Closure closure, void *closure_data);
 
 void esdm_rpc_get_random_bytes_full(UnprivAccess_Service *service,
 				    const GetRandomBytesFullRequest *request,
@@ -120,13 +118,11 @@ void esdm_rpc_get_random_bytes(UnprivAccess_Service *service,
 
 void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		       const GetSeedRequest *request,
-		       GetSeedResponse_Closure closure,
-		       void *closure_data);
+		       GetSeedResponse_Closure closure, void *closure_data);
 
 void esdm_rpc_write_data(UnprivAccess_Service *service,
 			 const WriteDataRequest *request,
-			 WriteDataResponse_Closure closure,
-			 void *closure_data);
+			 WriteDataResponse_Closure closure, void *closure_data);
 
 /* IOCTL implementations */
 void esdm_rpc_rnd_get_ent_cnt(UnprivAccess_Service *service,
@@ -156,15 +152,12 @@ void esdm_rpc_get_poolsize(UnprivAccess_Service *service,
 			   GetPoolsizeResponse_Closure closure,
 			   void *closure_data);
 void esdm_rpc_get_write_wakeup_thresh(
-				UnprivAccess_Service *service,
-				const GetWriteWakeupThreshRequest *request,
-				GetWriteWakeupThreshResponse_Closure closure,
-				void *closure_data);
+	UnprivAccess_Service *service,
+	const GetWriteWakeupThreshRequest *request,
+	GetWriteWakeupThreshResponse_Closure closure, void *closure_data);
 void esdm_rpc_set_write_wakeup_thresh(
-				PrivAccess_Service *service,
-				const SetWriteWakeupThreshRequest *request,
-				SetWriteWakeupThreshResponse_Closure closure,
-				void *closure_data);
+	PrivAccess_Service *service, const SetWriteWakeupThreshRequest *request,
+	SetWriteWakeupThreshResponse_Closure closure, void *closure_data);
 void esdm_rpc_get_min_reseed_secs(UnprivAccess_Service *service,
 				  const GetMinReseedSecsRequest *request,
 				  GetMinReseedSecsResponse_Closure closure,
@@ -192,7 +185,7 @@ extern PrivAccess_Service priv_access_service;
  * let us pick a value with some more leeway.
  */
 #define ESDM_RPC_MAX_MSG_SIZE 65536
-#define ESDM_RPC_MAX_DATA						\
+#define ESDM_RPC_MAX_DATA                                                      \
 	(ESDM_RPC_MAX_MSG_SIZE - sizeof(struct esdm_rpc_proto_sc_header))
 
 #ifdef __cplusplus

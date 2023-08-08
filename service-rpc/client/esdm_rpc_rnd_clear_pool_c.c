@@ -33,12 +33,11 @@ struct esdm_rnd_clear_pool_buf {
 	int ret;
 };
 
-static void
-esdm_rpcc_rnd_clear_pool_cb(const RndClearPoolResponse *response,
-			    void *closure_data)
+static void esdm_rpcc_rnd_clear_pool_cb(const RndClearPoolResponse *response,
+					void *closure_data)
 {
 	struct esdm_rnd_clear_pool_buf *buffer =
-			(struct esdm_rnd_clear_pool_buf *)closure_data;
+		(struct esdm_rnd_clear_pool_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;

@@ -29,9 +29,8 @@
  * DRBG interface functions
  *************************************************************************/
 DSO_PUBLIC
-int lc_drbg_seed(struct lc_drbg_state *drbg,
-		 const uint8_t *seedbuf, size_t seedlen,
-		 const uint8_t *persbuf, size_t perslen)
+int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
+		 size_t seedlen, const uint8_t *persbuf, size_t perslen)
 {
 	struct lc_drbg_string seed;
 	struct lc_drbg_string pers;
@@ -61,9 +60,9 @@ int lc_drbg_seed(struct lc_drbg_state *drbg,
 }
 
 DSO_PUBLIC
-ssize_t lc_drbg_generate(struct lc_drbg_state *drbg,
-			 uint8_t *buf, size_t buflen,
-			 const uint8_t *addtlbuf, size_t addtllen)
+ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
+			 size_t buflen, const uint8_t *addtlbuf,
+			 size_t addtllen)
 {
 	struct lc_drbg_string addtl_data;
 	struct lc_drbg_string *addtl = NULL;

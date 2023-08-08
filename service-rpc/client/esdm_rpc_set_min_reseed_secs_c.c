@@ -32,11 +32,12 @@ struct esdm_set_min_reseed_secs_buf {
 	int ret;
 };
 
-static void esdm_rpcc_set_min_reseed_secs_cb(
-	const SetMinReseedSecsResponse *response, void *closure_data)
+static void
+esdm_rpcc_set_min_reseed_secs_cb(const SetMinReseedSecsResponse *response,
+				 void *closure_data)
 {
 	struct esdm_set_min_reseed_secs_buf *buffer =
-			(struct esdm_set_min_reseed_secs_buf *)closure_data;
+		(struct esdm_set_min_reseed_secs_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
@@ -56,7 +57,8 @@ int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data)
 
 	msg.seconds = seconds;
 	priv_access__rpc_set_min_reseed_secs(&rpc_conn->service, &msg,
-				esdm_rpcc_set_min_reseed_secs_cb, &buffer);
+					     esdm_rpcc_set_min_reseed_secs_cb,
+					     &buffer);
 
 	ret = buffer.ret;
 

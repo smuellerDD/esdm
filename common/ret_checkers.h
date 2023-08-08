@@ -23,38 +23,41 @@
 #include "logger.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-#define CKINT(x) {							\
-	ret = x;							\
-	if (ret < 0)							\
-		goto out;						\
-}
+#define CKINT(x)                                                               \
+	{                                                                      \
+		ret = x;                                                       \
+		if (ret < 0)                                                   \
+			goto out;                                              \
+	}
 
-#define CKINT_LOG(x, ...) {						\
-	ret = x;							\
-	if (ret < 0) {							\
-		logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);		\
-		goto out;						\
-	}								\
-}
+#define CKINT_LOG(x, ...)                                                      \
+	{                                                                      \
+		ret = x;                                                       \
+		if (ret < 0) {                                                 \
+			logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);         \
+			goto out;                                              \
+		}                                                              \
+	}
 
-#define CKNULL(v, r) {							\
-	if (!v) {							\
-		ret = r;						\
-		goto out;						\
-	}								\
-}
+#define CKNULL(v, r)                                                           \
+	{                                                                      \
+		if (!v) {                                                      \
+			ret = r;                                               \
+			goto out;                                              \
+		}                                                              \
+	}
 
-#define CKNULL_LOG(v, r, ...) {						\
-	if (!v) {							\
-		logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);		\
-		ret = r;						\
-		goto out;						\
-	}								\
-}
+#define CKNULL_LOG(v, r, ...)                                                  \
+	{                                                                      \
+		if (!v) {                                                      \
+			logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);         \
+			ret = r;                                               \
+			goto out;                                              \
+		}                                                              \
+	}
 
 #ifdef __cplusplus
 }

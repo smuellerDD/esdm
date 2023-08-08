@@ -512,7 +512,7 @@ int thread_get_name(char *name, size_t len)
 static int thread_wait_all(bool system_threads)
 {
 	unsigned int i, upper = system_threads ? THREADING_REALLY_ALL_THREADS :
-						       THREADING_MAX_THREADS;
+						 THREADING_MAX_THREADS;
 	int ret = 0;
 
 	mutex_w_lock(&threads_cleanup);

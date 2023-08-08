@@ -48,7 +48,7 @@ static inline void lc_cc20_drng_update(struct lc_chacha20_drng_ctx *cc20_ctx,
 	} else {
 		for (i = 0; i < LC_CC20_KEY_SIZE_WORDS; i++) {
 			chacha20_state->key.u[i] ^=
-						le_bswap32(buf[i + used_words]);
+				le_bswap32(buf[i + used_words]);
 		}
 	}
 

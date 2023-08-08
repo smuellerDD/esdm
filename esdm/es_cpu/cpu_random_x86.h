@@ -27,30 +27,30 @@
 
 #define ESDM_CPU_ES_IMPLEMENTED
 
-#define RDRAND_RETRY_LOOPS	10
+#define RDRAND_RETRY_LOOPS 10
 
-#define RDRAND_INT	".byte 0x0f,0xc7,0xf0"
-#define RDSEED_INT	".byte 0x0f,0xc7,0xf8"
+#define RDRAND_INT ".byte 0x0f,0xc7,0xf0"
+#define RDSEED_INT ".byte 0x0f,0xc7,0xf8"
 #ifdef __LP64__
-# define RDRAND_LONG	".byte 0x48,0x0f,0xc7,0xf0"
-# define RDSEED_LONG	".byte 0x48,0x0f,0xc7,0xf8"
+#define RDRAND_LONG ".byte 0x48,0x0f,0xc7,0xf0"
+#define RDSEED_LONG ".byte 0x48,0x0f,0xc7,0xf8"
 #else
-# define RDRAND_LONG	RDRAND_INT
-# define RDSEED_LONG	RDSEED_INT
+#define RDRAND_LONG RDRAND_INT
+#define RDSEED_LONG RDSEED_INT
 #endif
 
-#define ECX_RDRAND		(1 << 30)
-#define EXT_FEAT_EBX_RDSEED	(1 << 18)
+#define ECX_RDRAND (1 << 30)
+#define EXT_FEAT_EBX_RDSEED (1 << 18)
 
-#define cpuid_eax(level, a, b, c, d)					\
-	__asm__ __volatile__ ("cpuid\n\t"				\
-			      : "=a" (a), "=b" (b), "=c" (c), "=d" (d)	\
-			      : "0" (level))
+#define cpuid_eax(level, a, b, c, d)                                           \
+	__asm__ __volatile__("cpuid\n\t"                                       \
+			     : "=a"(a), "=b"(b), "=c"(c), "=d"(d)              \
+			     : "0"(level))
 
-#define cpuid_eax_ecx(level, count, a, b, c, d)				\
-	__asm__ __volatile__ ("cpuid\n\t"				\
-			      : "=a" (a), "=b" (b), "=c" (c), "=d" (d)  \
-			      : "0" (level), "2" (count))
+#define cpuid_eax_ecx(level, count, a, b, c, d)                                \
+	__asm__ __volatile__("cpuid\n\t"                                       \
+			     : "=a"(a), "=b"(b), "=c"(c), "=d"(d)              \
+			     : "0"(level), "2"(count))
 
 static inline int rdseed_available(void)
 {
@@ -102,8 +102,8 @@ static inline bool cpu_es_x86_rdseed(unsigned long *buf)
 
 	do {
 		__asm__ __volatile__(RDSEED_LONG "\n\t"
-			     "setc %0"
-			     : "=qm" (ok), "=a" (*buf));
+						 "setc %0"
+				     : "=qm"(ok), "=a"(*buf));
 	} while (!ok && retry++ > RDRAND_RETRY_LOOPS);
 
 	return !!ok;
@@ -128,8 +128,8 @@ static inline bool cpu_es_x86_rdrand(unsigned long *buf)
 			     "decl %0\n\t"
 			     "jnz 1b\n\t"
 			     "2:"
-			     : "=r" (ok), "=a" (*buf)
-			     : "0" (RDRAND_RETRY_LOOPS));
+			     : "=r"(ok), "=a"(*buf)
+			     : "0"(RDRAND_RETRY_LOOPS));
 	return !!ok;
 }
 

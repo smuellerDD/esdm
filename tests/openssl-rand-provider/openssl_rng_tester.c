@@ -30,17 +30,18 @@
 
 #include "env.h"
 
-static bool test_random() {
+static bool test_random()
+{
 	unsigned char bytes[300];
 	int ret;
 
 	ret = RAND_bytes(bytes, 300);
 	fprintf(stderr, "%i\n", ret);
-	if(ret != 1)
+	if (ret != 1)
 		return false;
 
 	EVP_PKEY *pkey = EVP_RSA_gen(4096);
-	if(pkey == NULL)
+	if (pkey == NULL)
 		return false;
 	EVP_PKEY_free(pkey);
 
@@ -52,32 +53,35 @@ static bool test_instantiate(bool prediction_resistance)
 	const size_t buffer_size = 100;
 	unsigned int strength = 256;
 	unsigned char bytes[100];
-	OSSL_PARAM params [2];
+	OSSL_PARAM params[2];
 	EVP_RAND_CTX *rctx;
 	EVP_RAND *rand;
 	int ret;
 
-	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER, "AES-256-CTR", 0);
+	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER,
+						     "AES-256-CTR", 0);
 	params[1] = OSSL_PARAM_construct_end();
 
 	rand = EVP_RAND_fetch(NULL, "CTR-DRBG", NULL);
-	if(rand == NULL)
+	if (rand == NULL)
 		return false;
 	rctx = EVP_RAND_CTX_new(rand, NULL);
-	if(rctx == NULL) {
+	if (rctx == NULL) {
 		EVP_RAND_free(rand);
 		return false;
 	}
 	EVP_RAND_free(rand);
 
-	ret = EVP_RAND_instantiate(rctx, strength, prediction_resistance ? 1 : 0, NULL, 0, params);
-	if(ret != 1) {
+	ret = EVP_RAND_instantiate(
+		rctx, strength, prediction_resistance ? 1 : 0, NULL, 0, params);
+	if (ret != 1) {
 		EVP_RAND_CTX_free(rctx);
 		return false;
 	}
 
-	ret = EVP_RAND_generate(rctx, bytes, sizeof(bytes), strength, prediction_resistance ? 1 : 0, NULL, 0);
-	if(ret != 1) {
+	ret = EVP_RAND_generate(rctx, bytes, sizeof(bytes), strength,
+				prediction_resistance ? 1 : 0, NULL, 0);
+	if (ret != 1) {
 		EVP_RAND_CTX_free(rctx);
 		return false;
 	}
@@ -88,8 +92,9 @@ static bool test_instantiate(bool prediction_resistance)
 	assert(ret <= buffer_size);
 	*/
 
-	ret = EVP_RAND_reseed(rctx, prediction_resistance ? 1 : 0, bytes, buffer_size, bytes, buffer_size);
-	if(ret != 1) {
+	ret = EVP_RAND_reseed(rctx, prediction_resistance ? 1 : 0, bytes,
+			      buffer_size, bytes, buffer_size);
+	if (ret != 1) {
 		EVP_RAND_CTX_free(rctx);
 		return false;
 	}
@@ -98,22 +103,27 @@ static bool test_instantiate(bool prediction_resistance)
 	return true;
 }
 
-static bool performTest(char* test, char* type) {
+static bool performTest(char *test, char *type)
+{
 	if (strncmp(type, "rng", strlen("rng"))) {
-		OSSL_PROVIDER* prov_esdm = OSSL_PROVIDER_load(NULL, "libesdm-rng-provider");
-		if(prov_esdm == NULL)
+		OSSL_PROVIDER *prov_esdm =
+			OSSL_PROVIDER_load(NULL, "libesdm-rng-provider");
+		if (prov_esdm == NULL)
 			return false;
-		OSSL_PROVIDER* prov_default = OSSL_PROVIDER_load(NULL, "default");
-		if(prov_default == NULL)
+		OSSL_PROVIDER *prov_default =
+			OSSL_PROVIDER_load(NULL, "default");
+		if (prov_default == NULL)
 			return false;
 	}
 
 	if (strncmp(type, "seed-src", strlen("seed-src"))) {
-		OSSL_PROVIDER* prov_esdm = OSSL_PROVIDER_load(NULL, "libesdm-seed-src-provider");
-		if(prov_esdm == NULL)
+		OSSL_PROVIDER *prov_esdm =
+			OSSL_PROVIDER_load(NULL, "libesdm-seed-src-provider");
+		if (prov_esdm == NULL)
 			return false;
-		OSSL_PROVIDER* prov_default = OSSL_PROVIDER_load(NULL, "default");
-		if(prov_default == NULL)
+		OSSL_PROVIDER *prov_default =
+			OSSL_PROVIDER_load(NULL, "default");
+		if (prov_default == NULL)
 			return false;
 	}
 
@@ -146,7 +156,7 @@ int main(int argc, char **argv)
 		return ret;
 
 	ret = OSSL_PROVIDER_set_default_search_path(NULL, provider_search_path);
-	if(ret != 1) {
+	if (ret != 1) {
 		env_fini();
 		return EXIT_FAILURE;
 	}

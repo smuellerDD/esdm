@@ -34,12 +34,11 @@ struct esdm_rnd_get_ent_cnt_buf {
 	unsigned int entcnt;
 };
 
-static void
-esdm_rpcc_rnd_get_ent_cnt_cb(const RndGetEntCntResponse *response,
-			     void *closure_data)
+static void esdm_rpcc_rnd_get_ent_cnt_cb(const RndGetEntCntResponse *response,
+					 void *closure_data)
 {
 	struct esdm_rnd_get_ent_cnt_buf *buffer =
-			(struct esdm_rnd_get_ent_cnt_buf *)closure_data;
+		(struct esdm_rnd_get_ent_cnt_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;

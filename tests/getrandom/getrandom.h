@@ -26,15 +26,14 @@
 #include <sys/random.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #ifndef GRND_SEED
-#define GRND_SEED		0x0010
+#define GRND_SEED 0x0010
 #endif
 #ifndef GRND_FULLY_SEEDED
-#define GRND_FULLY_SEEDED	0x0020
+#define GRND_FULLY_SEEDED 0x0020
 #endif
 
 static inline ssize_t __getrandom(uint8_t *buffer, size_t bufferlen,

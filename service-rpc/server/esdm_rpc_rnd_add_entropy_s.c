@@ -35,23 +35,23 @@ void esdm_rpc_rnd_add_entropy(PrivAccess_Service *service,
 
 	if (request == NULL || request->randval.data == NULL) {
 		response.ret = -EFAULT;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	} else if (!esdm_rpc_client_is_privileged(closure_data)) {
 		response.ret = -EPERM;
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 
 	} else {
 		if (request->randval.len > UINT32_MAX) {
 			response.ret = -EINVAL;
 		} else {
-			response.ret = esdm_pool_insert_aux(
-						request->randval.data,
-						request->randval.len,
-						request->entcnt);
+			response.ret =
+				esdm_pool_insert_aux(request->randval.data,
+						     request->randval.len,
+						     request->entcnt);
 			memset_secure(request->randval.data, 0,
 				      request->randval.len);
 		}
 
-		closure (&response, closure_data);
+		closure(&response, closure_data);
 	}
 }

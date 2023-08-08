@@ -23,12 +23,11 @@
 #include "lc_hash.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
-#define LC_SHA512_SIZE_BLOCK	128
-#define LC_SHA512_SIZE_DIGEST	64
+#define LC_SHA512_SIZE_BLOCK 128
+#define LC_SHA512_SIZE_DIGEST 64
 
 extern const struct lc_hash *lc_sha512;
 

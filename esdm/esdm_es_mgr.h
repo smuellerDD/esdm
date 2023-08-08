@@ -11,18 +11,17 @@
 
 /*************************** General ESDM parameter ***************************/
 
-#define ESDM_DRNG_BLOCKSIZE 64		/* Maximum of DRNG block sizes */
+#define ESDM_DRNG_BLOCKSIZE 64 /* Maximum of DRNG block sizes */
 
 /* Helper to concatenate a macro with an integer type */
-#define ESDM_PASTER(x, y) x ## y
+#define ESDM_PASTER(x, y) x##y
 #define ESDM_UINT32_C(x) ESDM_PASTER(x, U)
 
 /************************* Entropy sources management *************************/
 
 extern struct esdm_es_cb *esdm_es[];
 
-#define for_each_esdm_es(ctr)		\
-	for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
+#define for_each_esdm_es(ctr) for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
 
 bool esdm_state_min_seeded(void);
 void esdm_debug_report_seedlevel(const char *name);
@@ -47,7 +46,7 @@ void esdm_init_ops(struct entropy_buf *eb);
 
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
-int esdm_es_mgr_monitor_initialize(void(*priv_init_completion)(void));
+int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void));
 void esdm_es_mgr_monitor_wakeup(void);
 void esdm_es_mgr_finalize(void);
 

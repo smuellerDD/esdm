@@ -58,7 +58,7 @@ int esdm_reinit(void);
  *
  * @return: 0 on success, < 0 on error
  */
-int esdm_init_monitor(void(*priv_init_completion)(void));
+int esdm_init_monitor(void (*priv_init_completion)(void));
 
 /**
  * @brief esdm_fini() - finalize the ESDM library and release all resources
@@ -244,8 +244,8 @@ void esdm_status(char *buf, size_t buflen);
  * @param [out] status Buffer to be filled with status information
  */
 struct esdm_status_st {
-	unsigned int es_irq_enabled:1;
-	unsigned int es_sched_enabled:2;
+	unsigned int es_irq_enabled : 1;
+	unsigned int es_sched_enabled : 2;
 };
 void esdm_status_machine(struct esdm_status_st *status);
 
