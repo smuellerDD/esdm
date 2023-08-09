@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 #
 # Helper script to invoke clang-format to re-format all files allowed to be
