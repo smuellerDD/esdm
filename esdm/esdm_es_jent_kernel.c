@@ -1,7 +1,7 @@
 /*
  * ESDM Fast Entropy Source: Linux jitter-based entropy source
  *
- * Copyright (C) 2023, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2023, Markus Theil <theil.markus@gmail.com>
  *
  * License: see LICENSE file in root directory
  *
