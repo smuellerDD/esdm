@@ -130,7 +130,7 @@ void _logger(const enum logger_verbosity severity,
 	time_t now;
 	struct tm now_detail;
 	va_list args;
-	int (*fprintf_color)(FILE *stream, const char *format, ...) = &fprintf;
+	int (*fprintf_color)(FILE * stream, const char *format, ...) = &fprintf;
 	int ret;
 	char msg[4096];
 	char sev[10];
