@@ -30,7 +30,7 @@
 
 #include "env.h"
 
-static bool test_random()
+static bool test_random(void)
 {
 	unsigned char bytes[300];
 	int ret;
@@ -151,7 +151,7 @@ int main(int argc, char **argv)
 	test = argv[2];
 	type = argv[3];
 
-	env_init();
+	ret = env_init();
 	if (ret)
 		return ret;
 

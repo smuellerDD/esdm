@@ -91,7 +91,7 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 	LC_HASH_CTX_ON_STACK(shash, lc_sha3_512);
 	bool shash_free = false;
 #else
-	void *shash;
+	void *shash = NULL;
 	bool shash_free = true;
 #endif
 	const struct esdm_hash_cb *hash_cb;

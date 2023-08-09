@@ -14,7 +14,7 @@ esdm_botan_rng_lib = library(
 		link_with: esdm_rpc_client_lib,
 		install: true
 		)
-pkg.generate(esdm_botan_rng_lib)
+pkgconfig.generate(esdm_botan_rng_lib)
 
 include_user_files += files([
 	'botan-rng.hpp'

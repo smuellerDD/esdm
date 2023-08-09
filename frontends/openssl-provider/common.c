@@ -170,20 +170,20 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 				 int prediction_resistance __unused,
 				 const unsigned char *addin, size_t addin_len)
 {
-	const size_t entropy_buffer_size = 2048;
+#define ENTROPY_BUFFER_SIZE 2048
 	struct esdm_seed_buffer {
 		uint64_t len;
 		uint64_t entropy_bits;
-		uint8_t buf[entropy_buffer_size] /* should be large enough for entropy from all active
-											sources */
+		/* should be large enough for entropy from all active sources */
+		uint8_t buf[ENTROPY_BUFFER_SIZE];
 	} __attribute__((__packed__));
 	size_t seed_buffer_size = sizeof(struct esdm_seed_buffer);
-	struct esdm_seed_buffer *seed_buffer;
+	struct esdm_seed_buffer *seed_buffer = NULL;
 	ssize_t ret;
 
-	if (entropy_buffer_size < min_len)
+	if (ENTROPY_BUFFER_SIZE < min_len)
 		goto err;
-	if (entropy_buffer_size >= max_len)
+	if (ENTROPY_BUFFER_SIZE >= max_len)
 		goto err;
 
 	if (addin && addin_len > 0) {
@@ -192,19 +192,20 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 			goto err;
 	}
 
-	seed_buffer = OPENSSL_secure_zalloc(seed_buffer_size);
-	esdm_invoke(esdm_rpcc_get_seed(seed_buffer, seed_buffer_size, 0));
+	seed_buffer = OPENSSL_secure_zalloc(ENTROPY_BUFFER_SIZE);
+	esdm_invoke(esdm_rpcc_get_seed((uint8_t *)seed_buffer,
+				       ENTROPY_BUFFER_SIZE, 0));
 	if (ret <= 0)
 		goto err;
 
 	if (seed_buffer->entropy_bits < (uint64_t)entropy_bits)
 		goto err;
 
-	*buffer = OPENSSL_secure_zalloc(entropy_buffer_size);
-	memcpy(*buffer, seed_buffer->buf, entropy_buffer_size);
-	OPENSSL_secure_clear_free(seed_buffer, seed_buffer_size);
+	*buffer = OPENSSL_secure_zalloc(ENTROPY_BUFFER_SIZE);
+	memcpy(*buffer, seed_buffer->buf, ENTROPY_BUFFER_SIZE);
+	OPENSSL_secure_clear_free(seed_buffer, ENTROPY_BUFFER_SIZE);
 
-	return entropy_buffer_size;
+	return ENTROPY_BUFFER_SIZE;
 
 err:
 	OPENSSL_secure_clear_free(seed_buffer, seed_buffer_size);
