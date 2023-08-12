@@ -40,13 +40,6 @@ int main(int argc, char *argv[])
 	(void)argc;
 	(void)argv;
 
-#ifndef ESDM_TESTMODE
-	if (getuid()) {
-		printf("Program must be started as root\n");
-		return 77;
-	}
-#endif
-
 	ret = env_init();
 	if (ret)
 		return ret;

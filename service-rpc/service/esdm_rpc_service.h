@@ -39,9 +39,9 @@ extern "C" {
 
 #ifdef ESDM_TESTMODE
 
-#define ESDM_RPC_UNPRIV_SOCKET "/var/run/esdm-rpc-unpriv-testmode.socket"
+#define ESDM_RPC_UNPRIV_SOCKET "/tmp/esdm-rpc-unpriv-testmode.socket"
 
-#define ESDM_RPC_PRIV_SOCKET "/var/run/esdm-rpc-priv-testmode.socket"
+#define ESDM_RPC_PRIV_SOCKET "/tmp/esdm-rpc-priv-testmode.socket"
 
 #define ESDM_SHM_NAME "/"
 #define ESDM_SHM_STATUS 0x6573646d

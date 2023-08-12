@@ -96,11 +96,18 @@ static int clear_ioctl(int fd, int exp)
 		printf("RNDGETENTCNT IOCTL failed: with %d\n", errno);
 		return 1;
 	}
+
+#if 0
+	/*
+	 * This check does not work any more because the Jitter RNG will
+	 * attempt to immediately reseed the ESDM.
+	 */
 	if (ent_count_bits2 >= ent_count_bits) {
 		printf("RNDCLEARPOOL failed to clear entropy: before %u, after %u\n",
 		       ent_count_bits, ent_count_bits2);
 		return 1;
 	}
+#endif
 
 	printf("RNDCLEARPOOL: passed to clear entropy\n");
 
