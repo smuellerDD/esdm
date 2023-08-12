@@ -371,6 +371,9 @@ static int esdm_openssl_drbg_selftest(void)
 		goto out;
 	}
 
+	if (memcmp(act, exp, sizeof(exp)))
+		ret = -EFAULT;
+
 out:
 	esdm_openssl_drbg_dealloc(drng);
 	return ret;
