@@ -29,17 +29,20 @@
 
 #include "env.h"
 
-bool performTest(std::shared_ptr<Botan::RandomNumberGenerator>& rng)
+bool performTest(std::shared_ptr<Botan::RandomNumberGenerator> &rng)
 {
 	std::vector<uint8_t> bytes(300);
 	try {
 		rng->randomize(bytes);
-		Botan::ECDSA_PrivateKey key_ecdsa(*rng, Botan::EC_Group("secp521r1"));
+		Botan::ECDSA_PrivateKey key_ecdsa(*rng,
+						  Botan::EC_Group("secp521r1"));
 		Botan::RSA_PrivateKey key_rsa(*rng, 2048);
-	} catch(const Botan::System_Error& err) {
-		std::cerr << "Got Botan error, ESDM may did not deliver random bits: " << err.what() << std::endl;
+	} catch (const Botan::System_Error &err) {
+		std::cerr
+			<< "Got Botan error, ESDM may did not deliver random bits: "
+			<< err.what() << std::endl;
 		return false;
-	} catch(...) {
+	} catch (...) {
 		return false;
 	}
 
@@ -58,22 +61,22 @@ int main(void)
 	try {
 		rng_pr.reset(new ESDM_RNG(true));
 		rng_full.reset(new ESDM_RNG(false));
-	} catch(const Botan::System_Error& err) {
+	} catch (const Botan::System_Error &err) {
 		std::cerr << "Cannot initialize ESDM connection" << std::endl;
 		goto out_err;
 	}
 
-	if(rng_pr->name() != "esdm_pr") {
+	if (rng_pr->name() != "esdm_pr") {
 		goto out_err;
 	}
-	if(rng_full->name() != "esdm_full") {
+	if (rng_full->name() != "esdm_full") {
 		goto out_err;
 	}
 
-	if(!performTest(rng_pr)) {
+	if (!performTest(rng_pr)) {
 		goto out_err;
 	}
-	if(!performTest(rng_full)) {
+	if (!performTest(rng_full)) {
 		goto out_err;
 	}
 
