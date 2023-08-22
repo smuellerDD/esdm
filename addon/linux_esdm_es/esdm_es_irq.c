@@ -256,7 +256,7 @@ static void esdm_irq_reset(void)
 	/* Trigger GCD calculation anew. */
 	esdm_gcd_set(0);
 
-	for_each_online_cpu(cpu)
+	for_each_online_cpu (cpu)
 		atomic_set(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
 }
 
@@ -268,8 +268,7 @@ static u32 esdm_irq_avail_pool_size(void)
 	if (!esdm_irq_continuous_compression)
 		max_pool = min_t(u32, max_pool, ESDM_DATA_NUM_VALUES);
 
-	for_each_online_cpu(cpu)
-	{
+	for_each_online_cpu (cpu) {
 		if (esdm_irq_pool_online(cpu))
 			max_size += max_pool;
 	}
@@ -296,8 +295,7 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 			min_t(u32, digestsize_irqs, ESDM_DATA_NUM_VALUES);
 	}
 
-	for_each_online_cpu(cpu)
-	{
+	for_each_online_cpu (cpu) {
 		if (!esdm_irq_pool_online(cpu))
 			continue;
 		irq += min_t(u32, digestsize_irqs,
@@ -406,8 +404,7 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	 * Harvest entropy from each per-CPU hash state - even though we may
 	 * have collected sufficient entropy, we will hash all per-CPU pools.
 	 */
-	for_each_online_cpu(cpu)
-	{
+	for_each_online_cpu (cpu) {
 		u32 digestsize, pcpu_unused_irqs = 0;
 
 		/* If pool is not online, then no entropy is present. */

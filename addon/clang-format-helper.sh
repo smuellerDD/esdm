@@ -15,7 +15,7 @@ CLANGFORMAT="clang-format"
 CLANGCONF="./.clang-format"
 
 files="$(find ./ -name *.c)"
-files="$(find ./ -name *.cpp)"
+files="$files $(find ./ -name *.cpp)"
 files="$files $(find ./ -name *.h)"
 
 if [ ! -f "$CLANGCONF" ]

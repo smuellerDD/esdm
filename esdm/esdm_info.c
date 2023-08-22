@@ -84,8 +84,7 @@ void esdm_status(char *buf, size_t buflen)
 		 esdm_avail_entropy());
 
 	/* Concatenate the output of the entropy sources. */
-	for_each_esdm_es(i)
-	{
+	for_each_esdm_es (i) {
 		len = esdm_remaining_buf_len(buf, buflen);
 		snprintf(buf + len, buflen - len,
 			 "Entropy Source %u properties:\n"

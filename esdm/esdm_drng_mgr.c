@@ -411,7 +411,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	unsigned int i, num_es_delivered = 0;
 	bool forced = drng->force_reseed;
 
-	for_each_esdm_es(i) collected_seedbuf.entropy_es[i].e_bits = 0;
+	for_each_esdm_es (i)
+		collected_seedbuf.entropy_es[i].e_bits = 0;
 
 	/*
 	 * This clearing is not strictly needed, but it silences
@@ -436,8 +437,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
 		/* Sum iterations up. */
-		for_each_esdm_es(i)
-		{
+		for_each_esdm_es (i) {
 			collected_seedbuf.entropy_es[i].e_bits +=
 				seedbuf.entropy_es[i].e_bits;
 			num_es_delivered += !!seedbuf.entropy_es[i].e_bits;

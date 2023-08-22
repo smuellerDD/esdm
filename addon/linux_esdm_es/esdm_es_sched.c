@@ -148,7 +148,8 @@ static u32 esdm_sched_avail_pool_size(void)
 	    max_size = min_t(u32, max_pool, ESDM_DATA_NUM_VALUES);
 	int cpu;
 
-	for_each_online_cpu(cpu) max_size += max_pool;
+	for_each_online_cpu (cpu)
+		max_size += max_pool;
 
 	return max_size;
 }
@@ -169,8 +170,7 @@ static u32 esdm_sched_avail_entropy(u32 __unused)
 	/* Cap to max. number of scheduler events the array can hold */
 	digestsize_events = min_t(u32, digestsize_events, ESDM_DATA_NUM_VALUES);
 
-	for_each_online_cpu(cpu)
-	{
+	for_each_online_cpu (cpu) {
 		events += min_t(u32, digestsize_events,
 				atomic_read_u32(per_cpu_ptr(
 					&esdm_sched_array_events, cpu)));
@@ -192,7 +192,7 @@ static void esdm_sched_reset(void)
 	/* Trigger GCD calculation anew. */
 	esdm_gcd_set(0);
 
-	for_each_online_cpu(cpu)
+	for_each_online_cpu (cpu)
 		atomic_set(per_cpu_ptr(&esdm_sched_array_events, cpu), 0);
 }
 
@@ -303,8 +303,7 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	 * Harvest entropy from each per-CPU hash state - even though we may
 	 * have collected sufficient entropy, we will hash all per-CPU pools.
 	 */
-	for_each_online_cpu(cpu)
-	{
+	for_each_online_cpu (cpu) {
 		u32 digestsize, unused_events = 0;
 
 		found_events = esdm_sched_pool_hash_one(hash_cb, hash, cpu,
