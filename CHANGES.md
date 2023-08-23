@@ -3,6 +3,14 @@ Changes 0.7.0-prerelease:
 
 * IRQ/Sched ES: add support to retry accessing the kernel with -i and -s flags
 
+* enhancement: Jitter RNG ES generates data asynchronously
+
+* fix: ESDM server - systemd unit executes server in current mount namespace
+
+* editorial: apply clang-format
+
+* fix: CUSE daemons may hang during shutdown due to busy mounts
+
 Changes 0.6.0:
 * Move ESDM apps into separate namespaces to limit their privilege even further (e.g. no possibility to create network connections)
 

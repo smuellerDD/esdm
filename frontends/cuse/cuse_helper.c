@@ -66,7 +66,9 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 
 int esdm_cuse_bind_unmount(char **mount_src, char **mount_dst)
 {
-#define MAX_WAIT_SEC (8 * 5)
+#define WAIT_TILL_DETACH (5)
+#define WAIT_TILL_FORCE (2 * WAIT_TILL_DETACH)
+#define MAX_WAIT_SEC (8 * WAIT_TILL_DETACH)
 	char *m_s = *mount_src, *m_d = *mount_dst;
 	struct timespec sleep = { 0, 1 << 27 };
 	unsigned int ctr = 0;
@@ -84,7 +86,12 @@ int esdm_cuse_bind_unmount(char **mount_src, char **mount_dst)
 
 	do {
 		errsv = 0;
-		ret = umount(m_d);
+		if (ctr > WAIT_TILL_FORCE)
+			ret = umount2(m_d, MNT_DETACH | MNT_FORCE);
+		else if (ctr > WAIT_TILL_DETACH)
+			ret = umount2(m_d, MNT_DETACH);
+		else
+			ret = umount(m_d);
 		if (ret < 0 && errno == EBUSY) {
 			errsv = errno;
 			nanosleep(&sleep, NULL);
