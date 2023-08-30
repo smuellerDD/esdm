@@ -19,8 +19,8 @@
 
 #include <errno.h>
 
-#include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
@@ -47,7 +47,7 @@ DSO_PUBLIC
 int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data)
 {
 	SetMinReseedSecsRequest msg = SET_MIN_RESEED_SECS_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn = NULL;
+	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_set_min_reseed_secs_buf buffer;
 	int ret = 0;
 

@@ -25,44 +25,31 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#include "atomic.h"
-#include "mutex_w.h"
-#include "queue.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-enum {
-	esdm_rpcc_uninitialized,
-	esdm_rpcc_in_initialization,
-	esdm_rpcc_initialized,
-	esdm_rpcc_in_termination,
-};
+/**
+ * @brief esdm_rpcc_interrupt_func_t - Consumer interrupt function
+ *
+ * Optional interrupt function which a caller can register. This function
+ * allows a consuming application to notify the ESDM library whether it shall
+ * interrupt an ongoing RPC connection.
+ *
+ * @param [in] interrupt_data This data is opaque to ESDM. It is provided by
+ *			      the consuming application when using the different
+ *			      *_int functions listed below.
+ *
+ * @return 0 if no interruption is raised and != 0 for any interruption.
+ */
+typedef int (*esdm_rpcc_interrupt_func_t)(void *interrupt_data);
 
-typedef bool (*esdm_rpcc_interrupt_func_t)(void *interrupt_data);
-
-struct esdm_rpc_client_connection {
-	ProtobufCService service;
-	char socketname[FILENAME_MAX];
-	int fd;
-
-	/*
-	 * Caller can register function that is invoked to check whether call
-	 * should be interrupted.
-	 */
-	esdm_rpcc_interrupt_func_t interrupt_func;
-	void *interrupt_data;
-
-	mutex_w_t lock;
-	atomic_t ref_cnt;
-	atomic_t state;
-	struct thread_wait_queue completion;
-};
-
-/* Sleep time for poll operations */
-static const struct timespec esdm_client_poll_ts = { .tv_sec = 1,
-						     .tv_nsec = 0 };
+/**
+ * @brief esdm_rpc_client_connection_t
+ *
+ * Opaque data structure referencing a client connection.
+ */
+typedef struct esdm_rpc_client_connection esdm_rpc_client_connection_t;
 
 /******************************************************************************
  * General service handlers
@@ -101,7 +88,7 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
  *
  * @return 0 on success, < 0 on error
  */
-int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
+int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
 				 void *int_data);
 
 /**
@@ -112,7 +99,7 @@ int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
  * @param [in] rpc_conn Connection handle that shall be used. This handle can be
  *		    	located on the stack.
  */
-void esdm_rpcc_put_unpriv_service(struct esdm_rpc_client_connection *rpc_conn);
+void esdm_rpcc_put_unpriv_service(esdm_rpc_client_connection_t *rpc_conn);
 
 /**
  * @brief Initiate the memory for accessing the unprivileged RPC connection.
@@ -147,7 +134,7 @@ void esdm_rpcc_fini_unpriv_service(void);
  *
  * @return 0 on success, < 0 on error
  */
-int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
+int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
 			       void *int_data);
 
 /**
@@ -158,7 +145,7 @@ int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
  * @param [in] rpc_conn Connection handle that shall be used. This handle can be
  *		    	located on the stack.
  */
-void esdm_rpcc_put_priv_service(struct esdm_rpc_client_connection *rpc_conn);
+void esdm_rpcc_put_priv_service(esdm_rpc_client_connection_t *rpc_conn);
 
 /**
  * @brief Initiate the memory for accessing the privileged RPC connection.

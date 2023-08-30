@@ -22,8 +22,8 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
 #include "math_helper.h"
 #include "logger.h"
@@ -62,7 +62,7 @@ ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
 					   void *int_data)
 {
 	GetRandomBytesMinRequest msg = GET_RANDOM_BYTES_FULL_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn = NULL;
+	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_random_bytes_min_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
 	ssize_t ret = 0;

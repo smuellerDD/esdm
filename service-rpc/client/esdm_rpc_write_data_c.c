@@ -20,8 +20,8 @@
 #include <errno.h>
 #include <stdio.h>
 
-#include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
 #include "math_helper.h"
 #include "logger.h"
@@ -48,7 +48,7 @@ int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
 			     void *int_data)
 {
 	WriteDataRequest msg = WRITE_DATA_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn = NULL;
+	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_write_data_buf buffer;
 	int ret = 0;
 

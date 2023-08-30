@@ -22,8 +22,8 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
 #include "math_helper.h"
 #include "logger.h"
@@ -57,7 +57,7 @@ ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
 			       void *int_data)
 {
 	GetSeedRequest msg = GET_SEED_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn = NULL;
+	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_seed_buf buffer;
 	ssize_t ret = 0;
 	int noblock = flags & ESDM_GET_SEED_NONBLOCK;

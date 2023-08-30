@@ -316,20 +316,20 @@ The value must not be lower than 1.
 
 # Option for: ESDM_DRNG_HASH_DRBG
 option('drng_hash_drbg', type: 'feature', value: 'enabled',
-       description:'''SP800-90A Hash Deterministic Random Number Generator.
+       description:'''Builtin: SP800-90A Hash Deterministic Random Number Generator.
 
 This configuration enables an SP800-90A Hash DRBG with SHA-512 core
-without prediction resistance.
+without prediction resistance when the builtin crypto primitives are selected.
 ''')
 
 option('drng_chacha20', type: 'feature', value: 'disabled',
-       description: 'ChaCha20-based Deterministic Random Number Generator.')
+       description: 'Builtin: ChaCha20-based Deterministic Random Number Generator.')
 
 option('hash_sha512', type: 'feature', value: 'enabled',
-       description: 'Enable SHA2-512 conditioning hash')
+       description: 'Builtin: Enable SHA2-512 conditioning hash')
 
 option('hash_sha3_512', type: 'feature', value: 'disabled',
-       description: 'Enable SHA3-512 conditioning hash')
+       description: 'Builtin: Enable SHA3-512 conditioning hash')
 
 option('crypto_backend', type: 'combo', value: 'builtin',
        choices: ['builtin',

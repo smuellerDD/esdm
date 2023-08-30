@@ -24,6 +24,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "bool.h"
 #include "constructor.h"
 #include "esdm_rpc_client.h"
 #include "visibility.h"

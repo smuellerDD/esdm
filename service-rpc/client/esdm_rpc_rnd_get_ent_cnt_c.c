@@ -20,8 +20,8 @@
 #include <errno.h>
 #include <stdio.h>
 
-#include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
@@ -49,7 +49,7 @@ DSO_PUBLIC
 int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data)
 {
 	RndGetEntCntRequest msg = RND_GET_ENT_CNT_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn = NULL;
+	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_rnd_get_ent_cnt_buf buffer;
 	int ret = 0;
 

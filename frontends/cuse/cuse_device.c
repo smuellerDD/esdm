@@ -40,6 +40,7 @@
 #include "math_helper.h"
 #include "memset_secure.h"
 #include "mutex.h"
+#include "mutex_w.h"
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
@@ -395,7 +396,7 @@ void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi)
 	fuse_reply_open(req, fi);
 }
 
-static bool esdm_cuse_interrupt(void *data)
+static int esdm_cuse_interrupt(void *data)
 {
 	fuse_req_t req = (fuse_req_t)data;
 

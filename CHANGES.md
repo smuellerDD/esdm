@@ -5,6 +5,8 @@ Changes 0.7.0-prerelease:
 
 * enhancement: Jitter RNG ES generates data asynchronously
 
+* enhancement: add kernel Jitter RNG ES
+
 * fix: ESDM server - systemd unit executes server in current mount namespace
 
 * editorial: apply clang-format

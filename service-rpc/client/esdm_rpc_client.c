@@ -30,7 +30,7 @@
 #include "buffer.h"
 #include "atomic.h"
 #include "conv_be_le.h"
-#include "esdm_rpc_client.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_protocol.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
@@ -44,10 +44,10 @@
 
 struct esdm_rpcc_write_buf {
 	ProtobufCBuffer base;
-	struct esdm_rpc_client_connection *rpc_conn;
+	esdm_rpc_client_connection_t *rpc_conn;
 };
 
-static void esdm_fini_proto_service(struct esdm_rpc_client_connection *rpc_conn)
+static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	ProtobufCService *service;
 
@@ -67,7 +67,7 @@ static void esdm_fini_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 }
 
 static int
-esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
+esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	const char *socketname = rpc_conn->socketname;
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 28 };
@@ -152,7 +152,7 @@ esdm_connect_proto_service(struct esdm_rpc_client_connection *rpc_conn)
 }
 
 static int
-esdm_rpc_client_write_data(struct esdm_rpc_client_connection *rpc_conn,
+esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 			   const uint8_t *data, size_t len)
 {
 	size_t written = 0;
@@ -205,7 +205,7 @@ static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 
 static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 				unsigned int method_index,
-				struct esdm_rpc_client_connection *rpc_conn)
+				esdm_rpc_client_connection_t *rpc_conn)
 {
 	struct esdm_rpc_proto_cs_header cs_header;
 	struct esdm_rpcc_write_buf tmp = { 0 };
@@ -241,7 +241,7 @@ out:
 }
 
 static int
-esdm_rpc_client_read_handler(struct esdm_rpc_client_connection *rpc_conn,
+esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			     const ProtobufCMessageDescriptor *message_desc,
 			     ProtobufCClosure closure, void *closure_data)
 {
@@ -405,8 +405,8 @@ static void esdm_client_invoke(ProtobufCService *service,
 {
 	const ProtobufCServiceDescriptor *desc = service->descriptor;
 	const ProtobufCMethodDescriptor *method = desc->methods + method_index;
-	struct esdm_rpc_client_connection *rpc_conn =
-		(struct esdm_rpc_client_connection *)service;
+	esdm_rpc_client_connection_t *rpc_conn =
+		(esdm_rpc_client_connection_t *)service;
 	int ret;
 
 	mutex_w_lock(&rpc_conn->lock);
@@ -430,8 +430,8 @@ out:
 
 static void esdm_client_destroy(ProtobufCService *service)
 {
-	struct esdm_rpc_client_connection *rpc_conn =
-		(struct esdm_rpc_client_connection *)service;
+	esdm_rpc_client_connection_t *rpc_conn =
+		(esdm_rpc_client_connection_t *)service;
 
 	mutex_w_lock(&rpc_conn->lock);
 	if (rpc_conn->fd >= 0) {
@@ -444,7 +444,7 @@ static void esdm_client_destroy(ProtobufCService *service)
 static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 				   const char *socketname,
 				   esdm_rpcc_interrupt_func_t interrupt_func,
-				   struct esdm_rpc_client_connection *rpc_conn)
+				   esdm_rpc_client_connection_t *rpc_conn)
 {
 	ProtobufCService *service;
 	int ret = 0;
@@ -492,10 +492,10 @@ static uint32_t esdm_rpcc_curr_node(void)
 	return (esdm_curr_node() % esdm_rpcc_max_nodes);
 }
 
-static void esdm_rpcc_fini_service(struct esdm_rpc_client_connection **rpc_conn)
+static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
 {
-	struct esdm_rpc_client_connection *rpc_conn_array = *rpc_conn;
-	struct esdm_rpc_client_connection *rpc_conn_p = rpc_conn_array;
+	esdm_rpc_client_connection_t *rpc_conn_array = *rpc_conn;
+	esdm_rpc_client_connection_t *rpc_conn_p = rpc_conn_array;
 	uint32_t i, num_conn = esdm_rpcc_get_online_nodes();
 
 	if (!rpc_conn_array)
@@ -525,9 +525,9 @@ static void esdm_rpcc_fini_service(struct esdm_rpc_client_connection **rpc_conn)
 static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 				  const char *socketname,
 				  esdm_rpcc_interrupt_func_t interrupt_func,
-				  struct esdm_rpc_client_connection **rpc_conn)
+				  esdm_rpc_client_connection_t **rpc_conn)
 {
-	struct esdm_rpc_client_connection *tmp, *tmp_p;
+	esdm_rpc_client_connection_t *tmp, *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
 	int ret = 0;
 
@@ -561,11 +561,11 @@ out:
 }
 
 static int
-esdm_rpcc_get_service(struct esdm_rpc_client_connection *rpc_conn_array,
-		      struct esdm_rpc_client_connection **ret_rpc_conn,
+esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
+		      esdm_rpc_client_connection_t **ret_rpc_conn,
 		      void *int_data)
 {
-	struct esdm_rpc_client_connection *rpc_conn_p;
+	esdm_rpc_client_connection_t *rpc_conn_p;
 	int ret = 0;
 
 	CKNULL(rpc_conn_array, -EFAULT);
@@ -593,7 +593,7 @@ out:
 	return ret;
 }
 
-static void esdm_rpcc_put_service(struct esdm_rpc_client_connection *rpc_conn)
+static void esdm_rpcc_put_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	if (!rpc_conn)
 		return;
@@ -607,17 +607,17 @@ static void esdm_rpcc_put_service(struct esdm_rpc_client_connection *rpc_conn)
 /******************************************************************************
  * Unprivileged connection
  ******************************************************************************/
-static struct esdm_rpc_client_connection *unpriv_rpc_conn = NULL;
+static esdm_rpc_client_connection_t *unpriv_rpc_conn = NULL;
 
 DSO_PUBLIC
-int esdm_rpcc_get_unpriv_service(struct esdm_rpc_client_connection **rpc_conn,
+int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
 				 void *int_data)
 {
 	return esdm_rpcc_get_service(unpriv_rpc_conn, rpc_conn, int_data);
 }
 
 DSO_PUBLIC
-void esdm_rpcc_put_unpriv_service(struct esdm_rpc_client_connection *rpc_conn)
+void esdm_rpcc_put_unpriv_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	esdm_rpcc_put_service(rpc_conn);
 }
@@ -639,17 +639,17 @@ void esdm_rpcc_fini_unpriv_service(void)
 /******************************************************************************
  * Privileged connection
  ******************************************************************************/
-static struct esdm_rpc_client_connection *priv_rpc_conn = NULL;
+static esdm_rpc_client_connection_t *priv_rpc_conn = NULL;
 
 DSO_PUBLIC
-int esdm_rpcc_get_priv_service(struct esdm_rpc_client_connection **rpc_conn,
+int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
 			       void *int_data)
 {
 	return esdm_rpcc_get_service(priv_rpc_conn, rpc_conn, int_data);
 }
 
 DSO_PUBLIC
-void esdm_rpcc_put_priv_service(struct esdm_rpc_client_connection *rpc_conn)
+void esdm_rpcc_put_priv_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	esdm_rpcc_put_service(rpc_conn);
 }

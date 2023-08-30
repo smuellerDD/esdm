@@ -20,8 +20,8 @@
 #include <errno.h>
 #include <stdio.h>
 
-#include "esdm_rpc_client.h"
 #include "esdm_rpc_client_helper.h"
+#include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "logger.h"
@@ -49,7 +49,7 @@ int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
 				  void *int_data)
 {
 	RndAddEntropyRequest msg = RND_ADD_ENTROPY_REQUEST__INIT;
-	struct esdm_rpc_client_connection *rpc_conn = NULL;
+	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_rnd_add_entropy_buf buffer;
 	int ret = 0;
 
