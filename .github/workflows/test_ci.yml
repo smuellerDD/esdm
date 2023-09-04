@@ -18,10 +18,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y meson libprotobuf-c-dev
     - name: Install Jitter RNG
-      run: wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v3.4.1.tar.gz
-      run: tar xvfz jent.tar.gz
-      run: make -C jitterentropy-library*
-      run: sudo make -C jitterentropy-library* install
+      run: |
+        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v3.4.1.tar.gz
+        tar xvfz jent.tar.gz
+        make -C jitterentropy-library*
+        sudo make -C jitterentropy-library* install
     - name: Meson setup
       run: meson setup build -Dtestmode=enabled -Dselinux=disabled
     - name: Meson compile
