@@ -453,7 +453,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		/*
 		 * Set the seeding state of the ESDM
 		 *
-		 * Do not call lrng_init_ops(seedbuf) here as the atomic DRNG
+		 * Do not call esdm_init_ops(seedbuf) here as the atomic DRNG
 		 * does not serve common users.
 		 */
 		if (init_ops)

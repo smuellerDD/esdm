@@ -75,7 +75,7 @@ config ESDM_SWITCHABLE_CONTINUOUS_COMPRESSION
 
 	  To modify the default behavior of the continuous
 	  compression operation, use the kernel command line option
-	  of lrng_sw_noise.lrng_pcpu_continuous_compression.
+	  of esdm_sw_noise.esdm_pcpu_continuous_compression.
 
 	  If unsure, say N.
 */
@@ -106,10 +106,10 @@ config ESDM_IRQ_ENTROPY_RATE
 #define CONFIG_ESDM_IRQ_ENTROPY_RATE 256
 
 /*
-config LRNG_RUNTIME_ES_CONFIG
+config ESDM_RUNTIME_ES_CONFIG
 	bool "Enable runtime configuration of entropy sources"
 	help
-	  When enabling this option, the LRNG provides the mechanism
+	  When enabling this option, the ESDM provides the mechanism
 	  allowing to alter the entropy rate of each entropy source
 	  during boot time and runtime.
 
