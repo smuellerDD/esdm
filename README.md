@@ -45,7 +45,8 @@ specifications:
   entropy source is provided. In addition, when using the interrupt-based
   entropy source - which is only implemented for the Linux kernel using the
   code in `addon/linux_esdm_es`, a separate SP800-90B entropy source is
-  provided.
+  provided. If the kernel-based jitter entropy source shall be used, please
+  compile your Linux kernel with CONFIG_CRYPTO_JITTERENTROPY.
 
 * SP800-90C: The specification provides guidelines how to combine a DRNG
   and entropy sources.
@@ -73,6 +74,10 @@ The following dependencies are required:
   RNG library from your distribution or from the
   [Jitter RNG homepage](https://www.chronox.de/jent.html).
 
+* kcapi library: If the kernel-based jitter source shall be used, the kcapi
+  library is required, either from your distribution or from the
+  [libkcapi website](http://www.chronox.de/libkcapi.html).
+
 * SELinux library: If your system uses SELinux and you compile the CUSE device
   file support, the SELinux library is needed for proper device file labeling.
   In this case, use the package from your distribution.
@@ -80,6 +85,14 @@ The following dependencies are required:
 * FUSE 3 library: If the CUSE daemons shall be compiled, the FUSE 3 library
   is required either from your distribution or from the
   [libfuse Github website](https://github.com/libfuse/libfuse/).
+
+* Botan >= 3.0: If the Botan backend for cryptographic operations shall be used,
+  get Botan either from your distribution or from the
+  [botan Github website](https://github.com/randombit/botan).
+
+* OpenSSL >= 3.0: If the OpenSSL backend for cryptographic operations shall be used,
+  obtain OpenSSL either from your distribution or from the
+  [OpenSSL website](https://www.openssl.org/source/).
 
 Beyond those dependencies, only POSIX support is required.
 
@@ -93,6 +106,29 @@ its derivatives, you can use your favorite
 | :--------- | :------------- | :----------- |
 | the latest changes in the default branch (master currently) | Piotr Górski   | [esdm-git](https://aur.archlinux.org/packages/esdm-git) <sup>AUR</sup> |
 
+### Using ESDM in NixOS
+
+If you are using [NixOS](https://nixos.org/), enable ESDM as follows:
+
+```
+services.esdm.enable = true;
+```
+
+Please consult the current NixOS module for more finegrained settings.
+At the time of writing this, it was located in:
+
+```
+nixpkgs/nixos/modules/services/security/esdm.nix
+```
+The first release including ESDM support will be 23.11. Beforehand use either
+the master or unstable branch of nixpkgs.
+
+### Using ESDM from Rust
+
+A small helper crate for ESDM usage together with Rust's rand crate can
+be obtained from [ESDM Crate](https://crates.io/crates/rand-esdm).
+Please find current usage instructions in the crate's documentation.
+
 ### Configuration
 
 The ESDM build system supports various configuration options which are
@@ -100,6 +136,10 @@ listed and documented when invoking `meson configure build`.
 
 The options can be altered with `meson configure build -D<option>=<value>`
 where `<value>` is either `enabled` or `disabled`.
+
+Besides different entropy sources, multiple cryptographic backends can be
+configured. Please note, that backends based on libraries like OpenSSL or
+Botan typically provide higher DRBG performance than the builtin backend.
 
 ### Scheduler-based Entropy Source
 
@@ -217,6 +257,14 @@ The ESDM consists of the following components:
 		- `LDFLAGS += -Wl,--wrap=getrandom,--wrap=getentropy`
 
 		- `LDFLAGS += -lesdm-getrandom`
+
+* `openssl-provider`: A random provider for OpenSSL 3.0 and greater is included.
+  Load `libesdm-rng-provider.so` if all random numbers should originate in ESDM
+  or `esdm-seed-src-provider.so` if ESDM should only be used as a source of seeds.
+
+* `botan-rng`: A small sample class for usage with Botan starting with version 3.0
+  is provided. Use it either by linking to `libesdm-botan-rng.so` or include it to your
+  code-base.
 
 IMPORTANT NOTE: The RPC interfaces between the components are present to ensure
 there is a proper security domain separation. The RPC protocol is not considered
