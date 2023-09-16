@@ -132,6 +132,7 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 29 };
 	unsigned int i, avail = 0;
+	bool priv_init_completed = false;
 
 	for_each_esdm_es (i) {
 		if (esdm_es[i]->active())
@@ -170,15 +171,20 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 			}
 		}
 
-		if (priv_init_complete && priv_init_completion)
+		if (priv_init_complete && priv_init_completion) {
 			priv_init_completion();
+			priv_init_completed = true;
+		}
 
 		if (!ret && esdm_pool_all_nodes_seeded_get()) {
 			thread_wait_no_event(&esdm_monitor_wait);
+		} else {
+			nanosleep(&ts, NULL);
 		}
-
-		nanosleep(&ts, NULL);
 	}
+
+	if (!priv_init_completed && priv_init_completion)
+		priv_init_completion();
 
 	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Stopping entropy monitor\n");
 	return 0;
