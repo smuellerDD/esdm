@@ -32,6 +32,14 @@
 #include "helper.h"
 #include "logger.h"
 
+/*
+ * This lock shall prevent a deallocation of the ESDM while a Jitter RNG
+ * operation is ongoing. This lock, however, is not needed when the Jitter
+ * RNG is called in monitor context, i.e. from esdm_jent_async_monitor
+ * as the monitor is immediately killed when a termination signal arrives.
+ * Thus, the lock only needs to be held for the synchronous case where
+ * a signal handler operates.
+ */
 static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
 
 static atomic_t esdm_jent_initialized = ATOMIC_INIT(0);
@@ -85,8 +93,6 @@ static void esdm_jent_get(struct entropy_es *eb_es, uint32_t requested_bits,
 	if (!atomic_read(&esdm_jent_initialized))
 		goto err;
 
-	mutex_w_lock(&esdm_jent_lock);
-
 	if (esdm_config_fips_enabled()) {
 		ret = jent_read_entropy(esdm_jent_state, (char *)eb_es->e,
 					requested_bits >> 3);
@@ -94,7 +100,6 @@ static void esdm_jent_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		ret = jent_read_entropy_safe(&esdm_jent_state, (char *)eb_es->e,
 					     requested_bits >> 3);
 	}
-	mutex_w_unlock(&esdm_jent_lock);
 
 	if (ret < 0) {
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
@@ -173,7 +178,11 @@ static void esdm_jent_async_get(struct entropy_es *eb_es,
 		logger(LOGGER_DEBUG, LOGGER_C_ES,
 		       "Jitter RNG ES monitor: buffer slot %u exhausted\n",
 		       slot);
+
+		mutex_w_lock(&esdm_jent_lock);
 		esdm_jent_get(eb_es, requested_bits, unused);
+		mutex_w_unlock(&esdm_jent_lock);
+
 		esdm_es_mgr_monitor_wakeup();
 		return;
 	}
@@ -204,7 +213,9 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 	    (requested_bits == esdm_get_seed_entropy_osr(true))) {
 		esdm_jent_async_get(eb_es, requested_bits, unused);
 	} else {
+		mutex_w_lock(&esdm_jent_lock);
 		esdm_jent_get(eb_es, requested_bits, unused);
+		mutex_w_unlock(&esdm_jent_lock);
 	}
 }
 
