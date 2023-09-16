@@ -87,7 +87,7 @@ static void esdm_test_shm_status_delete_shm(void)
 
 static int esdm_test_shm_status_create_shm(void)
 {
-	int errsv;
+	int errsv, create_shm;
 	void *tmp;
 	key_t key = esdm_ftok(ESDM_TEST_SHM_NAME, ESDM_TEST_SHM_STATUS);
 	int ret = 0;
@@ -98,8 +98,25 @@ static int esdm_test_shm_status_create_shm(void)
 	esdm_test_shmid = shmget(key, sizeof(struct esdm_test_shm_status),
 				 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
 					 S_IROTH | S_IWOTH);
+	create_shm = (errno == ENOENT) ? 1 : 0;
+
+	if (esdm_test_shmid >= 0) {
+		struct shmid_ds buf;
+
+		if (shmctl(esdm_test_shmid, IPC_STAT, &buf) < 0) {
+			errsv = errno;
+			esdm_test_shm_status_delete_shm();
+			return -errsv;
+		}
+
+		if (buf.shm_nattch == 0) {
+			esdm_test_shm_status_delete_shm();
+			create_shm = 1;
+		}
+	}
+
 	if (esdm_test_shmid < 0) {
-		if (errno == ENOENT) {
+		if (create_shm) {
 			esdm_test_shmid =
 				shmget(key, sizeof(struct esdm_test_shm_status),
 				       IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP |
