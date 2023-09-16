@@ -46,9 +46,28 @@ struct thread_wait_queue {
 			  &(queue)->thread_wait_lock);                         \
 	pthread_mutex_unlock(&(queue)->thread_wait_lock)
 
+/* Timed wait on event, reltime is the relative time to wait */
+#define thread_timedwait_no_event(queue, reltime)                              \
+	do {                                                                   \
+		struct timespec __ts;                                          \
+                                                                               \
+		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
+		clock_gettime(CLOCK_REALTIME, &__ts);                          \
+		__ts.tv_sec += (reltime)->tv_sec;                              \
+		__ts.tv_nsec += (reltime)->tv_nsec;                            \
+		pthread_cond_timedwait(&(queue)->thread_wait_cv,               \
+				       &(queue)->thread_wait_lock, &__ts);     \
+		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
+	} while (0)
+
 #define thread_wait_event(queue, condition)                                    \
 	while (!condition) {                                                   \
 		thread_wait_no_event(queue);                                   \
+	}
+
+#define thread_timedwait_event(queue, condition, reltime)                      \
+	while (!condition) {                                                   \
+		thread_timedwait_no_event(queue, reltime);                     \
 	}
 
 static inline bool thread_queue_sleeper(struct thread_wait_queue *queue)
