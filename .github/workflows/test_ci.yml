@@ -23,7 +23,7 @@ jobs:
         tar xvfz jent.tar.gz
         make -C jitterentropy-library*
         sudo make -C jitterentropy-library* install
-	sudo ldconfig
+        sudo ldconfig
     - name: Meson setup
       run: meson setup build -Dtestmode=enabled -Dselinux=disabled
     - name: Meson compile
