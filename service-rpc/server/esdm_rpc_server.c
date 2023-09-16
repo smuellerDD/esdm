@@ -642,11 +642,6 @@ static int esdm_rpcs_unpriv_init(void *args)
 		goto out;
 	}
 
-	/* Wait for the privileged initialization to complete. */
-	thread_wait_event(&esdm_rpc_thread_init_wait,
-			  (atomic_read(&esdm_rpc_init_state) ==
-			   esdm_rpcs_state_priv_init_complete));
-
 	/* Notify the mother that the unprivileged thread is initialized. */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_unpriv_init);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
@@ -861,6 +856,12 @@ int esdm_rpc_server_init(const char *username)
 			logger(LOGGER_WARN, LOGGER_C_RPC,
 			       "Starting ES monitor thread failed\n");
 		}
+
+		/* Wait for the privileged initialization to complete. */
+		thread_wait_event(&esdm_rpc_thread_init_wait,
+				  (atomic_read(&esdm_rpc_init_state) ==
+				   esdm_rpcs_state_priv_init_complete));
+
 		/* Fork the server process */
 		esdm_rpcs_interfaces_init(username);
 	} else {
@@ -913,5 +914,5 @@ void esdm_rpc_server_fini(void)
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
 
-	thread_release(true, true);
+	thread_release(true, false);
 }
