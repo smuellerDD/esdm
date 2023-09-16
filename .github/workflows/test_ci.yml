@@ -28,5 +28,7 @@ jobs:
       run: meson setup build -Dtestmode=enabled -Dselinux=disabled
     - name: Meson compile
       run: meson compile -C build
+
+# TODO: invoke meson test with real root privileges to enable all CUSE tests
     - name: Meson test
       run: meson test -v -C build
