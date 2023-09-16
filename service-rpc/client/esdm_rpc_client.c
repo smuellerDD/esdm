@@ -494,6 +494,7 @@ static uint32_t esdm_rpcc_curr_node(void)
 
 static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
 {
+	const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
 	esdm_rpc_client_connection_t *rpc_conn_array = *rpc_conn;
 	esdm_rpc_client_connection_t *rpc_conn_p = rpc_conn_array;
 	uint32_t i, num_conn = esdm_rpcc_get_online_nodes();
@@ -513,8 +514,16 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
 	 */
 	for (i = 0, rpc_conn_p = rpc_conn_array; i < num_conn;
 	     i++, rpc_conn_p++) {
-		thread_wait_event(&rpc_conn_p->completion,
-				  !atomic_read(&rpc_conn_p->ref_cnt));
+		if (atomic_read(&rpc_conn_p->ref_cnt)) {
+			/*
+			 * The termination check does not wait indefinitely.
+			 * If the esdm_rpcc_put_service is not properly called,
+			 * we need to avoid a deadlock here.
+			 */
+			thread_timedwait_no_event(&rpc_conn_p->completion,
+						  &abstime);
+			atomic_set(&rpc_conn_p->ref_cnt, 0);
+		}
 		esdm_fini_proto_service(rpc_conn_p);
 	}
 
