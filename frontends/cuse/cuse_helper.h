@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+int esdm_cuse_file_name(char *outfile, size_t outfilelen, const char *name);
+int esdm_cuse_dev_file(char *outfile, size_t outfilelen, const char *name);
 int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst);
 int esdm_cuse_bind_unmount(char **mount_src, char **mount_dst);
 

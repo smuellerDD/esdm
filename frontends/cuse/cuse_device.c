@@ -42,6 +42,7 @@
 #include "mutex.h"
 #include "mutex_w.h"
 #include "privileges.h"
+#include "queue.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
 
@@ -86,15 +87,42 @@ static void esdm_cuse_shm_status_close_shm(void)
 
 static int esdm_cuse_shm_status_create_shm(void)
 {
-	int errsv;
+	int errsv, create_shm;
 	void *tmp;
 
 	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
 
 	esdm_cuse_shmid = shmget(key, sizeof(struct esdm_shm_status),
 				 S_IRUSR | S_IRGRP | S_IROTH);
+	create_shm = (errno == ENOENT) ? 1 : 0;
+
+	/* Check whether the SHM segment is stale */
+	if (esdm_cuse_shmid >= 0) {
+		struct shmid_ds buf;
+
+		if (shmctl(esdm_cuse_shmid, IPC_STAT, &buf) < 0) {
+			errsv = errno;
+			esdm_cuse_shm_status_close_shm();
+			if (esdm_cuse_shmid >= 0) {
+				shmctl(esdm_cuse_shmid, IPC_RMID, NULL);
+				esdm_cuse_shmid = -1;
+			}
+			return -errsv;
+		}
+
+		/* SHM exists, but has no attachments -> stale */
+		if (buf.shm_nattch == 0) {
+			esdm_cuse_shm_status_close_shm();
+			if (esdm_cuse_shmid >= 0) {
+				shmctl(esdm_cuse_shmid, IPC_RMID, NULL);
+				esdm_cuse_shmid = -1;
+				create_shm = 1;
+			}
+		}
+	}
+
 	if (esdm_cuse_shmid < 0) {
-		if (errno == ENOENT) {
+		if (create_shm) {
 			esdm_cuse_shmid =
 				shmget(key, sizeof(struct esdm_shm_status),
 				       IPC_CREAT | S_IRUSR | S_IWUSR | S_IRGRP |
@@ -188,10 +216,12 @@ static int esdm_cuse_shm_status_create_sem(void)
  ******************************************************************************/
 
 static bool esdm_cuse_poll_thread_shutdown = false;
+static DECLARE_WAIT_QUEUE(esdm_cuse_poll_checker_wait);
 
 static void esdm_cuse_term(void)
 {
 	esdm_cuse_poll_thread_shutdown = true;
+	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
 	thread_stop_spawning();
 
@@ -814,11 +844,10 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		esdm_cuse_polls[i].poll_events = fi->poll_events;
 		break;
 	}
+	mutex_w_unlock(&esdm_cuse_ph_lock);
 
 	if (i == ESDM_CUSE_MAX_PH)
 		fuse_reply_err(req, EBUSY);
-
-	mutex_w_unlock(&esdm_cuse_ph_lock);
 }
 
 /* Poll checker handler executed in separate thread */
@@ -834,6 +863,7 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 		esdm_cuse_polls[i].ph = NULL;
 		esdm_cuse_polls[i].poll_events = 0;
 	}
+	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
 	while (!esdm_cuse_poll_thread_shutdown) {
 		mutex_w_lock(&esdm_cuse_ph_lock);
@@ -890,6 +920,9 @@ void esdm_cuse_init_done(void *userdata)
 	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL,
 			       ESDM_THREAD_CUSE_POLL_GROUP, NULL),
 		  "Starting poll-in-reset thread failed: %d\n", ret);
+
+	/* Wait until thread is fully initialized */
+	thread_wait_no_event(&esdm_cuse_poll_checker_wait);
 
 	return;
 
@@ -971,12 +1004,13 @@ static int esdm_cuse_process_arg(void *data, const char *arg, int key,
 	}
 }
 
-int main_common(const char *devname, const char *target,
+int main_common(const char *_devname, const char *target,
 		const struct cuse_lowlevel_ops *clop, int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0 };
 	char dev_name[128] = "DEVNAME=";
+	char devname[20];
 	const char *dev_info_argv[] = { dev_name };
 	struct cuse_info ci;
 	int ret = 1;
@@ -991,6 +1025,8 @@ int main_common(const char *devname, const char *target,
 	logger_set_verbosity(param.verbosity);
 
 	esdm_test_disable_fallback(param.disable_fallback);
+
+	CKINT(esdm_cuse_file_name(devname, sizeof(devname), _devname));
 
 	if (!param.is_help) {
 		const char *dev_name_p = param.dev_name;

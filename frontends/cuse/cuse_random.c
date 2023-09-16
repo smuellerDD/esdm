@@ -25,7 +25,9 @@
 #include <unistd.h>
 
 #include "cuse_device.h"
+#include "cuse_helper.h"
 #include "logger.h"
+#include "ret_checkers.h"
 
 static int random_fd = -1;
 
@@ -66,6 +68,7 @@ static const struct cuse_lowlevel_ops esdm_dev_clop = {
 
 int main(int argc, char *argv[])
 {
+	char devfile[20];
 	unsigned int ctr = 0;
 	int ret, errsv = 0;
 
@@ -85,9 +88,10 @@ int main(int argc, char *argv[])
 		return errsv;
 	}
 
-	ret = main_common("esdm", "/dev/random", &esdm_dev_clop, argc, argv);
+	CKINT(esdm_cuse_dev_file(devfile, sizeof(devfile), "random"));
+	ret = main_common("esdm", devfile, &esdm_dev_clop, argc, argv);
 
+out:
 	close(random_fd);
-
 	return ret;
 }
