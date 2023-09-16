@@ -70,6 +70,7 @@ static int write_random(const char *path, uint8_t *buf, size_t buflen)
 
 int main(int argc, char *argv[])
 {
+	char devfile[20];
 	uint8_t buf[1024];
 	uint8_t zero[sizeof(buf)];
 	size_t len = sizeof(buf);
@@ -78,6 +79,8 @@ int main(int argc, char *argv[])
 
 	if (!argc)
 		return 1;
+
+	esdm_cuse_dev_file(devfile, sizeof(devfile), argv[1]);
 
 	memset(buf, 0, sizeof(buf));
 
@@ -88,7 +91,7 @@ int main(int argc, char *argv[])
 	drop_privileges();
 
 	/* Establish server connection */
-	write_random(argv[1], buf, len);
+	write_random(devfile, buf, len);
 
 	env_kill_server();
 
@@ -100,7 +103,7 @@ int main(int argc, char *argv[])
 		write_ops++;
 
 		memset(buf, 0, len);
-		ret = write_random(argv[1], buf, len);
+		ret = write_random(devfile, buf, len);
 		if (ret)
 			goto out;
 	}

@@ -137,10 +137,16 @@ out:
 
 int main(int argc, char *argv[])
 {
+	char devfile[20];
 	int ret;
 
 	(void)argc;
 	(void)argv;
+
+	if (!argc)
+		return 1;
+
+	esdm_cuse_dev_file(devfile, sizeof(devfile), argv[1]);
 
 	ret = env_init(1);
 	if (ret)
@@ -150,7 +156,7 @@ int main(int argc, char *argv[])
 	if (ret)
 		return ret;
 
-	ret = test_poll_write(argv[1]);
+	ret = test_poll_write(devfile);
 
 	env_fini();
 

@@ -100,112 +100,112 @@ if get_option('linux-devfiles').enabled()
 
 	test('IOCTL RNDADDENTROPY /dev/random', ioctl_addent_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('IOCTL RNDADDENTROPY /dev/urandom', ioctl_addent_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('IOCTL RNDCLEARPOOL /dev/random', ioctl_clear_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		timeout: 300,
 		is_parallel: false)
 	test('IOCTL RNDCLEARPOOL /dev/urandom', ioctl_clear_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		timeout: 300,
 		is_parallel: false)
 
 	test('IOCTL RNDGETENTCNT /dev/random', ioctl_getent_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('IOCTL RNDGETENTCNT /dev/urandom', ioctl_getent_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('IOCTL RNDRESEEDCRNG /dev/random', ioctl_reseed_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('IOCTL RNDRESEEDCRNG /dev/urandom', ioctl_reseed_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('IOCTL RNDADDTOENTCNT /dev/random', ioctl_setent_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('IOCTL RNDADDTOENTCNT /dev/urandom', ioctl_setent_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('IOCTL get info /dev/random', ioctl_getinfo_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('IOCTL get info /dev/urandom', ioctl_getinfo_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('Poll writer FD /dev/random', poll_write_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('Poll writer FD /dev/urandom', poll_write_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('Read /dev/random', random_read_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('Read /dev/urandom', random_read_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('Write /dev/random', random_write_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('Write /dev/urandom', random_write_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('Read /dev/random - w/o ESDM server', random_read_no_server_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('Read /dev/urandom - w/o ESDM server', random_read_no_server_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	test('Write /dev/random - w/o ESDM server', random_write_no_server_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/random' ],
+		args : ['random' ],
 		is_parallel: false)
 	test('Write /dev/urandom - w/o ESDM server', random_write_no_server_tester,
 		env: [ tester_cuse_env ],
-		args : ['/dev/urandom' ],
+		args : ['urandom' ],
 		is_parallel: false)
 
 	# Poll read is not yet well implemented
 	#test('Poll reader FD /dev/random', poll_read_tester,
 	#	env: [ tester_cuse_env ],
-	#	args : ['/dev/random' ],
+	#	args : ['random' ],
 	#	is_parallel: false)
 	#test('Poll reader FD /dev/urandom', poll_read_tester,
 	#	env: [ tester_cuse_env ],
-	#	args : ['/dev/urandom' ],
+	#	args : ['urandom' ],
 	#	is_parallel: false)
 endif

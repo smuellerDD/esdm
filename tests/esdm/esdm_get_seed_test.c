@@ -98,9 +98,7 @@ int main(int argc, char *argv[])
 	 */
 	for_each_online_node(cpu)
 	{
-		rc = esdm_get_seed(buf, sizeof(buf),
-				   ESDM_GET_SEED_NONBLOCK |
-					   ESDM_GET_SEED_FULLY_SEEDED);
+		rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
 		if (rc != -EAGAIN)
 			break;
 	}
@@ -136,7 +134,8 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
+	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK |
+					     ESDM_GET_SEED_FULLY_SEEDED);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;

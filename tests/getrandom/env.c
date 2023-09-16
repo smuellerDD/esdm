@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -35,6 +36,7 @@ void env_fini(void)
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);
 		kill(server_pid, SIGTERM);
+		waitpid(server_pid, NULL, 0);
 	}
 	server_pid = 0;
 }

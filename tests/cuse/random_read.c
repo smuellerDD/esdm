@@ -68,6 +68,7 @@ static int read_random(const char *path, uint8_t *buf, size_t buflen)
 
 int main(int argc, char *argv[])
 {
+	char devfile[20];
 	uint8_t buf[1024 * 1024];
 	uint8_t zero[sizeof(buf)];
 	size_t len = sizeof(buf);
@@ -75,6 +76,8 @@ int main(int argc, char *argv[])
 
 	if (!argc)
 		return 1;
+
+	esdm_cuse_dev_file(devfile, sizeof(devfile), argv[1]);
 
 	ret = env_init(1);
 	if (ret)
@@ -88,7 +91,7 @@ int main(int argc, char *argv[])
 		unsigned short val;
 
 		memset(buf, 0, len);
-		ret = read_random(argv[1], buf, len);
+		ret = read_random(devfile, buf, len);
 		if (ret)
 			goto out;
 

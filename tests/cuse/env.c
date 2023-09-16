@@ -23,9 +23,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "env.h"
 #include "privileges.h"
 #include "ret_checkers.h"
@@ -35,6 +37,15 @@ static pid_t server_pid = 0;
 static pid_t random_pid = 0;
 static pid_t urandom_pid = 0;
 
+void esdm_cuse_dev_file(char *outfile, size_t outfilelen, const char *name)
+{
+#ifdef ESDM_TESTMODE
+	snprintf(outfile, outfilelen, "/dev/tst-%s", name);
+#else
+	snprintf(outfile, outfilelen, "/dev/%s", name);
+#endif
+}
+
 void env_fini(void)
 {
 	raise_privilege();
@@ -43,16 +54,19 @@ void env_fini(void)
 	if (random_pid > 0) {
 		printf("Killing random PID %u\n", random_pid);
 		kill(random_pid, SIGTERM);
+		waitpid(random_pid, NULL, 0);
 	}
 	random_pid = 0;
 	if (urandom_pid > 0) {
 		printf("Killing urandom PID %u\n", urandom_pid);
 		kill(urandom_pid, SIGTERM);
+		waitpid(urandom_pid, NULL, 0);
 	}
 	urandom_pid = 0;
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);
 		kill(server_pid, SIGTERM);
+		waitpid(server_pid, NULL, 0);
 	}
 	server_pid = 0;
 }
@@ -176,12 +190,13 @@ out:
 
 void env_kill_server(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1 << 29 };
+	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
 
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);
 		raise_privilege();
 		kill(server_pid, SIGTERM);
+		waitpid(server_pid, NULL, 0);
 	}
 	server_pid = 0;
 	nanosleep(&ts, NULL);

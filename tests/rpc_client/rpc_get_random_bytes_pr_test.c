@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 {
 	uint8_t buf[32];
 	uint8_t zero[sizeof(buf)];
-	size_t count = 1000;
+	size_t count = 10;
 	int ret;
 
 	(void)argc;

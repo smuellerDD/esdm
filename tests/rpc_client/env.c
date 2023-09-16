@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -34,11 +35,16 @@ static pid_t server_pid = 0;
 
 void env_fini(void)
 {
+	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
+
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);
 		kill(server_pid, SIGTERM);
+		waitpid(server_pid, NULL, 0);
 	}
 	server_pid = 0;
+
+	nanosleep(&ts, NULL);
 }
 
 static int env_check_file(const char *path)
@@ -102,13 +108,14 @@ out:
 
 void env_kill_server(void)
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1 << 29 };
+	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
 
 	esdm_test_shm_status_fini();
 
 	if (server_pid > 0) {
 		printf("Killing server PID %u\n", server_pid);
 		kill(server_pid, SIGTERM);
+		waitpid(server_pid, NULL, 0);
 	}
 	server_pid = 0;
 	nanosleep(&ts, NULL);

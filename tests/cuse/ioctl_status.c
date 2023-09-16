@@ -70,10 +70,16 @@ static int test_ioctl(const char *path)
 
 int main(int argc, char *argv[])
 {
+	char devfile[20];
 	int ret;
 
 	(void)argc;
 	(void)argv;
+
+	if (!argc)
+		return 1;
+
+	esdm_cuse_dev_file(devfile, sizeof(devfile), argv[1]);
 
 	ret = env_init(1);
 	if (ret)
@@ -85,13 +91,13 @@ int main(int argc, char *argv[])
 
 	drop_privileges();
 	printf("============== Unprivileged Tests ============================\n");
-	ret = test_ioctl(argv[1]);
+	ret = test_ioctl(devfile);
 	raise_privilege();
 	printf("============== Privileged Tests ============================\n");
-	ret += test_ioctl(argv[1]);
+	ret += test_ioctl(devfile);
 	drop_privileges();
 	printf("============== Unprivileged Tests ============================\n");
-	ret += test_ioctl(argv[1]);
+	ret += test_ioctl(devfile);
 
 	raise_privilege();
 	env_fini();
