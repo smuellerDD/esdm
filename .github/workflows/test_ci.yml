@@ -28,4 +28,4 @@ jobs:
     - name: Meson compile
       run: meson compile -C build
     - name: Meson test
-      run: sudo meson test -v -C build
+      run: meson test -v -C build
