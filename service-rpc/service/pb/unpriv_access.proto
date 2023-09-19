@@ -24,7 +24,7 @@ message StatusRequest {
  * @param buffer_len Number of bytes present in the buffer - if no message
  *		     buffer is returned, this value specifies the number of
  *		     required bytes.
- * @param buffer Buffer with ASCII status - this is a NULL-terminated string
+ * @param buffer Buffer with ASCII/JSON status - this is a NULL-terminated string
  */
 message StatusResponse {
 	int32 ret = 1;
@@ -286,6 +286,7 @@ message GetMinReseedSecsResponse {
  ******************************************************************************/
 service UnprivAccess {
 	rpc RpcStatus (StatusRequest) returns (StatusResponse);
+	rpc RpcStatusJSON (StatusRequest) returns (StatusResponse);
 	rpc RpcGetRandomBytesFull (GetRandomBytesFullRequest) returns
 				  (GetRandomBytesFullResponse);
 	rpc RpcGetRandomBytesMin (GetRandomBytesMinRequest) returns

@@ -1736,8 +1736,10 @@ const ProtobufCMessageDescriptor get_min_reseed_secs_response__descriptor = {
 	NULL,
 	NULL /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[11] = {
+static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[12] = {
 	{ "RpcStatus", &status_request__descriptor,
+	  &status_response__descriptor },
+	{ "RpcStatusJSON", &status_request__descriptor,
 	  &status_response__descriptor },
 	{ "RpcGetRandomBytesFull", &get_random_bytes_full_request__descriptor,
 	  &get_random_bytes_full_response__descriptor },
@@ -1762,17 +1764,18 @@ static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[11] = {
 	  &get_min_reseed_secs_response__descriptor },
 };
 const unsigned unpriv_access__method_indices_by_name[] = {
-	10, /* RpcGetMinReseedSecs */
-	8, /* RpcGetPoolsize */
-	4, /* RpcGetRandomBytes */
-	1, /* RpcGetRandomBytesFull */
-	2, /* RpcGetRandomBytesMin */
-	3, /* RpcGetRandomBytesPr */
-	5, /* RpcGetSeed */
-	9, /* RpcGetWriteWakeupThresh */
-	7, /* RpcRndGetEntCnt */
+	11, /* RpcGetMinReseedSecs */
+	9, /* RpcGetPoolsize */
+	5, /* RpcGetRandomBytes */
+	2, /* RpcGetRandomBytesFull */
+	3, /* RpcGetRandomBytesMin */
+	4, /* RpcGetRandomBytesPr */
+	6, /* RpcGetSeed */
+	10, /* RpcGetWriteWakeupThresh */
+	8, /* RpcRndGetEntCnt */
 	0, /* RpcStatus */
-	6 /* RpcWriteData */
+	1, /* RpcStatusJSON */
+	7 /* RpcWriteData */
 };
 const ProtobufCServiceDescriptor unpriv_access__descriptor = {
 	PROTOBUF_C__SERVICE_DESCRIPTOR_MAGIC,
@@ -1780,7 +1783,7 @@ const ProtobufCServiceDescriptor unpriv_access__descriptor = {
 	"UnprivAccess",
 	"UnprivAccess",
 	"",
-	11,
+	12,
 	unpriv_access__method_descriptors,
 	unpriv_access__method_indices_by_name
 };
@@ -1793,12 +1796,21 @@ void unpriv_access__rpc_status(ProtobufCService *service,
 	service->invoke(service, 0, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
+void unpriv_access__rpc_status_json(ProtobufCService *service,
+				    const StatusRequest *input,
+				    StatusResponse_Closure closure,
+				    void *closure_data)
+{
+	assert(service->descriptor == &unpriv_access__descriptor);
+	service->invoke(service, 1, (const ProtobufCMessage *)input,
+			(ProtobufCClosure)closure, closure_data);
+}
 void unpriv_access__rpc_get_random_bytes_full(
 	ProtobufCService *service, const GetRandomBytesFullRequest *input,
 	GetRandomBytesFullResponse_Closure closure, void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 1, (const ProtobufCMessage *)input,
+	service->invoke(service, 2, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_random_bytes_min(
@@ -1806,7 +1818,7 @@ void unpriv_access__rpc_get_random_bytes_min(
 	GetRandomBytesMinResponse_Closure closure, void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 2, (const ProtobufCMessage *)input,
+	service->invoke(service, 3, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_random_bytes_pr(
@@ -1814,7 +1826,7 @@ void unpriv_access__rpc_get_random_bytes_pr(
 	GetRandomBytesPrResponse_Closure closure, void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 3, (const ProtobufCMessage *)input,
+	service->invoke(service, 4, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_random_bytes(ProtobufCService *service,
@@ -1823,7 +1835,7 @@ void unpriv_access__rpc_get_random_bytes(ProtobufCService *service,
 					 void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 4, (const ProtobufCMessage *)input,
+	service->invoke(service, 5, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_seed(ProtobufCService *service,
@@ -1832,7 +1844,7 @@ void unpriv_access__rpc_get_seed(ProtobufCService *service,
 				 void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 5, (const ProtobufCMessage *)input,
+	service->invoke(service, 6, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_write_data(ProtobufCService *service,
@@ -1841,7 +1853,7 @@ void unpriv_access__rpc_write_data(ProtobufCService *service,
 				   void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 6, (const ProtobufCMessage *)input,
+	service->invoke(service, 7, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_rnd_get_ent_cnt(ProtobufCService *service,
@@ -1850,7 +1862,7 @@ void unpriv_access__rpc_rnd_get_ent_cnt(ProtobufCService *service,
 					void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 7, (const ProtobufCMessage *)input,
+	service->invoke(service, 8, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_poolsize(ProtobufCService *service,
@@ -1859,7 +1871,7 @@ void unpriv_access__rpc_get_poolsize(ProtobufCService *service,
 				     void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 8, (const ProtobufCMessage *)input,
+	service->invoke(service, 9, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_write_wakeup_thresh(
@@ -1867,7 +1879,7 @@ void unpriv_access__rpc_get_write_wakeup_thresh(
 	GetWriteWakeupThreshResponse_Closure closure, void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 9, (const ProtobufCMessage *)input,
+	service->invoke(service, 10, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__rpc_get_min_reseed_secs(
@@ -1875,7 +1887,7 @@ void unpriv_access__rpc_get_min_reseed_secs(
 	GetMinReseedSecsResponse_Closure closure, void *closure_data)
 {
 	assert(service->descriptor == &unpriv_access__descriptor);
-	service->invoke(service, 10, (const ProtobufCMessage *)input,
+	service->invoke(service, 11, (const ProtobufCMessage *)input,
 			(ProtobufCClosure)closure, closure_data);
 }
 void unpriv_access__init(UnprivAccess_Service *service,
