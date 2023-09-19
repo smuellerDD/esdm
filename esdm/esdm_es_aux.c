@@ -403,6 +403,18 @@ static void esdm_aux_es_state(char *buf, size_t buflen)
 		 esdm_aux_avail_entropy(0));
 }
 
+static void esdm_aux_es_state_json(struct json_object *obj)
+{
+	const struct esdm_drng *esdm_drng_init = esdm_drng_init_instance();
+
+	// /* Assume the esdm_drng_init lock is taken by caller */
+	// snprintf((char *)buf, buflen,
+	// 	 " Hash for operating entropy pool: %s\n"
+	// 	 " Available entropy: %u\n",
+	// 	 esdm_drng_init->hash_cb->hash_name(),
+	// 	 esdm_aux_avail_entropy(0));
+}
+
 static bool esdm_aux_active(void)
 {
 	return true;
@@ -417,6 +429,7 @@ struct esdm_es_cb esdm_es_aux = {
 	.curr_entropy = esdm_aux_avail_entropy,
 	.max_entropy = esdm_get_digestsize,
 	.state = esdm_aux_es_state,
+	.state_json = esdm_aux_es_state_json,
 	.reset = esdm_aux_reset,
 	.active = esdm_aux_active,
 	.switch_hash = esdm_aux_switch_hash,

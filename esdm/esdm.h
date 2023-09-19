@@ -238,6 +238,15 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
  */
 void esdm_status(char *buf, size_t buflen);
 
+
+/**
+ * @brief esdm_status_json() - Get status information on ESDM (JSON formatted)
+ *
+ * @param [out] buf Buffer to be filled with status information
+ * @param [in] buflen Length of buffer
+ */
+void esdm_status(char *buf, size_t buflen);
+
 /**
  * @brief esdm_status_machine() - Get status information on ESDM
  *

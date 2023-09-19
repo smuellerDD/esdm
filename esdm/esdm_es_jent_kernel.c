@@ -106,6 +106,16 @@ static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 		 esdm_jent_kernel_entropylevel(256));
 }
 
+static void esdm_jent_kernel_es_state_json(struct json_object *obj)
+{
+	// /* Assume the esdm_drng_init lock is taken by caller */
+	// snprintf(buf, buflen,
+	// 	 " Available entropy: %u\n"
+	// 	 " Entropy Rate per 256 data bits: %u\n",
+	// 	 esdm_jent_kernel_poolsize(),
+	// 	 esdm_jent_kernel_entropylevel(256));
+}
+
 static bool esdm_jent_kernel_active(void)
 {
 	return jent_rng != NULL;
@@ -120,6 +130,7 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.curr_entropy = esdm_jent_kernel_entropylevel,
 	.max_entropy = esdm_jent_kernel_poolsize,
 	.state = esdm_jent_kernel_es_state,
+	.state_json = esdm_jent_kernel_es_state_json,
 	.reset = NULL,
 	.active = esdm_jent_kernel_active,
 	.switch_hash = NULL,

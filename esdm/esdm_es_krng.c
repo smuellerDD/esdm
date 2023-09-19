@@ -255,6 +255,14 @@ static void esdm_krng_es_state(char *buf, size_t buflen)
 		 esdm_krng_poolsize(), esdm_krng_entropylevel(256));
 }
 
+static void esdm_krng_es_state_json(struct json_object *obj)
+{
+	// snprintf(buf, buflen,
+	// 	 " Available entropy: %u\n"
+	// 	 " Entropy Rate per 256 data bits: %u\n",
+	// 	 esdm_krng_poolsize(), esdm_krng_entropylevel(256));
+}
+
 static bool esdm_krng_active(void)
 {
 	return true;
@@ -269,6 +277,7 @@ struct esdm_es_cb esdm_es_krng = {
 	.curr_entropy = esdm_krng_entropylevel,
 	.max_entropy = esdm_krng_poolsize,
 	.state = esdm_krng_es_state,
+	.state_json = esdm_krng_es_state_json,
 	.reset = NULL,
 	.active = esdm_krng_active,
 	.switch_hash = NULL,

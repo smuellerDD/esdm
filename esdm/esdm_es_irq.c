@@ -288,6 +288,27 @@ static void esdm_irq_es_state(char *buf, size_t buflen)
 	}
 }
 
+static void esdm_irq_es_state_json(struct json_object *obj)
+{
+	// char status[250], *status_p = (buflen < sizeof(status)) ? status : buf;
+
+	// if (esdm_irq_entropy_fd >= 0) {
+	// 	ssize_t ret;
+
+	// 	esdm_irq_set_entropy_rate(esdm_irq_requested_bits_set);
+
+	// 	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_STATUS, status_p);
+	// 	if (ret < 0) {
+	// 		snprintf(buf, buflen,
+	// 			 " failure in reading kernel status\n");
+	// 	} else if (buflen < sizeof(status)) {
+	// 		snprintf(buf, buflen, "%s", status_p);
+	// 	}
+	// } else {
+	// 	snprintf(buf, buflen, " disabled - missing kernel support\n");
+	// }
+}
+
 static void esdm_irq_reset(void)
 {
 	uint32_t reset[2];
@@ -319,6 +340,7 @@ struct esdm_es_cb esdm_es_irq = {
 	.curr_entropy = esdm_irq_entropylevel,
 	.max_entropy = esdm_irq_poolsize,
 	.state = esdm_irq_es_state,
+	.state_json = esdm_irq_es_state_json,
 	.reset = esdm_irq_reset,
 	.active = esdm_irq_active,
 	.switch_hash = NULL,

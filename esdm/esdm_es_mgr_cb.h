@@ -22,6 +22,7 @@
 #ifndef _ESDM_ES_MGR_CB_H
 #define _ESDM_ES_MGR_CB_H
 
+#include <json-c/json.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <time.h>
@@ -122,6 +123,7 @@ struct esdm_es_cb {
 	uint32_t (*curr_entropy)(uint32_t requested_bits);
 	uint32_t (*max_entropy)(void);
 	void (*state)(char *buf, size_t buflen);
+	void (*state_json)(struct json_object *obj);
 	void (*reset)(void);
 	bool (*active)(void);
 	int (*switch_hash)(struct esdm_drng *drng, int node,

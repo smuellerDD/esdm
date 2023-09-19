@@ -96,6 +96,10 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		     const StatusRequest *request,
 		     StatusResponse_Closure closure, void *closure_data);
 
+void esdm_rpc_status_json(UnprivAccess_Service *service,
+		     const StatusRequest *request,
+		     StatusResponse_Closure closure, void *closure_data);
+
 void esdm_rpc_get_random_bytes_full(UnprivAccess_Service *service,
 				    const GetRandomBytesFullRequest *request,
 				    GetRandomBytesFullResponse_Closure closure,

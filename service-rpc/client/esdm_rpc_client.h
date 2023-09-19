@@ -191,6 +191,30 @@ int esdm_rpcc_status(char *buf, size_t buflen);
 int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
 
 /**
+ * @brief RPC-version of esdm_status_json
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * @param [out] buf Buffer to be filled with json-formatted status information.
+ *		    The string will be NULL-terminated.
+ * @param [in] buflen Size of the buffer provided by the caller.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_status_json(char *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_status
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_status_json_int(char *buf, size_t buflen, void *int_data);
+
+/**
  * @brief RPC-version of esdm_get_random_bytes_full
  *
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore

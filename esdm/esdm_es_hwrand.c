@@ -125,6 +125,15 @@ static void esdm_hwrand_es_state(char *buf, size_t buflen)
 		 esdm_hwrand_poolsize(), esdm_hwrand_entropylevel(256));
 }
 
+static void esdm_hwrand_es_state_json(struct json_object *obj)
+{
+	// /* Assume the esdm_drng_init lock is taken by caller */
+	// snprintf(buf, buflen,
+	// 	 " Available entropy: %u\n"
+	// 	 " Entropy Rate per 256 data bits: %u\n",
+	// 	 esdm_hwrand_poolsize(), esdm_hwrand_entropylevel(256));
+}
+
 static bool esdm_hwrand_active(void)
 {
 	return (esdm_hwrand_fd != -1);
@@ -139,6 +148,7 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.curr_entropy = esdm_hwrand_entropylevel,
 	.max_entropy = esdm_hwrand_poolsize,
 	.state = esdm_hwrand_es_state,
+	.state_json = esdm_hwrand_es_state_json,
 	.reset = NULL,
 	.active = esdm_hwrand_active,
 	.switch_hash = NULL,

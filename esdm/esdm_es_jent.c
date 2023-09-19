@@ -324,6 +324,14 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 esdm_jent_poolsize(), jent_version());
 }
 
+static void esdm_jent_es_state_json(struct json_object *obj)
+{
+	// snprintf(buf, buflen,
+	// 	 " Available entropy: %u\n"
+	// 	 " Library version: %u\n",
+	// 	 esdm_jent_poolsize(), jent_version());
+}
+
 static bool esdm_jent_active(void)
 {
 	return (esdm_jent_state != NULL);
@@ -342,6 +350,7 @@ struct esdm_es_cb esdm_es_jent = {
 	.curr_entropy = esdm_jent_entropylevel,
 	.max_entropy = esdm_jent_poolsize,
 	.state = esdm_jent_es_state,
+	.state_json = esdm_jent_es_state_json,
 	.reset = NULL,
 	.active = esdm_jent_active,
 	.switch_hash = NULL,

@@ -265,6 +265,21 @@ static void esdm_cpu_es_state(char *buf, size_t buflen)
 		 esdm_cpu_poolsize(), multiplier);
 }
 
+static void esdm_cpu_es_state_json(struct json_object *obj)
+{
+	// const struct esdm_drng *esdm_drng_init = esdm_drng_init_instance();
+	// uint32_t multiplier = esdm_cpu_multiplier();
+
+	// /* Assume the esdm_drng_init lock is taken by caller */
+	// snprintf(buf, buflen,
+	// 	 " Hash for compressing data: %s\n"
+	// 	 " Available entropy: %u\n"
+	// 	 " Data multiplier: %u\n",
+	// 	 (multiplier <= 1) ? "N/A" :
+	// 			     esdm_drng_init->hash_cb->hash_name(),
+	// 	 esdm_cpu_poolsize(), multiplier);
+}
+
 static bool esdm_cpu_active(void)
 {
 #ifdef ESDM_CPU_ES_IMPLEMENTED
@@ -283,6 +298,7 @@ struct esdm_es_cb esdm_es_cpu = {
 	.curr_entropy = esdm_cpu_entropylevel,
 	.max_entropy = esdm_cpu_poolsize,
 	.state = esdm_cpu_es_state,
+	.state_json = esdm_cpu_es_state_json,
 	.reset = NULL,
 	.active = esdm_cpu_active,
 	.switch_hash = esdm_cpu_switch_hash,

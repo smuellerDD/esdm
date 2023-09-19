@@ -18,6 +18,7 @@
  */
 
 #include <stdio.h>
+#include <json-c/json.h>
 
 #include "esdm.h"
 #include "esdm_es_aux.h"
@@ -94,6 +95,58 @@ void esdm_status(char *buf, size_t buflen)
 		len = esdm_remaining_buf_len(buf, buflen);
 		esdm_es[i]->state(buf + len, buflen - len);
 	}
+}
+
+DSO_PUBLIC
+void esdm_status_json(char *buf, size_t buflen)
+{
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	struct json_object *stat_obj;
+	struct json_object *std_arr;
+	struct json_object *es_obj;
+	size_t len;
+	uint32_t i;
+
+	if (!buf) {
+		logger(LOGGER_ERR, LOGGER_C_ANY,
+		       "Status information cannot be created\n");
+		return;
+	}
+
+	stat_obj = json_object_new_object();
+	if(!stat_obj) {
+		logger(LOGGER_ERR, LOGGER_C_ANY,
+		       "Status JSON object cannot be created\n");
+		return;
+	}
+
+	json_object_object_add(stat_obj, "version", json_object_new_string(VERSION));
+	json_object_object_add(stat_obj, "drng_name", json_object_new_string(drng->drng_cb->drng_name()));
+	json_object_object_add(stat_obj, "security_strength_bits", json_object_new_int(esdm_security_strength()));
+	json_object_object_add(stat_obj, "drng_instances", json_object_new_int(esdm_nodes));
+	std_arr = json_object_new_array();
+	if(esdm_sp80090c_compliant())
+		json_object_array_add(std_arr, json_object_new_string("SP800-90C"));
+	if(esdm_ntg1_compliant())
+		json_object_array_add(std_arr, json_object_new_string("NTG.1 (2011)"));
+	if(esdm_ntg1_2022_compliant())
+		json_object_array_add(std_arr, json_object_new_string("NTG.1 (2022)"));
+	json_object_object_add(stat_obj, "standards_compliance", std_arr);
+	json_object_object_add(stat_obj, "minimally_seeded", json_object_new_boolean(esdm_state_min_seeded()));
+	json_object_object_add(stat_obj, "fully_seeded", json_object_new_boolean(esdm_state_fully_seeded()));
+	json_object_object_add(stat_obj, "available_entropy", json_object_new_int(esdm_avail_entropy()));
+	
+	es_obj = json_object_new_object();
+	/* Concatenate the output of the entropy sources. */
+	for_each_esdm_es (i) {
+		struct json_object *current_es_obj = json_object_new_object();
+		esdm_es[i]->state_json(current_es_obj);
+		json_object_object_add(es_obj, esdm_es[i]->name, current_es_obj);
+	}
+	json_object_object_add(stat_obj, "entropy_sources", es_obj);
+
+	snprintf(buf, buflen, "%s", json_object_to_json_string(stat_obj));
+	json_object_put(stat_obj);
 }
 
 DSO_PUBLIC
