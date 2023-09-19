@@ -145,7 +145,11 @@ void esdm_status_json(char *buf, size_t buflen)
 	}
 	json_object_object_add(stat_obj, "entropy_sources", es_obj);
 
+	/*
 	snprintf(buf, buflen, "%s", json_object_to_json_string(stat_obj));
+	*/
+	snprintf(buf, buflen, "%s", json_object_to_json_string_ext(stat_obj, JSON_C_TO_STRING_PRETTY));
+	
 	json_object_put(stat_obj);
 }
 

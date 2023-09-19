@@ -326,10 +326,8 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 
 static void esdm_jent_es_state_json(struct json_object *obj)
 {
-	// snprintf(buf, buflen,
-	// 	 " Available entropy: %u\n"
-	// 	 " Library version: %u\n",
-	// 	 esdm_jent_poolsize(), jent_version());
+	json_object_object_add(obj, "avail_entropy", json_object_new_int(esdm_jent_poolsize()));
+	json_object_object_add(obj, "version", json_object_new_int(jent_version()));
 }
 
 static bool esdm_jent_active(void)
