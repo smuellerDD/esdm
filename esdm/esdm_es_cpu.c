@@ -271,6 +271,7 @@ static void esdm_cpu_es_state_json(struct json_object *obj)
 	uint32_t multiplier = esdm_cpu_multiplier();
 
 	/* Assume the esdm_drng_init lock is taken by caller */
+	json_object_object_add(obj, "active", json_object_new_boolean(true));
 	json_object_object_add(obj, "hash", json_object_new_string(esdm_drng_init->hash_cb->hash_name()));
 	json_object_object_add(obj, "avail_entropy", json_object_new_int(esdm_cpu_poolsize()));
 	json_object_object_add(obj, "multiplier", json_object_new_int(multiplier));

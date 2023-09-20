@@ -326,6 +326,7 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 
 static void esdm_jent_es_state_json(struct json_object *obj)
 {
+	json_object_object_add(obj, "active", json_object_new_boolean(atomic_read(&esdm_jent_initialized)));
 	json_object_object_add(obj, "avail_entropy", json_object_new_int(esdm_jent_poolsize()));
 	json_object_object_add(obj, "version", json_object_new_int(jent_version()));
 }

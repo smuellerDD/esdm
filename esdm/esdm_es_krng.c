@@ -257,6 +257,7 @@ static void esdm_krng_es_state(char *buf, size_t buflen)
 
 static void esdm_krng_es_state_json(struct json_object *obj)
 {
+	json_object_object_add(obj, "active", json_object_new_boolean(true));
 	json_object_object_add(obj, "avail_entropy", json_object_new_int(esdm_krng_poolsize()));
 	json_object_object_add(obj, "entropy_level", json_object_new_int(esdm_krng_entropylevel(256)));
 }

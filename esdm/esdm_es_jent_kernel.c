@@ -109,6 +109,7 @@ static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 static void esdm_jent_kernel_es_state_json(struct json_object *obj)
 {
 	/* Assume the esdm_drng_init lock is taken by caller */
+	json_object_object_add(obj, "active", json_object_new_boolean(jent_rng != NULL));
 	json_object_object_add(obj, "avail_entropy", json_object_new_int(esdm_jent_kernel_poolsize()));
 	json_object_object_add(obj, "entropy_level", json_object_new_int(esdm_jent_kernel_entropylevel(256)));
 }

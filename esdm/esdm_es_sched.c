@@ -281,23 +281,12 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 
 static void esdm_sched_es_state_json(struct json_object *obj)
 {
-	// char status[250], *status_p = (buflen < sizeof(status)) ? status : buf;
-
-	// if (esdm_sched_entropy_fd >= 0) {
-	// 	ssize_t ret;
-
-	// 	esdm_sched_set_entropy_rate(esdm_sched_requested_bits_set);
-
-	// 	ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_STATUS, status_p);
-	// 	if (ret < 0) {
-	// 		snprintf(buf, buflen,
-	// 			 " failure in reading kernel status\n");
-	// 	} else if (buflen < sizeof(status)) {
-	// 		snprintf(buf, buflen, "%s", status_p);
-	// 	}
-	// } else {
-	// 	snprintf(buf, buflen, " disabled - missing kernel support\n");
-	// }
+	if (esdm_sched_entropy_fd >= 0) {
+		json_object_object_add(obj, "active", json_object_new_boolean(true));
+	} else {
+		json_object_object_add(obj, "active", json_object_new_boolean(false));
+		json_object_object_add(obj, "avail_entropy", json_object_new_int(0));
+	}
 }
 
 static void esdm_sched_reset(void)

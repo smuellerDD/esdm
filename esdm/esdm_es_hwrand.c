@@ -128,6 +128,7 @@ static void esdm_hwrand_es_state(char *buf, size_t buflen)
 static void esdm_hwrand_es_state_json(struct json_object *obj)
 {
 	/* Assume the esdm_drng_init lock is taken by caller */
+	json_object_object_add(obj, "active", json_object_new_boolean(esdm_hwrand_fd > 0));
 	json_object_object_add(obj, "avail_entropy", json_object_new_int(esdm_hwrand_poolsize()));
 	json_object_object_add(obj, "entropy_level", json_object_new_int(esdm_hwrand_entropylevel(256)));
 }
