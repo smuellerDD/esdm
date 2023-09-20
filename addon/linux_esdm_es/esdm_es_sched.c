@@ -468,11 +468,13 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 
 	/* Assume the esdm_drng_init lock is taken by caller */
 	snprintf(buf, buflen,
-		 " Hash for operating entropy pool: %s\n"
-		 " Available entropy: %u\n"
-		 " per-CPU scheduler event collection size: %u\n"
-		 " Standards compliance: %s\n"
-		 " High-resolution timer: %s\n",
+		 "{\n"
+		 "\"hash\": \"%s\",\n"
+		 "\"avail_entropy\": %u,\n"
+		 "\"per_cpu_scheduler_event_collection_size\": %u,\n"
+		 "\"standards_compliance\": \"%s\",\n"
+		 "\"high_resolution_timer\": %s\n"
+		 "}",
 		 hash_cb->hash_name(), esdm_sched_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B " : "",

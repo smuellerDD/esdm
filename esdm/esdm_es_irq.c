@@ -290,12 +290,38 @@ static void esdm_irq_es_state(char *buf, size_t buflen)
 
 static void esdm_irq_es_state_json(struct json_object *obj)
 {
+	char status[250];
+
 	if (esdm_irq_entropy_fd >= 0) {
+		struct json_object *jobj;
+		ssize_t ret;
+
+		esdm_irq_set_entropy_rate(esdm_irq_requested_bits_set);
+
+		ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_STATUS, status);
+		if (ret < 0) {
+			goto err;
+		}
+		
+		jobj = json_tokener_parse(status);
+		if(!jobj)
+			goto err;
+
+		json_object_object_foreach(jobj, key, val) {
+			struct json_object *copy = NULL;
+
+			json_object_deep_copy(val, &copy, NULL);
+			json_object_object_add(obj, key, copy);
+		}
+		json_object_put(jobj);
 		json_object_object_add(obj, "active", json_object_new_boolean(true));
-	} else {
-		json_object_object_add(obj, "active", json_object_new_boolean(false));
-		json_object_object_add(obj, "avail_entropy", json_object_new_int(0));
+
+		return;
 	}
+
+err:
+	json_object_object_add(obj, "active", json_object_new_boolean(false));
+	json_object_object_add(obj, "avail_entropy", json_object_new_int(0));
 }
 
 static void esdm_irq_reset(void)

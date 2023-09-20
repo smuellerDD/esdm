@@ -45,7 +45,6 @@ struct esdm_es_cb {
 	u32 (*curr_entropy)(u32 requested_bits);
 	u32 (*max_entropy)(void);
 	void (*state)(unsigned char *buf, size_t buflen);
-	void (*state_json)(struct json_object *obj);
 	void (*reset)(void);
 	void (*set_entropy_rate)(u32 rate);
 };
