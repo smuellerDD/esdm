@@ -133,6 +133,9 @@ static int esdm_shm_status_create_sem(void)
 				       strerror(errsv));
 				return -errsv;
 			}
+
+			/* Re-synchronize */
+			sem_post(esdm_semid);
 		}
 	}
 
