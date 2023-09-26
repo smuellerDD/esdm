@@ -159,6 +159,7 @@ static int esdm_cuse_shm_status_create_shm(void)
  ******************************************************************************/
 
 static sem_t *esdm_cuse_semid = SEM_FAILED;
+static const char *esdm_sem_name = NULL;
 
 static void esdm_cuse_shm_status_down(void)
 {
@@ -191,17 +192,18 @@ static int esdm_cuse_shm_status_create_sem(void)
 {
 	int errsv;
 
-	esdm_cuse_semid = sem_open(ESDM_SEM_NAME, O_CREAT, 0644, 0);
+	if (!esdm_sem_name)
+		return -EFAULT;
+
+	esdm_cuse_semid = sem_open(esdm_sem_name, O_CREAT | O_EXCL, 0644, 0);
 	if (esdm_cuse_semid == SEM_FAILED) {
 		if (errno == EEXIST) {
-			esdm_cuse_semid = sem_open(ESDM_SEM_NAME, 0, 0644, 0);
-			if (esdm_cuse_semid == SEM_FAILED) {
-				errsv = errno;
-				logger(LOGGER_ERR, LOGGER_C_ANY,
-				       "ESDM change indicator semaphore creation failed: %s\n",
-				       strerror(errsv));
-				return -errsv;
-			}
+			esdm_cuse_semid = sem_open(esdm_sem_name, O_CREAT, 0644,
+						   0);
+			if (esdm_cuse_semid == SEM_FAILED)
+				goto err;
+		} else {
+			goto err;
 		}
 	}
 
@@ -209,6 +211,13 @@ static int esdm_cuse_shm_status_create_sem(void)
 	       "ESDM change indicator semaphore initialized\n");
 
 	return 0;
+
+err:
+	errsv = errno;
+	logger(LOGGER_ERR, LOGGER_C_ANY,
+	       "ESDM change indicator semaphore creation failed: %s\n",
+	       strerror(errsv));
+	return -errsv;
 }
 
 /******************************************************************************
@@ -1004,7 +1013,7 @@ static int esdm_cuse_process_arg(void *data, const char *arg, int key,
 	}
 }
 
-int main_common(const char *_devname, const char *target,
+int main_common(const char *_devname, const char *target, const char *semname,
 		const struct cuse_lowlevel_ops *clop, int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -1079,6 +1088,8 @@ int main_common(const char *_devname, const char *target,
 
 	/* One thread group */
 	CKINT(thread_init(1));
+
+	esdm_sem_name = semname;
 
 	memset(&ci, 0, sizeof(ci));
 	ci.dev_major = 0;

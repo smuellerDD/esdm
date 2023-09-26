@@ -26,6 +26,7 @@
 
 #include "cuse_device.h"
 #include "cuse_helper.h"
+#include "esdm_rpc_service.h"
 #include "logger.h"
 #include "ret_checkers.h"
 
@@ -89,7 +90,8 @@ int main(int argc, char *argv[])
 	}
 
 	CKINT(esdm_cuse_dev_file(devfile, sizeof(devfile), "random"));
-	ret = main_common("esdm", devfile, &esdm_dev_clop, argc, argv);
+	ret = main_common("esdm", devfile, ESDM_SEM_RANDOM_NAME, &esdm_dev_clop,
+			  argc, argv);
 
 out:
 	close(random_fd);

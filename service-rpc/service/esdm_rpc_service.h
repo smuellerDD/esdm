@@ -46,7 +46,8 @@ extern "C" {
 #define ESDM_SHM_NAME "/"
 #define ESDM_SHM_STATUS 0x6573646d
 
-#define ESDM_SEM_NAME "esdm-shm-status-semaphore-testmode"
+#define ESDM_SEM_RANDOM_NAME "esdm-random-shm-status-semaphore-testmode"
+#define ESDM_SEM_URANDOM_NAME "esdm-urandom-shm-status-semaphore-testmode"
 
 #else /* ESDM_TESTMODE */
 
@@ -57,7 +58,8 @@ extern "C" {
 #define ESDM_SHM_NAME "/"
 #define ESDM_SHM_STATUS 0x6d647365
 
-#define ESDM_SEM_NAME "esdm-shm-status-semaphore"
+#define ESDM_SEM_RANDOM_NAME "esdm-random-shm-status-semaphore"
+#define ESDM_SEM_URANDOM_NAME "esdm-urandom-shm-status-semaphore"
 
 #endif /* ESDM_TESTMODE */
 

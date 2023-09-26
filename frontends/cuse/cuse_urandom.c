@@ -26,6 +26,7 @@
 
 #include "cuse_device.h"
 #include "cuse_helper.h"
+#include "esdm_rpc_service.h"
 #include "logger.h"
 #include "ret_checkers.h"
 
@@ -91,7 +92,8 @@ int main(int argc, char *argv[])
 	}
 
 	CKINT(esdm_cuse_dev_file(devfile, sizeof(devfile), "urandom"));
-	ret = main_common("uesdm", devfile, &esdm_dev_clop, argc, argv);
+	ret = main_common("uesdm", devfile, ESDM_SEM_URANDOM_NAME,
+			  &esdm_dev_clop, argc, argv);
 
 out:
 	close(urandom_fd);

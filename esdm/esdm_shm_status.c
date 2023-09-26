@@ -39,13 +39,14 @@
 
 static struct esdm_shm_status *esdm_shm_status = NULL;
 static int esdm_shmid = -1;
-static sem_t *esdm_semid = SEM_FAILED;
+static sem_t *esdm_semid_random = SEM_FAILED;
+static sem_t *esdm_semid_urandom = SEM_FAILED;
 
-static void esdm_shm_status_up(void)
+static void _esdm_shm_status_up(sem_t *sem)
 {
 	int semval = 0;
 
-	if (esdm_semid == SEM_FAILED)
+	if (sem == SEM_FAILED)
 		return;
 
 	/*
@@ -56,12 +57,18 @@ static void esdm_shm_status_up(void)
 	 * event is not present any more for others. Hence the semaphore shall
 	 * only toggle between 0 and 1.
 	 */
-	sem_getvalue(esdm_semid, &semval);
+	sem_getvalue(sem, &semval);
 	if (semval > 0)
 		return;
 
-	if (sem_post(esdm_semid))
+	if (sem_post(sem))
 		logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot unlock semaphore\n");
+}
+
+static void esdm_shm_status_up(void)
+{
+	_esdm_shm_status_up(esdm_semid_random);
+	_esdm_shm_status_up(esdm_semid_urandom);
 }
 
 void esdm_shm_status_set_operational(bool enabled)
@@ -92,12 +99,12 @@ void esdm_shm_status_set_need_entropy(void)
 	}
 }
 
-static void esdm_shm_status_delete_sem(void)
+static void _esdm_shm_status_delete_sem(sem_t **sem)
 {
-	if (esdm_semid != SEM_FAILED) {
-		sem_t *tmp = esdm_semid;
+	if (*sem != SEM_FAILED) {
+		sem_t *tmp = *sem;
 
-		esdm_semid = SEM_FAILED;
+		*sem = SEM_FAILED;
 		sem_close(tmp);
 	}
 
@@ -118,31 +125,43 @@ static void esdm_shm_status_delete_sem(void)
 #endif
 }
 
-static int esdm_shm_status_create_sem(void)
+static void esdm_shm_status_delete_sem(void)
 {
+	_esdm_shm_status_delete_sem(&esdm_semid_random);
+	_esdm_shm_status_delete_sem(&esdm_semid_urandom);
+}
+
+static int esdm_shm_status_create_sem(const char *semname, sem_t **sem)
+{
+	sem_t *tmp;
 	int errsv;
 
-	esdm_semid = sem_open(ESDM_SEM_NAME, O_CREAT, 0644, 0);
-	if (esdm_semid == SEM_FAILED) {
+	tmp = sem_open(semname, O_CREAT | O_EXCL, 0644, 0);
+	if (tmp == SEM_FAILED) {
 		if (errno == EEXIST) {
-			esdm_semid = sem_open(ESDM_SEM_NAME, 0, 0644, 0);
-			if (esdm_semid == SEM_FAILED) {
-				errsv = errno;
-				logger(LOGGER_ERR, LOGGER_C_ANY,
-				       "ESDM change indicator semaphore creation failed: %s\n",
-				       strerror(errsv));
-				return -errsv;
-			}
+			tmp = sem_open(semname, O_CREAT, 0644, 0);
+			if (tmp == SEM_FAILED)
+				goto err;
 
 			/* Re-synchronize */
-			sem_post(esdm_semid);
+			sem_post(tmp);
+		} else {
+			goto err;
 		}
 	}
 
 	logger(LOGGER_DEBUG, LOGGER_C_ANY,
-	       "ESDM change indicator semaphore initialized\n");
+	       "ESDM change indicator semaphore %s initialized\n", semname);
+	*sem = tmp;
 
 	return 0;
+
+err:
+	errsv = errno;
+	logger(LOGGER_ERR, LOGGER_C_ANY,
+	       "ESDM change indicator semaphore creation failed: %s\n",
+	       strerror(errsv));
+	return -errsv;
 }
 
 static void esdm_shm_status_delete_shm(void)
@@ -235,9 +254,17 @@ int esdm_shm_status_init(void)
 	if (ret)
 		return ret;
 
-	ret = esdm_shm_status_create_sem();
+	ret = esdm_shm_status_create_sem(ESDM_SEM_RANDOM_NAME,
+					 &esdm_semid_random);
 	if (ret) {
 		esdm_shm_status_delete_shm();
+		return ret;
+	}
+
+	ret = esdm_shm_status_create_sem(ESDM_SEM_URANDOM_NAME,
+					 &esdm_semid_urandom);
+	if (ret) {
+		esdm_shm_status_exit();
 		return ret;
 	}
 
