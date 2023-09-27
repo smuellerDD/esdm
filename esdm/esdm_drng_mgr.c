@@ -295,8 +295,8 @@ int esdm_sp80090c_compliant(void)
 #ifndef ESDM_OVERSAMPLE_ENTROPY_SOURCES
 	return false;
 #else
-	/* SP800-90C only requested in FIPS mode */
-	return esdm_config_fips_enabled();
+	/* Check whether SP80-90C compliance is requested. */
+	return esdm_config_sp80090c_compliant();
 #endif
 }
 

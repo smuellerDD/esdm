@@ -17,6 +17,7 @@
  * DAMAGE.
  */
 
+#include "config.h"
 #include "esdm.h"
 #include "esdm_config_internal.h"
 #include "esdm_crypto.h"
@@ -30,6 +31,12 @@ DSO_PUBLIC
 int esdm_init(void)
 {
 	int ret = 0;
+
+#ifdef ESDM_OVERSAMPLE_ENTROPY_SOURCES
+	/* Enable oversampling of entropy sources if selected at compile time */
+	if (!esdm_config_sp80090c_compliant())
+		esdm_config_force_fips_set(esdm_config_force_sp80090c_enabled);
+#endif
 
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_init());

@@ -314,7 +314,17 @@ int esdm_config_fips_enabled(void)
 {
 	if (esdm_config.force_fips == esdm_config_force_fips_unset)
 		return fips_enabled();
-	return (esdm_config.force_fips == esdm_config_force_fips_enabled);
+	return (esdm_config.force_fips >= esdm_config_force_fips_enabled);
+}
+
+DSO_PUBLIC
+int esdm_config_sp80090c_compliant(void)
+{
+	if (esdm_config.force_fips == esdm_config_force_fips_unset)
+		return fips_enabled();
+
+	/* SP800-90C is always enabled if FIPS-140 mode is enabled */
+	return (esdm_config.force_fips >= esdm_config_force_sp80090c_enabled);
 }
 
 DSO_PUBLIC

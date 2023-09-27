@@ -158,10 +158,10 @@ static int esdm_krng_init(void)
 static uint32_t esdm_krng_properties_entropylevel(uint32_t entropylevel)
 {
 	/*
-	 * If FIPS mode is enabled, we cannot claim that the kernel provides
-	 * entropy as the kernel is not SP800-90B compliant.
+	 * If SP800-90C compliant mode is enabled, we cannot claim that the
+	 * kernel provides entropy as the kernel is not SP800-90B compliant.
 	 */
-	return esdm_config_fips_enabled() ||
+	return esdm_sp80090c_compliant() ||
 			       /*
 	 * If the scheduler-based entropy source is enabled, the kernel is
 	 * claimed to not return any entropy. This is due to the fact that

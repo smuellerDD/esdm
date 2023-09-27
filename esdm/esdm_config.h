@@ -225,9 +225,11 @@ uint32_t esdm_config_max_nodes(void);
 enum esdm_config_force_fips {
 	/** Default: no FIPS enforcement is set, ESDM checks environment */
 	esdm_config_force_fips_unset,
-	/** Force FIPS mode irrespective of environment */
-	esdm_config_force_fips_disabled,
 	/** Disable FIPS mode irrespective of environment */
+	esdm_config_force_fips_disabled,
+	/** Force SP800-90C mode irrespective of environment */
+	esdm_config_force_sp80090c_enabled,
+	/** Force FIPS mode irrespective of environment */
 	esdm_config_force_fips_enabled,
 };
 
@@ -243,6 +245,14 @@ void esdm_config_force_fips_set(enum esdm_config_force_fips val);
  * @return 1 if FIPS mode is enabled, 0 if FIPS mode is disabled
  */
 int esdm_config_fips_enabled(void);
+
+/**
+ * @brief DRNG Manager configuration: Indicator whether SP800-90C compliant mode
+ *        is enabled (i.e. the ES oversampling is applied)
+ *
+ * @return 1 if SP800-90C mode is enabled, 0 if SP800-90C mode is disabled
+ */
+int esdm_config_sp80090c_compliant(void);
 
 /**
  * @brief DRNG Manager configuration: Get number of active nodes

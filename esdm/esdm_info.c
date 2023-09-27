@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 
+#include "esdm_config.h"
 #include "esdm.h"
 #include "esdm_es_aux.h"
 #include "esdm_drng_mgr.h"
@@ -71,14 +72,15 @@ void esdm_status(char *buf, size_t buflen)
 		 "DRNG name: %s\n"
 		 "ESDM security strength in bits: %d\n"
 		 "Number of DRNG instances: %u\n"
-		 "Standards compliance: %s%s%s\n"
+		 "Standards compliance: %s%s%s%s\n"
 		 "ESDM minimally seeded: %s\n"
 		 "ESDM fully seeded: %s\n"
 		 "ESDM entropy level: %u\n",
 		 drng->drng_cb->drng_name(), esdm_security_strength(),
-		 esdm_nodes, esdm_sp80090c_compliant() ? "SP800-90C, " : "",
-		 esdm_ntg1_compliant() ? "NTG.1 (2011), " : "",
-		 esdm_ntg1_2022_compliant() ? "NTG.1 (2022)" : "",
+		 esdm_nodes, esdm_config_fips_enabled() ? "FIPS 140 " : "",
+		 esdm_sp80090c_compliant() ? "SP800-90C " : "",
+		 esdm_ntg1_compliant() ? "NTG.1(2011) " : "",
+		 esdm_ntg1_2022_compliant() ? "NTG.1(2022)" : "",
 		 esdm_state_min_seeded() ? "true" : "false",
 		 esdm_state_fully_seeded() ? "true" : "false",
 		 esdm_avail_entropy());
