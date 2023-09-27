@@ -137,7 +137,8 @@ int main(int argc, char *argv[])
 	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK |
 					     ESDM_GET_SEED_FULLY_SEEDED);
 	if (rc < 0) {
-		printf("esdm_get_seed returned an error %zd\n", rc);
+		printf("esdm_get_seed returned an error for fully seeded request %zd\n",
+		       rc);
 		ret = 1;
 		goto out;
 	}

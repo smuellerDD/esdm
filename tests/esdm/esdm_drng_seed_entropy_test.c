@@ -203,7 +203,6 @@ int main(int argc, char *argv[])
 			ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		esdm_config_es_sched_entropy_rate_set(0);
 		esdm_config_es_irq_entropy_rate_set(0);
-		printf("========= %u\n", esdm_config_es_irq_entropy_rate());
 		break;
 	case 4:
 		/* Scheduler ES fully seeded */
