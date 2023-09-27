@@ -1,4 +1,4 @@
-Changes 0.7.0-prerelease:
+Changes 1.0.0-prerelease:
 * fix (re)initialization of ESDM to set correct entropy level
 
 * IRQ/Sched ES: add support to retry accessing the kernel with -i and -s flags
@@ -7,11 +7,23 @@ Changes 0.7.0-prerelease:
 
 * enhancement: add kernel Jitter RNG ES
 
+* enhancement: add leancrypto, OpenSSL and Botan crypto provider backends
+
+* enhancement: add OpenSSL, Botan seed provider (leancrypto ESDM seed provider is found in leancrypto source code)
+
 * fix: ESDM server - systemd unit executes server in current mount namespace
 
 * editorial: apply clang-format
 
 * fix: CUSE daemons may hang during shutdown due to busy mounts
+
+* fix: resynchronize CUSE daemons and ESDM server upon ESDM server restart
+
+* enhancement: ESDM server status splits up FIPS 140 and SP800-90C compliance
+
+* rename compile time option "oversample_es" to "sp80090c" which is now disabled
+  by default considering that with its enabling, the oversampling is applied
+  unconditionally during startup
 
 Changes 0.6.0:
 * Move ESDM apps into separate namespaces to limit their privilege even further (e.g. no possibility to create network connections)
