@@ -59,6 +59,7 @@ static char *mount_dst = NULL;
 
 static struct esdm_shm_status *esdm_cuse_shm_status = NULL;
 static int esdm_cuse_shmid = -1;
+static uint64_t next_fh = 1;
 
 static int esdm_cuse_shm_status_avail(void)
 {
@@ -433,6 +434,7 @@ static void esdm_cuse_unpriv_call_end(void)
  ******************************************************************************/
 void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi)
 {
+	fi->fh = next_fh++;
 	fuse_reply_open(req, fi);
 }
 
@@ -839,8 +841,10 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	mutex_w_lock(&esdm_cuse_ph_lock);
 	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
 		if (esdm_cuse_polls[i].fh == fi->fh) {
-			if (esdm_cuse_polls[i].ph)
+			if (esdm_cuse_polls[i].ph) {
+				fuse_notify_poll(esdm_cuse_polls[i].ph);
 				fuse_pollhandle_destroy(esdm_cuse_polls[i].ph);
+			}
 			esdm_cuse_polls[i].fh = 0;
 			esdm_cuse_polls[i].ph = NULL;
 			esdm_cuse_polls[i].poll_events = 0;
