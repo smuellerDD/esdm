@@ -18,9 +18,9 @@ endif
 conf_data = configuration_data()
 
 conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
-	      get_option('oversample_es'))
+	      get_option('sp80090c'))
 conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031'))
-if get_option('oversample_es')
+if get_option('sp80090c')
 	conf_data.set('ESDM_SEED_BUFFER_INIT_ADD_BITS', 128)
 	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 64)
 else
