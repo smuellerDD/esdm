@@ -28,46 +28,17 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "env.h"
 #include "privileges.h"
 
-static int esdm_cuse_fips_enabled(void)
+static int esdm_cuse_sp80090c_enabled(void)
 {
-	static char fipsflag[1] = { 'A' };
-	size_t n = 0;
-
-	if (fipsflag[0] == 'A') {
-#ifdef HAVE_SECURE_GETENV
-		if (secure_getenv("ESDM_SERVER_FORCE_FIPS")) {
+#ifdef ESDM_OVERSAMPLE_ENTROPY_SOURCES
+	return 1;
 #else
-		if (getenv("ESDM_SERVER_FORCE_FIPS")) {
+	return 0;
 #endif
-			fipsflag[0] = 1;
-		} else {
-			FILE *fipsfile = NULL;
-
-			fipsfile = fopen("/proc/sys/crypto/fips_enabled", "r");
-			if (!fipsfile) {
-				if (errno == ENOENT) {
-					/* FIPS support not enabled in kernel */
-					return 0;
-				} else {
-					printf("FIPS: Cannot open fips_enabled file: %s\n",
-					       strerror(errno));
-					return -EIO;
-				}
-			}
-
-			n = fread((void *)fipsflag, 1, 1, fipsfile);
-			fclose(fipsfile);
-			if (n != 1) {
-				printf("FIPS: Cannot read FIPS flag\n");
-				return 0;
-			}
-		}
-	}
-
-	return (fipsflag[0] == '1');
 }
 
 /******************************************************************************/
@@ -129,7 +100,7 @@ static int addent_ioctl(int fd, int exp)
 		goto out;
 	}
 
-	if (esdm_cuse_fips_enabled()) {
+	if (esdm_cuse_sp80090c_enabled()) {
 		/* Note, we have to account for oversampling of entropy */
 		if (ent_count_bits2 - ent_count_bits < 10) {
 			printf("RNDADDENTROPY failed to add entropy: %u %u\n",
