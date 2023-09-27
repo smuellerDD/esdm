@@ -41,7 +41,7 @@ static inline void mb_64(void)
 	__sync_synchronize();
 }
 
-#define ATOMIC_64_INIT(i)                                                         \
+#define ATOMIC_64_INIT(i)                                                      \
 	{                                                                      \
 		(i)                                                            \
 	}
@@ -219,7 +219,7 @@ static inline long long atomic_nand_64(atomic_64_t *v, long long i)
  *	   To verify that the exchange was successful, the caller must compare
  *	   the return value with the old value.
  */
-static inline long long	atomic_cmpxchg_64(atomic_64_t *v, long long old,
+static inline long long atomic_cmpxchg_64(atomic_64_t *v, long long old,
 					  long long newval)
 {
 	return __sync_val_compare_and_swap(&v->counter, old, newval);

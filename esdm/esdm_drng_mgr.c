@@ -548,8 +548,7 @@ static void __esdm_drng_seed_work(bool force)
 	if (esdm_drng) {
 		uint32_t node;
 
-		for_each_online_node(node)
-		{
+		for_each_online_node (node) {
 			struct esdm_drng *drng = esdm_drng[node];
 
 			if (!drng)
@@ -611,8 +610,7 @@ void esdm_drng_force_reseed(void)
 		goto out;
 	}
 
-	for_each_online_node(node)
-	{
+	for_each_online_node (node) {
 		struct esdm_drng *drng = esdm_drng[node];
 
 		if (!drng)
@@ -808,8 +806,7 @@ void esdm_reset(void)
 	} else {
 		uint32_t cpu;
 
-		for_each_online_node(cpu)
-		{
+		for_each_online_node (cpu) {
 			struct esdm_drng *drng = esdm_drng[cpu];
 
 			if (!drng)

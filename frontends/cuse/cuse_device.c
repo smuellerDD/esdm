@@ -200,8 +200,8 @@ static int esdm_cuse_shm_status_create_sem(void)
 	esdm_cuse_semid = sem_open(esdm_sem_name, O_CREAT | O_EXCL, 0644, 0);
 	if (esdm_cuse_semid == SEM_FAILED) {
 		if (errno == EEXIST) {
-			esdm_cuse_semid = sem_open(esdm_sem_name, O_CREAT, 0644,
-						   0);
+			esdm_cuse_semid =
+				sem_open(esdm_sem_name, O_CREAT, 0644, 0);
 			if (esdm_cuse_semid == SEM_FAILED)
 				goto err;
 		} else {

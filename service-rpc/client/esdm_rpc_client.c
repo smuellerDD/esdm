@@ -66,8 +66,7 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	}
 }
 
-static int
-esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
+static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	const char *socketname = rpc_conn->socketname;
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 28 };
@@ -151,9 +150,8 @@ esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	return -errsv;
 }
 
-static int
-esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
-			   const uint8_t *data, size_t len)
+static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
+				      const uint8_t *data, size_t len)
 {
 	size_t written = 0;
 	ssize_t ret;
@@ -569,10 +567,9 @@ out:
 	return ret;
 }
 
-static int
-esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
-		      esdm_rpc_client_connection_t **ret_rpc_conn,
-		      void *int_data)
+static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
+				 esdm_rpc_client_connection_t **ret_rpc_conn,
+				 void *int_data)
 {
 	esdm_rpc_client_connection_t *rpc_conn_p;
 	int ret = 0;

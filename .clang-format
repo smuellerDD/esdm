@@ -69,6 +69,7 @@ ForEachMacros:
   - 'list_for_each_guarded'
   - 'for_each_online_cpu'
   - 'for_each_esdm_es'
+  - 'for_each_online_node'
 
 #IncludeBlocks: Preserve # Unknown to clang-format-5.0
 IncludeCategories:
