@@ -46,7 +46,7 @@ if get_option('node').enabled()
 	esdm_src += files('esdm_node.c')
 endif
 
-if get_option('fips140').enabled()
+if get_option('fips140')
 	esdm_src += files([ 'fips.c', 'fips_integrity.c' ])
 endif
 

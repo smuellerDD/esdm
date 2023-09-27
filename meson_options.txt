@@ -254,8 +254,11 @@ option('node', type: 'feature', value: 'enabled',
        description: 'Enable support for multiple DRNG nodes.')
 
 # Enable FIPS 140 support
-option('fips140', type: 'feature', value: 'enabled',
-       description: 'Enable FIPS 140 support.')
+option('fips140', type: 'boolean', value: 'false',
+       description: '''Enable FIPS 140 support.
+
+This option implicitly enables the SP800-90C compliance mode.
+''')
 
 # Option for: ESDM_OVERSAMPLE_ENTROPY_SOURCES
 option('sp80090c', type: 'boolean', value: 'false',

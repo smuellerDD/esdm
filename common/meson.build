@@ -18,9 +18,9 @@ endif
 conf_data = configuration_data()
 
 conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
-	      get_option('sp80090c'))
+	      get_option('sp80090c') or get_option('fips140'))
 conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031'))
-if get_option('sp80090c')
+if get_option('sp80090c') or get_option('fips140')
 	conf_data.set('ESDM_SEED_BUFFER_INIT_ADD_BITS', 128)
 	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 64)
 else
@@ -113,7 +113,7 @@ endif
 
 conf_data.set('ESDM_SELINUX_ENABLED', get_option('selinux').enabled())
 conf_data.set('ESDM_NODE', get_option('node').enabled())
-conf_data.set('ESDM_FIPS140', get_option('fips140').enabled())
+conf_data.set('ESDM_FIPS140', get_option('fips140'))
 
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
 

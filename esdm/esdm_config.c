@@ -312,19 +312,29 @@ void esdm_config_force_fips_set(enum esdm_config_force_fips val)
 DSO_PUBLIC
 int esdm_config_fips_enabled(void)
 {
+	/* FIPS 140 mode can only be set with FIPS-140 compile time option */
+#ifdef ESDM_FIPS140
 	if (esdm_config.force_fips == esdm_config_force_fips_unset)
 		return fips_enabled();
 	return (esdm_config.force_fips >= esdm_config_force_fips_enabled);
+#else
+	return false;
+#endif
 }
 
 DSO_PUBLIC
 int esdm_config_sp80090c_compliant(void)
 {
+	/* SP800-90C mode can only be set with SP800-90C compile-time option */
+#ifdef ESDM_OVERSAMPLE_ENTROPY_SOURCES
 	if (esdm_config.force_fips == esdm_config_force_fips_unset)
 		return fips_enabled();
 
 	/* SP800-90C is always enabled if FIPS-140 mode is enabled */
 	return (esdm_config.force_fips >= esdm_config_force_sp80090c_enabled);
+#else
+	return false;
+#endif
 }
 
 DSO_PUBLIC
