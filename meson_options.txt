@@ -258,11 +258,10 @@ option('fips140', type: 'feature', value: 'enabled',
        description: 'Enable FIPS 140 support.')
 
 # Option for: ESDM_OVERSAMPLE_ENTROPY_SOURCES
-option('oversample_es', type: 'boolean', value: 'true',
+option('oversample_es', type: 'boolean', value: 'false',
        description:'''Oversampling of Entropy Sources.
 
 If enabled, the ESDM oversamples the entropy sources compliant to SP800-90C.
-The oversampling is applied in FIPS-enabled mode only.
 
 The following oversampling is applied:
 * Seed the DRNG with 128 more bits of entropy from the conditioning component.
