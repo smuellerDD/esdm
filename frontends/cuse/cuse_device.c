@@ -432,9 +432,14 @@ static void esdm_cuse_unpriv_call_end(void)
 /******************************************************************************
  * CUSE callback handler
  ******************************************************************************/
+
+static DEFINE_MUTEX_W_UNLOCKED(esdm_cuse_ph_lock);
+
 void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi)
 {
+	mutex_w_lock(&esdm_cuse_ph_lock);
 	fi->fh = next_fh++;
+	mutex_w_unlock(&esdm_cuse_ph_lock);
 	fuse_reply_open(req, fi);
 }
 
@@ -797,7 +802,6 @@ struct esdm_cuse_poll {
 	uint32_t poll_events;
 };
 static struct esdm_cuse_poll esdm_cuse_polls[ESDM_CUSE_MAX_PH];
-static DEFINE_MUTEX_W_UNLOCKED(esdm_cuse_ph_lock);
 
 static void esdm_cuse_set_pollmask(unsigned int request_events,
 				   unsigned int *outmask)
