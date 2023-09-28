@@ -458,8 +458,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	service->invoke = esdm_client_invoke;
 	service->destroy = esdm_client_destroy;
 
-	WAIT_QUEUE_INIT(rpc_conn->completion);
-	atomic_set(&rpc_conn->ref_cnt, 0);
+	mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
 	rpc_conn->fd = -1;
 	mutex_w_init(&rpc_conn->lock, 0, 1);
 	atomic_set(&rpc_conn->state, esdm_rpcc_initialized);
@@ -512,15 +511,8 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
 	 */
 	for (i = 0, rpc_conn_p = rpc_conn_array; i < num_conn;
 	     i++, rpc_conn_p++) {
-		if (atomic_read(&rpc_conn_p->ref_cnt)) {
-			/*
-			 * The termination check does not wait indefinitely.
-			 * If the esdm_rpcc_put_service is not properly called,
-			 * we need to avoid a deadlock here.
-			 */
-			thread_timedwait_no_event(&rpc_conn_p->completion,
-						  &abstime);
-			atomic_set(&rpc_conn_p->ref_cnt, 0);
+		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime)) {
+			mutex_w_unlock(&rpc_conn_p->ref_cnt);
 		}
 		esdm_fini_proto_service(rpc_conn_p);
 	}
@@ -584,10 +576,7 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 	 * has only one caller at one given time. Set the ref_cnt to 1 if
 	 * we obtained the connection handle.
 	 */
-	do {
-		thread_wait_event(&rpc_conn_p->completion,
-				  !atomic_read(&rpc_conn_p->ref_cnt));
-	} while (atomic_cmpxchg(&rpc_conn_p->ref_cnt, 0, 1) != 0);
+	mutex_w_lock(&rpc_conn_p->ref_cnt);
 
 	if (atomic_read(&rpc_conn_p->state) != esdm_rpcc_initialized)
 		return -ESHUTDOWN;
@@ -604,10 +593,7 @@ static void esdm_rpcc_put_service(esdm_rpc_client_connection_t *rpc_conn)
 	if (!rpc_conn)
 		return;
 
-	atomic_set(&rpc_conn->ref_cnt, 0);
-
-	/* Notify all unpriv handler threads that they can become active */
-	thread_wake_all(&rpc_conn->completion);
+	mutex_w_unlock(&rpc_conn->ref_cnt);
 }
 
 /******************************************************************************

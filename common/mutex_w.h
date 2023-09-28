@@ -21,6 +21,7 @@
 #define _MUTEX_W_PTHREAD_H
 
 #include <pthread.h>
+#include <time.h>
 
 #include "bool.h"
 
@@ -99,6 +100,12 @@ static inline bool mutex_w_trylock(mutex_w_t *mutex)
 	if (pthread_mutex_trylock(&mutex->lock))
 		return false;
 	return true;
+}
+
+static inline int mutex_w_timedlock(mutex_w_t *mutex,
+				    const struct timespec *abstime)
+{
+	return pthread_mutex_timedlock(&mutex->lock, abstime);
 }
 
 #endif /* _MUTEX_W_PTHREAD_H */

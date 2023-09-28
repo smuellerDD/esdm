@@ -50,9 +50,8 @@ struct esdm_rpc_client_connection {
 	void *interrupt_data;
 
 	mutex_w_t lock;
-	atomic_t ref_cnt;
+	mutex_w_t ref_cnt;
 	atomic_t state;
-	struct thread_wait_queue completion;
 };
 
 /* Sleep time for poll operations */
