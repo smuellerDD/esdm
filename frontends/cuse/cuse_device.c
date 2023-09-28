@@ -906,6 +906,25 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 	return 0;
 }
 
+void esdm_cuse_release(fuse_req_t req, struct fuse_file_info *fi) {
+	int i;
+
+	mutex_w_lock(&esdm_cuse_ph_lock);
+	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
+		if (esdm_cuse_polls[i].fh == fi->fh) {
+			fuse_notify_poll(esdm_cuse_polls[i].ph);
+			fuse_pollhandle_destroy(esdm_cuse_polls[i].ph);
+
+			esdm_cuse_polls[i].fh = 0;
+			esdm_cuse_polls[i].ph = NULL;
+			esdm_cuse_polls[i].poll_events = 0;
+		}
+	}
+	mutex_w_unlock(&esdm_cuse_ph_lock);
+
+	fuse_reply_err(req, 0);
+}
+
 /******************************************************************************
  * CUSE daemon
  ******************************************************************************/

@@ -46,6 +46,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 		     const void *in_buf, size_t in_bufsz, size_t out_bufsz);
 void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		    struct fuse_pollhandle *ph);
+void esdm_cuse_release(fuse_req_t req, struct fuse_file_info *fi);
 int main_common(const char *devname, const char *target, const char *semname,
 		const struct cuse_lowlevel_ops *clop, int argc, char **argv);
 

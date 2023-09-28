@@ -64,6 +64,7 @@ static const struct cuse_lowlevel_ops esdm_dev_clop = {
 	.write = esdm_cuse_random_write,
 	.ioctl = esdm_cuse_random_ioctl,
 	.poll = esdm_cuse_poll,
+	.release = esdm_cuse_release,
 };
 #pragma GCC diagnostic pop
 
