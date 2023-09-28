@@ -511,9 +511,16 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
 	 */
 	for (i = 0, rpc_conn_p = rpc_conn_array; i < num_conn;
 	     i++, rpc_conn_p++) {
-		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime)) {
+		/*
+		 * Do not wait forever as during shutdown, the thread using
+		 * the handle may have been already killed. In this case,
+		 * we want to avoid a deadlock as the lock will not be released
+		 * by a killed thread.
+		 */
+		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime))
 			mutex_w_unlock(&rpc_conn_p->ref_cnt);
-		}
+
+		/* Terminate the handle */
 		esdm_fini_proto_service(rpc_conn_p);
 	}
 
@@ -573,13 +580,19 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 
 	/*
 	 * Wait until the previous call completed - each connection handle is
-	 * has only one caller at one given time. Set the ref_cnt to 1 if
-	 * we obtained the connection handle.
+	 * has only one caller at one given time. Lock the ref_cnt if we
+	 * obtained the connection handle.
 	 */
 	mutex_w_lock(&rpc_conn_p->ref_cnt);
 
-	if (atomic_read(&rpc_conn_p->state) != esdm_rpcc_initialized)
+	if (atomic_read(&rpc_conn_p->state) != esdm_rpcc_initialized) {
+		mutex_w_unlock(&rpc_conn_p->ref_cnt);
+
+		/* Safety measure */
+		*ret_rpc_conn = NULL;
+
 		return -ESHUTDOWN;
+	}
 
 	*ret_rpc_conn = rpc_conn_p;
 	rpc_conn_p->interrupt_data = int_data;
