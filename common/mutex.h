@@ -20,6 +20,7 @@
 #ifndef _MUTEX_PTHREAD_H
 #define _MUTEX_PTHREAD_H
 
+#include <errno.h>
 #include <pthread.h>
 
 #include "logger.h"
@@ -84,7 +85,11 @@ static inline void mutex_destroy(mutex_t *mutex)
  */
 static inline void mutex_reader_lock(mutex_t *mutex)
 {
-	pthread_rwlock_rdlock(mutex);
+	int ret;
+
+	do {
+		ret = pthread_rwlock_rdlock(mutex);
+	} while (ret == EAGAIN);
 }
 
 /**
