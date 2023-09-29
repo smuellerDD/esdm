@@ -906,8 +906,9 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 	return 0;
 }
 
-void esdm_cuse_release(fuse_req_t req, struct fuse_file_info *fi) {
-	int i;
+void esdm_cuse_release(fuse_req_t req, struct fuse_file_info *fi)
+{
+	unsigned int i;
 
 	mutex_w_lock(&esdm_cuse_ph_lock);
 	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
