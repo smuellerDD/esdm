@@ -115,6 +115,8 @@ conf_data.set('ESDM_SELINUX_ENABLED', get_option('selinux').enabled())
 conf_data.set('ESDM_NODE', get_option('node').enabled())
 conf_data.set('ESDM_FIPS140', get_option('fips140'))
 
+conf_data.set('ESDM_CLIENT_TIMEOUT_EXPONENT', get_option('client-timeout-exponent'))
+
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
 
 if build_machine.system() == 'linux'

@@ -28,6 +28,7 @@
 
 #include "bool.h"
 #include "buffer.h"
+#include "config.h"
 #include "atomic.h"
 #include "conv_be_le.h"
 #include "esdm_rpc_client_internal.h"
@@ -69,7 +70,9 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	const char *socketname = rpc_conn->socketname;
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 28 };
+	struct timespec ts = { .tv_sec = 0,
+			       .tv_nsec = 1U
+					  << (ESDM_CLIENT_TIMEOUT_EXPONENT) };
 	struct timeval tv = { .tv_sec = 0, .tv_usec = (ts.tv_nsec) >> 10 };
 	struct stat statbuf;
 	struct sockaddr_un addr;
