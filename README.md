@@ -2,6 +2,8 @@
 
 ** ... or /dev/random in user space **
 
+![Build Status CI](https://github.com/smuellerDD/esdm/actions/workflows/test_ci.yml/badge.svg?branch=master)
+
 The Entropy Source and DRNG Manager (ESDM) manages a set of deterministic
 random number generators (DRNG) and ensures their proper seeding and reseeding.
 To seed the DRNGs, a set of entropy sources are managed by the ESDM. The
