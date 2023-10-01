@@ -167,6 +167,22 @@ static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 		if (ret < 0) {
 			int errsv = errno;
 
+			/*
+			 * EPIPE is due to the server was restarted -> reconnect
+			 * EAGAIN/EWOULDBLOCK is due to the socket
+			 * timeout -> call write again
+			 */
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				/* Does the caller wants us to interrupt? */
+				if (rpc_conn->interrupt_func &&
+				    rpc_conn->interrupt_func(
+					    rpc_conn->interrupt_data)) {
+					return -EAGAIN;
+				}
+
+				continue;
+			}
+
 			if (errsv == EPIPE) {
 				logger(LOGGER_DEBUG, LOGGER_C_RPC,
 				       "Connection to server needs to be re-established\n");
@@ -185,6 +201,10 @@ static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 		}
 
 		written += (size_t)ret;
+
+		/* Cover short writes, e.g. due to timeouts */
+		data += (size_t)ret;
+		len -= (size_t)ret;
 	} while (written < len);
 
 	logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
