@@ -398,8 +398,10 @@ option('esdm-server', type: 'feature', value: 'enabled',
 ################################################################################
 
 option('client-timeout-exponent', type: 'integer', min: 20, max: 29, value: 28,
-       description: 'Set the rpc client send/receive timeout to
-       1 << VAL nanoseconds. Change the default with care/know the consequences!')
+       description: '''Timeout for ESDM client/server connection
+
+Set the rpc client send/receive timeout to
+1 << VAL nanoseconds. Change the default with care/know the consequences!''')
 
 ################################################################################
 # Enable Test configuration
