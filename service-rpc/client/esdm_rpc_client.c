@@ -70,10 +70,14 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	const char *socketname = rpc_conn->socketname;
-	struct timespec ts = { .tv_sec = 0,
-			       .tv_nsec = 1U
-					  << (ESDM_CLIENT_TIMEOUT_EXPONENT) };
-	struct timeval tv = { .tv_sec = 0, .tv_usec = (ts.tv_nsec) >> 10 };
+	struct timespec ts = {
+		.tv_sec = 0,
+		.tv_nsec = 1U << (ESDM_CLIENT_CONNECT_TIMEOUT_EXPONENT)
+	};
+	struct timeval tv = {
+		.tv_sec = 0,
+		.tv_usec = (1U << (ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT)) >> 10
+	};
 	struct stat statbuf;
 	struct sockaddr_un addr;
 	unsigned int attempts = 0;
@@ -141,7 +145,7 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		} else {
 			errsv = 0;
 		}
-	} while (attempts < 10 &&
+	} while (attempts < (ESDM_CLIENT_RECONNECT_ATTEMPTS) &&
 		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR));
 
 	if (errsv) {

@@ -397,11 +397,31 @@ option('esdm-server', type: 'feature', value: 'enabled',
 # Client-related Configuration
 ################################################################################
 
-option('client-timeout-exponent', type: 'integer', min: 20, max: 29, value: 28,
+# WARNING: handle all of these options with care as they may lead to an increased
+# number of failed RPC replies to the client without random data or higher load
+# due to faster retries!
+
+option('client-connect-timeout-exponent', type: 'integer', min: 20, max: 29, value: 28,
        description: '''Timeout for ESDM client/server connection
 
+Set the rpc client connect timeout to
+1 << VAL nanoseconds. Change the default with care/know the consequences!
+(perform tests under load, ...)''')
+
+option('client-rx-tx-timeout-exponent', type: 'integer', min: 20, max: 29, value: 28,
+       description: '''Timeout for ESDM client/server rx/tx operations
+
 Set the rpc client send/receive timeout to
-1 << VAL nanoseconds. Change the default with care/know the consequences!''')
+1 << VAL nanoseconds. Change the default with care/know the consequences!
+(perform tests under load, ...)''')
+
+option('client-reconnect-attempts', type: 'integer', min: 5, max: 30, value: 10,
+       description: '''Reconnect tries for ESDM client/server connection
+
+With this option, you have the possibility to increase the reconnect attempts
+when decreasing the client connection timeout.
+Change the default with care/know the consequences!
+(perform tests under load, ...)''')
 
 ################################################################################
 # Enable Test configuration
