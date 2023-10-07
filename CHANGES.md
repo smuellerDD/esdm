@@ -1,4 +1,4 @@
-Changes 1.0.0-prerelease:
+Changes 1.0.0:
 * fix (re)initialization of ESDM to set correct entropy level
 
 * IRQ/Sched ES: add support to retry accessing the kernel with -i and -s flags
