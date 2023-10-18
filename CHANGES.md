@@ -1,3 +1,6 @@
+Changes 1.0.1:
+* enhancement/fix: add support for multiple ESDM RPC client connection initializations
+
 Changes 1.0.0:
 * fix (re)initialization of ESDM to set correct entropy level
 

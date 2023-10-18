@@ -516,12 +516,13 @@ static uint32_t esdm_rpcc_curr_node(void)
 	return (esdm_curr_node() % esdm_rpcc_max_nodes);
 }
 
-static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
+static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
+				   uint32_t *num)
 {
 	const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
 	esdm_rpc_client_connection_t *rpc_conn_array = *rpc_conn;
 	esdm_rpc_client_connection_t *rpc_conn_p = rpc_conn_array;
-	uint32_t i, num_conn = esdm_rpcc_get_online_nodes();
+	uint32_t i, num_conn = *num;
 
 	if (!rpc_conn_array)
 		return;
@@ -553,16 +554,61 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn)
 
 	free(rpc_conn_array);
 	*rpc_conn = NULL;
+	*num = 0;
 }
 
 static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 				  const char *socketname,
 				  esdm_rpcc_interrupt_func_t interrupt_func,
-				  esdm_rpc_client_connection_t **rpc_conn)
+				  esdm_rpc_client_connection_t **rpc_conn,
+				  uint32_t *num_conn)
 {
 	esdm_rpc_client_connection_t *tmp, *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
 	int ret = 0;
+
+	/*
+	 * It is a legitimate scenario that this function is called twice for
+	 * one connection as follows: if the libesdm_getrandom is preloaded, the
+	 * connection is already allocated. Now, the caller also wants to
+	 * establish a new connection, it cannot assume that libesdm_getrandom
+	 * is preloaded. Thus, it will unconditionally call the init function
+	 * as well. Thus catch this issue here and avoid double allocation.
+	 * Note, the esdm_rpcc_fini_service will ensure that there is also no
+	 * double free.
+	 */
+	if (*rpc_conn) {
+		/*
+		 * If the existing nodes are already sufficient, do not allocate
+		 * more.
+		 */
+		if (*num_conn >= nodes)
+			return 0;
+
+		/*
+		 * The caller wants more ESDM connections now - release all
+		 * connections to allocate them anew.
+		 *
+		 * It is inefficient to release the connections, free the memory
+		 * and allocate it anew. Yet, it is the hope that this code
+		 * is never called by assuming the user avoids such situations.
+		 *
+		 * But it is conceivable to have such situations:
+		 * libesdm_getrandom allocates memory for one connection. If
+		 * this library is preloaded, and the application itself wants
+		 * to allow a larger set of ESDM connections, we end up in this
+		 * code path.
+		 *
+		 * NOTE: This is only permissible when assuming that the
+		 * init_service call is done at the beginning of an application,
+		 * i.e. when there is no transaction running.
+		 */
+		for (i = 0, tmp_p = tmp; i < *num_conn; i++, tmp_p++)
+			esdm_fini_proto_service(tmp_p);
+		if (tmp)
+			free(tmp);
+		*num_conn = 0;
+	}
 
 	tmp = calloc(nodes, sizeof(*tmp));
 	CKNULL(tmp, -ENOMEM);
@@ -572,13 +618,14 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 					      interrupt_func, tmp_p));
 	}
 
+	CKINT(esdm_test_shm_status_init());
+
 	*rpc_conn = tmp;
+	*num_conn = nodes;
 
 	logger(LOGGER_DEBUG, LOGGER_C_ANY,
 	       "Service supporting %u parallel requests for socket %s enabled\n",
 	       nodes, socketname);
-
-	CKINT(esdm_test_shm_status_init());
 
 out:
 	if (ret) {
@@ -594,16 +641,19 @@ out:
 }
 
 static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
+				 uint32_t num_conn,
 				 esdm_rpc_client_connection_t **ret_rpc_conn,
 				 void *int_data)
 {
 	esdm_rpc_client_connection_t *rpc_conn_p;
+	/* Protection against client programming errors */
+	uint32_t node = min_uint32(esdm_rpcc_curr_node(), num_conn);
 	int ret = 0;
 
 	CKNULL(rpc_conn_array, -EFAULT);
 	CKNULL(ret_rpc_conn, -EFAULT);
 
-	rpc_conn_p = rpc_conn_array + esdm_rpcc_curr_node();
+	rpc_conn_p = rpc_conn_array + node;
 
 	/*
 	 * Wait until the previous call completed - each connection handle is
@@ -640,12 +690,14 @@ static void esdm_rpcc_put_service(esdm_rpc_client_connection_t *rpc_conn)
  * Unprivileged connection
  ******************************************************************************/
 static esdm_rpc_client_connection_t *unpriv_rpc_conn = NULL;
+static uint32_t unpriv_rpc_conn_num = 0;
 
 DSO_PUBLIC
 int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
 				 void *int_data)
 {
-	return esdm_rpcc_get_service(unpriv_rpc_conn, rpc_conn, int_data);
+	return esdm_rpcc_get_service(unpriv_rpc_conn, unpriv_rpc_conn_num,
+				     rpc_conn, int_data);
 }
 
 DSO_PUBLIC
@@ -659,25 +711,27 @@ int esdm_rpcc_init_unpriv_service(esdm_rpcc_interrupt_func_t interrupt_func)
 {
 	return esdm_rpcc_init_service(&unpriv_access__descriptor,
 				      ESDM_RPC_UNPRIV_SOCKET, interrupt_func,
-				      &unpriv_rpc_conn);
+				      &unpriv_rpc_conn, &unpriv_rpc_conn_num);
 }
 
 DSO_PUBLIC
 void esdm_rpcc_fini_unpriv_service(void)
 {
-	esdm_rpcc_fini_service(&unpriv_rpc_conn);
+	esdm_rpcc_fini_service(&unpriv_rpc_conn, &unpriv_rpc_conn_num);
 }
 
 /******************************************************************************
  * Privileged connection
  ******************************************************************************/
 static esdm_rpc_client_connection_t *priv_rpc_conn = NULL;
+static uint32_t priv_rpc_conn_num = 0;
 
 DSO_PUBLIC
 int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
 			       void *int_data)
 {
-	return esdm_rpcc_get_service(priv_rpc_conn, rpc_conn, int_data);
+	return esdm_rpcc_get_service(priv_rpc_conn, priv_rpc_conn_num,
+				     rpc_conn, int_data);
 }
 
 DSO_PUBLIC
@@ -691,11 +745,11 @@ int esdm_rpcc_init_priv_service(esdm_rpcc_interrupt_func_t interrupt_func)
 {
 	return esdm_rpcc_init_service(&priv_access__descriptor,
 				      ESDM_RPC_PRIV_SOCKET, interrupt_func,
-				      &priv_rpc_conn);
+				      &priv_rpc_conn, &priv_rpc_conn_num);
 }
 
 DSO_PUBLIC
 void esdm_rpcc_fini_priv_service(void)
 {
-	esdm_rpcc_fini_service(&priv_rpc_conn);
+	esdm_rpcc_fini_service(&priv_rpc_conn, &priv_rpc_conn_num);
 }
