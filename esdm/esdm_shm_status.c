@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <semaphore.h>
+#include <signal.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/shm.h>
@@ -97,6 +98,30 @@ void esdm_shm_status_set_need_entropy(void)
 		atomic_bool_set(&esdm_shm_status->need_entropy, new);
 		esdm_shm_status_up();
 	}
+}
+
+static void esdm_shm_status_set_suspend(void)
+{
+	if (!esdm_shm_status)
+		return;
+
+	atomic_bool_set(&esdm_shm_status->suspend_trigger, true);
+	esdm_shm_status_up();
+}
+
+static void esdm_shm_status_signal_suspend(int sig)
+{
+	(void)sig;
+	logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Suspend signal received\n");
+
+	esdm_shm_status_set_suspend();
+}
+
+static void esdm_shm_status_install_signal_suspend(void)
+{
+	logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+	       "Install suspend signal handler\n");
+	signal(SIGUSR1, esdm_shm_status_signal_suspend);
 }
 
 static void _esdm_shm_status_delete_sem(sem_t **sem)
@@ -274,6 +299,7 @@ int esdm_shm_status_init(void)
 
 	esdm_shm_status_set_operational(esdm_state_operational());
 	esdm_shm_status_set_need_entropy();
+	esdm_shm_status_install_signal_suspend();
 
 	return 0;
 }

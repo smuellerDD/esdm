@@ -20,5 +20,11 @@ esdm_server_service = configure_file(
 	input : 'esdm-server.service.in',
 	output : 'esdm-server.service',
 	configuration : server_conf_data)
+esdm_server_suspend_service = configure_file(
+	input : 'esdm-server-suspend.service.in',
+	output : 'esdm-server-suspend.service',
+	configuration : server_conf_data)
 install_data(esdm_server_service,
+	     install_dir: get_option('prefix') / 'lib/systemd/system')
+install_data(esdm_server_suspend_service,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')

@@ -216,10 +216,12 @@ The ESDM consists of the following components:
 
   The ESDM CUSE daemon can either be started manually or with the provided (and
   installed) systemd unit file. When using systemd, start the server with
-  `systemctl start esdm-cuse-random`. Although the daemon creates a /dev/random
-  device, the actual visible operation is atomic (a bind mount) for both
-  creation and destruction of the new device file which implies that the daemon
-  can be started and stopped at any time during runtime of the Linux OS.
+  `systemctl start esdm-cuse-random` *and*
+  `systemctl start esdm-server-suspend` (the latter installs a suspend/sleep
+  trigger to wake up processes in select/poll). Although the daemon creates a
+  /dev/random device, the actual visible operation is atomic (a bind mount) for
+  both creation and destruction of the new device file which implies that the
+  daemon can be started and stopped at any time during runtime of the Linux OS.
 
   NOTE: The bind mount is only visible in the respective mount namespace. If
   you have multiple mount namespaces, you need to start this daemon in each

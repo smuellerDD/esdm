@@ -1,6 +1,8 @@
 Changes 1.0.1:
 * enhancement/fix: add support for multiple ESDM RPC client connection initializations
 
+* fix: If a process select/poll on a CUSE file, the system now goes properly to sleep
+
 Changes 1.0.0:
 * fix (re)initialization of ESDM to set correct entropy level
 

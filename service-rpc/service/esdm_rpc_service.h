@@ -81,6 +81,8 @@ struct esdm_shm_status {
 	atomic_bool_t operational;
 	/* Do we need new entropy? */
 	atomic_bool_t need_entropy;
+	/* Wake up due to suspend/hibernate trigger */
+	atomic_bool_t suspend_trigger;
 };
 
 static inline key_t esdm_ftok(const char *pathname, int proj_id)

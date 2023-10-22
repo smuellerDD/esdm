@@ -309,10 +309,7 @@ static void daemonize(void)
 		logger(LOGGER_ERR, LOGGER_C_SERVER,
 		       "Cannot change directory\n");
 
-	if (pidfile && strlen(pidfile))
-		create_pid_file(pidfile);
-
-		/* Redirect standard files to /dev/null */
+	/* Redirect standard files to /dev/null */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
 	freopen("/dev/null", "r", stdin);
@@ -338,6 +335,9 @@ int main(int argc, char *argv[])
 
 	if (verbosity == 0 && !foreground)
 		daemonize();
+
+	if (pidfile && strlen(pidfile))
+		create_pid_file(pidfile);
 
 	install_term();
 

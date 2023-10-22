@@ -1,0 +1,18 @@
+# Systemd configuration file
+#
+# Notify the ESDM server about suspend/sleep operation
+#
+
+[Unit]
+Description=Entropy Source and DRNG Manager Daemon Suspend/Sleep Trigger
+After=sleep.target
+After=suspend.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "kill -s SIGUSR1 $(cat /var/run/esdm-server.pid) > /dev/null 2>&1"
+TimeoutSec=0
+
+[Install]
+WantedBy=sleep.target
+WantedBy=suspend.target

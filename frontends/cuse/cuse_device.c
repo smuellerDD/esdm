@@ -810,6 +810,12 @@ static void esdm_cuse_set_pollmask(unsigned int request_events,
 	if (atomic_bool_read(&esdm_cuse_shm_status->need_entropy))
 		*outmask |= POLLOUT | POLLWRNORM;
 
+	/* Simply wake the caller no matter what it waits for. */
+	if (atomic_bool_read(&esdm_cuse_shm_status->suspend_trigger)) {
+		atomic_bool_set(&esdm_cuse_shm_status->suspend_trigger, false);
+		*outmask |= POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM;
+	}
+
 	*outmask &= request_events;
 }
 
