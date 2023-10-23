@@ -216,9 +216,7 @@ The ESDM consists of the following components:
 
   The ESDM CUSE daemon can either be started manually or with the provided (and
   installed) systemd unit file. When using systemd, start the server with
-  `systemctl start esdm-cuse-random` *and*
-  `systemctl start esdm-server-suspend` (the latter installs a suspend/sleep
-  trigger to wake up processes in select/poll). Although the daemon creates a
+  `systemctl start esdm-cuse-random`. Although the daemon creates a
   /dev/random device, the actual visible operation is atomic (a bind mount) for
   both creation and destruction of the new device file which implies that the
   daemon can be started and stopped at any time during runtime of the Linux OS.
@@ -269,6 +267,14 @@ The ESDM consists of the following components:
 * `botan-rng`: A small sample class for usage with Botan starting with version 3.0
   is provided. Use it either by linking to `libesdm-botan-rng.so` or include it to your
   code-base.
+
+* `esdm-server-signal-helper`: This small tool is used to support proper
+  quiescing of the ESDM server when the system suspends or sleeps. When invoking
+  this tool with the `--suspend --pid <ESDM-Server-PID-file>` it notifies the
+  ESDM server to prepare for suspending/sleeping. Conversely when the tool is
+  used with the option `--resume` it informs the ESDM server about the system
+  wakeup. The associated systemd unit files of `esdm-server-suspend.service`
+  and `esdm-server-resume.service` obtain the suspend/resume trigger.
 
 IMPORTANT NOTE: The RPC interfaces between the components are present to ensure
 there is a proper security domain separation. The RPC protocol is not considered
