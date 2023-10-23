@@ -7,10 +7,13 @@
 Description=Entropy Source and DRNG Manager Daemon Suspend/Sleep Trigger
 After=sleep.target
 After=suspend.target
+After=esdm-server.service
+Wants=esdm-server.service
+ConditionPathExists=/var/run/esdm-server.pid
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c "kill -s SIGUSR1 $(cat /var/run/esdm-server.pid) > /dev/null 2>&1"
+ExecStart=/bin/sh -c "kill -s SIGUSR1 $(cat /var/run/esdm-server.pid) > /dev/null 2>&1"
 TimeoutSec=0
 
 [Install]
