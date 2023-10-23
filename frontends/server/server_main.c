@@ -240,7 +240,7 @@ static void install_term(void)
 
 static void create_pid_file(const char *pid_file)
 {
-	char pid_str[12]; /* max. integer length + '\n' + null */
+	char pid_str[12] = {0}; /* max. integer length + '\n' + null */
 
 	/* Ensure only one copy */
 	pidfile_fd =
@@ -265,7 +265,7 @@ static void create_pid_file(const char *pid_file)
 	}
 
 	/* write our pid to the pid file */
-	snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
+	snprintf(pid_str, sizeof(pid_str), "%i\n", getpid());
 	if (write(pidfile_fd, pid_str, strlen(pid_str)) !=
 	    (ssize_t)strlen(pid_str)) {
 		logger(LOGGER_ERR, LOGGER_C_SERVER,

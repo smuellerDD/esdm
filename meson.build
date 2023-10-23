@@ -131,7 +131,7 @@ if get_option('es_jent_kernel').enabled()
 endif
 
 if get_option('esdm-server').enabled()
-	subdirs += [ 'frontends/server' ]
+	subdirs += [ 'frontends/server', 'frontends/server-signal-helper' ]
 endif
 
 if get_option('linux-devfiles').enabled()
