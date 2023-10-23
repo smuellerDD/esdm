@@ -1,0 +1,18 @@
+# Systemd configuration file
+#
+# Notify the ESDM server about resume from suspend/sleep operation
+#
+
+[Unit]
+Description=Entropy Source and DRNG Manager Daemon Resume Trigger
+After=esdm-server.service
+Wants=esdm-server.service
+After=post-resume.service
+
+[Service]
+Type=oneshot
+ExecStart=/@PATH@/esdm-server-signal-helper --resume
+TimeoutSec=0
+
+[Install]
+WantedBy=post-resume.target
