@@ -7,7 +7,7 @@
 Description=Entropy Source and DRNG Manager Daemon Resume Trigger
 After=esdm-server.service
 Wants=esdm-server.service
-After=post-resume.service
+After=systemd-suspend.service systemd-hybrid-sleep.service systemd-hibernate.service
 
 [Service]
 Type=oneshot
@@ -15,4 +15,4 @@ ExecStart=@PATH@/esdm-server-signal-helper --resume
 TimeoutSec=0
 
 [Install]
-WantedBy=post-resume.target
+WantedBy=sleep.target
