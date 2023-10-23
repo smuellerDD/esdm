@@ -7,6 +7,7 @@
 Description=Entropy Source and DRNG Manager Daemon Suspend/Sleep Trigger
 After=sleep.target
 After=suspend.target
+After=hibernate.target
 After=esdm-server.service
 Wants=esdm-server.service
 ConditionPathExists=/var/run/esdm-server.pid
@@ -19,3 +20,4 @@ TimeoutSec=0
 [Install]
 WantedBy=sleep.target
 WantedBy=suspend.target
+WantedBy=hibernate.target
