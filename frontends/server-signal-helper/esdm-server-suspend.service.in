@@ -13,7 +13,7 @@ ConditionPathExists=/var/run/esdm-server.pid
 
 [Service]
 Type=oneshot
-ExecStart=/@PATH@/esdm-server-signal-helper --suspend --pid /var/run/esdm-server.pid
+ExecStart=@PATH@/esdm-server-signal-helper --suspend --pid /var/run/esdm-server.pid
 TimeoutSec=0
 
 [Install]

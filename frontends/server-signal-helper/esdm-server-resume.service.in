@@ -11,7 +11,7 @@ After=post-resume.service
 
 [Service]
 Type=oneshot
-ExecStart=/@PATH@/esdm-server-signal-helper --resume
+ExecStart=@PATH@/esdm-server-signal-helper --resume
 TimeoutSec=0
 
 [Install]
