@@ -233,7 +233,8 @@ static void esdm_cuse_term(void)
 {
 	esdm_cuse_poll_thread_shutdown = true;
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
-	sem_post(esdm_cuse_semid);
+	if (esdm_cuse_semid != SEM_FAILED)
+		sem_post(esdm_cuse_semid);
 
 	thread_stop_spawning();
 
