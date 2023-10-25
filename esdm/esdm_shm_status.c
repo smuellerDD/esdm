@@ -109,6 +109,12 @@ static void esdm_shm_status_set_suspend(void)
 	esdm_shm_status_up();
 }
 
+static void esdm_shm_status_server_exit(void)
+{
+	/* The exit notification is the same as the suspend notification */
+	esdm_shm_status_set_suspend();
+}
+
 static void esdm_shm_status_signal_suspend(int sig)
 {
 	(void)sig;
@@ -306,6 +312,8 @@ int esdm_shm_status_init(void)
 
 void esdm_shm_status_exit(void)
 {
+	/* Notify the client to inform that the server exists */
+	esdm_shm_status_server_exit();
 	esdm_shm_status_delete_shm();
 	esdm_shm_status_delete_sem();
 }

@@ -800,22 +800,33 @@ struct esdm_cuse_poll {
 static struct esdm_cuse_poll esdm_cuse_polls[ESDM_CUSE_MAX_PH];
 static DEFINE_MUTEX_W_UNLOCKED(esdm_cuse_ph_lock);
 
-static void esdm_cuse_set_pollmask(unsigned int request_events,
-				   unsigned int *outmask)
+static void esdm_cuse_get_pollmask(unsigned int *outmask)
 {
+#define ESDM_POLL_READER (POLLIN | POLLRDNORM)
+#define ESDM_POLL_WRITER (POLLOUT | POLLWRNORM)
+
 	*outmask = 0;
 
 	if (atomic_bool_read(&esdm_cuse_shm_status->operational))
-		*outmask |= POLLIN | POLLRDNORM;
+		*outmask |= ESDM_POLL_READER;
 	if (atomic_bool_read(&esdm_cuse_shm_status->need_entropy))
-		*outmask |= POLLOUT | POLLWRNORM;
+		*outmask |= ESDM_POLL_WRITER;
 
-	/* Simply wake the caller no matter what it waits for. */
+	/* Simply wake the poller no matter what it waits for. */
 	if (atomic_bool_read(&esdm_cuse_shm_status->suspend_trigger)) {
 		atomic_bool_set(&esdm_cuse_shm_status->suspend_trigger, false);
-		*outmask |= POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM;
+		*outmask |= ESDM_POLL_READER | ESDM_POLL_WRITER;
 	}
 
+	/* Simply wake the poller no matter what it waits for. */
+	if (esdm_cuse_poll_thread_shutdown)
+		*outmask |= ESDM_POLL_READER | ESDM_POLL_WRITER;
+}
+
+/* *outmask is already filled with output of esdm_cuse_get_pollmask */
+static void esdm_cuse_set_pollmask(unsigned int request_events,
+				   unsigned int *outmask)
+{
 	*outmask &= request_events;
 }
 
@@ -833,6 +844,7 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	 * Check current status and return it if it complies with requested
 	 * status.
 	 */
+	esdm_cuse_get_pollmask(&mask);
 	esdm_cuse_set_pollmask(fi->poll_events, &mask);
 	fuse_reply_poll(req, mask);
 
@@ -874,7 +886,7 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 /* Poll checker handler executed in separate thread */
 static int esdm_cuse_poll_checker(void __unused *unused)
 {
-	unsigned int i, mask;
+	unsigned int i;
 
 	thread_set_name(cuse_poll, 0);
 
@@ -887,11 +899,21 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
 	while (!esdm_cuse_poll_thread_shutdown) {
+		unsigned int sysmask, mask;
+		bool sysmask_set = false;
+
 		mutex_w_lock(&esdm_cuse_ph_lock);
 		for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
 			if (!esdm_cuse_polls[i].ph)
 				continue;
 
+			/* Get the mask once for this loop */
+			if (!sysmask_set) {
+				esdm_cuse_get_pollmask(&sysmask);
+				sysmask_set = true;
+			}
+
+			mask = sysmask;
 			esdm_cuse_set_pollmask(esdm_cuse_polls[i].poll_events,
 					       &mask);
 
