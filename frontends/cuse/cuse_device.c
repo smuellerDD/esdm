@@ -831,14 +831,19 @@ static void esdm_cuse_set_pollmask(unsigned int request_events,
 	*outmask &= request_events;
 }
 
+/* when extending this function, always check and return error
+ * codes first, as they may originate from an interrupted poll/select
+ * which causes many bogus events if answered with notify_poll or reply_poll
+ */
 void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		    struct fuse_pollhandle *ph)
 {
 	unsigned int i, mask;
+	int err_code;
 
 	if (!fi->poll_events) {
-		fuse_reply_err(req, EINVAL);
-		return;
+		err_code = EINVAL;
+		goto err;
 	}
 
 	/*
@@ -849,20 +854,11 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	esdm_cuse_set_pollmask(fi->poll_events, &mask);
 	fuse_reply_poll(req, mask);
 
-	if (!ph)
-		return;
-
-	if (mask) {
-		fuse_notify_poll(ph);
-		fuse_pollhandle_destroy(ph);
-		return;
-	}
-
+	/* cleanup first, as we may have an interrupted poll/select */
 	mutex_w_lock(&esdm_cuse_ph_lock);
 	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
 		if (esdm_cuse_polls[i].fh == fi->fh) {
 			if (esdm_cuse_polls[i].ph) {
-				fuse_notify_poll(esdm_cuse_polls[i].ph);
 				fuse_pollhandle_destroy(esdm_cuse_polls[i].ph);
 			}
 			esdm_cuse_polls[i].fh = 0;
@@ -873,6 +869,12 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		if (esdm_cuse_polls[i].ph)
 			continue;
 
+		if (mask) {
+			fuse_notify_poll(ph);
+			fuse_pollhandle_destroy(ph);
+			break;
+		}
+
 		esdm_cuse_polls[i].fh = fi->fh;
 		esdm_cuse_polls[i].ph = ph;
 		esdm_cuse_polls[i].poll_events = fi->poll_events;
@@ -880,8 +882,15 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	}
 	mutex_w_unlock(&esdm_cuse_ph_lock);
 
-	if (i == ESDM_CUSE_MAX_PH)
-		fuse_reply_err(req, EBUSY);
+	if (i == ESDM_CUSE_MAX_PH) {
+		err_code = EBUSY;
+		goto err;
+	}
+
+	return;
+
+err:
+	fuse_reply_err(req, err_code);
 }
 
 /* Poll checker handler executed in separate thread */
