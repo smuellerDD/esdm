@@ -176,7 +176,20 @@ static void esdm_cuse_shm_status_down(void)
 	while (!esdm_cuse_shm_status_avail())
 		nanosleep(&ts, NULL);
 
-	if (sem_wait(esdm_cuse_semid))
+	/* wait with timeout in order to cleanly shutdown when esdm-server
+	 * already exited. There is a race condition between setting this
+	 * semaphore and the poller exit variable. This is only a fallback,
+	 * as it is sensitive to clock changes due to time sync (e.g. NTP).
+	 * Additionaly, always try to unlock the semaphore wait with a interruption
+	 * signal.
+	 */
+	if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
+	{
+		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot get clock for semaphore timed wait\n");
+		return;
+	}
+	ts.tv_sec  += 1;
+	if (sem_timedwait(esdm_cuse_semid, &ts) && errno != ETIMEDOUT)
 		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
 }
 
