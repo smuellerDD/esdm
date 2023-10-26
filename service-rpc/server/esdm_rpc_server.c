@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/shm.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -458,6 +459,13 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	CKNULL(proto->service, -EINVAL);
 
 	while (atomic_read(&server_exit) == 0) {
+		struct timeval timeout;
+		fd_set fds;
+		int sret;
+
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100 * 1000;
+
 		/*
 		 * Allocate the memory for the thread invocation. This is done
 		 * before the accept() call as now we should have time but
@@ -478,9 +486,31 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 
 		rpc_conn->proto = proto;
 
+		FD_ZERO(&fds);
+		FD_SET(proto->server_listening_fd, &fds);
+
+		sret = select(proto->server_listening_fd + 1, &fds, NULL, NULL,
+			      &timeout);
+
+		/* error */
+		if (sret == -1 && errno != EINTR) {
+			logger(LOGGER_ERR, LOGGER_C_ANY,
+			       "Select returned with error %s\n",
+			       strerror(errno));
+			esdm_rpcs_release_conn(rpc_conn);
+			rpc_conn = NULL;
+			break;
+		}
+
+		/* timeout */
+		if (sret == 0) {
+			esdm_rpcs_release_conn(rpc_conn);
+			rpc_conn = NULL;
+			continue;
+		}
+
 		/* Wait for incoming connection */
-		rpc_conn->child_fd =
-			accept(proto->server_listening_fd, &addr, &addr_len);
+		rpc_conn->child_fd = accept(proto->server_listening_fd, &addr, &addr_len);
 
 		/* If server is requested to terminate, do that */
 		if (atomic_read(&server_exit))
@@ -568,7 +598,8 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		return -EINVAL;
 	}
 
-	fd = socket(protocol_family, SOCK_SEQPACKET, 0);
+	fd = socket(protocol_family,
+		    SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
 		errsv = -errno;
 		logger(LOGGER_ERR, LOGGER_C_RPC,
