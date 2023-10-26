@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 
 #include "buffer.h"
 #include "esdm_rpc_protocol.h"
@@ -39,6 +40,7 @@ void *esdm_rpc_alloc(void *allocator_data, size_t size)
 
 	/* Adjust the consumed memory indicator */
 	tlh->consumed += size;
+	memset(new_aligned, 0, size);
 
 	/* Return the aligned memory */
 	return new_aligned;
