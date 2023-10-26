@@ -160,6 +160,7 @@ static int esdm_cuse_shm_status_create_shm(void)
  * Semaphore for shared memory segment
  ******************************************************************************/
 
+static atomic_bool_t esdm_cuse_poll_thread_shutdown = ATOMIC_BOOL_INIT(false);
 static sem_t *esdm_cuse_semid = SEM_FAILED;
 static const char *esdm_sem_name = NULL;
 
@@ -175,6 +176,10 @@ static void esdm_cuse_shm_status_down(void)
 	/* Wait and block until the SHM-Segment becomes available */
 	while (!esdm_cuse_shm_status_avail())
 		nanosleep(&ts, NULL);
+
+	/* The server is terminating, do not block any more */
+	if (atomic_bool_read(&esdm_cuse_poll_thread_shutdown))
+		return;
 
 	if (sem_wait(esdm_cuse_semid))
 		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
@@ -226,12 +231,11 @@ err:
  * Signal handler
  ******************************************************************************/
 
-static bool esdm_cuse_poll_thread_shutdown = false;
 static DECLARE_WAIT_QUEUE(esdm_cuse_poll_checker_wait);
 
 static void esdm_cuse_term(void)
 {
-	esdm_cuse_poll_thread_shutdown = true;
+	atomic_bool_set(&esdm_cuse_poll_thread_shutdown, true);
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 	if (esdm_cuse_semid != SEM_FAILED)
 		sem_post(esdm_cuse_semid);
@@ -820,7 +824,7 @@ static void esdm_cuse_get_pollmask(unsigned int *outmask)
 	}
 
 	/* Simply wake the poller no matter what it waits for. */
-	if (esdm_cuse_poll_thread_shutdown)
+	if (atomic_bool_read(&esdm_cuse_poll_thread_shutdown))
 		*outmask |= ESDM_POLL_READER | ESDM_POLL_WRITER;
 }
 
@@ -908,7 +912,7 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 	}
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
-	while (!esdm_cuse_poll_thread_shutdown) {
+	while (!atomic_bool_read(&esdm_cuse_poll_thread_shutdown)) {
 		unsigned int sysmask, mask;
 		bool sysmask_set = false;
 
