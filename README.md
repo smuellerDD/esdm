@@ -72,28 +72,36 @@ The following dependencies are required:
   installed or obtain the sources from the
   [Protobuf-C Github website](https://github.com/protobuf-c/protobuf-c).
 
-* Jitter RNG: If the Jitter RNG entropy source is enabled, install the Jitter
-  RNG library from your distribution or from the
+The following dependencies are required provided the respective functionality
+is enabled during compile time:
+
+* Jitter RNG: If the Jitter RNG entropy source is enabled as a compile time
+  option, install the Jitter RNG library from your distribution or from the
   [Jitter RNG homepage](https://www.chronox.de/jent.html).
 
-* kcapi library: If the kernel-based jitter source shall be used, the kcapi
-  library is required, either from your distribution or from the
+* kcapi library: If the kernel-based jitter source is enabled as a compile time
+  option, the kcapi library is required, either from your distribution or from
+  the
   [libkcapi website](http://www.chronox.de/libkcapi.html).
 
 * SELinux library: If your system uses SELinux and you compile the CUSE device
-  file support, the SELinux library is needed for proper device file labeling.
-  In this case, use the package from your distribution.
+  file support (compile time option), the SELinux library is needed for proper
+  device file labeling. In this case, use the package from your distribution.
 
-* FUSE 3 library: If the CUSE daemons shall be compiled, the FUSE 3 library
-  is required either from your distribution or from the
+* FUSE 3 library: If the CUSE daemons shall be compiled and are enabled as a
+  compile time option, the FUSE 3 library is required either from your
+  distribution or from the
   [libfuse Github website](https://github.com/libfuse/libfuse/).
 
-* Botan >= 3.0: If the Botan backend for cryptographic operations shall be used,
-  get Botan either from your distribution or from the
+* Botan >= 3.0: If the Botan backend for cryptographic operations shall be used
+  and is enabled as a compile time option, or if the Botan ESDM seed source
+  shall be compiled when the compile time option is enabled get Botan either
+  from your distribution or from the
   [botan Github website](https://github.com/randombit/botan).
 
-* OpenSSL >= 3.0: If the OpenSSL backend for cryptographic operations shall be used,
-  obtain OpenSSL either from your distribution or from the
+* OpenSSL >= 3.0: If the OpenSSL backend for cryptographic operations shall be
+  used and is enabled as a compile time option, or if the OpenSSL ESDM seed
+  source shall be compiled when the compile time option is enabled, obtain OpenSSL either from your distribution or from the
   [OpenSSL website](https://www.openssl.org/source/).
 
 Beyond those dependencies, only POSIX support is required.
