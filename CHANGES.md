@@ -3,6 +3,8 @@ Changes 1.0.1:
 
 * fix: If a process select/poll on a CUSE file, the system now goes properly to sleep
 
+* fix: If there is high load on the CUSE daemons - make sure they properly shut down on reboot
+
 Changes 1.0.0:
 * fix (re)initialization of ESDM to set correct entropy level
 

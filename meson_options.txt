@@ -424,6 +424,23 @@ Change the default with care/know the consequences!
 (perform tests under load, ...)''')
 
 ################################################################################
+# Server-related Configuration
+################################################################################
+
+option('esdm-server-term-on-signal', type: 'boolean', value: 'true',
+       description:'''ESDM-Server: Terminate on signal
+
+When enabled, the ESDM server sleeps on accept() either until a connection
+arrives or until a terminating signal is received. When a signal is recieved,
+the workerloop terminates and with it the server terminates. Conversely if
+this option is disabled, the ESDM server wakes up regularly to check whether
+the termination signal was received.
+
+This option is intended when for unknown reasons the accept() does not terminate
+even though the server shall exit.
+''')
+
+################################################################################
 # Enable Test configuration
 #
 # WARNING: DO NOT ENABLE FOR PRODUCTION MODE

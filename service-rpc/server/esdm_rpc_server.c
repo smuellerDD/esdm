@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/shm.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -478,6 +479,51 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 
 		rpc_conn->proto = proto;
 
+		/*
+		 * When there is a high load, there is a race between SIGTERM
+		 * signal breaking the accept() call and the propagation that
+		 * sever_exit is set to true. Thus, in a shutdown under high
+		 * load, it is possible that the caller triggered yet another
+		 * accept() before server_exit is set. In this case, accept
+		 * now blocks indefinitely. If it is unacceptable to check
+		 * accept's errno for EINTR and then terminate the loop,
+		 * because other signals than SIGTERM can be received that
+		 * should not immediately terminate the worker loop, undefine
+		 * this macro to use a timer-based wakeup to check for the
+		 * status of server_exit.
+		 */
+#ifndef ESDM_WORKERLOOP_TERM_ON_SIGNAL
+		for (;;) {
+			struct timeval timeout = { .tv_sec = 1, .tv_usec = 0};
+			fd_set fds;
+			int sret;
+
+			FD_ZERO(&fds);
+			FD_SET(proto->server_listening_fd, &fds);
+
+			sret = select(proto->server_listening_fd + 1, &fds,
+				      NULL, NULL, &timeout);
+
+			/* error */
+			if (sret == -1 && errno != EINTR) {
+				logger(LOGGER_ERR, LOGGER_C_ANY,
+				       "Select returned with error %s\n",
+				       strerror(errno));
+				goto out;
+			}
+
+			/* activity */
+			if (sret > 0)
+				break;
+
+			/* timeout - yet server shall exit */
+			if (atomic_read(&server_exit))
+				goto out;
+
+			/* timeout - simply retry */
+		}
+#endif
+
 		/* Wait for incoming connection */
 		rpc_conn->child_fd =
 			accept(proto->server_listening_fd, &addr, &addr_len);
@@ -487,6 +533,12 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			break;
 
 		if (rpc_conn->child_fd < 0) {
+#ifdef ESDM_WORKERLOOP_TERM_ON_SIGNAL
+			/* Terminate the worker loop upon receipt of signal */
+			if (errno == EINTR)
+				goto out;
+#endif
+
 			esdm_rpcs_release_conn(rpc_conn);
 			rpc_conn = NULL;
 			logger(LOGGER_WARN, LOGGER_C_ANY,
@@ -568,7 +620,11 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		return -EINVAL;
 	}
 
-	fd = socket(protocol_family, SOCK_SEQPACKET, 0);
+	fd = socket(protocol_family, SOCK_SEQPACKET
+#ifndef ESDM_WORKERLOOP_TERM_ON_SIGNAL
+				     | SOCK_NONBLOCK | SOCK_CLOEXEC
+#endif
+				     , 0);
 	if (fd < 0) {
 		errsv = -errno;
 		logger(LOGGER_ERR, LOGGER_C_RPC,

@@ -119,6 +119,8 @@ conf_data.set('ESDM_CLIENT_CONNECT_TIMEOUT_EXPONENT', get_option('client-connect
 conf_data.set('ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT', get_option('client-rx-tx-timeout-exponent'))
 conf_data.set('ESDM_CLIENT_RECONNECT_ATTEMPTS', get_option('client-reconnect-attempts'))
 
+conf_data.set('ESDM_WORKERLOOP_TERM_ON_SIGNAL', get_option('esdm-server-term-on-signal'))
+
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
 
 if build_machine.system() == 'linux'
