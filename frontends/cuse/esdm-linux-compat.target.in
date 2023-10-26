@@ -1,0 +1,22 @@
+# Systemd configuration file
+#
+# Meta target for /dev and /proc emulation for ESDM
+# These services should always be started together,
+# or not at all.
+
+[Unit]
+Description=Entropy Source and DRNG Manager Linux compatibility target
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+Wants=esdm-server.service
+After=esdm-server.service
+
+Requires=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service
+After=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service
+
+[Install]
+WantedBy=basic.target

@@ -52,9 +52,15 @@ esdm_cuse_proc_service = configure_file(
 	input : 'esdm-proc.service.in',
 	output : 'esdm-proc.service',
 	configuration : cuse_conf_data)
+esdm_linux_compat_target = configure_file(
+	input : 'esdm-linux-compat.target.in',
+	output : 'esdm-linux-compat.target',
+	configuration : cuse_conf_data)
 install_data(esdm_cuse_random_service,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')
 install_data(esdm_cuse_urandom_service,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')
 install_data(esdm_cuse_proc_service,
+	     install_dir: get_option('prefix') / 'lib/systemd/system')
+install_data(esdm_linux_compat_target,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')

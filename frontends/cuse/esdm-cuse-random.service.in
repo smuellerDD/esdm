@@ -14,11 +14,9 @@ StartLimitIntervalSec=500
 StartLimitBurst=5
 Wants=esdm-server.service
 After=esdm-server.service
+PartOf=esdm-linux-compat.service
 
 [Service]
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-cuse-random -f
-
-[Install]
-WantedBy=basic.target
