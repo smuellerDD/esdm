@@ -457,8 +457,9 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi, get_func_t get,
 			     int fallback_fd)
 {
-	uint8_t tmpbuf[ESDM_RPC_MAX_DATA];
-	size_t cleansize = min_size(sizeof(tmpbuf), size);
+	/* size is limited by fuse to its maximum request size, mostly 131072 byte */
+	uint8_t *tmpbuf = calloc(1, size);
+	size_t read_bytes = 0;
 	ssize_t ret = 0;
 
 	(void)off;
@@ -468,19 +469,14 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	if (fi->flags & O_SYNC)
 		get = esdm_rpcc_get_random_bytes_pr_int;
 
-	if (size > sizeof(tmpbuf)) {
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Due to FUSE limitation, the maximum request size is %zu\n",
-		       sizeof(tmpbuf));
-		size = sizeof(tmpbuf);
-	}
-
-	//	while (size)
+	/* fuse automatically chunks requests, e.g. for a 1MB read multiple <= 131072 byte reads
+	* are typically performed, try to fill them up */
+	while (read_bytes < size)
 	{
-		size_t todo = min_size(sizeof(tmpbuf), size);
+		size_t todo = min_size(ESDM_RPC_MAX_MSG_SIZE, size - read_bytes);
 
 		esdm_cuse_unpriv_call_start();
-		esdm_invoke(get(tmpbuf, todo, req));
+		esdm_invoke(get(tmpbuf + read_bytes, todo, req));
 		esdm_cuse_unpriv_call_end();
 
 		/*
@@ -499,32 +495,14 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 
 		if (ret < 0)
 			goto out;
-		todo = (size_t)ret;
-
-		/*
-		 * This call segfaults when called a 2nd time because req is
-		 * freed. Thus, the while loop is currently disabled.
-		 *
-		 * Thus, we will return a short read here that the caller must
-		 * consider. Returning a short read is permissible in VFS and
-		 * thus it is no error to apply a short read here.
-		 *
-		 * The caller may accommodate that with a while loop around
-		 * its read system call. Another example when using dd is
-		 * the following command that must be used:
-		 *
-		 * dd if=/dev/esdm of=out count=1 bs=65550 iflag=fullblock
-		 */
-		ret = fuse_reply_buf(req, (const char *)tmpbuf, todo);
-
-		// 		if (ret < 0)
-		// 			goto out;
-		//
-		// 		size -= todo;
+		read_bytes += (size_t)ret;
 	}
+	ret = fuse_reply_buf(req, (const char *)tmpbuf, size);
 
 out:
-	memset_secure(tmpbuf, 0, cleansize);
+	memset_secure(tmpbuf, 0, size);
+	free(tmpbuf);
+
 	if (ret < 0)
 		fuse_reply_err(req, (int)-ret);
 }
@@ -541,29 +519,39 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
-	esdm_cuse_unpriv_call_start();
-	esdm_invoke(esdm_rpcc_write_data_int((const uint8_t *)buf, size, req));
-	esdm_cuse_unpriv_call_end();
-	if (ret == 0)
-		written = size;
+	while (written < size) {
+		size_t todo = min_size(ESDM_RPC_MAX_MSG_SIZE, size - written);
 
+		esdm_cuse_unpriv_call_start();
+		esdm_invoke(esdm_rpcc_write_data_int((const uint8_t *)buf + written, todo, req));
+		esdm_cuse_unpriv_call_end();
+		if (ret == 0)
+			written += todo;
+		else
+			goto err;
+	}
+
+	goto out;
+
+err:
 	/*
-	 * If call to the ESDM server failed, let us fall back to the
-	 * fallback file descriptor. Yet, we do not cover for short
-	 * reads as this entire CUSE handling is prone to short reads
-	 * as outlined below. Thus, the caller needs to handle this
-	 * appropriately.
-	 */
+	* If call to the ESDM server failed, let us fall back to the
+	* fallback file descriptor. Yet, we do not cover for short
+	* reads as this entire CUSE handling is prone to short reads
+	* as outlined below. Thus, the caller needs to handle this
+	* appropriately.
+	*/
 	if (ret < 0 && fallback_fd > -1) {
 		logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-		       "Use fallback to provide data due to RPC error code %zd\n",
-		       ret);
+			"Use fallback to provide data due to RPC error code %zd\n",
+			ret);
 		do {
 			ret = write(fallback_fd, buf, size);
 			written += (size_t)ret;
 		} while (ret > 0 && written < size);
 	}
 
+out:
 	if (ret < 0)
 		fuse_reply_err(req, (int)-ret);
 	else
