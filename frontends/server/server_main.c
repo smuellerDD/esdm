@@ -240,7 +240,7 @@ static void install_term(void)
 
 static void create_pid_file(const char *pid_file)
 {
-	char pid_str[12] = {0}; /* max. integer length + '\n' + null */
+	char pid_str[12] = { 0 }; /* max. integer length + '\n' + null */
 
 	/* Ensure only one copy */
 	pidfile_fd =
@@ -309,7 +309,7 @@ static void daemonize(void)
 		logger(LOGGER_ERR, LOGGER_C_SERVER,
 		       "Cannot change directory\n");
 
-	/* Redirect standard files to /dev/null */
+		/* Redirect standard files to /dev/null */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
 	freopen("/dev/null", "r", stdin);

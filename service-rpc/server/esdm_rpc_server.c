@@ -494,7 +494,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		 */
 #ifndef ESDM_WORKERLOOP_TERM_ON_SIGNAL
 		for (;;) {
-			struct timeval timeout = { .tv_sec = 1, .tv_usec = 0};
+			struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
 			fd_set fds;
 			int sret;
 
@@ -620,11 +620,13 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		return -EINVAL;
 	}
 
-	fd = socket(protocol_family, SOCK_SEQPACKET
+	fd = socket(protocol_family,
+		    SOCK_SEQPACKET
 #ifndef ESDM_WORKERLOOP_TERM_ON_SIGNAL
-				     | SOCK_NONBLOCK | SOCK_CLOEXEC
+			    | SOCK_NONBLOCK | SOCK_CLOEXEC
 #endif
-				     , 0);
+		    ,
+		    0);
 	if (fd < 0) {
 		errsv = -errno;
 		logger(LOGGER_ERR, LOGGER_C_RPC,
