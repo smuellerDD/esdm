@@ -563,7 +563,7 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 				  esdm_rpc_client_connection_t **rpc_conn,
 				  uint32_t *num_conn)
 {
-	esdm_rpc_client_connection_t *tmp, *tmp_p;
+	esdm_rpc_client_connection_t *tmp = *rpc_conn, *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
 	int ret = 0;
 
@@ -577,7 +577,7 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 	 * Note, the esdm_rpcc_fini_service will ensure that there is also no
 	 * double free.
 	 */
-	if (*rpc_conn) {
+	if (tmp) {
 		/*
 		 * If the existing nodes are already sufficient, do not allocate
 		 * more.
@@ -730,8 +730,8 @@ DSO_PUBLIC
 int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
 			       void *int_data)
 {
-	return esdm_rpcc_get_service(priv_rpc_conn, priv_rpc_conn_num,
-				     rpc_conn, int_data);
+	return esdm_rpcc_get_service(priv_rpc_conn, priv_rpc_conn_num, rpc_conn,
+				     int_data);
 }
 
 DSO_PUBLIC
