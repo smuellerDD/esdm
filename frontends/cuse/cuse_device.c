@@ -457,26 +457,38 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi, get_func_t get,
 			     int fallback_fd)
 {
-	/* size is limited by fuse to its maximum request size, mostly 131072 byte */
-	uint8_t *tmpbuf = calloc(1, size);
+	uint8_t tmpbuf_s[64], *tmpbuf_p = tmpbuf_s, *tmpbuf = NULL;
 	size_t read_bytes = 0;
 	ssize_t ret = 0;
 
 	(void)off;
+
+	/*
+	 * size is limited by fuse to its maximum request size, mostly
+	 * 131072 byte
+	 */
+	if (size > sizeof(tmpbuf_s)) {
+		tmpbuf = calloc(1, size);
+		CKNULL(tmpbuf, -ENOMEM);
+		tmpbuf_p = tmpbuf;
+	}
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
 	if (fi->flags & O_SYNC)
 		get = esdm_rpcc_get_random_bytes_pr_int;
 
-	/* fuse automatically chunks requests, e.g. for a 1MB read multiple <= 131072 byte reads
-	* are typically performed, try to fill them up */
-	while (read_bytes < size)
-	{
-		size_t todo = min_size(ESDM_RPC_MAX_MSG_SIZE, size - read_bytes);
+	/*
+	 * fuse automatically chunks requests, e.g. for a 1MB read
+	 * multiple <= 131072 byte reads are typically performed, try to fill
+	 * them up.
+	 */
+	while (read_bytes < size) {
+		size_t todo =
+			min_size(ESDM_RPC_MAX_MSG_SIZE, size - read_bytes);
 
 		esdm_cuse_unpriv_call_start();
-		esdm_invoke(get(tmpbuf + read_bytes, todo, req));
+		esdm_invoke(get(tmpbuf_p + read_bytes, todo, req));
 		esdm_cuse_unpriv_call_end();
 
 		/*
@@ -490,18 +502,22 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
 			       "Use fallback to provide data due to RPC error code %zd\n",
 			       ret);
-			ret = read(fallback_fd, tmpbuf, todo);
+			ret = read(fallback_fd, tmpbuf_p + read_bytes, todo);
 		}
 
 		if (ret < 0)
 			goto out;
 		read_bytes += (size_t)ret;
 	}
-	ret = fuse_reply_buf(req, (const char *)tmpbuf, size);
+	ret = fuse_reply_buf(req, (const char *)tmpbuf_p, size);
 
 out:
-	memset_secure(tmpbuf, 0, size);
-	free(tmpbuf);
+	if (tmpbuf) {
+		memset_secure(tmpbuf, 0, size);
+		free(tmpbuf);
+	} else {
+		memset_secure(tmpbuf_s, 0, sizeof(tmpbuf_s));
+	}
 
 	if (ret < 0)
 		fuse_reply_err(req, (int)-ret);
@@ -523,7 +539,8 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 		size_t todo = min_size(ESDM_RPC_MAX_MSG_SIZE, size - written);
 
 		esdm_cuse_unpriv_call_start();
-		esdm_invoke(esdm_rpcc_write_data_int((const uint8_t *)buf + written, todo, req));
+		esdm_invoke(esdm_rpcc_write_data_int(
+			(const uint8_t *)buf + written, todo, req));
 		esdm_cuse_unpriv_call_end();
 		if (ret == 0)
 			written += todo;
@@ -535,16 +552,15 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 
 err:
 	/*
-	* If call to the ESDM server failed, let us fall back to the
-	* fallback file descriptor. Yet, we do not cover for short
-	* reads as this entire CUSE handling is prone to short reads
-	* as outlined below. Thus, the caller needs to handle this
-	* appropriately.
-	*/
+	 * If call to the ESDM server failed, let us fall back to the
+	 * fallback file descriptor. It writes the entire buffer into the
+	 * fallback as we do not consider a mix-n-match of data written to
+	 * ESDM and data written to the fallback as appropriate.
+	 */
 	if (ret < 0 && fallback_fd > -1) {
 		logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-			"Use fallback to provide data due to RPC error code %zd\n",
-			ret);
+		       "Use fallback to provide data due to RPC error code %zd\n",
+		       ret);
 		do {
 			ret = write(fallback_fd, buf, size);
 			written += (size_t)ret;
