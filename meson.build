@@ -19,7 +19,7 @@ project('esdm', 'c',
 		'b_lto=true',
 		'b_staticpic=true',
 		'b_pie=true',
-		'b_asneeded=true'
+		'b_asneeded=true',
 		# set the C++ std for the botan frontend here, C++ only gets used if botan-rng is enabled
 		'cpp_std=c++20',
 	])
@@ -38,7 +38,11 @@ add_global_arguments([ '-fstack-protector-strong',
 		       '-Wmissing-field-initializers',
 		       '-Wshadow',
 		       '-Wmissing-prototypes',
-		       '-Wswitch-enum' ],
+		       '-Wswitch-enum',
+		       '-Wformat=2',
+                       # clang currently segfaults with it
+                       #'-fzero-call-used-regs=used-gpr',
+                       ],
 		       language : 'c')
 
 if get_option('optimization') != '0'
