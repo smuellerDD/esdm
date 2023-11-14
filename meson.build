@@ -19,6 +19,7 @@ project('esdm', 'c',
 		'b_lto=true',
 		'b_staticpic=true',
 		'b_pie=true',
+		'b_asneeded=true'
 		# set the C++ std for the botan frontend here, C++ only gets used if botan-rng is enabled
 		'cpp_std=c++20',
 	])
@@ -64,9 +65,6 @@ add_project_link_arguments('-Wl,-z,now', language : 'c')
 
 # No executable stack
 add_project_link_arguments('-Wl,-z,noexecstack', language : 'c')
-
-# Only link to truly needed libraries
-add_project_link_arguments('-Wl,--as-needed', language : 'c')
 
 # Prepare distribution
 dist_script = find_program('addon/sanity_checks.sh', required: true)
