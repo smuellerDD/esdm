@@ -59,7 +59,7 @@ static bool signal_suspend(char *pidfile_path)
 	return kill(pid, SIGUSR1) == 0;
 }
 
-static bool signal_resume()
+static bool signal_resume(void)
 {
 	int ret;
 
@@ -77,7 +77,7 @@ static bool signal_resume()
 	return ret == 0;
 }
 
-static void usage()
+static void usage(void)
 {
 	fprintf(stderr,
 		"esdm-server-signal-helper [--resume] [--suspend] [--pid PIDFILE] [--help]\n");
