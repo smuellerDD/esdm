@@ -1,3 +1,6 @@
+Changes 1.0.2-prerelease:
+* hardening: enable -fzero-call-used-regs=used-gpr
+
 Changes 1.0.1:
 * enhancement/fix: add support for multiple ESDM RPC client connection initializations
 

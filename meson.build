@@ -11,7 +11,7 @@
 # Patchlevel Version: API / ABI compatible, no functional changes, no
 #		      enhancements, bug fixes only.
 project('esdm', 'c',
-	version: '1.0.1',
+	version: '1.0.2',
 	default_options: [
 		'warning_level=3',
 		'optimization=2',
@@ -28,6 +28,8 @@ project('esdm', 'c',
 # Generic project defines
 ################################################################################
 
+cc = meson.get_compiler('c')
+
 # Hardening Compiler flags
 add_global_arguments([ '-fstack-protector-strong',
 		       '-fwrapv',
@@ -40,10 +42,14 @@ add_global_arguments([ '-fstack-protector-strong',
 		       '-Wmissing-prototypes',
 		       '-Wswitch-enum',
 		       '-Wformat=2',
-                       # clang currently segfaults with it
-                       #'-fzero-call-used-regs=used-gpr',
                        ],
 		       language : 'c')
+
+# More hardening
+if cc.has_argument('-fzero-call-used-regs=used-gpr')
+	add_global_arguments([ '-fzero-call-used-regs=used-gpr' ],
+			     language: 'c')
+endif
 
 if get_option('optimization') != '0'
 	add_global_arguments([ '-D_FORTIFY_SOURCE=2' ], language: 'c')
@@ -78,7 +84,6 @@ meson.add_dist_script(dist_script, meson.project_version())
 # Project-specific defines
 ################################################################################
 
-cc = meson.get_compiler('c')
 dependencies = [ dependency('libprotobuf-c'), dependency('threads') ]
 
 pkgconfig = import('pkgconfig')
