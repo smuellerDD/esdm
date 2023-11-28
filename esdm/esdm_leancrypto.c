@@ -124,14 +124,14 @@ static ssize_t esdm_leancrypto_drbg_generate(void *drng, uint8_t *outbuf,
 static int esdm_leancrypto_drbg_alloc(void **drng, uint32_t sec_strength)
 {
 	struct lc_rng_ctx **ctx = (struct lc_rng_ctx **)drng;
-	int ret = lc_cshake256_drng_alloc(ctx);
+	int ret = lc_xdrbg256_drng_alloc(ctx);
 
 	(void)sec_strength;
 
 	if (ret)
 		return ret;
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "cSHAKE DRNG core allocated\n");
+	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "XDRBG256 core allocated\n");
 
 	return 0;
 }
