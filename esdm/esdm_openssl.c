@@ -28,7 +28,7 @@
 
 #include "esdm_crypto.h"
 #include "esdm_openssl.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 #define ESDM_OPENSSL_HASH (EVP_sha3_512())
@@ -45,8 +45,9 @@ static int esdm_openssl_hash_init(void *hash)
 	int ret = EVP_DigestInit(ctx, ESDM_OPENSSL_HASH);
 
 	if (ret != 1) {
-		logger(LOGGER_ERR, LOGGER_C_MD, "EVP_DigestInit() failed %s\n",
-		       ERR_error_string(ERR_get_error(), NULL));
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "EVP_DigestInit() failed %s\n",
+			    ERR_error_string(ERR_get_error(), NULL));
 		return -EFAULT;
 	}
 
@@ -60,9 +61,9 @@ static int esdm_openssl_hash_update(void *hash, const uint8_t *inbuf,
 	int ret = EVP_DigestUpdate(ctx, inbuf, inbuflen);
 
 	if (ret != 1) {
-		logger(LOGGER_ERR, LOGGER_C_MD,
-		       "EVP_DigestUpdate() failed %s\n",
-		       ERR_error_string(ERR_get_error(), NULL));
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "EVP_DigestUpdate() failed %s\n",
+			    ERR_error_string(ERR_get_error(), NULL));
 		return -EFAULT;
 	}
 
@@ -76,8 +77,9 @@ static int esdm_openssl_hash_final(void *hash, uint8_t *digest)
 	int ret = EVP_DigestFinal(ctx, digest, &maclen);
 
 	if (ret != 1) {
-		logger(LOGGER_ERR, LOGGER_C_MD, "EVP_DigestFinal() failed %s\n",
-		       ERR_error_string(ERR_get_error(), NULL));
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "EVP_DigestFinal() failed %s\n",
+			    ERR_error_string(ERR_get_error(), NULL));
 		return -EFAULT;
 	}
 
@@ -178,17 +180,17 @@ static int esdm_openssl_drbg_seed(void *drng, const uint8_t *inbuf,
 		params[2] = OSSL_PARAM_construct_end();
 		if (!EVP_RAND_instantiate(state->seed_source, state->strength,
 					  0, NULL, 0, params)) {
-			logger(LOGGER_ERR, LOGGER_C_MD,
-			       "Failed to instantiate seed source: %s\n",
-			       ERR_error_string(ERR_get_error(), NULL));
+			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+				    "Failed to instantiate seed source: %s\n",
+				    ERR_error_string(ERR_get_error(), NULL));
 			return -EFAULT;
 		}
 
 		if (!EVP_RAND_instantiate(state->drbg, state->strength, 0,
 					  (unsigned char *)"", 0, NULL)) {
-			logger(LOGGER_ERR, LOGGER_C_MD,
-			       "Failed to instantiate DRBG: %s\n",
-			       ERR_error_string(ERR_get_error(), NULL));
+			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+				    "Failed to instantiate DRBG: %s\n",
+				    ERR_error_string(ERR_get_error(), NULL));
 			return -EFAULT;
 		}
 
@@ -198,15 +200,15 @@ static int esdm_openssl_drbg_seed(void *drng, const uint8_t *inbuf,
 			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
 		params[1] = OSSL_PARAM_construct_end();
 		if (!EVP_RAND_CTX_set_params(state->seed_source, params)) {
-			logger(LOGGER_ERR, LOGGER_C_MD,
-			       "Failed to reseed seed source: %s\n",
-			       ERR_error_string(ERR_get_error(), NULL));
+			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+				    "Failed to reseed seed source: %s\n",
+				    ERR_error_string(ERR_get_error(), NULL));
 			return -EFAULT;
 		}
 
 		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, NULL, 0)) {
-			logger(LOGGER_ERR, LOGGER_C_MD,
-			       "Failed to reseed DRBG\n");
+			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+				    "Failed to reseed DRBG\n");
 			return -EFAULT;
 		}
 	}
@@ -221,8 +223,8 @@ static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
 
 	if (!EVP_RAND_generate(state->drbg, outbuf, outbuflen, state->strength,
 			       0, NULL, 0)) {
-		logger(LOGGER_ERR, LOGGER_C_MD,
-		       "Failed to generate random numbers\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Failed to generate random numbers\n");
 		return -EFAULT;
 	}
 
@@ -295,7 +297,7 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	}
 
 	*drng = state;
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core allocated\n");
 
 out:
 	if (rand)
@@ -312,7 +314,8 @@ static void esdm_openssl_drbg_dealloc(void *drng)
 
 	esdm_openssl_drbg_dealloc_internal(state);
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "DRBG core zeroized and freed\n");
 
 	free(state);
 }

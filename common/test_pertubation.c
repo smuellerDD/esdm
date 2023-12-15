@@ -26,7 +26,7 @@
 
 #include "esdm_rpc_service.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 #include "test_pertubation.h"
 
@@ -125,8 +125,9 @@ static int esdm_test_shm_status_create_shm(void)
 
 			if (esdm_test_shmid) {
 				esdm_test_shm_status_reset();
-				logger(LOGGER_DEBUG, LOGGER_C_ANY,
-				       "ESDM test shared memory segment created\n");
+				esdm_logger(
+					LOGGER_DEBUG, LOGGER_C_ANY,
+					"ESDM test shared memory segment created\n");
 			}
 		}
 		CKNULL_LOG(esdm_test_shmid, -errsv,
@@ -136,16 +137,17 @@ static int esdm_test_shm_status_create_shm(void)
 	tmp = shmat(esdm_test_shmid, NULL, 0);
 	if (tmp == (void *)-1) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Attaching to ESDM shared memory segment failed: %s\n",
-		       strerror(errsv));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ANY,
+			"Attaching to ESDM shared memory segment failed: %s\n",
+			strerror(errsv));
 		esdm_test_shm_status_delete_shm();
 		return -errsv;
 	}
 	esdm_test_shm_status = tmp;
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY,
-	       "ESDM test shared memory segment initialized\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+		    "ESDM test shared memory segment initialized\n");
 
 out:
 	return ret;

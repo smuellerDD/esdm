@@ -26,7 +26,7 @@
 
 #include "esdm_crypto.h"
 #include "esdm_gnutls.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 #define ESDM_GNUTLS_HASH GNUTLS_DIG_SHA512
 
@@ -183,7 +183,7 @@ static int esdm_gnutls_drbg_alloc(void **drng, uint32_t sec_strength)
 		return -ENOMEM;
 	*drng = drbg;
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "CTR DRBG core allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "CTR DRBG core allocated\n");
 
 	return 0;
 }
@@ -197,8 +197,8 @@ static void esdm_gnutls_drbg_dealloc(void *drng)
 
 	gnutls_memset(drbg, 0, sizeof(*drbg));
 	free(drbg);
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "CTR DRBG core zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "CTR DRBG core zeroized and freed\n");
 }
 
 static const char *esdm_gnutls_drbg_name(void)

@@ -24,7 +24,7 @@
 #include "esdm_crypto.h"
 #include "lc_hash_drbg_sha512.h"
 #include "esdm_builtin_hash_drbg.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 static int esdm_hash_drbg_seed(void *drng, const uint8_t *inbuf,
 			       size_t inbuflen)
@@ -52,7 +52,7 @@ static int esdm_hash_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (ret < 0)
 		return ret;
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Hash DRBG core allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Hash DRBG core allocated\n");
 
 	return ret;
 }
@@ -62,8 +62,8 @@ static void esdm_hash_drbg_dealloc(void *drng)
 	struct lc_drbg_state *drbg = (struct lc_drbg_state *)drng;
 
 	lc_drbg_zero_free(drbg);
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "Hash DRBG core zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "Hash DRBG core zeroized and freed\n");
 }
 
 static const char *esdm_hash_drbg_name(void)

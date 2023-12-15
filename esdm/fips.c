@@ -27,7 +27,7 @@
 #include "fips.h"
 #include "lc_hmac.h"
 #include "lc_sha256.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 #define FIPS_LOGGER_PREFIX "FIPS POST: "
 
@@ -107,9 +107,10 @@ bool fips_enabled(void)
 					fipsflag[0] = '0';
 					return 0;
 				} else {
-					logger(LOGGER_ERR, LOGGER_C_ANY,
-					       "FIPS: Cannot open fips_enabled file: %s\n",
-					       strerror(errno));
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_ANY,
+						"FIPS: Cannot open fips_enabled file: %s\n",
+						strerror(errno));
 					return -EIO;
 				}
 			}
@@ -117,8 +118,8 @@ bool fips_enabled(void)
 			n = fread((void *)fipsflag, 1, 1, fipsfile);
 			fclose(fipsfile);
 			if (n != 1) {
-				logger(LOGGER_ERR, LOGGER_C_ANY,
-				       "FIPS: Cannot read FIPS flag\n");
+				esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+					    "FIPS: Cannot read FIPS flag\n");
 				return false;
 			}
 		}

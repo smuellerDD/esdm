@@ -28,7 +28,7 @@
 
 #include "esdm_crypto.h"
 #include "esdm_botan.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 static const std::string DEFAULT_BOTAN_HASH{ "SHA-3(512)" };
@@ -53,8 +53,9 @@ static int esdm_botan_hash_init(void *hash)
 		ctx->hash_fn = Botan::HashFunction::create_or_throw(
 			DEFAULT_BOTAN_HASH);
 	} catch (const Botan::Lookup_Error &ex) {
-		logger(LOGGER_ERR, LOGGER_C_MD,
-		       "Botan::HashFunction::create() failed %s\n", ex.what());
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Botan::HashFunction::create() failed %s\n",
+			    ex.what());
 		return -EFAULT;
 	}
 
@@ -203,7 +204,7 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 	state->drbg.reset(new Botan::HMAC_DRBG("SHA-512"));
 
 	*drng = state;
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core allocated\n");
 
 	if (state->drbg == nullptr) {
 		esdm_botan_drbg_dealloc_internal(state);
@@ -220,7 +221,8 @@ static void esdm_botan_drbg_dealloc(void *drng)
 
 	esdm_botan_drbg_dealloc_internal(state);
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "DRBG core zeroized and freed\n");
 
 	delete state;
 }

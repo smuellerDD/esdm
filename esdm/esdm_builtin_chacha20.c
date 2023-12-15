@@ -26,7 +26,7 @@
 #include "lc_chacha20_drng.h"
 #include "lc_chacha20_private.h"
 #include "esdm_builtin_chacha20.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 static int esdm_chacha20_seed(void *drng, const uint8_t *inbuf, size_t inbuflen)
 {
@@ -51,15 +51,17 @@ static int esdm_chacha20_alloc(void **drng, uint32_t sec_strength)
 		(struct lc_chacha20_drng_ctx **)drng;
 
 	if (sec_strength > LC_CC20_KEY_SIZE) {
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Security strength of ChaCha20 DRNG (%u bits) lower than requested by ESDM (%u bits)\n",
-		       LC_CC20_KEY_SIZE * 8, sec_strength * 8);
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ANY,
+			"Security strength of ChaCha20 DRNG (%u bits) lower than requested by ESDM (%u bits)\n",
+			LC_CC20_KEY_SIZE * 8, sec_strength * 8);
 		return -EINVAL;
 	}
 	if (sec_strength < LC_CC20_KEY_SIZE)
-		logger(LOGGER_WARN, LOGGER_C_ANY,
-		       "Security strength of ChaCha20 DRNG (%u bits) higher than requested by ESDM (%u bits)\n",
-		       LC_CC20_KEY_SIZE * 8, sec_strength * 8);
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ANY,
+			"Security strength of ChaCha20 DRNG (%u bits) higher than requested by ESDM (%u bits)\n",
+			LC_CC20_KEY_SIZE * 8, sec_strength * 8);
 
 	return lc_cc20_drng_alloc(cc20);
 }
@@ -69,8 +71,8 @@ static void esdm_chacha20_dealloc(void *drng)
 	struct lc_chacha20_drng_ctx *cc20 = (struct lc_chacha20_drng_ctx *)drng;
 
 	lc_cc20_drng_zero_free(cc20);
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "ChaCha20 core zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "ChaCha20 core zeroized and freed\n");
 }
 
 static const char *esdm_chacha20_name(void)
