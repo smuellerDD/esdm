@@ -143,8 +143,8 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 	if (ent_bits && hash_cb->hash_update(shash, outbuf, ent_bits >> 3))
 		goto err;
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "pulled %u bits from CPU RNG entropy source\n", full_bits);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "pulled %u bits from CPU RNG entropy source\n", full_bits);
 	ent_bits = requested_bits;
 
 	/* Generate the compressed data to be returned to the caller */
@@ -195,8 +195,9 @@ static uint32_t esdm_cpu_multiplier(void)
 	esdm_cpu_data_multiplier = max_uint32(esdm_cpu_data_multiplier,
 					      ESDM_CPU_FULL_ENT_MULTIPLIER);
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "Setting CPU ES multiplier to %u\n",
-	       esdm_cpu_data_multiplier);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "Setting CPU ES multiplier to %u\n",
+		    esdm_cpu_data_multiplier);
 
 	return esdm_cpu_data_multiplier;
 }
@@ -217,8 +218,9 @@ static int esdm_cpu_switch_hash(struct esdm_drng __unused *drng,
 	 * the set CPU entropy rate.
 	 */
 	if (multiplier > 1 && digestsize < curr_ent_rate)
-		logger(LOGGER_WARN, LOGGER_C_ES,
-		       "Compression hash has smaller digest size than CPU entropy rate\n");
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ES,
+			"Compression hash has smaller digest size than CPU entropy rate\n");
 
 	esdm_config_es_cpu_entropy_rate_set(
 		min_uint32(digestsize, curr_ent_rate));
@@ -244,9 +246,9 @@ static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits,
 	}
 
 	ent_bits = esdm_cpu_entropylevel(ent_bits);
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "obtained %u bits of entropy from CPU RNG entropy source\n",
-	       ent_bits);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "obtained %u bits of entropy from CPU RNG entropy source\n",
+		    ent_bits);
 	eb_es->e_bits = ent_bits;
 }
 

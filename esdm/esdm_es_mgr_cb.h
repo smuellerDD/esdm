@@ -145,14 +145,15 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 				    unsigned int ioctl_cmd);
 
 /* Cap to maximum entropy that can ever be generated with given hash */
-#define esdm_cap_requested(__digestsize_bits, __requested_bits)                                          \
-	do {                                                                                             \
-		if (__digestsize_bits < __requested_bits) {                                              \
-			logger(LOGGER_DEBUG, LOGGER_C_ANY,                                               \
-			       "Cannot satisfy requested entropy %u due to insufficient hash size %u\n", \
-			       __requested_bits, __digestsize_bits);                                     \
-			__requested_bits = __digestsize_bits;                                            \
-		}                                                                                        \
+#define esdm_cap_requested(__digestsize_bits, __requested_bits)                                           \
+	do {                                                                                              \
+		if (__digestsize_bits < __requested_bits) {                                               \
+			esdm_logger(                                                                      \
+				LOGGER_DEBUG, LOGGER_C_ANY,                                               \
+				"Cannot satisfy requested entropy %u due to insufficient hash size %u\n", \
+				__requested_bits, __digestsize_bits);                                     \
+			__requested_bits = __digestsize_bits;                                             \
+		}                                                                                         \
 	} while (0)
 
 /* Kernel entropy sources */

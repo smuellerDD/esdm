@@ -23,7 +23,7 @@
 #include "esdm_rpc_client_helper.h"
 #include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_service.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ptr_err.h"
 #include "ret_checkers.h"
 #include "visibility.h"

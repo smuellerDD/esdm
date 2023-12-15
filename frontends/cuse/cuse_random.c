@@ -27,7 +27,7 @@
 #include "cuse_device.h"
 #include "cuse_helper.h"
 #include "esdm_rpc_service.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 static int random_fd = -1;
@@ -85,8 +85,8 @@ int main(int argc, char *argv[])
 
 	if (random_fd == -1) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Cannot open /dev/random: %s\n", strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Cannot open /dev/random: %s\n", strerror(errsv));
 		return errsv;
 	}
 

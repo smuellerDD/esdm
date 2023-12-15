@@ -25,7 +25,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "logger.h"
+#include "esdm_logger.h"
 #include "privileges.h"
 #include "visibility.h"
 
@@ -42,8 +42,8 @@ int drop_privileges_transient(const char *user)
 	if (gid == 0 || uid == 0) {
 		pwd = getpwnam(user);
 		if (pwd == NULL) {
-			logger(LOGGER_ERR, LOGGER_C_ANY, "User %s unknown\n",
-			       user);
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				    "User %s unknown\n", user);
 			return -ENOENT;
 		}
 
@@ -52,31 +52,32 @@ int drop_privileges_transient(const char *user)
 
 		/* Drop all supplemental groups */
 		if (setgroups(0, NULL) == -1) {
-			logger(LOGGER_ERR, LOGGER_C_ANY,
-			       "Cannot clear supplemental groups: %s\n",
-			       strerror(errno));
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				    "Cannot clear supplemental groups: %s\n",
+				    strerror(errno));
 		}
 	}
 
 	/* Drop privileged group */
 	if (setegid(gid) == -1) {
 		ret = -errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot drop to unprivileged group: %s\n",
-		       strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot drop to unprivileged group: %s\n",
+			    strerror(errno));
 	}
 
 	/* Drop privileged user */
 	if (seteuid(uid) == -1) {
 		ret = -errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot drop to unprivileged user: %s\n",
-		       strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot drop to unprivileged user: %s\n",
+			    strerror(errno));
 	}
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "Successfully dropped privileges to user %s (UID %u, GID %u)\n",
-	       user, uid, gid);
+	esdm_logger(
+		LOGGER_VERBOSE, LOGGER_C_ANY,
+		"Successfully dropped privileges to user %s (UID %u, GID %u)\n",
+		user, uid, gid);
 
 	return ret;
 }
@@ -87,8 +88,9 @@ int raise_privilege_transient(uid_t uid, gid_t gid)
 	if (setegid(gid) == -1) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot raise to group %u: %s\n", gid, strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot raise to group %u: %s\n", gid,
+			    strerror(errsv));
 		return -errsv;
 	}
 
@@ -96,13 +98,15 @@ int raise_privilege_transient(uid_t uid, gid_t gid)
 	if (seteuid(uid) == -1) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot drop to user %u: %s\n",
-		       uid, strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot drop to user %u: %s\n", uid,
+			    strerror(errsv));
 		return -errsv;
 	}
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "Successfully raised privileges to UID %u, GID %u\n", uid, gid);
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "Successfully raised privileges to UID %u, GID %u\n", uid,
+		    gid);
 
 	return 0;
 }

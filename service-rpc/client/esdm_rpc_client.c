@@ -35,7 +35,7 @@
 #include "esdm_rpc_protocol.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "math_helper.h"
 #include "memset_secure.h"
 #include "ptr_err.h"
@@ -93,16 +93,17 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		errsv = errno;
 
 		if (errsv == ENOENT) {
-			logger(LOGGER_DEBUG, LOGGER_C_RPC,
-			       "ESDM server interface %s not available\n",
-			       socketname);
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+				    "ESDM server interface %s not available\n",
+				    socketname);
 		}
 
 		return -errsv;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-	       "Attempting to access ESDM server interface %s\n", socketname);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+		    "Attempting to access ESDM server interface %s\n",
+		    socketname);
 
 	/* Connect to the Unix domain socket */
 	addr.sun_family = AF_UNIX;
@@ -111,8 +112,8 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_RPC, "Error creating socket: %s\n",
-		       strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Error creating socket: %s\n", strerror(errsv));
 		return -errsv;
 	}
 
@@ -123,9 +124,9 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		       sizeof(tv)) < 0) {
 		errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "Error setting timeout on socket: %s\n",
-		       strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Error setting timeout on socket: %s\n",
+			    strerror(errsv));
 		return -errsv;
 	}
 
@@ -138,9 +139,9 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 			    sizeof(addr)) < 0) {
 			errsv = errno;
 
-			logger(LOGGER_ERR, LOGGER_C_RPC,
-			       "Error connecting socket: %s\n",
-			       strerror(errsv));
+			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+				    "Error connecting socket: %s\n",
+				    strerror(errsv));
 			attempts++;
 		} else {
 			errsv = 0;
@@ -149,9 +150,9 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR));
 
 	if (errsv) {
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "Connection attempt using socket %s failed\n",
-		       socketname);
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Connection attempt using socket %s failed\n",
+			    socketname);
 	}
 
 	return -errsv;
@@ -188,8 +189,9 @@ static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 			}
 
 			if (errsv == EPIPE) {
-				logger(LOGGER_DEBUG, LOGGER_C_RPC,
-				       "Connection to server needs to be re-established\n");
+				esdm_logger(
+					LOGGER_DEBUG, LOGGER_C_RPC,
+					"Connection to server needs to be re-established\n");
 
 				int rc = esdm_connect_proto_service(rpc_conn);
 				if (rc)
@@ -197,9 +199,10 @@ static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 				continue;
 			}
 
-			logger(LOGGER_ERR, LOGGER_C_RPC,
-			       "Writting of data to file descriptor %d failed: %s\n",
-			       rpc_conn->fd, strerror(errsv));
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_RPC,
+				"Writting of data to file descriptor %d failed: %s\n",
+				rpc_conn->fd, strerror(errsv));
 
 			return -errsv;
 		}
@@ -211,7 +214,7 @@ static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 		len -= (size_t)ret;
 	} while (written < len);
 
-	logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
+	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
 	return 0;
 }
@@ -223,9 +226,9 @@ static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 	int ret = esdm_rpc_client_write_data(buf->rpc_conn, data, len);
 
 	if (ret < 0)
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "Submission of payload data failed with error %d\n",
-		       ret);
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Submission of payload data failed with error %d\n",
+			    ret);
 }
 
 static int esdm_rpc_client_pack(const ProtobufCMessage *message,
@@ -245,10 +248,11 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 	cs_header.message_length = le_bswap32(message_length);
 	cs_header.request_id = le_bswap32(0);
 
-	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-	       "Client sending: message length %u, message index %u, request ID %u\n",
-	       cs_header.message_length, cs_header.method_index,
-	       cs_header.request_id);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_RPC,
+		"Client sending: message length %u, message index %u, request ID %u\n",
+		cs_header.message_length, cs_header.method_index,
+		cs_header.request_id);
 
 	CKINT_LOG(esdm_rpc_client_write_data(rpc_conn, (uint8_t *)&cs_header,
 					     sizeof(cs_header)),
@@ -256,8 +260,8 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 
 	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
 	    message_length) {
-		logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-		       "Short write of data to file descriptor \n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+			    "Short write of data to file descriptor \n");
 		ret = -EFAULT;
 	}
 
@@ -320,8 +324,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			}
 
 			ret = -errno;
-			logger(LOGGER_DEBUG, LOGGER_C_RPC, "Read failed: %s\n",
-			       strerror(errno));
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+				    "Read failed: %s\n", strerror(errno));
 			break;
 		}
 
@@ -347,10 +351,11 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			header->method_index = le_bswap32(header->method_index);
 			header->request_id = le_bswap32(header->request_id);
 
-			logger(LOGGER_DEBUG, LOGGER_C_RPC,
-			       "Client received: server status %u, message length %u, message index %u, request ID %u\n",
-			       header->status_code, header->message_length,
-			       header->method_index, header->request_id);
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_RPC,
+				"Client received: server status %u, message length %u, message index %u, request ID %u\n",
+				header->status_code, header->message_length,
+				header->method_index, header->request_id);
 
 			/*
 			 * Truncate the buffer length if client specified
@@ -393,26 +398,28 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			closure(msg, closure_data);
 			protobuf_c_message_free_unpacked(
 				msg, &esdm_rpc_client_allocator);
-			logger(LOGGER_DEBUG, LOGGER_C_RPC,
-			       "Data with length %u send to client closure handler\n",
-			       header->message_length);
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_RPC,
+				"Data with length %u send to client closure handler\n",
+				header->message_length);
 		} else {
-			logger(LOGGER_ERR, LOGGER_C_RPC,
-			       "Response message not found\n");
+			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+				    "Response message not found\n");
 			msg = ERR_PTR(-EFAULT);
 			closure(msg, closure_data);
 		}
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
 
-		logger(LOGGER_VERBOSE, LOGGER_C_RPC, "Request interrupted\n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+			    "Request interrupted\n");
 		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
 	} else {
 		ProtobufCMessage *msg;
 
-		logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-		       "Server returned with an error\n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+			    "Server returned with an error\n");
 		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
 	}
@@ -623,9 +630,10 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 	*rpc_conn = tmp;
 	*num_conn = nodes;
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY,
-	       "Service supporting %u parallel requests for socket %s enabled\n",
-	       nodes, socketname);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_ANY,
+		"Service supporting %u parallel requests for socket %s enabled\n",
+		nodes, socketname);
 
 out:
 	if (ret) {

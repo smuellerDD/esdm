@@ -30,7 +30,7 @@
 #include "atomic_bool.h"
 #include "bool.h"
 #include "config.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "ret_checkers.h"
@@ -169,9 +169,10 @@ int thread_init(uint32_t groups)
 	int ret;
 
 	if (groups > (THREADING_MAX_THREADS)) {
-		logger(LOGGER_ERR, LOGGER_C_THREADING,
-		       "Number of threads (%u) is less than the number of requested thread groups (%u)\n",
-		       THREADING_MAX_THREADS, groups);
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_THREADING,
+			"Number of threads (%u) is less than the number of requested thread groups (%u)\n",
+			THREADING_MAX_THREADS, groups);
 		return -EINVAL;
 	}
 
@@ -197,14 +198,14 @@ int thread_init(uint32_t groups)
 	threads_groups = groups;
 	threads_per_threadgroup = THREADING_MAX_THREADS / threads_groups;
 
-	logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-	       "Initialized threading support for %u threads\n",
-	       THREADING_MAX_THREADS);
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+		    "Initialized threading support for %u threads\n",
+		    THREADING_MAX_THREADS);
 	if (threads_per_threadgroup * threads_groups < THREADING_MAX_THREADS) {
-		logger(LOGGER_WARN, LOGGER_C_THREADING,
-		       "%u thread slots will never be used\n",
-		       THREADING_MAX_THREADS -
-			       (threads_per_threadgroup * threads_groups));
+		esdm_logger(LOGGER_WARN, LOGGER_C_THREADING,
+			    "%u thread slots will never be used\n",
+			    THREADING_MAX_THREADS -
+				    (threads_per_threadgroup * threads_groups));
 	}
 
 out:
@@ -254,8 +255,8 @@ static void *thread_worker(void *arg)
 			/* Work to do, execute */
 			tctx->ret_ancestor = tctx->start_routine(tctx->data);
 			thread_cleanup(tctx);
-			logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-			       "Thread %u completed\n", tctx->thread_num);
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+				    "Thread %u completed\n", tctx->thread_num);
 			mutex_w_unlock(&tctx->inuse);
 			pthread_cond_broadcast(&thread_wait_cv);
 		} else {
@@ -329,9 +330,10 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 	unsigned int special_slot = thread_get_special_slot(thread_group);
 
 	if (threads_groups < thread_group && !special_slot) {
-		logger(LOGGER_ERR, LOGGER_C_THREADING,
-		       "undefined thread group requested (%u, max thread group is %u)\n",
-		       thread_group, threads_groups);
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_THREADING,
+			"undefined thread group requested (%u, max thread group is %u)\n",
+			thread_group, threads_groups);
 		return -EINVAL;
 	}
 
@@ -381,9 +383,10 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 				if (ret)
 					return ret;
 
-				logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-				       "Thread %u for thread group %u allocated\n",
-				       i, thread_group);
+				esdm_logger(
+					LOGGER_VERBOSE, LOGGER_C_THREADING,
+					"Thread %u for thread group %u allocated\n",
+					i, thread_group);
 			}
 
 			/* Catch the return code of the ancestor thread */
@@ -394,9 +397,9 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			 * Use the thread from the thread pool and schedule
 			 * job.
 			 */
-			logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-			       "Thread %u for thread group %u assigned\n", i,
-			       thread_group);
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+				    "Thread %u for thread group %u assigned\n",
+				    i, thread_group);
 			threads[i].data = tdata;
 			threads[i].start_routine = start_routine;
 			threads[i].parent = pthread_self();
@@ -532,8 +535,8 @@ static int thread_wait_all(bool system_threads)
 			pthread_join(threads[i].thread_id, NULL);
 			ret |= threads[i].ret_ancestor;
 			thread_cleanup_full(&threads[i]);
-			logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-			       "Thread %u terminated\n", i);
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+				    "Thread %u terminated\n", i);
 		}
 	}
 
@@ -568,8 +571,8 @@ static void thread_cancel(bool system_threads)
 			pthread_cancel(threads[i].thread_id);
 			pthread_join(threads[i].thread_id, NULL);
 			thread_cleanup_full(&threads[i]);
-			logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-			       "Thread %u killed\n", i);
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+				    "Thread %u killed\n", i);
 		}
 	}
 

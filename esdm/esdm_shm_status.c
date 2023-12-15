@@ -35,7 +35,7 @@
 #include "esdm_rpc_service.h"
 #include "esdm_shm_status.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 static struct esdm_shm_status *esdm_shm_status = NULL;
@@ -63,7 +63,8 @@ static void _esdm_shm_status_up(sem_t *sem)
 		return;
 
 	if (sem_post(sem))
-		logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot unlock semaphore\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot unlock semaphore\n");
 }
 
 static void esdm_shm_status_up(void)
@@ -118,15 +119,15 @@ static void esdm_shm_status_server_exit(void)
 static void esdm_shm_status_signal_suspend(int sig)
 {
 	(void)sig;
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Suspend signal received\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Suspend signal received\n");
 
 	esdm_shm_status_set_suspend();
 }
 
 static void esdm_shm_status_install_signal_suspend(void)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-	       "Install suspend signal handler\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		    "Install suspend signal handler\n");
 	signal(SIGUSR1, esdm_shm_status_signal_suspend);
 }
 
@@ -148,7 +149,7 @@ static void _esdm_shm_status_delete_sem(sem_t **sem)
 #if 0
 	if (sem_unlink(ESDM_SEM_NAME)) {
 		if (errno != ENOENT) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 			       "Cannot unlink semaphore: %s\n",
 			       strerror(errno));
 		}
@@ -181,17 +182,18 @@ static int esdm_shm_status_create_sem(const char *semname, sem_t **sem)
 		}
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY,
-	       "ESDM change indicator semaphore %s initialized\n", semname);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+		    "ESDM change indicator semaphore %s initialized\n",
+		    semname);
 	*sem = tmp;
 
 	return 0;
 
 err:
 	errsv = errno;
-	logger(LOGGER_ERR, LOGGER_C_ANY,
-	       "ESDM change indicator semaphore creation failed: %s\n",
-	       strerror(errsv));
+	esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+		    "ESDM change indicator semaphore creation failed: %s\n",
+		    strerror(errsv));
 	return -errsv;
 }
 
@@ -233,12 +235,14 @@ static int esdm_shm_status_create_shm(void)
 			shmget(key, 1, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 		if (esdm_shmid >= 0) {
 			if (shmctl(esdm_shmid, IPC_RMID, NULL) < 0) {
-				logger(LOGGER_ERR, LOGGER_C_SERVER,
-				       "ESDM shared memory segment cannot be deleted: %s\n",
-				       strerror(errno));
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_SERVER,
+					"ESDM shared memory segment cannot be deleted: %s\n",
+					strerror(errno));
 			} else {
-				logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-				       "ESDM shared memory segment deleted\n");
+				esdm_logger(
+					LOGGER_DEBUG, LOGGER_C_SERVER,
+					"ESDM shared memory segment deleted\n");
 
 				/* Create SHM with the next code block. */
 				esdm_shmid = -1;
@@ -253,9 +257,10 @@ static int esdm_shm_status_create_shm(void)
 					    S_IROTH);
 		if (esdm_shmid < 0) {
 			errsv = errno;
-			logger(LOGGER_ERR, LOGGER_C_ANY,
-			       "ESDM shared memory segment creation failed: %s\n",
-			       strerror(errsv));
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_ANY,
+				"ESDM shared memory segment creation failed: %s\n",
+				strerror(errsv));
 			return -errsv;
 		}
 	}
@@ -263,17 +268,18 @@ static int esdm_shm_status_create_shm(void)
 	tmp = shmat(esdm_shmid, NULL, 0);
 	if (tmp == (void *)-1) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Attaching to ESDM shared memory segment failed: %s\n",
-		       strerror(errsv));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ANY,
+			"Attaching to ESDM shared memory segment failed: %s\n",
+			strerror(errsv));
 		esdm_shm_status_delete_shm();
 		return -errsv;
 	}
 	esdm_shm_status = tmp;
 	esdm_shm_status->version = ESDM_SHM_STATUS_VERSION;
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY,
-	       "ESDM shared memory segment initialized\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+		    "ESDM shared memory segment initialized\n");
 
 	return 0;
 }

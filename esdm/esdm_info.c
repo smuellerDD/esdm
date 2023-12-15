@@ -27,7 +27,7 @@
 #include "esdm_es_mgr.h"
 #include "esdm_es_sched.h"
 #include "esdm_info.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "test_pertubation.h"
 #include "visibility.h"
 
@@ -59,8 +59,8 @@ void esdm_status(char *buf, size_t buflen)
 	uint32_t i;
 
 	if (!buf) {
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Status information cannot be created\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Status information cannot be created\n");
 		return;
 	}
 

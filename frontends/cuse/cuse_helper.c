@@ -29,7 +29,7 @@
 #include "cuse_helper.h"
 #include "privileges.h"
 #include "selinux.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 int esdm_cuse_file_name(char *outfile, size_t outfilelen, const char *name)
 {
@@ -74,9 +74,10 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 		int errsv = errno, fd;
 
 		if (errsv != ENOENT) {
-			logger(LOGGER_ERR, LOGGER_C_CUSE,
-			       "Failed to find destination of bind mount %s: %s\n",
-			       mount_dst, strerror(errsv));
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_CUSE,
+				"Failed to find destination of bind mount %s: %s\n",
+				mount_dst, strerror(errsv));
 			return -errsv;
 		}
 
@@ -84,9 +85,10 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 		if (fd < 0) {
 			errsv = errno;
 
-			logger(LOGGER_ERR, LOGGER_C_CUSE,
-			       "Failed to create destination of bind mount %s: %s\n",
-			       mount_dst, strerror(errsv));
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_CUSE,
+				"Failed to create destination of bind mount %s: %s\n",
+				mount_dst, strerror(errsv));
 			return -errsv;
 		}
 
@@ -97,9 +99,9 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 	if (mount(mount_src, mount_dst, type, MS_BIND, NULL) < 0) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Failed to created bind mount from %s to %s: %s\n",
-		       mount_src, mount_dst, strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Failed to created bind mount from %s to %s: %s\n",
+			    mount_src, mount_dst, strerror(errsv));
 		return -errsv;
 	}
 
@@ -107,14 +109,14 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 		int errsv = errno;
 
 		umount(mount_dst);
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Failed properly relabel %s\n", mount_dst);
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Failed properly relabel %s\n", mount_dst);
 		return -errsv;
 	}
 
-	logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-	       "Successfully created bind mount from %s to %s\n", mount_src,
-	       mount_dst);
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
+		    "Successfully created bind mount from %s to %s\n",
+		    mount_src, mount_dst);
 	return 0;
 }
 
@@ -133,8 +135,9 @@ int esdm_cuse_bind_unmount(char **mount_src, char **mount_dst)
 
 	ret = raise_privilege_transient(0, 0);
 	if (ret < 0) {
-		logger(LOGGER_WARN, LOGGER_C_CUSE,
-		       "Failed to raise privilege for unmount bind mount\n");
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_CUSE,
+			"Failed to raise privilege for unmount bind mount\n");
 		return ret;
 	}
 
@@ -155,12 +158,12 @@ int esdm_cuse_bind_unmount(char **mount_src, char **mount_dst)
 
 	if (ret < 0) {
 		errsv = errno;
-		logger(LOGGER_WARN, LOGGER_C_CUSE,
-		       "Failed to remove bind mount from %s\n", m_d);
+		esdm_logger(LOGGER_WARN, LOGGER_C_CUSE,
+			    "Failed to remove bind mount from %s\n", m_d);
 		ret = -errsv;
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-		       "Successfully removed bind mount from %s\n", m_d);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+			    "Successfully removed bind mount from %s\n", m_d);
 	}
 
 	if (cuse_unlink)

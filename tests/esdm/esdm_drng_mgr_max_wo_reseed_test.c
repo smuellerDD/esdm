@@ -30,7 +30,7 @@
 #include "esdm_config.h"
 #include "esdm_config_internal.h"
 #include "esdm_es_mgr.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 #ifdef ESDM_TESTMODE
@@ -40,7 +40,7 @@ static int esdm_drng_mgr_max_wo_reseed_test(bool success)
 	unsigned int i;
 	int ret;
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
 	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 	esdm_config_es_jent_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);

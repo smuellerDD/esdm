@@ -35,7 +35,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "selinux.h"
@@ -78,11 +78,12 @@ static bool esdm_proc_client_privileged(void)
 	 * MUST NOT run in a PID or user namespace.
 	 */
 	if (fuse_get_context()->uid == 0) {
-		logger(LOGGER_DEBUG, LOGGER_C_CUSE, "PROC caller privileged\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+			    "PROC caller privileged\n");
 		return true;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "PROC caller unprivileged\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "PROC caller unprivileged\n");
 	return false;
 }
 
@@ -141,7 +142,7 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	file->valdata[ESDM_PROC_UUID_LEN - 2] = '\n';
 	file->valdata[ESDM_PROC_UUID_LEN - 1] = '\0';
 	file->vallen = ESDM_PROC_UUID_LEN - 1;
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "uuid: %s\n", file->valdata);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "uuid: %s\n", file->valdata);
 
 	return 0;
 }
@@ -321,9 +322,10 @@ static int esdm_proc_pre_init(void)
 
 	fd = open("/proc/sys/kernel/random/boot_id", O_RDONLY);
 	if (fd < 0) {
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Cannot read boot_id (%s) - generating a new boot_id\n",
-		       strerror(errno));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_CUSE,
+			"Cannot read boot_id (%s) - generating a new boot_id\n",
+			strerror(errno));
 		esdm_proc_uuid(file);
 	} else {
 		do {
@@ -336,13 +338,15 @@ static int esdm_proc_pre_init(void)
 		file->vallen = ESDM_PROC_UUID_LEN - 1;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "boot_id: %s\n", file->valdata);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "boot_id: %s\n",
+		    file->valdata);
 
 	if (esdm_rpcc_status(buf, sizeof(buf))) {
-		logger(LOGGER_WARN, LOGGER_C_CUSE,
-		       "PROC client started but ESDM server not available!\n");
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_CUSE,
+			"PROC client started but ESDM server not available!\n");
 	} else {
-		logger_status(
+		esdm_logger_status(
 			LOGGER_C_CUSE,
 			"PROC client started with ESDM server properties:\n%s\n",
 			buf);
@@ -385,8 +389,8 @@ static int esdm_proc_getattr(const char *path, struct stat *stbuf,
 		for (i = 0; i < ARRAY_SIZE(esdm_proc_files); i++) {
 			struct esdm_proc_file *file = &esdm_proc_files[i];
 
-			logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-			       "Getattr for file %s\n", file->filename);
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+				    "Getattr for file %s\n", file->filename);
 			/* pathlen is one longer than file name due to / */
 			if (pathlen == file->filename_len &&
 			    !strncmp(path + 1, file->filename,
@@ -599,7 +603,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	logger_set_verbosity(esdm_proc_options.verbosity);
+	esdm_logger_set_verbosity(esdm_proc_options.verbosity);
 
 	/*
 	 * When --help is specified, first print our own file-system

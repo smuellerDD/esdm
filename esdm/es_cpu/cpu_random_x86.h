@@ -23,7 +23,7 @@
 #if defined(__x86_64__) || defined(__i386__)
 
 #include "bool.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 #define ESDM_CPU_ES_IMPLEMENTED
 
@@ -93,9 +93,9 @@ static inline bool cpu_es_x86_rdseed(unsigned long *buf)
 
 	if (rdseed_avail == -1) {
 		rdseed_avail = rdseed_available();
-		logger(LOGGER_DEBUG, LOGGER_C_ANY,
-		       "RDSEED support %sdetected\n",
-		       rdseed_avail ? "" : "not ");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "RDSEED support %sdetected\n",
+			    rdseed_avail ? "" : "not ");
 	}
 	if (!rdseed_avail)
 		return false;
@@ -116,9 +116,9 @@ static inline bool cpu_es_x86_rdrand(unsigned long *buf)
 
 	if (rdrand_avail == -1) {
 		rdrand_avail = rdrand_available();
-		logger(LOGGER_DEBUG, LOGGER_C_ANY,
-		       "RDRAND support %sdetected\n",
-		       rdrand_avail ? "" : "not ");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "RDRAND support %sdetected\n",
+			    rdrand_avail ? "" : "not ");
 	}
 	if (!rdrand_avail)
 		return false;

@@ -20,7 +20,7 @@
 #ifndef RET_CHECKERS_H
 #define RET_CHECKERS_H
 
-#include "logger.h"
+#include "esdm_logger.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +37,7 @@ extern "C" {
 	{                                                                      \
 		ret = x;                                                       \
 		if (ret < 0) {                                                 \
-			logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);         \
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);    \
 			goto out;                                              \
 		}                                                              \
 	}
@@ -53,7 +53,7 @@ extern "C" {
 #define CKNULL_LOG(v, r, ...)                                                  \
 	{                                                                      \
 		if (!v) {                                                      \
-			logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);         \
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);    \
 			ret = r;                                               \
 			goto out;                                              \
 		}                                                              \

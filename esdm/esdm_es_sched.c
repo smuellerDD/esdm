@@ -30,7 +30,7 @@
 #include "esdm_es_mgr.h"
 #include "esdm_es_sched.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 #include "test_pertubation.h"
 
@@ -131,35 +131,38 @@ static int esdm_sched_initialize(void)
 		fd = open("/dev/esdm_es", O_RDONLY);
 
 	if (fd < 0) {
-		logger(esdm_config_es_sched_retry() ? LOGGER_VERBOSE :
-						      LOGGER_WARN,
-		       LOGGER_C_ES,
-		       "Disabling scheduler-based entropy source which is not present in kernel\n") return 0;
+		esdm_logger(
+			esdm_config_es_sched_retry() ? LOGGER_VERBOSE :
+						       LOGGER_WARN,
+			LOGGER_C_ES,
+			"Disabling scheduler-based entropy source which is not present in kernel\n") return 0;
 	}
 
 	ret = ioctl(fd, ESDM_SCHED_ENT_BUF_SIZE, &status);
 	if (ret < 0) {
-		logger(LOGGER_ERR, LOGGER_C_ES,
-		       "Failure to obtain scheduler entropy source status from kernel\n");
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"Failure to obtain scheduler entropy source status from kernel\n");
 		close(fd);
 		return -EAGAIN;
 	}
 
 	if (status[0] == sizeof(struct entropy_es)) {
 		esdm_sched_data_size = esdm_es_data_equal;
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
-		       "Kernel entropy buffer has equal size as ESDM\n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "Kernel entropy buffer has equal size as ESDM\n");
 	} else if (status[0] == sizeof(struct entropy_es_small)) {
 		esdm_sched_data_size = esdm_es_data_small;
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
-		       "Kernel entropy buffer has smaller size as ESDM - Scheduler ES alone will never be able to fully seed the ESDM\n");
+		esdm_logger(
+			LOGGER_VERBOSE, LOGGER_C_ES,
+			"Kernel entropy buffer has smaller size as ESDM - Scheduler ES alone will never be able to fully seed the ESDM\n");
 	} else if (status[0] == sizeof(struct entropy_es_large)) {
 		esdm_sched_data_size = esdm_es_data_large;
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
-		       "Kernel entropy buffer has larger size as ESDM\n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "Kernel entropy buffer has larger size as ESDM\n");
 	} else {
-		logger(LOGGER_ERR, LOGGER_C_ES,
-		       "Kernel entropy buffer has different size\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "Kernel entropy buffer has different size\n");
 		close(fd);
 		return -EFAULT;
 	}
@@ -176,7 +179,7 @@ static int esdm_sched_seed_monitor(void)
 	if (esdm_pool_all_nodes_seeded_get())
 		return 0;
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "Scheduler ES monitor check\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "Scheduler ES monitor check\n");
 
 	if (esdm_config_es_sched_retry() && esdm_sched_entropy_fd < 0) {
 		int ret = esdm_sched_initialize();
@@ -187,8 +190,9 @@ static int esdm_sched_seed_monitor(void)
 
 		if (esdm_sched_entropy_fd < 0) {
 			if (getuid()) {
-				logger(LOGGER_WARN, LOGGER_C_ES,
-				       "Scheduler ES cannot initialize as privileges are missing!\n");
+				esdm_logger(
+					LOGGER_WARN, LOGGER_C_ES,
+					"Scheduler ES cannot initialize as privileges are missing!\n");
 				return 0;
 			}
 
@@ -205,8 +209,8 @@ static int esdm_sched_seed_monitor(void)
 		return 0;
 
 	if (ent >= esdm_config_es_sched_entropy_rate()) {
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-		       "Full entropy of scheduler ES detected\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "Full entropy of scheduler ES detected\n");
 		esdm_es_add_entropy();
 		esdm_test_seed_entropy(ent);
 	}
@@ -290,8 +294,9 @@ static void esdm_sched_reset(void)
 		int ret = ioctl(esdm_sched_entropy_fd, ESDM_SCHED_CONF, reset);
 
 		if (ret < 0) {
-			logger(LOGGER_ERR, LOGGER_C_ES,
-			       "Reset of scheduler entropy source failed\n");
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_ES,
+				"Reset of scheduler entropy source failed\n");
 		}
 	}
 }

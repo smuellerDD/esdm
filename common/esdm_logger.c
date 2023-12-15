@@ -30,22 +30,22 @@
 #include "build_bug_on.h"
 #include "constructor.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "term_colors.h"
 #include "threading_support.h"
 #include "visibility.h"
 
-static enum logger_verbosity logger_verbosity_level = LOGGER_STATUS;
-static enum logger_class logger_class_level = LOGGER_C_ANY;
+static enum esdm_logger_verbosity esdm_logger_verbosity_level = LOGGER_STATUS;
+static enum esdm_logger_class esdm_logger_class_level = LOGGER_C_ANY;
 
-struct logger_class_map {
-	const enum logger_class class;
+struct esdm_logger_class_map {
+	const enum esdm_logger_class class;
 	const char *logdata;
 };
 
-static FILE *logger_stream = NULL;
+static FILE *esdm_logger_stream = NULL;
 
-static const struct logger_class_map logger_class_mapping[] = {
+static const struct esdm_logger_class_map esdm_logger_class_mapping[] = {
 	{ LOGGER_C_ANY, NULL },
 	{ LOGGER_C_THREADING, "Threading support" },
 	{ LOGGER_C_MD, "Message digest" },
@@ -56,8 +56,8 @@ static const struct logger_class_map logger_class_mapping[] = {
 	{ LOGGER_C_SERVER, "ESDM server" },
 };
 
-static void logger_severity(enum logger_verbosity severity, char *sev,
-			    const unsigned int sevlen)
+static void esdm_logger_severity(enum esdm_logger_verbosity severity, char *sev,
+				 const unsigned int sevlen)
 {
 	switch (severity) {
 	case LOGGER_DEBUG2:
@@ -85,17 +85,19 @@ static void logger_severity(enum logger_verbosity severity, char *sev,
 	}
 }
 
-static int logger_class_idx(enum logger_class class, unsigned int *idx)
+static int esdm_logger_class_idx(enum esdm_logger_class class,
+				 unsigned int *idx)
 {
 	unsigned int i;
 
 	*idx = 0;
 
-	if (logger_class_level != LOGGER_C_ANY && logger_class_level != class)
+	if (esdm_logger_class_level != LOGGER_C_ANY &&
+	    esdm_logger_class_level != class)
 		return -EOPNOTSUPP;
 
-	for (i = 0; i < ARRAY_SIZE(logger_class_mapping); i++) {
-		if (class == logger_class_mapping[i].class) {
+	for (i = 0; i < ARRAY_SIZE(esdm_logger_class_mapping); i++) {
+		if (class == esdm_logger_class_mapping[i].class) {
 			*idx = i;
 
 			return 0;
@@ -105,17 +107,18 @@ static int logger_class_idx(enum logger_class class, unsigned int *idx)
 	return -EINVAL;
 }
 
-static int logger_class(const enum logger_class class, char *s,
-			const unsigned int slen)
+static int esdm_logger_class(const enum esdm_logger_class class, char *s,
+			     const unsigned int slen)
 {
 	unsigned int idx;
-	int ret = logger_class_idx(class, &idx);
+	int ret = esdm_logger_class_idx(class, &idx);
 
 	if (ret)
 		return ret;
 
-	if (logger_class_mapping[idx].logdata)
-		snprintf(s, slen, " - %s", logger_class_mapping[idx].logdata);
+	if (esdm_logger_class_mapping[idx].logdata)
+		snprintf(s, slen, " - %s",
+			 esdm_logger_class_mapping[idx].logdata);
 	else
 		s[0] = '\0';
 
@@ -123,9 +126,9 @@ static int logger_class(const enum logger_class class, char *s,
 }
 
 DSO_PUBLIC
-void _logger(const enum logger_verbosity severity,
-	     const enum logger_class class, const char *file, const char *func,
-	     const uint32_t line, const char *fmt, ...)
+void _esdm_logger(const enum esdm_logger_verbosity severity,
+		  const enum esdm_logger_class class, const char *file,
+		  const char *func, const uint32_t line, const char *fmt, ...)
 {
 	time_t now;
 	struct tm now_detail;
@@ -137,18 +140,18 @@ void _logger(const enum logger_verbosity severity,
 	char c[30];
 	char thread_name[ESDM_THREAD_MAX_NAMELEN];
 
-	if (!logger_stream)
-		logger_stream = stderr;
+	if (!esdm_logger_stream)
+		esdm_logger_stream = stderr;
 
-	if (severity > logger_verbosity_level)
+	if (severity > esdm_logger_verbosity_level)
 		return;
 
 	va_start(args, fmt);
 	vsnprintf(msg, sizeof(msg), fmt, args);
 	va_end(args);
 
-	logger_severity(severity, sev, sizeof(sev));
-	ret = logger_class(class, c, sizeof(c));
+	esdm_logger_severity(severity, sev, sizeof(sev));
+	ret = esdm_logger_class(class, c, sizeof(c));
 	if (ret)
 		return;
 
@@ -182,10 +185,10 @@ void _logger(const enum logger_verbosity severity,
 
 	thread_get_name(thread_name, sizeof(thread_name));
 
-	switch (logger_verbosity_level) {
+	switch (esdm_logger_verbosity_level) {
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
-		fprintf_color(logger_stream,
+		fprintf_color(esdm_logger_stream,
 			      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s [%s:%s:%u]: ",
 			      now_detail.tm_hour, now_detail.tm_min,
 			      now_detail.tm_sec, thread_name, sev, c, file,
@@ -198,20 +201,21 @@ void _logger(const enum logger_verbosity severity,
 	case LOGGER_NONE:
 	case LOGGER_MAX_LEVEL:
 	default:
-		fprintf_color(logger_stream,
+		fprintf_color(esdm_logger_stream,
 			      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s: ",
 			      now_detail.tm_hour, now_detail.tm_min,
 			      now_detail.tm_sec, thread_name, sev, c);
 		break;
 	}
 
-	fprintf(logger_stream, "%s", msg);
+	fprintf(esdm_logger_stream, "%s", msg);
 }
 
-void _logger_binary(const enum logger_verbosity severity,
-		    const enum logger_class class, const unsigned char *bin,
-		    const uint32_t binlen, const char *str, const char *file,
-		    const char *func, const uint32_t line)
+void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
+			 const enum esdm_logger_class class,
+			 const unsigned char *bin, const uint32_t binlen,
+			 const char *str, const char *file, const char *func,
+			 const uint32_t line)
 {
 	time_t now;
 	struct tm now_detail;
@@ -220,19 +224,19 @@ void _logger_binary(const enum logger_verbosity severity,
 	char msg[4096];
 	char c[30];
 
-	if (severity > logger_verbosity_level)
+	if (severity > esdm_logger_verbosity_level)
 		return;
 
-	logger_severity(severity, sev, sizeof(sev));
+	esdm_logger_severity(severity, sev, sizeof(sev));
 
 	now = time(NULL);
 	localtime_r(&now, &now_detail);
 
-	ret = logger_class(class, c, sizeof(c));
+	ret = esdm_logger_class(class, c, sizeof(c));
 	if (ret)
 		return;
 
-	switch (logger_verbosity_level) {
+	switch (esdm_logger_verbosity_level) {
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
 		snprintf(msg, sizeof(msg),
@@ -253,14 +257,14 @@ void _logger_binary(const enum logger_verbosity severity,
 		break;
 	}
 
-	bin2print(bin, binlen, logger_stream, msg);
+	bin2print(bin, binlen, esdm_logger_stream, msg);
 }
 
-void logger_spinner(const unsigned int percentage, const char *fmt, ...)
+void esdm_logger_spinner(const unsigned int percentage, const char *fmt, ...)
 {
 	static unsigned int start = 0;
 
-	if (logger_verbosity_level > LOGGER_ERR)
+	if (esdm_logger_verbosity_level > LOGGER_ERR)
 		return;
 
 	if (percentage >= 100) {
@@ -293,24 +297,24 @@ void logger_spinner(const unsigned int percentage, const char *fmt, ...)
 	fflush(stderr);
 }
 
-static void logger_destructor(void)
+static void esdm_logger_destructor(void)
 {
-	if (logger_stream && logger_stream != stderr)
-		fclose(logger_stream);
+	if (esdm_logger_stream && esdm_logger_stream != stderr)
+		fclose(esdm_logger_stream);
 }
 
-ESDM_DEFINE_CONSTRUCTOR(logger_constructor);
-static void logger_constructor(void)
+ESDM_DEFINE_CONSTRUCTOR(esdm_logger_constructor);
+static void esdm_logger_constructor(void)
 {
-	logger_stream = stderr;
+	esdm_logger_stream = stderr;
 }
 
-FILE *logger_log_stream(void)
+FILE *esdm_logger_log_stream(void)
 {
-	return logger_stream;
+	return esdm_logger_stream;
 }
 
-int logger_set_file(const char *pathname)
+int esdm_logger_set_file(const char *pathname)
 {
 	FILE *out;
 
@@ -318,31 +322,31 @@ int logger_set_file(const char *pathname)
 	if (!out)
 		return -errno;
 
-	if (!logger_stream || logger_stream == stderr)
-		logger_stream = out;
+	if (!esdm_logger_stream || esdm_logger_stream == stderr)
+		esdm_logger_stream = out;
 	else {
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Reject to set new log file\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Reject to set new log file\n");
 		return -EFAULT;
 	}
-	atexit(logger_destructor);
+	atexit(esdm_logger_destructor);
 
 	return 0;
 }
 
 DSO_PUBLIC
-void logger_set_verbosity(const enum logger_verbosity level)
+void esdm_logger_set_verbosity(const enum esdm_logger_verbosity level)
 {
-	logger_verbosity_level = level;
+	esdm_logger_verbosity_level = level;
 }
 
-int logger_set_class(enum logger_class class)
+int esdm_logger_set_class(enum esdm_logger_class class)
 {
 	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(logger_class_mapping); i++) {
-		if (class == logger_class_mapping[i].class) {
-			logger_class_level = class;
+	for (i = 0; i < ARRAY_SIZE(esdm_logger_class_mapping); i++) {
+		if (class == esdm_logger_class_mapping[i].class) {
+			esdm_logger_class_level = class;
 			return 0;
 		}
 	}
@@ -350,34 +354,35 @@ int logger_set_class(enum logger_class class)
 	return -EINVAL;
 }
 
-void logger_get_class(const int fd)
+void esdm_logger_get_class(const int fd)
 {
 	unsigned int i;
 
-	/* Ensure that logger_class_mapping contains all LOGGER_C_ enums */
-	BUILD_BUG_ON(ARRAY_SIZE(logger_class_mapping) != LOGGER_C_LAST);
+	/* Ensure that esdm_logger_class_mapping contains all LOGGER_C_ enums */
+	BUILD_BUG_ON(ARRAY_SIZE(esdm_logger_class_mapping) != LOGGER_C_LAST);
 
-	for (i = 0; i < ARRAY_SIZE(logger_class_mapping); i++) {
-		dprintf(fd, "%u %s\n", logger_class_mapping[i].class,
-			logger_class_mapping[i].logdata ?
-				logger_class_mapping[i].logdata :
+	for (i = 0; i < ARRAY_SIZE(esdm_logger_class_mapping); i++) {
+		dprintf(fd, "%u %s\n", esdm_logger_class_mapping[i].class,
+			esdm_logger_class_mapping[i].logdata ?
+				esdm_logger_class_mapping[i].logdata :
 				"(unclassified)");
 	}
 }
 
-enum logger_verbosity logger_get_verbosity(const enum logger_class class)
+enum esdm_logger_verbosity
+esdm_logger_get_verbosity(const enum esdm_logger_class class)
 {
 	unsigned int idx;
 
-	if (logger_class_idx(class, &idx))
+	if (esdm_logger_class_idx(class, &idx))
 		return LOGGER_NONE;
-	return logger_verbosity_level;
+	return esdm_logger_verbosity_level;
 }
 
-void logger_inc_verbosity(void)
+void esdm_logger_inc_verbosity(void)
 {
-	if (logger_verbosity_level >= LOGGER_MAX_LEVEL - 1)
+	if (esdm_logger_verbosity_level >= LOGGER_MAX_LEVEL - 1)
 		return;
 
-	logger_verbosity_level++;
+	esdm_logger_verbosity_level++;
 }

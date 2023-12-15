@@ -30,7 +30,7 @@
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_rpc_server.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 static unsigned int verbosity = 0;
@@ -183,7 +183,7 @@ static int daemon_init(void)
 {
 	int ret;
 
-	logger(LOGGER_VERBOSE, LOGGER_C_SERVER, "Starting ESDM server\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER, "Starting ESDM server\n");
 	CKINT(esdm_init());
 	CKINT(esdm_rpc_server_init(username));
 
@@ -213,7 +213,7 @@ static void dealloc(void)
 static void sig_term(int sig)
 {
 	(void)sig;
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Shutting down cleanly\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Shutting down cleanly\n");
 
 	/* Prevent the kernel from interfering with the shutdown */
 	signal(SIGALRM, SIG_IGN);
@@ -230,8 +230,8 @@ static void sig_term(int sig)
 
 static void install_term(void)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-	       "Install termination signal handler\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		    "Install termination signal handler\n");
 	signal(SIGHUP, sig_term);
 	signal(SIGINT, sig_term);
 	signal(SIGQUIT, sig_term);
@@ -246,21 +246,22 @@ static void create_pid_file(const char *pid_file)
 	pidfile_fd =
 		open(pid_file, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (pidfile_fd == -1)
-		logger(LOGGER_ERR, LOGGER_C_SERVER, "Cannot open pid file\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot open pid file\n");
 
 	if (lockf(pidfile_fd, F_TLOCK, 0) == -1) {
 		if (errno == EAGAIN || errno == EACCES) {
-			logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "PID file already locked\n");
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "PID file already locked\n");
 			exit(1);
 		} else
-			logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "Cannot lock pid file\n");
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot lock pid file\n");
 	}
 
 	if (ftruncate(pidfile_fd, 0) == -1) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot truncate pid file\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot truncate pid file\n");
 		exit(1);
 	}
 
@@ -268,8 +269,8 @@ static void create_pid_file(const char *pid_file)
 	snprintf(pid_str, sizeof(pid_str), "%i\n", getpid());
 	if (write(pidfile_fd, pid_str, strlen(pid_str)) !=
 	    (ssize_t)strlen(pid_str)) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot write to pid file\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot write to pid file\n");
 		exit(1);
 	}
 }
@@ -284,8 +285,8 @@ static void daemonize(void)
 
 	pid = fork();
 	if (pid < 0) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot fork to daemonize\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot fork to daemonize\n");
 		exit(1);
 	}
 
@@ -300,14 +301,14 @@ static void daemonize(void)
 
 	/* new SID for the child process */
 	if (setsid() < 0)
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot obtain new SID for child\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot obtain new SID for child\n");
 
 	/* Change the current working directory.  This prevents the current
 	 * directory from being locked; hence not being able to remove it. */
 	if ((chdir("/")) < 0)
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot change directory\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot change directory\n");
 
 		/* Redirect standard files to /dev/null */
 #pragma GCC diagnostic push
@@ -325,13 +326,13 @@ int main(int argc, char *argv[])
 	parse_opts(argc, argv);
 
 	if (geteuid()) {
-		logger_inc_verbosity();
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Program must start as root!\n");
+		esdm_logger_inc_verbosity();
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Program must start as root!\n");
 		return 1;
 	}
 
-	logger_set_verbosity(verbosity);
+	esdm_logger_set_verbosity(verbosity);
 
 	if (verbosity == 0 && !foreground)
 		daemonize();

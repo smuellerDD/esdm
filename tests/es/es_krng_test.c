@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
 	(void)argc;
 	(void)argv;
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
 	ret = es_krng_init();
 	if (ret)

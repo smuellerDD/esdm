@@ -24,7 +24,7 @@
 
 #include "esdm_crypto.h"
 #include "esdm_leancrypto.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 #define ESDM_LEANCRYPTO_HASH lc_sha3_512
 
@@ -131,7 +131,7 @@ static int esdm_leancrypto_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (ret)
 		return ret;
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "XDRBG256 core allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "XDRBG256 core allocated\n");
 
 	return 0;
 }
@@ -141,8 +141,8 @@ static void esdm_leancrypto_drbg_dealloc(void *drng)
 	struct lc_rng_ctx *ctx = drng;
 
 	lc_rng_zero_free(ctx);
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "cSHAKE DRNG core zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "cSHAKE DRNG core zeroized and freed\n");
 }
 
 static const char *esdm_leancrypto_drbg_name(void)

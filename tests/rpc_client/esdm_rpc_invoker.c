@@ -24,7 +24,7 @@
 #include <string.h>
 
 #include "esdm_rpc_client.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 struct opt_data {
 	int foo;
@@ -113,7 +113,7 @@ static int parse_opts(int argc, char *argv[], struct opt_data *opts)
 			switch (opt_index) {
 			case 0:
 				/* verbose */
-				logger_inc_verbosity();
+				esdm_logger_inc_verbosity();
 				break;
 			case 1:
 				/* help */
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
 	struct opt_data opts;
 	int ret;
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
 	esdm_rpcc_set_max_online_nodes(1);
 	ret = esdm_rpcc_init_unpriv_service(NULL);

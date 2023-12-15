@@ -26,12 +26,12 @@ extern "C" {
 
 #define esdm_rpcc_error_check(response, buffer)                                \
 	if (!response) {                                                       \
-		logger(LOGGER_DEBUG, LOGGER_C_RPC, "missing data\n");          \
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "missing data\n");     \
 		buffer->ret = -EFAULT;                                         \
 		return;                                                        \
 	} else if (IS_ERR(response)) {                                         \
-		logger(LOGGER_DEBUG, LOGGER_C_RPC,                             \
-		       "missing data - connection interrupted\n");             \
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,                        \
+			    "missing data - connection interrupted\n");        \
 		buffer->ret = (int)PTR_ERR(response);                          \
 		return;                                                        \
 	}

@@ -36,7 +36,7 @@
 #include "esdm_es_krng.h"
 #include "esdm_es_sched.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 
 /*
  * Shall we use select() to wait for an initialization of the kernel RNG or
@@ -56,9 +56,10 @@ static int esdm_krng_adjust_entropy(void)
 	krng_entropy = esdm_config_es_krng_entropy_rate();
 
 	entropylevel = esdm_krng_properties_entropylevel(krng_entropy);
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "Kernel RNG is fully seeded, setting entropy rate to %u bits of entropy\n",
-	       entropylevel);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_ES,
+		"Kernel RNG is fully seeded, setting entropy rate to %u bits of entropy\n",
+		entropylevel);
 
 	/* Do not trigger a reseed if the DRNG manger is not available */
 	if (!esdm_get_available())
@@ -84,8 +85,8 @@ static int esdm_krng_init(void)
 	if (fd < 0) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_ES, "Open of %s failed: %s\n",
-		       DEVRANDOM, strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES, "Open of %s failed: %s\n",
+			    DEVRANDOM, strerror(errno));
 		return -errsv;
 	}
 
@@ -94,7 +95,7 @@ static int esdm_krng_init(void)
 	timeout.tv_usec = 100 * 1000;
 
 	FD_ZERO(&fds);
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "Polling %s\n", DEVRANDOM);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "Polling %s\n", DEVRANDOM);
 
 	/* only /dev/random implements polling */
 	do {
@@ -103,15 +104,16 @@ static int esdm_krng_init(void)
 		ret = select((fd + 1), &fds, NULL, NULL, &timeout);
 
 		if (ret == -1 && errno != EINTR) {
-			logger(LOGGER_ERR, LOGGER_C_ES,
-			       "Select returned with error %s\n",
-			       strerror(errno));
+			esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+				    "Select returned with error %s\n",
+				    strerror(errno));
 			break;
 		}
 
 		if (ret > 0) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "Wakeup call for select on %s\n", DEVRANDOM);
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+				    "Wakeup call for select on %s\n",
+				    DEVRANDOM);
 			esdm_krng_adjust_entropy();
 			break;
 		}
@@ -231,18 +233,21 @@ static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 	if (ret < 0) {
 		if (ret == -EAGAIN) {
-			logger(LOGGER_DEBUG, LOGGER_C_ES,
-			       "Kernel RNG not yet initialized, implying 0 bits of entropy\n");
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_ES,
+				"Kernel RNG not yet initialized, implying 0 bits of entropy\n");
 		} else {
-			logger(LOGGER_WARN, LOGGER_C_ES,
-			       "Gathering of random numbers from kernel failed with error: %zd\n",
-			       ret);
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"Gathering of random numbers from kernel failed with error: %zd\n",
+				ret);
 		}
 		eb_es->e_bits = 0;
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-		       "obtained %u bits of entropy from kernel RNG noise source\n",
-		       ent_bits);
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"obtained %u bits of entropy from kernel RNG noise source\n",
+			ent_bits);
 		eb_es->e_bits = ent_bits;
 	}
 }

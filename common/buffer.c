@@ -26,7 +26,7 @@
 #include <unistd.h>
 
 #include "buffer.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 
 /*****************************************************************************
@@ -35,8 +35,8 @@
 int buffer_alloc(size_t size, struct buffer *buf)
 {
 	if (buf->buf) {
-		logger(LOGGER_WARN, LOGGER_C_ANY,
-		       "Allocate an already allocated buffer!\n");
+		esdm_logger(LOGGER_WARN, LOGGER_C_ANY,
+			    "Allocate an already allocated buffer!\n");
 		return -EFAULT;
 	}
 	if (!size)

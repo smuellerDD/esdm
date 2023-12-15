@@ -23,7 +23,7 @@
 #include <errno.h>
 #include <pthread.h>
 
-#include "logger.h"
+#include "esdm_logger.h"
 
 /**
  * @brief Reader / Writer mutex based on pthread
@@ -65,8 +65,9 @@ static inline void mutex_init(mutex_t *mutex, int locked)
 
 	ret = pthread_rwlock_init(mutex, NULL);
 	if (ret) {
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Pthread lock initialization failed with %d\n", -ret);
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Pthread lock initialization failed with %d\n",
+			    -ret);
 	}
 
 	if (locked)

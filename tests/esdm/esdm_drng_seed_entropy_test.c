@@ -30,7 +30,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_sched.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 #include "test_pertubation.h"
 
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
 
 	val = strtoul(argv[2], NULL, 10);
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
 	/* First initialize */
 	ret = esdm_init();

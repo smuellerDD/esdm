@@ -2,8 +2,8 @@
 common_src = files([
 	'binhexbin.c',
 	'buffer.c',
+	'esdm_logger.c',
 	'helper.c',
-	'logger.c',
 	'threading_support.c',
 ])
 

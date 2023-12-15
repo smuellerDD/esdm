@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
 	(void)argc;
 	(void)argv;
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
 	/* Poolsize before initialization */
 	ret = es_jent_poolsize_pre_init();

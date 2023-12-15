@@ -22,7 +22,7 @@
 #include <unistd.h>
 
 #include "esdm.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "test_pertubation.h"
 
 int main(int argc, char *argv[])
@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 	}
 #endif
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 	ret = esdm_init();
 	if (ret)
 		return ret;

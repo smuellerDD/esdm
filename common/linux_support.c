@@ -26,7 +26,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "logger.h"
+#include "esdm_logger.h"
 #include "linux_support.h"
 
 int linux_isolate_namespace_prefork(void)
@@ -41,18 +41,18 @@ int linux_isolate_namespace_prefork(void)
 	 */
 	if (unshare(CLONE_NEWPID) == -1) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 		       "Cannot create PID namespace: %s\n", strerror(errsv));
 		return -errsv;
 	}
 
-	logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
 	       "Successfully entered isolating PID namespace\n");
 
 	pid = fork();
 	if (pid < 0) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 		       "Cannot enter PID namespace: %s\n", strerror(errsv));
 		return -errsv;
 	} else if (pid > 0) {
@@ -78,13 +78,13 @@ int linux_isolate_namespace(void)
 	if (unshare(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWNET) == -1) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot enter namespaces: %s\n", strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot enter namespaces: %s\n", strerror(errsv));
 		return -errsv;
 	}
 
-	logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
-	       "Successfully entered isolating namespaces\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
+		    "Successfully entered isolating namespaces\n");
 
 	return 0;
 }

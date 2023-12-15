@@ -155,7 +155,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	drng->fully_seeded = false;
 	/* Do not set force, as this flag is used for the emergency reseeding */
 	drng->force_reseed = false;
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG, "reset DRNG\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG, "reset DRNG\n");
 }
 
 /* Initialize the DRNG, except the mutex lock */
@@ -206,22 +206,24 @@ static int esdm_drng_mgr_selftest(void)
 	if (hash_cb->hash_selftest)
 		ret = hash_cb->hash_selftest();
 	else
-		logger(LOGGER_WARN, LOGGER_C_DRNG, "Hash self test missing\n");
+		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
+			    "Hash self test missing\n");
 	mutex_reader_unlock(&drng->hash_lock);
 	CKINT_LOG(ret, "Hash self test failed: %d\n", ret);
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "Hash self test passed successfully\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+		    "Hash self test passed successfully\n");
 
 	mutex_w_lock(&drng->lock);
 	drng_cb = drng->drng_cb;
 	if (drng_cb->drng_selftest)
 		ret = drng_cb->drng_selftest();
 	else
-		logger(LOGGER_WARN, LOGGER_C_DRNG, "DRNG self test missing\n");
+		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
+			    "DRNG self test missing\n");
 	mutex_w_unlock(&drng->lock);
 	CKINT_LOG(ret, "DRNG self test failed: %d\n", ret);
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "DRNG self test passed successfully\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+		    "DRNG self test passed successfully\n");
 
 out:
 	esdm_drng_put_instances();
@@ -256,23 +258,24 @@ int esdm_drng_mgr_initialize(void)
 	mutex_w_unlock(&esdm_drng_pr.lock);
 
 	if (!ret) {
-		logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
-		       "DRNG with prediction resistance allocated\n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
+			    "DRNG with prediction resistance allocated\n");
 		mutex_w_init(&esdm_drng_init.lock, 1, 1);
 		ret = esdm_drng_alloc_common(&esdm_drng_init,
 					     esdm_default_drng_cb);
 		mutex_w_unlock(&esdm_drng_init.lock);
 		if (!ret) {
 			atomic_set(&esdm_avail, 2);
-			logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
-			       "DRNG without prediction resistance allocated\n");
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_DRNG,
+				"DRNG without prediction resistance allocated\n");
 		}
 	}
 
 	CKINT(ret);
 
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "ESDM for general use is available\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+		    "ESDM for general use is available\n");
 
 	CKINT(esdm_drng_mgr_selftest());
 
@@ -360,22 +363,23 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		      size_t inbuflen, bool fully_seeded, const char *drng_type)
 {
 	BUILD_BUG_ON(ESDM_DRNG_RESEED_THRESH > INT_MAX);
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG, "seeding %s DRNG with %zu bytes\n",
-	       drng_type, inbuflen);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+		    "seeding %s DRNG with %zu bytes\n", drng_type, inbuflen);
 
 	if (!drng->drng)
 		return;
 
 	if (drng->drng_cb->drng_seed(drng->drng, inbuf, inbuflen) < 0) {
-		logger(LOGGER_WARN, LOGGER_C_DRNG,
-		       "seeding of %s DRNG failed\n", drng_type);
+		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
+			    "seeding of %s DRNG failed\n", drng_type);
 		drng->force_reseed = true;
 	} else {
 		int gc = ESDM_DRNG_RESEED_THRESH - atomic_read(&drng->requests);
 
-		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		       "%s DRNG stats since last seeding: %lu secs; generate calls: %d\n",
-		       drng_type, esdm_time_after_now(drng->last_seeded), gc);
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_DRNG,
+			"%s DRNG stats since last seeding: %lu secs; generate calls: %d\n",
+			drng_type, esdm_time_after_now(drng->last_seeded), gc);
 
 		/* Count the numbers of generate ops since last fully seeded */
 		if (fully_seeded)
@@ -390,8 +394,9 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		if (!drng->fully_seeded) {
 			drng->fully_seeded = fully_seeded;
 			if (drng->fully_seeded)
-				logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-				       "%s DRNG fully seeded\n", drng_type);
+				esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+					    "%s DRNG fully seeded\n",
+					    drng_type);
 		}
 	}
 }
@@ -425,9 +430,10 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		num_es_delivered = 0;
 
 		if (collected_entropy) {
-			logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
-			       "Force fully seeding level for %s DRNG by repeatedly pull entropy from available entropy sources\n",
-			       drng_type);
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_DRNG,
+				"Force fully seeding level for %s DRNG by repeatedly pull entropy from available entropy sources\n",
+				drng_type);
 		}
 
 		esdm_fill_seed_buffer(
@@ -500,8 +506,9 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 
 static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-	       "reseed triggered by system events for DRNG on node %d\n", node);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+		    "reseed triggered by system events for DRNG on node %d\n",
+		    node);
 	esdm_drng_seed(drng);
 	if (drng->fully_seeded) {
 		/* Prevent reseed storm */
@@ -605,8 +612,8 @@ void esdm_drng_force_reseed(void)
 	    (atomic_read_u32(&esdm_drng_init.requests_since_fully_seeded) >
 	     ESDM_DRNG_RESEED_THRESH)) {
 		esdm_drng_init.force_reseed = esdm_drng_init.fully_seeded;
-		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		       "force reseed of initial DRNG\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+			    "force reseed of initial DRNG\n");
 		goto out;
 	}
 
@@ -617,8 +624,8 @@ void esdm_drng_force_reseed(void)
 			continue;
 
 		drng->force_reseed = drng->fully_seeded;
-		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		       "force reseed of DRNG on CPU %u\n", node);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+			    "force reseed of DRNG on CPU %u\n", node);
 	}
 
 	esdm_drng_atomic_force_reseed();
@@ -742,9 +749,10 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 						   outbuf + processed, todo);
 		mutex_w_unlock(&drng->lock);
 		if (ret <= 0) {
-			logger(LOGGER_WARN, LOGGER_C_DRNG,
-			       "getting random data from DRNG failed (%zd)\n",
-			       ret);
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_DRNG,
+				"getting random data from DRNG failed (%zd)\n",
+				ret);
 			return -EFAULT;
 		}
 		processed += ret;
@@ -770,18 +778,21 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	ssize_t ret;
 
 	if (pr) {
-		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		       "Using prediction resistance DRNG instance to service generate request\n");
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_DRNG,
+			"Using prediction resistance DRNG instance to service generate request\n");
 		drng = &esdm_drng_pr;
 	} else if (esdm_drng && esdm_drng[node] &&
 		   esdm_drng[node]->fully_seeded) {
-		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		       "Using DRNG instance on node %u to service generate request\n",
-		       node);
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_DRNG,
+			"Using DRNG instance on node %u to service generate request\n",
+			node);
 		drng = esdm_drng[node];
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		       "Using DRNG instance on node 0 to service generate request\n");
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_DRNG,
+			"Using DRNG instance on node 0 to service generate request\n");
 	}
 
 	CKINT(esdm_drng_mgr_initialize());

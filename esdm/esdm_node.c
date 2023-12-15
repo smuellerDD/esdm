@@ -28,7 +28,7 @@
 #include "esdm_es_mgr.h"
 #include "esdm_info.h"
 #include "esdm_node.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "mutex.h"
 
 static struct esdm_drng **esdm_drng = NULL;
@@ -128,9 +128,10 @@ void esdm_drngs_node_alloc(void)
 		drngs[node] = drng;
 
 		esdm_pool_inc_node_node();
-		logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-		       "DRNG and entropy pool read hash for node %d allocated\n",
-		       node);
+		esdm_logger(
+			LOGGER_VERBOSE, LOGGER_C_ANY,
+			"DRNG and entropy pool read hash for node %d allocated\n",
+			node);
 	}
 
 	/* counterpart to memory barrier in esdm_drng_get_instances */

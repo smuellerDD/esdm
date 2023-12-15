@@ -25,7 +25,7 @@
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 #include "threading_support.h"
 #include "unpriv_access.pb-c.h"

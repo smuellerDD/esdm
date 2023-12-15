@@ -29,7 +29,7 @@
 #include "esdm.h"
 #include "esdm_rpc_server_linux.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 #include "threading_support.h"
 
@@ -57,9 +57,10 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 			if (stat("/dev/random", &statfs) < 0) {
 				errsv = errno;
 
-				logger(LOGGER_ERR, LOGGER_C_SERVER,
-				       "Error in accessing /dev/random: %s\n",
-				       strerror(errsv));
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_SERVER,
+					"Error in accessing /dev/random: %s\n",
+					strerror(errsv));
 				return -errsv;
 			}
 
@@ -67,19 +68,20 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 			if (esdm_rpcs_linux_fd < 0) {
 				errsv = errno;
 
-				logger(LOGGER_ERR, LOGGER_C_SERVER,
-				       "Error in opening /dev/random: %s\n",
-				       strerror(errsv));
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_SERVER,
+					"Error in opening /dev/random: %s\n",
+					strerror(errsv));
 				return -errsv;
 			}
-			logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-			       "/dev/random opened to insert entropy\n");
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+				    "/dev/random opened to insert entropy\n");
 		} else if (errno) {
 			errsv = errno;
 
-			logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "Error in accessing /dev/esdm: %s\n",
-			       strerror(errsv));
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Error in accessing /dev/esdm: %s\n",
+				    strerror(errsv));
 			return -errsv;
 		}
 	} else {
@@ -87,13 +89,13 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 		if (esdm_rpcs_linux_fd < 0) {
 			errsv = errno;
 
-			logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "Error in opening /dev/esdm: %s\n",
-			       strerror(errsv));
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Error in opening /dev/esdm: %s\n",
+				    strerror(errsv));
 			return -errsv;
 		}
-		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		       "/dev/esdm opened to insert entropy\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "/dev/esdm opened to insert entropy\n");
 
 		/* Use the special IOCTL from the CUSE server */
 		esdm_rpcs_linux_ioctl = 43;
@@ -102,12 +104,12 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 	errsv = ioctl(esdm_rpcs_linux_fd, esdm_rpcs_linux_ioctl, rpi);
 	if (errsv != 0) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Error in adding entropy: %s\n", strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Error in adding entropy: %s\n", strerror(errsv));
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		       "Entropy data with rate %u bits added\n",
-		       rpi->entropy_count);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "Entropy data with rate %u bits added\n",
+			    rpi->entropy_count);
 	}
 
 	close(esdm_rpcs_linux_fd);
@@ -146,8 +148,9 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 		ret = esdm_get_random_bytes_full((uint8_t *)rpi->buf,
 						 (size_t)rpi->buf_size);
 		if (ret < 0) {
-			logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "Failure in generating random bits: %zd\n", ret);
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Failure in generating random bits: %zd\n",
+				    ret);
 		} else {
 			/*
 			 * When the IRQ entropy source is enabled, the
@@ -185,9 +188,10 @@ int esdm_rpcs_linux_init_feeder(void)
 			       ESDM_THREAD_CUSE_POLL_GROUP, NULL);
 
 	if (ret) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Starting the Linux kernel feeder thread failed: %d\n",
-		       ret);
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_SERVER,
+			"Starting the Linux kernel feeder thread failed: %d\n",
+			ret);
 	}
 
 	return ret;

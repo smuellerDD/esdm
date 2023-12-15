@@ -26,7 +26,7 @@
 #include <unistd.h>
 
 #include "linux_support.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "privileges.h"
 #include "visibility.h"
 
@@ -46,7 +46,8 @@ int drop_privileges_permanent(const char *user)
 
 	pwd = getpwnam(user);
 	if (pwd == NULL) {
-		logger(LOGGER_ERR, LOGGER_C_ANY, "User %s unknown\n", user);
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "User %s unknown\n",
+			    user);
 		return -ENOENT;
 	}
 
@@ -56,40 +57,41 @@ int drop_privileges_permanent(const char *user)
 	/* Drop all supplemental groups */
 	if (setgroups(0, NULL) == -1) {
 		ret = -errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot clear supplemental groups: %s\n",
-		       strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot clear supplemental groups: %s\n",
+			    strerror(errno));
 		return ret;
 	}
 
 	/* Drop privileged group */
 	if (setgid(gid) == -1) {
 		ret = -errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot drop to unprivileged group: %s\n",
-		       strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot drop to unprivileged group: %s\n",
+			    strerror(errno));
 		return ret;
 	}
 
 	/* Drop privileged user */
 	if (setuid(uid) == -1) {
 		ret = -errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot drop to unprivileged user: %s\n",
-		       strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot drop to unprivileged user: %s\n",
+			    strerror(errno));
 		return ret;
 	}
 
 	if ((chdir("/")) < 0) {
 		ret = -errno;
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Cannot change directory: %s\n", strerror(errno));
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot change directory: %s\n", strerror(errno));
 		return ret;
 	}
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-	       "Successfully dropped privileges to user %s (UID %u, GID %u)\n",
-	       user, uid, gid);
+	esdm_logger(
+		LOGGER_VERBOSE, LOGGER_C_ANY,
+		"Successfully dropped privileges to user %s (UID %u, GID %u)\n",
+		user, uid, gid);
 
 	return 0;
 }

@@ -37,7 +37,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "linux_support.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "math_helper.h"
 #include "memset_secure.h"
 #include "mutex.h"
@@ -70,7 +70,7 @@ static int esdm_cuse_shm_status_avail(void)
 
 	if (ret && !initialized) {
 		initialized = 1;
-		logger_status(
+		esdm_logger_status(
 			LOGGER_C_CUSE,
 			"CUSE client started detected ESDM server with properties:\n%s\n",
 			esdm_cuse_shm_status->info);
@@ -131,9 +131,10 @@ static int esdm_cuse_shm_status_create_shm(void)
 					       S_IROTH);
 			if (esdm_cuse_shmid < 0) {
 				errsv = errno;
-				logger(LOGGER_ERR, LOGGER_C_ANY,
-				       "ESDM shared memory segment creation failed: %s\n",
-				       strerror(errsv));
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_ANY,
+					"ESDM shared memory segment creation failed: %s\n",
+					strerror(errsv));
 				return -errsv;
 			}
 		}
@@ -142,16 +143,16 @@ static int esdm_cuse_shm_status_create_shm(void)
 	tmp = shmat(esdm_cuse_shmid, NULL, SHM_RDONLY);
 	if (tmp == (void *)-1) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Attaching to shared memory segment failed: %s\n",
-		       strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Attaching to shared memory segment failed: %s\n",
+			    strerror(errsv));
 		esdm_cuse_shm_status_close_shm();
 		return -errsv;
 	}
 	esdm_cuse_shm_status = tmp;
 
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-	       "ESDM shared memory segment successfully attached to\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+		    "ESDM shared memory segment successfully attached to\n");
 
 	return 0;
 }
@@ -169,7 +170,8 @@ static void esdm_cuse_shm_status_down(void)
 	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
 
 	if (esdm_cuse_semid == SEM_FAILED) {
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Cannot use semaphore\n");
 		return;
 	}
 
@@ -182,7 +184,8 @@ static void esdm_cuse_shm_status_down(void)
 		return;
 
 	if (sem_wait(esdm_cuse_semid))
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "Cannot use semaphore\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Cannot use semaphore\n");
 }
 
 static void esdm_cuse_shm_status_close_sem(void)
@@ -214,16 +217,16 @@ static int esdm_cuse_shm_status_create_sem(void)
 		}
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-	       "ESDM change indicator semaphore initialized\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+		    "ESDM change indicator semaphore initialized\n");
 
 	return 0;
 
 err:
 	errsv = errno;
-	logger(LOGGER_ERR, LOGGER_C_ANY,
-	       "ESDM change indicator semaphore creation failed: %s\n",
-	       strerror(errsv));
+	esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+		    "ESDM change indicator semaphore creation failed: %s\n",
+		    strerror(errsv));
 	return -errsv;
 }
 
@@ -261,7 +264,7 @@ static void esdm_cuse_term(void)
 /* terminate the daemon cleanly */
 static void esdm_cuse_sig_handler(int sig)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Received signal %d\n", sig);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Received signal %d\n", sig);
 	esdm_cuse_term();
 
 	signal(SIGABRT, SIG_DFL);
@@ -293,8 +296,8 @@ static void esdm_cuse_sig_handler(int sig)
 
 static int esdm_cuse_install_sig_handler(void)
 {
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-	       "Install termination signal handler\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+		    "Install termination signal handler\n");
 
 	/* Catch all termination signals to ensure the bind mount is removed */
 	signal(SIGABRT, esdm_cuse_sig_handler);
@@ -351,7 +354,7 @@ static bool esdm_cuse_fips_enabled(void)
 					/* FIPS support not enabled in kernel */
 					return 0;
 				} else {
-					logger(LOGGER_ERR, LOGGER_C_CUSE,
+					esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
 						"FIPS: Cannot open fips_enabled file: %s\n",
 						strerror(errno));
 					return -EIO;
@@ -361,7 +364,7 @@ static bool esdm_cuse_fips_enabled(void)
 			n = fread((void *)fipsflag, 1, 1, fipsfile);
 			fclose(fipsfile);
 			if (n != 1) {
-				logger(LOGGER_ERR, LOGGER_C_CUSE,
+				esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
 				       "FIPS: Cannot read FIPS flag\n");
 				return false;
 			}
@@ -397,11 +400,12 @@ static bool esdm_cuse_client_privileged(fuse_req_t req)
 	 * MUST NOT run in a PID or user namespace.
 	 */
 	if (ctx->uid == 0) {
-		logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller privileged\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
+			    "CUSE caller privileged\n");
 		return true;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller unprivileged\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller unprivileged\n");
 	return false;
 }
 
@@ -499,9 +503,10 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 		 * appropriately.
 		 */
 		if (ret < 0 && fallback_fd > -1) {
-			logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-			       "Use fallback to provide data due to RPC error code %zd\n",
-			       ret);
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_CUSE,
+				"Use fallback to provide data due to RPC error code %zd\n",
+				ret);
 			ret = read(fallback_fd, tmpbuf_p + read_bytes, todo);
 		}
 
@@ -558,9 +563,10 @@ err:
 	 * ESDM and data written to the fallback as appropriate.
 	 */
 	if (ret < 0 && fallback_fd > -1) {
-		logger(LOGGER_VERBOSE, LOGGER_C_CUSE,
-		       "Use fallback to provide data due to RPC error code %zd\n",
-		       ret);
+		esdm_logger(
+			LOGGER_VERBOSE, LOGGER_C_CUSE,
+			"Use fallback to provide data due to RPC error code %zd\n",
+			ret);
 		do {
 			ret = write(fallback_fd, buf, size);
 			written += (size_t)ret;
@@ -985,9 +991,10 @@ void esdm_cuse_init_done(void *userdata)
 	if (mount_src) {
 		if (chmod(mount_src, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
 					     S_IROTH | S_IWOTH) < 0) {
-			logger(LOGGER_ERR, LOGGER_C_CUSE,
-			       "Changing permissions to world-writeable failed: %s",
-			       strerror(errno));
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_CUSE,
+				"Changing permissions to world-writeable failed: %s",
+				strerror(errno));
 		}
 	}
 
@@ -1098,12 +1105,13 @@ int main_common(const char *_devname, const char *target, const char *semname,
 
 	if (fuse_opt_parse(&args, &param, esdm_cuse_opts,
 			   esdm_cuse_process_arg)) {
-		logger(LOGGER_ERR, LOGGER_C_CUSE, "failed to parse option\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "failed to parse option\n");
 		free(param.dev_name);
 		goto out;
 	}
 
-	logger_set_verbosity(param.verbosity);
+	esdm_logger_set_verbosity(param.verbosity);
 
 	esdm_test_disable_fallback(param.disable_fallback);
 

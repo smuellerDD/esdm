@@ -57,9 +57,10 @@ static int esdm_hwrand_init(void)
 
 	esdm_hwrand_fd = open(ESDM_ES_HWRAND_IF, O_RDONLY);
 	if (esdm_hwrand_fd < 0) {
-		logger(LOGGER_WARN, LOGGER_C_ES,
-		       "Disabling /dev/hwrng-based entropy source as device not present, error opening %s: %s\n",
-		       ESDM_ES_HWRAND_IF, strerror(errno));
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ES,
+			"Disabling /dev/hwrng-based entropy source as device not present, error opening %s: %s\n",
+			ESDM_ES_HWRAND_IF, strerror(errno));
 		return 0;
 	}
 
@@ -68,8 +69,9 @@ static int esdm_hwrand_init(void)
 	if (fd >= 0) {
 		if (esdm_safe_read(fd, (uint8_t *)buf, buflen) &&
 		    buf[0] == '\n') {
-			logger(LOGGER_WARN, LOGGER_C_ES,
-			       "Disabling /dev/hwrng-based entropy source as it has no backing device\n");
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"Disabling /dev/hwrng-based entropy source as it has no backing device\n");
 			close(esdm_hwrand_fd);
 			esdm_hwrand_fd = -1;
 		}
@@ -106,9 +108,10 @@ static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		goto err;
 
 	eb_es->e_bits = esdm_hwrand_entropylevel(requested_bits);
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "obtained %u bits of entropy from /dev/hwrng RNG entropy source\n",
-	       eb_es->e_bits);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_ES,
+		"obtained %u bits of entropy from /dev/hwrng RNG entropy source\n",
+		eb_es->e_bits);
 
 	return;
 

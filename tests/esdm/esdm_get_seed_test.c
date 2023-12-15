@@ -28,7 +28,7 @@
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_node.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "test_pertubation.h"
 
 int main(int argc, char *argv[])
@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 	} else
 		esdm_config_force_fips_set(esdm_config_force_fips_disabled);
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 	ret = esdm_init();
 	if (ret)
 		return ret;

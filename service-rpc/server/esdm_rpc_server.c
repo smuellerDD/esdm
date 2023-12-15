@@ -47,7 +47,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "linux_support.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 #include "privileges.h"
 #include "ret_checkers.h"
@@ -132,16 +132,17 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 		if (ret < 0) {
 			int errsv = errno;
 
-			logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-			       "Writting of data to file descriptor %d failed: %s\n",
-			       rpc_conn->child_fd, strerror(errsv));
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_RPC,
+				"Writting of data to file descriptor %d failed: %s\n",
+				rpc_conn->child_fd, strerror(errsv));
 			return -errsv;
 		}
 
 		written += (size_t)ret;
 	} while (written < len);
 
-	logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
+	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
 	return 0;
 }
@@ -154,9 +155,9 @@ static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
 	int ret = esdm_rpcs_write_data(buf->rpc_conn, data, len);
 
 	if (ret < 0)
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "Submission of payload data failed with error %d\n",
-		       ret);
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Submission of payload data failed with error %d\n",
+			    ret);
 }
 
 /* Pack the message into a ProtobufC structure and write it to the receiver. */
@@ -187,10 +188,11 @@ static int esdm_rpcs_pack(const ProtobufCMessage *message,
 	sc_header.message_length = le_bswap32(message_length);
 	sc_header.request_id = le_bswap32(rpc_conn->request_id);
 
-	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-	       "Server sending: server status %u, message length %u, message index %u, request ID %u\n",
-	       sc_header.status_code, sc_header.message_length,
-	       sc_header.method_index, sc_header.request_id);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_RPC,
+		"Server sending: server status %u, message length %u, message index %u, request ID %u\n",
+		sc_header.status_code, sc_header.message_length,
+		sc_header.method_index, sc_header.request_id);
 
 	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, (uint8_t *)&sc_header,
 				       sizeof(sc_header)),
@@ -198,8 +200,8 @@ static int esdm_rpcs_pack(const ProtobufCMessage *message,
 
 	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
 	    message_length) {
-		logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-		       "Short write of data to file descriptor \n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+			    "Short write of data to file descriptor \n");
 		ret = -EFAULT;
 	}
 
@@ -219,12 +221,13 @@ bool esdm_rpc_client_is_privileged(void *closure_data)
 		return false;
 
 	if (cred.uid == 0) {
-		logger(LOGGER_DEBUG, LOGGER_C_ANY,
-		       "Remote client is privileged\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "Remote client is privileged\n");
 		return true;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_ANY, "Remote client is not privileged\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+		    "Remote client is not privileged\n");
 	return false;
 }
 
@@ -328,9 +331,9 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		total_received += (size_t)received;
 		buf_p += (size_t)received;
 
-		logger(LOGGER_DEBUG, LOGGER_C_ANY,
-		       "Reading %zd bytes, already consumed %zu bytes\n",
-		       received, total_received);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "Reading %zd bytes, already consumed %zu bytes\n",
+			    received, total_received);
 
 		/* We insist on having at least a header received. */
 		if (total_received < sizeof(*received_data))
@@ -347,10 +350,11 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 			header->method_index = le_bswap32(header->method_index);
 			header->request_id = le_bswap32(header->request_id);
 
-			logger(LOGGER_DEBUG, LOGGER_C_RPC,
-			       "Server received: message length %u, message index %u, request ID %u\n",
-			       header->message_length, header->method_index,
-			       header->request_id);
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_RPC,
+				"Server received: message length %u, message index %u, request ID %u\n",
+				header->message_length, header->method_index,
+				header->request_id);
 
 			/*
 			 * Truncate the buffer length if client specified
@@ -424,8 +428,9 @@ static int esdm_rpcs_handler(void *args)
 		ret = esdm_rpcs_read(rpc_conn);
 	} while (!ret);
 
-	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-	       "Closing incoming connection for FD %d\n", rpc_conn->child_fd);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+		    "Closing incoming connection for FD %d\n",
+		    rpc_conn->child_fd);
 	esdm_rpcs_release_conn(rpc_conn);
 	return 0;
 }
@@ -450,8 +455,9 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	int ret = 0;
 
 #ifdef DEBUG
-	logger(LOGGER_WARN, LOGGER_C_RPC,
-	       "Debug mode enabled, RPC server executes single threaded\n");
+	esdm_logger(
+		LOGGER_WARN, LOGGER_C_RPC,
+		"Debug mode enabled, RPC server executes single threaded\n");
 #endif
 
 	if (proto->server_listening_fd < 0)
@@ -506,9 +512,9 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 
 			/* error */
 			if (sret == -1 && errno != EINTR) {
-				logger(LOGGER_ERR, LOGGER_C_ANY,
-				       "Select returned with error %s\n",
-				       strerror(errno));
+				esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+					    "Select returned with error %s\n",
+					    strerror(errno));
 				goto out;
 			}
 
@@ -541,9 +547,10 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 
 			esdm_rpcs_release_conn(rpc_conn);
 			rpc_conn = NULL;
-			logger(LOGGER_WARN, LOGGER_C_ANY,
-			       "Accepting incoming connections failed: %s\n",
-			       strerror(errno));
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ANY,
+				"Accepting incoming connections failed: %s\n",
+				strerror(errno));
 			continue;
 		}
 
@@ -553,17 +560,17 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			       (const char *)&tv, sizeof(tv)) < 0) {
 			int errsv = errno;
 
-			logger(LOGGER_ERR, LOGGER_C_RPC,
-			       "Error setting timeout on socket: %s\n",
-			       strerror(errsv));
+			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+				    "Error setting timeout on socket: %s\n",
+				    strerror(errsv));
 			esdm_rpcs_release_conn(rpc_conn);
 			rpc_conn = NULL;
 			continue;
 		}
 
-		logger(LOGGER_DEBUG, LOGGER_C_RPC,
-		       "Processing new incoming connection for FD %d\n",
-		       rpc_conn->child_fd);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+			    "Processing new incoming connection for FD %d\n",
+			    rpc_conn->child_fd);
 
 		/* Handle new incoming connection */
 #ifdef DEBUG
@@ -574,8 +581,9 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		esdm_rpcs_handler(rpc_conn);
 #else /* DEBUG */
 		if (thread_start(esdm_rpcs_handler, rpc_conn, 0, NULL)) {
-			logger(LOGGER_ERR, LOGGER_C_RPC,
-			       "Starting new thread for incoming connection failed\n");
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_RPC,
+				"Starting new thread for incoming connection failed\n");
 			esdm_rpcs_release_conn(rpc_conn);
 			rpc_conn = NULL;
 			continue;
@@ -629,26 +637,26 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		    0);
 	if (fd < 0) {
 		errsv = -errno;
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "RPC Server: cannot create socket: %s\n",
-		       strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "RPC Server: cannot create socket: %s\n",
+			    strerror(errsv));
 		return -errsv;
 	}
 
 	if (bind(fd, address, address_len) < 0) {
 		errsv = -errno;
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "RPC Server: cannot bind to socket: %s\n",
-		       strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "RPC Server: cannot bind to socket: %s\n",
+			    strerror(errsv));
 		close(fd);
 		return -errsv;
 	}
 
 	if (listen(fd, 255) < 0) {
 		errsv = -errno;
-		logger(LOGGER_ERR, LOGGER_C_RPC,
-		       "RPC Server: cannot listen on socket: %s\n",
-		       strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "RPC Server: cannot listen on socket: %s\n",
+			    strerror(errsv));
 		close(fd);
 		return -errsv;
 	}
@@ -693,9 +701,10 @@ static int esdm_rpcs_unpriv_init(void *args)
 	    -1) {
 		ret = -errno;
 
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Failed to set permissions for Unix domain socket %s: %s\n",
-		       ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ANY,
+			"Failed to set permissions for Unix domain socket %s: %s\n",
+			ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
 
 		goto out;
 	}
@@ -708,9 +717,9 @@ static int esdm_rpcs_unpriv_init(void *args)
 	thread_wait_event(&esdm_rpc_thread_init_wait,
 			  (atomic_read(&esdm_rpc_init_state) ==
 			   esdm_rpcs_state_perm_dropped));
-	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-	       "Unprivileged server thread for %s available\n",
-	       ESDM_RPC_UNPRIV_SOCKET);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+		    "Unprivileged server thread for %s available\n",
+		    ESDM_RPC_UNPRIV_SOCKET);
 
 	/* Server handing unprivileged interface in current thread */
 	CKINT(esdm_rpcs_workerloop(&unpriv_proto));
@@ -748,9 +757,10 @@ static int esdm_rpcs_interfaces_init(const char *username)
 	if (chmod(ESDM_RPC_PRIV_SOCKET, S_IRUSR | S_IWUSR) == -1) {
 		int errsv = errno;
 
-		logger(LOGGER_ERR, LOGGER_C_ANY,
-		       "Failed to set permissions for Unix domain socket %s: %s\n",
-		       ESDM_RPC_PRIV_SOCKET, strerror(errsv));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ANY,
+			"Failed to set permissions for Unix domain socket %s: %s\n",
+			ESDM_RPC_PRIV_SOCKET, strerror(errsv));
 		ret = -errsv;
 		goto out;
 	}
@@ -771,9 +781,9 @@ static int esdm_rpcs_interfaces_init(const char *username)
 	/* Notify all unpriv handler threads that they can become active */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_perm_dropped);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
-	logger(LOGGER_DEBUG, LOGGER_C_RPC,
-	       "Privileged server thread for %s available\n",
-	       ESDM_RPC_PRIV_SOCKET);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+		    "Privileged server thread for %s available\n",
+		    ESDM_RPC_PRIV_SOCKET);
 
 	/* Server handing privileged interface in current thread */
 	CKINT(esdm_rpcs_workerloop(&priv_proto));
@@ -790,24 +800,26 @@ static void esdm_rpcs_cleanup(void)
 {
 	/* Clean up all unprivileged Unix domain socket */
 	if (unlink(ESDM_RPC_UNPRIV_SOCKET) < 0) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "ESDM Unix domain socket %s cannot be deleted: %s\n",
-		       ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_SERVER,
+			"ESDM Unix domain socket %s cannot be deleted: %s\n",
+			ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		       "ESDM Unix domain socket %s deleted\n",
-		       ESDM_RPC_UNPRIV_SOCKET);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "ESDM Unix domain socket %s deleted\n",
+			    ESDM_RPC_UNPRIV_SOCKET);
 	}
 
 	/* Clean up the privileged Unix domain socket */
 	if (unlink(ESDM_RPC_PRIV_SOCKET) < 0) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "ESDM Unix domain socket %s cannot be deleted: %s\n",
-		       ESDM_RPC_PRIV_SOCKET, strerror(errno));
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_SERVER,
+			"ESDM Unix domain socket %s cannot be deleted: %s\n",
+			ESDM_RPC_PRIV_SOCKET, strerror(errno));
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		       "ESDM Unix domain socket %s deleted\n",
-		       ESDM_RPC_PRIV_SOCKET);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "ESDM Unix domain socket %s deleted\n",
+			    ESDM_RPC_PRIV_SOCKET);
 	}
 
 	/*
@@ -824,26 +836,26 @@ static void esdm_rpcs_cleanup(void)
 	esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
 			    S_IRUSR | S_IRGRP | S_IROTH);
 	if (esdm_shmid < 0) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 		       "ESDM shared memory segment attachment for deletion failed: %s\n",
 		       strerror(errno));
 	} else {
 		if (shmctl(esdm_shmid, IPC_RMID, NULL) < 0) {
-			logger(LOGGER_ERR, LOGGER_C_SERVER,
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			       "ESDM shared memory segment cannot be deleted: %s\n",
 			       strerror(errno));
 		} else {
-			logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 			       "ESDM shared memory segment deleted\n");
 		}
 	}
 
 	/* Clean up the status semaphore */
 	if (sem_unlink(ESDM_SEM_NAME)) {
-		logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
 		       "Cannot unlink semaphore: %s\n", strerror(errno));
 	} else {
-		logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 		       "ESDM semaphore deleted\n");
 	}
 #endif
@@ -872,8 +884,8 @@ static void esdm_rpc_priv_init_complete(void)
 	if (atomic_read(&esdm_rpc_init_state) != esdm_rpcs_state_uninitialized)
 		return;
 
-	logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-	       "Privileged intiialization complete\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		    "Privileged intiialization complete\n");
 	/* Notification that the privileged initialization is complete. */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_priv_init_complete);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
@@ -902,8 +914,8 @@ int esdm_rpc_server_init(const char *username)
 
 	pid = fork();
 	if (pid < 0) {
-		logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "Cannot fork interface process\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot fork interface process\n");
 		exit(1);
 	} else if (pid == 0) {
 		pthread_setname_np(pthread_self(), "ESDM master");
@@ -911,8 +923,8 @@ int esdm_rpc_server_init(const char *username)
 		/* Create thread for entropy source monitor */
 		if (thread_start(esdm_rpc_server_es_monitor, NULL,
 				 ESDM_THREAD_ES_MONITOR, NULL)) {
-			logger(LOGGER_WARN, LOGGER_C_RPC,
-			       "Starting ES monitor thread failed\n");
+			esdm_logger(LOGGER_WARN, LOGGER_C_RPC,
+				    "Starting ES monitor thread failed\n");
 		}
 
 		/* Wait for the privileged initialization to complete. */

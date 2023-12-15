@@ -17,8 +17,8 @@
 * DAMAGE.
 */
 
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef ESDM_LOGGER_H
+#define ESDM_LOGGER_H
 
 #include <stdint.h>
 #include <stdio.h>
@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 
-enum logger_verbosity {
+enum esdm_logger_verbosity {
 	LOGGER_NONE,
 	LOGGER_STATUS,
 	LOGGER_ERR,
@@ -39,7 +39,7 @@ enum logger_verbosity {
 	LOGGER_MAX_LEVEL /* This must be last entry */
 };
 
-enum logger_class {
+enum esdm_logger_class {
 	LOGGER_C_ANY,
 	LOGGER_C_MD,
 	LOGGER_C_DRNG,
@@ -53,14 +53,15 @@ enum logger_class {
 };
 
 /* Helper that is not intended to be called directly */
-void _logger(const enum logger_verbosity severity,
-	     const enum logger_class class_, const char *file, const char *func,
-	     const uint32_t line, const char *fmt, ...)
+void _esdm_logger(const enum esdm_logger_verbosity severity,
+		  const enum esdm_logger_class class_, const char *file,
+		  const char *func, const uint32_t line, const char *fmt, ...)
 	__attribute__((format(printf, 6, 7)));
-void _logger_binary(const enum logger_verbosity severity,
-		    const enum logger_class class_, const unsigned char *bin,
-		    const uint32_t binlen, const char *str, const char *file,
-		    const char *func, const uint32_t line);
+void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
+			 const enum esdm_logger_class class_,
+			 const unsigned char *bin, const uint32_t binlen,
+			 const char *str, const char *file, const char *func,
+			 const uint32_t line);
 
 /**
  * logger - log string with given severity
@@ -75,12 +76,12 @@ void _logger_binary(const enum logger_verbosity severity,
 #else
 #pragma GCC diagnostic ignored "-Wvariadic-macros"
 #endif
-#define logger(severity, class_, fmt...)                                       \
+#define esdm_logger(severity, class_, fmt...)                                  \
 	do {                                                                   \
 		_Pragma("GCC diagnostic push")                                 \
 			_Pragma("GCC diagnostic ignored \"-Wpedantic\"")       \
-				_logger(severity, class_, __FILE__,            \
-					__FUNCTION__, __LINE__, ##fmt);        \
+				_esdm_logger(severity, class_, __FILE__,       \
+					     __FUNCTION__, __LINE__, ##fmt);   \
 		_Pragma("GCC diagnostic pop")                                  \
 	} while (0);
 #pragma GCC diagnostic pop
@@ -97,7 +98,8 @@ void _logger_binary(const enum logger_verbosity severity,
 #else
 #pragma GCC diagnostic ignored "-Wvariadic-macros"
 #endif
-#define logger_status(class_, fmt...) logger(LOGGER_STATUS, class_, ##fmt)
+#define esdm_logger_status(class_, fmt...)                                     \
+	esdm_logger(LOGGER_STATUS, class_, ##fmt)
 #pragma GCC diagnostic pop
 
 /**
@@ -108,13 +110,13 @@ void _logger_binary(const enum logger_verbosity severity,
  * @param binlen length of binary string
  * @param str string that is prepended to hex-converted binary string
  */
-#define logger_binary(severity, class_, bin, binlen, str)                      \
+#define esdm_logger_binary(severity, class_, bin, binlen, str)                 \
 	do {                                                                   \
 		_Pragma("GCC diagnostic push")                                 \
 			_Pragma("GCC diagnostic ignored \"-Wpedantic\"")       \
-				_logger_binary(severity, class_, bin, binlen,  \
-					       str, __FILE__, __FUNCTION__,    \
-					       __LINE__);                      \
+				_esdm_logger_binary(severity, class_, bin,     \
+						    binlen, str, __FILE__,     \
+						    __FUNCTION__, __LINE__);   \
 		_Pragma("GCC diagnostic pop")                                  \
 	} while (0);
 
@@ -123,33 +125,34 @@ void _logger_binary(const enum logger_verbosity severity,
  * @param percentage Integer indicating a percentage value
  * @param fmt format string printed during first call
  */
-void logger_spinner(const unsigned int percentage, const char *fmt, ...)
+void esdm_logger_spinner(const unsigned int percentage, const char *fmt, ...)
 	__attribute__((format(printf, 2, 3)));
 
 /**
  * logger_set_verbosity - set verbosity level
  */
-void logger_set_verbosity(const enum logger_verbosity level);
+void esdm_logger_set_verbosity(const enum esdm_logger_verbosity level);
 
 /**
  * logger_set_class - set logging class
  */
-int logger_set_class(const enum logger_class class_);
+int esdm_logger_set_class(const enum esdm_logger_class class_);
 
 /**
  * logger_get_class - List all logging classes to file descriptor
  */
-void logger_get_class(const int fd);
+void esdm_logger_get_class(const int fd);
 
 /**
  * logger_get_verbosity - get verbosity level for given class
  */
-enum logger_verbosity logger_get_verbosity(const enum logger_class class_);
+enum esdm_logger_verbosity
+esdm_logger_get_verbosity(const enum esdm_logger_class class_);
 
 /**
  * logger_inc_verbosity - increase verbosity level by one
  */
-void logger_inc_verbosity(void);
+void esdm_logger_inc_verbosity(void);
 
 /**
  * Log into the given file
@@ -160,15 +163,15 @@ void logger_inc_verbosity(void);
  * @param [in] pathname Path name of log file
  * @return 0 on success, < 0 on error
  */
-int logger_set_file(const char *pathname);
+int esdm_logger_set_file(const char *pathname);
 
 /**
  * Retrieve the file stream to log to.
  */
-FILE *logger_log_stream(void);
+FILE *esdm_logger_log_stream(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LOGGER_H */
+#endif /* ESDM_LOGGER_H */

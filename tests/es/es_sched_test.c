@@ -302,7 +302,7 @@ int main(int argc, char *argv[])
 	(void)argc;
 	(void)argv;
 
-	logger_set_verbosity(LOGGER_DEBUG);
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
 	esdm_config_es_sched_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 	ret = es_sched_init();

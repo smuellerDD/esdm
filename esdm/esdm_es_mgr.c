@@ -42,7 +42,7 @@
 #include "esdm_interface_dev_common.h"
 #include "esdm_shm_status.h"
 #include "helper.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "queue.h"
@@ -140,15 +140,17 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 	}
 
 	if (!avail) {
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-		       "Full entropy monitor not started as no slow entropy sources present\n");
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"Full entropy monitor not started as no slow entropy sources present\n");
 		if (priv_init_completion)
 			priv_init_completion();
 
 		return 0;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "Full entropy monitor started\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "Full entropy monitor started\n");
 
 	while (!atomic_read(&esdm_es_mgr_terminate)) {
 		unsigned int j;
@@ -186,7 +188,7 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 	if (!priv_init_completed && priv_init_completion)
 		priv_init_completion();
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Stopping entropy monitor\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES, "Stopping entropy monitor\n");
 	return 0;
 }
 
@@ -230,9 +232,9 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 
 	ret = ioctl(fd, ioctl_cmd, buf);
 	if (ret < 0) {
-		logger(LOGGER_WARN, LOGGER_C_ES,
-		       "failed to obtain entropy from ES %s, error %d\n", name,
-		       errno);
+		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
+			    "failed to obtain entropy from ES %s, error %d\n",
+			    name, errno);
 		goto err;
 	}
 
@@ -271,8 +273,9 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 		goto err;
 	}
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "obtained %u bits of entropy from ES %s\n", eb_es->e_bits, name);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "obtained %u bits of entropy from ES %s\n", eb_es->e_bits,
+		    name);
 
 	return;
 
@@ -302,13 +305,14 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 		ret = ioctl(fd, ioctl_cmd, &data);
 		if (ret >= 0) {
 			*configured_bits = requested_bits;
-			logger(LOGGER_DEBUG, LOGGER_C_ES,
-			       "Set requested %u bits with kernel\n",
-			       requested_bits);
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+				    "Set requested %u bits with kernel\n",
+				    requested_bits);
 		} else {
-			logger(LOGGER_WARN, LOGGER_C_ES,
-			       "Failed to set requested %u bits with kernel\n",
-			       requested_bits);
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"Failed to set requested %u bits with kernel\n",
+				requested_bits);
 		}
 	}
 }
@@ -318,9 +322,10 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 void esdm_debug_report_seedlevel(const char *name)
 {
 	if (!esdm_state_min_seeded())
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
-		       "%s called without reaching minimally seeded level (available entropy %u)\n",
-		       name, esdm_avail_entropy());
+		esdm_logger(
+			LOGGER_VERBOSE, LOGGER_C_ES,
+			"%s called without reaching minimally seeded level (available entropy %u)\n",
+			name, esdm_avail_entropy());
 
 	esdm_force_fully_seeded();
 }
@@ -368,7 +373,7 @@ void esdm_reset_state(void)
 	esdm_state.esdm_fully_seeded = false;
 	esdm_state.esdm_min_seeded = false;
 	esdm_state.all_online_nodes_seeded = false;
-	logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
 	/* Start the entropy monitor */
 	esdm_es_mgr_monitor_wakeup();
@@ -471,8 +476,8 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 	 * non-operational if the initial DRNG becomes not fully seeded.
 	 */
 	if (drng == esdm_drng_init_instance() && esdm_state_operational()) {
-		logger(LOGGER_DEBUG, LOGGER_C_ES,
-		       "ESDM set to non-operational\n");
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "ESDM set to non-operational\n");
 		esdm_state.esdm_operational = false;
 		esdm_state.esdm_fully_seeded = false;
 
@@ -497,7 +502,8 @@ static void esdm_set_operational(void)
 		esdm_state.esdm_operational = true;
 		esdm_init_wakeup();
 		esdm_shm_status_set_operational(true);
-		logger(LOGGER_VERBOSE, LOGGER_C_ES, "ESDM fully operational\n");
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "ESDM fully operational\n");
 	}
 }
 
@@ -593,25 +599,27 @@ void esdm_init_ops(struct entropy_buf *eb)
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
 		state->esdm_min_seeded = true;
-		logger(LOGGER_VERBOSE, LOGGER_C_ES,
-		       "ESDM fully seeded with %u bits of entropy\n",
-		       seed_bits);
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "ESDM fully seeded with %u bits of entropy\n",
+			    seed_bits);
 		esdm_set_entropy_thresh(requested_bits);
 	} else if (!state->esdm_min_seeded) {
 		/* DRNG is seeded with at least 128 bits of entropy */
 		if (seed_bits >= ESDM_MIN_SEED_ENTROPY_BITS) {
 			state->esdm_min_seeded = true;
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "ESDM minimally seeded with %u bits of entropy\n",
-			       seed_bits);
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_ES,
+				"ESDM minimally seeded with %u bits of entropy\n",
+				seed_bits);
 			esdm_set_entropy_thresh(requested_bits);
 			esdm_init_wakeup();
 
 			/* DRNG is seeded with at least ESDM_INIT_ENTROPY_BITS bits */
 		} else if (seed_bits >= ESDM_INIT_ENTROPY_BITS) {
-			logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			       "ESDM initial entropy level %u bits of entropy\n",
-			       seed_bits);
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_ES,
+				"ESDM initial entropy level %u bits of entropy\n",
+				seed_bits);
 			esdm_set_entropy_thresh(ESDM_MIN_SEED_ENTROPY_BITS);
 		}
 	}
@@ -627,8 +635,8 @@ int esdm_es_mgr_reinitialize(void)
 	/* Initialize the entropy sources */
 	for_each_esdm_es (i) {
 		if (esdm_es[i]->init) {
-			logger(LOGGER_DEBUG, LOGGER_C_ES,
-			       "Re-initialize ES %s\n", esdm_es[i]->name);
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+				    "Re-initialize ES %s\n", esdm_es[i]->name);
 			CKINT_LOG(esdm_es[i]->init(),
 				  "Reinitialization of ES %s failed: %d",
 				  esdm_es[i]->name, ret);
@@ -646,8 +654,8 @@ static int esdm_es_mgr_init_es(struct esdm_es_cb *esdm_es_one)
 	int ret = 0;
 
 	if (esdm_es_one->init) {
-		logger(LOGGER_DEBUG, LOGGER_C_ES, "Initialize ES %s\n",
-		       esdm_es_one->name);
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "Initialize ES %s\n",
+			    esdm_es_one->name);
 		CKINT_LOG(esdm_es_one->init(),
 			  "Initialization of ES %s failed: %d",
 			  esdm_es_one->name, ret);
@@ -670,7 +678,7 @@ int esdm_es_mgr_initialize(void)
 
 	BUILD_BUG_ON(ESDM_MAX_DIGESTSIZE % sizeof(unsigned long));
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ES, "Initialize ES manager\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES, "Initialize ES manager\n");
 
 	esdm_set_entropy_thresh(esdm_init_entropy_level(false));
 
@@ -697,10 +705,10 @@ int esdm_es_mgr_initialize(void)
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
 	memset_secure(&seed, 0, sizeof(seed));
 
-	logger(LOGGER_VERBOSE, LOGGER_C_ES,
-	       "Force fully seeding of all DRBGs\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		    "Force fully seeding of all DRBGs\n");
 	esdm_force_fully_seeded_all_drbgs();
-	logger(LOGGER_VERBOSE, LOGGER_C_ES, "All DRBGs fully seeded\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES, "All DRBGs fully seeded\n");
 
 out:
 	return ret;

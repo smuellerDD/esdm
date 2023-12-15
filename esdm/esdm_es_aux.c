@@ -124,7 +124,7 @@ static int esdm_aux_init(void)
 	hash_cb = drng->hash_cb;
 	if (hash_cb->hash_alloc)
 		CKINT(hash_cb->hash_alloc(&pool->aux_pool));
-	logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Aux ES hash allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Aux ES hash allocated\n");
 	pool->initialized = false;
 
 	esdm_init_wakeup_bits();
@@ -145,7 +145,7 @@ static void esdm_aux_fini(void)
 	if (hash_cb->hash_dealloc)
 		hash_cb->hash_dealloc(pool->aux_pool);
 	pool->aux_pool = NULL;
-	logger(LOGGER_DEBUG, LOGGER_C_ANY, "Aux ES hash deallocated\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "Aux ES hash deallocated\n");
 	mutex_unlock(&drng->hash_lock);
 }
 
@@ -222,9 +222,9 @@ static int esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
 	old_cb->hash_dealloc(shash);
 
 	esdm_set_digestsize(new_cb->hash_digestsize(pool->aux_pool));
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "Re-initialize aux entropy pool with hash %s\n",
-	       new_cb->hash_name());
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "Re-initialize aux entropy pool with hash %s\n",
+		    new_cb->hash_name());
 
 out:
 	new_cb->hash_dealloc(nhash);
@@ -345,9 +345,10 @@ static uint32_t esdm_aux_get_pool(uint8_t *outbuf, uint32_t requested_bits)
 	/* Apply oversampling: discount requested oversampling rate */
 	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
 
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "obtained %u bits by collecting %u bits of entropy from aux pool, %u bits of entropy remaining\n",
-	       returned_ent_bits, collected_ent_bits, unused_bits);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_ES,
+		"obtained %u bits by collecting %u bits of entropy from aux pool, %u bits of entropy remaining\n",
+		returned_ent_bits, collected_ent_bits, unused_bits);
 
 	/* Get the digest for the aux pool to be returned to the caller ... */
 	if (hash_cb->hash_final(shash, aux_output) ||
@@ -385,8 +386,8 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 	/* Mix the extracted data back into pool for backtracking resistance */
 	if (esdm_aux_pool_insert_locked((uint8_t *)eb_es,
 					sizeof(struct entropy_es), 0))
-		logger(LOGGER_WARN, LOGGER_C_ES,
-		       "Backtracking resistance operation failed\n");
+		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
+			    "Backtracking resistance operation failed\n");
 
 	mutex_w_unlock(&pool->lock);
 }

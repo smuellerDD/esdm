@@ -27,7 +27,7 @@
 #include "cuse_device.h"
 #include "cuse_helper.h"
 #include "esdm_rpc_service.h"
-#include "logger.h"
+#include "esdm_logger.h"
 #include "ret_checkers.h"
 
 static int urandom_fd = -1;
@@ -87,8 +87,8 @@ int main(int argc, char *argv[])
 
 	if (urandom_fd == -1) {
 		errsv = errno;
-		logger(LOGGER_ERR, LOGGER_C_CUSE,
-		       "Cannot open /dev/urandom: %s\n", strerror(errsv));
+		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
+			    "Cannot open /dev/urandom: %s\n", strerror(errsv));
 		return errsv;
 	}
 
