@@ -488,7 +488,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		/*
 		 * When there is a high load, there is a race between SIGTERM
 		 * signal breaking the accept() call and the propagation that
-		 * sever_exit is set to true. Thus, in a shutdown under high
+		 * server_exit is set to true. Thus, in a shutdown under high
 		 * load, it is possible that the caller triggered yet another
 		 * accept() before server_exit is set. In this case, accept
 		 * now blocks indefinitely. If it is unacceptable to check
@@ -980,6 +980,8 @@ void esdm_rpc_server_fini(void)
 
 	/* Unblock the accept() in the server loop */
 	thread_send_signal(ESDM_THREAD_RPC_UNPRIV_GROUP, SIGUSR1);
+	/* Unblock the accept() in the privileged server loop */
+	kill(server_pid, SIGUSR1);
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
