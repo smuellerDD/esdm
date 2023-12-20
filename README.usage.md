@@ -93,7 +93,7 @@ is present.
 
 ## AIS 20/31 (2011) Compliance
 
-The ESDM server operates NTG.1 compliant to AIS 20/31 (2022 draft version)
+The ESDM server operates NTG.1 compliant to AIS 20/31 (2011 version)
 right away when using one of the following interfaces:
 
 * `esdm_get_random_bytes_pr` ESDM library interface,
