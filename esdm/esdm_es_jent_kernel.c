@@ -50,9 +50,10 @@ static int esdm_jent_kernel_init(void)
 
 	ret = kcapi_rng_init(&jent_rng, "jitterentropy_rng", 0);
 	if (ret != 0) {
-		logger(LOGGER_WARN, LOGGER_C_ES,
-		       "Disabling kernel-based jitter entropy source as it is not present, error: %s\n",
-		       strerror(errno));
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ES,
+			"Disabling kernel-based jitter entropy source as it is not present, error: %s\n",
+			strerror(errno));
 		return 0;
 	}
 
@@ -86,9 +87,10 @@ static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 		goto err;
 
 	eb_es->e_bits = esdm_jent_kernel_entropylevel(requested_bits);
-	logger(LOGGER_DEBUG, LOGGER_C_ES,
-	       "obtained %u bits of entropy from kernel-based jitter RNG entropy source\n",
-	       eb_es->e_bits);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_ES,
+		"obtained %u bits of entropy from kernel-based jitter RNG entropy source\n",
+		eb_es->e_bits);
 
 	return;
 
