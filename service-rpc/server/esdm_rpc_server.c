@@ -973,6 +973,8 @@ out:
 
 void esdm_rpc_server_fini(void)
 {
+	pid_t tmp;
+
 	thread_stop_spawning();
 
 	atomic_set(&server_exit, 1);
@@ -981,7 +983,9 @@ void esdm_rpc_server_fini(void)
 	/* Unblock the accept() in the server loop */
 	thread_send_signal(ESDM_THREAD_RPC_UNPRIV_GROUP, SIGUSR1);
 	/* Unblock the accept() in the privileged server loop */
-	kill(server_pid, SIGUSR1);
+	tmp = server_pid;
+	if (tmp > 1)
+		kill(tmp, SIGUSR1);
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
