@@ -312,6 +312,7 @@ int esdm_shm_status_init(void)
 	esdm_shm_status_set_operational(esdm_state_operational());
 	esdm_shm_status_set_need_entropy();
 	esdm_shm_status_install_signal_suspend();
+	atomic_bool_set(&esdm_shm_status->suspend_trigger, false);
 
 	return 0;
 }
