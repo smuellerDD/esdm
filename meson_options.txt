@@ -441,6 +441,19 @@ even though the server shall exit.
 ''')
 
 ################################################################################
+# Auxiliary Options
+################################################################################
+
+option('small_memory', type: 'boolean', value: 'false',
+       description:'''Reduce Memory Footprint
+
+When enabled, the code is compiled such that it attempts to reduce the memory
+foot print of the entire code base as much as possible. This goes to the expense
+of the performance.
+''')
+
+
+################################################################################
 # Enable Test configuration
 #
 # WARNING: DO NOT ENABLE FOR PRODUCTION MODE

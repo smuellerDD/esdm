@@ -42,6 +42,7 @@
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_rpc_protocol.h"
+#include "esdm_rpc_protocol_helper.h"
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_server_linux.h"
 #include "esdm_rpc_service.h"
@@ -147,6 +148,81 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 	return 0;
 }
 
+#ifdef ESDM_RPCS_BUF_WRITE
+
+/*
+ * Implementation of packing data and sending it out. Properties:
+ *
+ * - one call to write data out to the file descriptor
+ *
+ * - one more copy of entire data required to linearize all data
+ */
+static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
+				   struct esdm_rpcs_connection *rpc_conn)
+{
+#define ESDM_RPCS_BUF_WRITE_HEADER_SZ (sizeof(struct esdm_rpc_proto_sc_header))
+
+	size_t message_length;
+	int ret;
+	uint8_t *data_buf_alloc = NULL;
+	uint8_t *data_buf;
+	struct esdm_rpc_proto_sc_header *sc_header;
+	struct esdm_rpc_write_data_buf tmp = { .dst_written = 0, };
+
+	tmp.base.append = esdm_rpc_append_data;
+
+	message_length = protobuf_c_message_get_packed_size(message);
+	if (message_length > ESDM_RPC_MAX_MSG_SIZE) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "Unexpected message length: %zu\n", message_length);
+		return -EFAULT;
+	}
+
+	data_buf_alloc = malloc(ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length +
+				sizeof(uint64_t) - 1);
+	CKNULL(data_buf_alloc, -ENOMEM);
+
+	data_buf = ALIGN_PTR_8(data_buf_alloc, sizeof(uint64_t));
+	tmp.dst_buf = (data_buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ);
+
+	sc_header = (struct esdm_rpc_proto_sc_header *)data_buf;
+	sc_header->status_code = le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SUCCESS);
+	sc_header->method_index = le_bswap32(rpc_conn->method_index);
+	sc_header->message_length = le_bswap32(message_length);
+	sc_header->request_id = le_bswap32(rpc_conn->request_id);
+
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_RPC,
+		"Server sending: server status %u, message length %u, message index %u, request ID %u\n",
+		sc_header->status_code, sc_header->message_length,
+		sc_header->method_index, sc_header->request_id);
+
+	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
+	    message_length) {
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+			    "Short write of data to file descriptor\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, data_buf,
+				       ESDM_RPCS_BUF_WRITE_HEADER_SZ +
+				       message_length),
+		  "Submission of message data failed with error %d\n", ret);
+
+out:
+	/*
+	 * Zeroization not needed, as data will go out through unprotected
+	 * channel anyway. If the data is not already protected, there is a
+	 * bigger problem.
+	 */
+	if (data_buf_alloc)
+		free(data_buf_alloc);
+	return ret;
+}
+
+#else /* KM_RPCS_BUF_WRITE */
+
 /* Write out data from a ProtobufC buffer. */
 static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
 				  const uint8_t *data)
@@ -160,24 +236,20 @@ static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
 			    ret);
 }
 
-/* Pack the message into a ProtobufC structure and write it to the receiver. */
-static int esdm_rpcs_pack(const ProtobufCMessage *message,
-			  struct esdm_rpcs_connection *rpc_conn)
+/*
+ * Implementation of packing data and sending it out. Properties:
+ *
+ * - multiple calls to write data out to the file descriptor
+ *
+ * - no additional memory required
+ */
+static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
+				   struct esdm_rpcs_connection *rpc_conn)
 {
 	struct esdm_rpc_proto_sc_header sc_header;
 	struct esdm_rpcs_write_buf tmp = { 0 };
 	size_t message_length;
 	int ret;
-
-	if (!protobuf_c_message_check(message)) {
-		sc_header.status_code =
-			le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SERVICE_FAILED);
-		sc_header.method_index = le_bswap32(rpc_conn->method_index);
-		sc_header.message_length = 0;
-		sc_header.request_id = le_bswap32(rpc_conn->request_id);
-		return esdm_rpcs_write_data(rpc_conn, (uint8_t *)&sc_header,
-					    sizeof(sc_header));
-	}
 
 	message_length = protobuf_c_message_get_packed_size(message);
 	tmp.base.append = esdm_rpcs_append_data;
@@ -201,12 +273,33 @@ static int esdm_rpcs_pack(const ProtobufCMessage *message,
 	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
 	    message_length) {
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-			    "Short write of data to file descriptor \n");
+			    "Short write of data to file descriptor\n");
 		ret = -EFAULT;
 	}
 
 out:
 	return ret;
+}
+
+#endif /* KM_RPCS_BUF_WRITE */
+
+/* Pack the message into a ProtobufC structure and write it to the receiver. */
+static int esdm_rpcs_pack(const ProtobufCMessage *message,
+			  struct esdm_rpcs_connection *rpc_conn)
+{
+	struct esdm_rpc_proto_sc_header sc_header;
+
+	if (!protobuf_c_message_check(message)) {
+		sc_header.status_code =
+			le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SERVICE_FAILED);
+		sc_header.method_index = le_bswap32(rpc_conn->method_index);
+		sc_header.message_length = 0;
+		sc_header.request_id = le_bswap32(rpc_conn->request_id);
+		return esdm_rpcs_write_data(rpc_conn, (uint8_t *)&sc_header,
+					    sizeof(sc_header));
+	}
+
+	return esdm_rpcs_pack_internal(message, rpc_conn);
 }
 
 /* Is the calling RPC client a privileged user? */

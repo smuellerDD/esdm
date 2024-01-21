@@ -127,4 +127,7 @@ if build_machine.system() == 'linux'
 	conf_data.set('ESDM_LINUX', 1)
 endif
 
+conf_data.set('ESDM_RPCC_BUF_WRITE', not get_option('small_memory'))
+conf_data.set('ESDM_RPCS_BUF_WRITE', not get_option('small_memory'))
+
 configure_file(output: 'config.h', configuration : conf_data)

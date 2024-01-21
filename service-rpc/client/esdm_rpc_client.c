@@ -33,6 +33,7 @@
 #include "conv_be_le.h"
 #include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_protocol.h"
+#include "esdm_rpc_protocol_helper.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "esdm_logger.h"
@@ -158,8 +159,8 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	return -errsv;
 }
 
-static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
-				      const uint8_t *data, size_t len)
+static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
+					 const uint8_t *data, size_t len)
 {
 	size_t written = 0;
 	ssize_t ret;
@@ -219,11 +220,86 @@ static int esdm_rpc_client_write_data(esdm_rpc_client_connection_t *rpc_conn,
 	return 0;
 }
 
+#ifdef ESDM_RPCC_BUF_WRITE
+
+/*
+ * Implementation of packing data and sending it out. Properties:
+ *
+ * - one call to write data out to the file descriptor
+ *
+ * - one more copy of entire data required to linearize all data
+ */
+static int esdm_rpc_client_pack(const ProtobufCMessage *message,
+				unsigned int method_index,
+				esdm_rpc_client_connection_t *rpc_conn)
+{
+#define ESDM_RPCC_BUF_WRITE_HEADER_SZ (sizeof(struct esdm_rpc_proto_cs_header))
+
+	size_t message_length;
+	int ret;
+	uint8_t *data_buf_alloc = NULL;
+	uint8_t *data_buf;
+	struct esdm_rpc_proto_cs_header *cs_header;
+	struct esdm_rpc_write_data_buf tmp = { .dst_written = 0, };
+
+	tmp.base.append = esdm_rpc_append_data;
+
+	message_length = protobuf_c_message_get_packed_size(message);
+	if (message_length > ESDM_RPC_MAX_MSG_SIZE) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "Unexpected message length: %zu\n", message_length);
+		return -EFAULT;
+	}
+
+	data_buf_alloc = malloc(ESDM_RPCC_BUF_WRITE_HEADER_SZ + message_length +
+				sizeof(uint64_t) - 1);
+	CKNULL(data_buf_alloc, -ENOMEM);
+
+	data_buf = ALIGN_PTR_8(data_buf_alloc, sizeof(uint64_t));
+	tmp.dst_buf = (data_buf + ESDM_RPCC_BUF_WRITE_HEADER_SZ);
+
+	cs_header = (struct esdm_rpc_proto_cs_header *)data_buf;
+	cs_header->method_index = le_bswap32(method_index);
+	cs_header->message_length = le_bswap32(message_length);
+	cs_header->request_id = le_bswap32(0);
+
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_RPC,
+		"Client sending: message length %u, message index %u, request ID %u\n",
+		cs_header->message_length, cs_header->method_index,
+		cs_header->request_id);
+
+	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
+	    message_length) {
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+			    "Short write of data to file descriptor \n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, data_buf,
+						ESDM_RPCC_BUF_WRITE_HEADER_SZ +
+						message_length),
+		  "Submission of message data failed with error %d\n", ret);
+
+out:
+	/*
+	 * Zeroization not needed, as data will go out through unprotected
+	 * channel anyway. If the data is not already protected, there is a
+	 * bigger problem.
+	 */
+	if (data_buf_alloc)
+		free(data_buf_alloc);
+	return ret;
+}
+
+#else /* KM_RPCC_BUF_WRITE */
+
 static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 					const uint8_t *data)
 {
 	struct esdm_rpcc_write_buf *buf = (struct esdm_rpcc_write_buf *)buffer;
-	int ret = esdm_rpc_client_write_data(buf->rpc_conn, data, len);
+	int ret = esdm_rpc_client_write_data_fd(buf->rpc_conn, data, len);
 
 	if (ret < 0)
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -231,6 +307,13 @@ static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 			    ret);
 }
 
+/*
+ * Implementation of packing data and sending it out. Properties:
+ *
+ * - multiple calls to write data out to the file descriptor
+ *
+ * - no additional memory required
+ */
 static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 				unsigned int method_index,
 				esdm_rpc_client_connection_t *rpc_conn)
@@ -254,8 +337,8 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 		cs_header.message_length, cs_header.method_index,
 		cs_header.request_id);
 
-	CKINT_LOG(esdm_rpc_client_write_data(rpc_conn, (uint8_t *)&cs_header,
-					     sizeof(cs_header)),
+	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, (uint8_t *)&cs_header,
+						sizeof(cs_header)),
 		  "Submission of header data failed with error %d\n", ret);
 
 	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
@@ -268,6 +351,8 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 out:
 	return ret;
 }
+
+#endif /* KM_RPCC_BUF_WRITE */
 
 static int
 esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
