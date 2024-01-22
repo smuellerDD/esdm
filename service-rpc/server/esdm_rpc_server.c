@@ -221,7 +221,7 @@ out:
 	return ret;
 }
 
-#else /* KM_RPCS_BUF_WRITE */
+#else /* ESDM_RPCS_BUF_WRITE */
 
 /* Write out data from a ProtobufC buffer. */
 static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
@@ -281,7 +281,7 @@ out:
 	return ret;
 }
 
-#endif /* KM_RPCS_BUF_WRITE */
+#endif /* ESDM_RPCS_BUF_WRITE */
 
 /* Pack the message into a ProtobufC structure and write it to the receiver. */
 static int esdm_rpcs_pack(const ProtobufCMessage *message,

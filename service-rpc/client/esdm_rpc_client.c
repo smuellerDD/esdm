@@ -293,7 +293,7 @@ out:
 	return ret;
 }
 
-#else /* KM_RPCC_BUF_WRITE */
+#else /* ESDM_RPCC_BUF_WRITE */
 
 static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
 					const uint8_t *data)
@@ -352,7 +352,7 @@ out:
 	return ret;
 }
 
-#endif /* KM_RPCC_BUF_WRITE */
+#endif /* ESDM_RPCC_BUF_WRITE */
 
 static int
 esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
