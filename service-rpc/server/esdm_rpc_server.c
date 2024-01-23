@@ -1075,6 +1075,7 @@ void esdm_rpc_server_fini(void)
 
 	/* Unblock the accept() in the server loop */
 	thread_send_signal(ESDM_THREAD_RPC_UNPRIV_GROUP, SIGUSR1);
+	thread_send_signal(ESDM_THREAD_CUSE_POLL_GROUP, SIGUSR1);
 	/* Unblock the accept() in the privileged server loop */
 	tmp = server_pid;
 	if (tmp > 1)
