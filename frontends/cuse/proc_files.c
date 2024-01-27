@@ -25,6 +25,7 @@
 #include <fuse3/fuse.h>
 #include <fuse3/fuse_lowlevel.h>
 #include <libgen.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -311,6 +312,37 @@ static void esdm_proc_term(void)
 	esdm_rpcc_fini_priv_service();
 	esdm_rpcc_fini_unpriv_service();
 }
+
+
+/* terminate the daemon cleanly */
+static void esdm_proc_sig_term(int sig)
+{
+	(void)sig;
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Shutting down cleanly\n");
+
+	/* Prevent the kernel from interfering with the shutdown */
+	signal(SIGALRM, SIG_IGN);
+
+	/* If we got another termination signal, just get killed */
+	signal(SIGHUP, SIG_DFL);
+	signal(SIGINT, SIG_DFL);
+	signal(SIGQUIT, SIG_DFL);
+	signal(SIGTERM, SIG_DFL);
+
+	esdm_proc_term();
+	exit(0);
+}
+
+static void esdm_proc_install_term(void)
+{
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		    "Install termination signal handler\n");
+	signal(SIGHUP, esdm_proc_sig_term);
+	signal(SIGINT, esdm_proc_sig_term);
+	signal(SIGQUIT, esdm_proc_sig_term);
+	signal(SIGTERM, esdm_proc_sig_term);
+}
+
 
 static int esdm_proc_pre_init(void)
 {
@@ -629,6 +661,8 @@ int main(int argc, char *argv[])
 		  "Initialization of dispatcher failed\n");
 
 	CKINT(esdm_proc_pre_init());
+
+	esdm_proc_install_term();
 
 	ret = fuse_main(args.argc, args.argv, &esdm_proc_oper, NULL);
 
