@@ -576,6 +576,10 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			continue;
 		}
 
+		/* If server is requested to terminate, do that */
+		if (atomic_read(&server_exit))
+			break;
+
 		rpc_conn->proto = proto;
 
 		/*
