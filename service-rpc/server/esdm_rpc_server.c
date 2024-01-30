@@ -1076,10 +1076,13 @@ void esdm_rpc_server_fini(void)
 	/* Unblock the accept() in the server loop */
 	thread_send_signal(ESDM_THREAD_RPC_UNPRIV_GROUP, SIGUSR1);
 	thread_send_signal(ESDM_THREAD_CUSE_POLL_GROUP, SIGUSR1);
-	/* Unblock the accept() in the privileged server loop */
+	/* Unblock the accept() in the privileged server loop.
+	 * Only some signal handled by the signal handler before fork
+	 * will be handled in the forked child and will set server_exit there.
+	 * Setting server_exit in the main process will have no effect */
 	tmp = server_pid;
 	if (tmp > 1)
-		kill(tmp, SIGUSR1);
+		kill(tmp, SIGTERM);
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
