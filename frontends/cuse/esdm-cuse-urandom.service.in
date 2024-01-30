@@ -20,3 +20,4 @@ PartOf=esdm-linux-compat.target
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-cuse-urandom -f
+KillMode=mixed

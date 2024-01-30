@@ -20,3 +20,4 @@ PartOf=esdm-linux-compat.target
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-proc --relabel -f -o allow_other /proc/sys/kernel/random
+KillMode=mixed
