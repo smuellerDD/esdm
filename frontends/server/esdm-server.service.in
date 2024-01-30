@@ -66,6 +66,7 @@ RemoveIPC=yes
 RestrictAddressFamilies=
 RestrictRealtime=yes
 UMask=0077
+KillMode=mixed
 
 [Install]
 WantedBy=basic.target
