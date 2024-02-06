@@ -131,7 +131,7 @@ static int esdm_leancrypto_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (ret)
 		return ret;
 
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "XDRBG256 core allocated\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "XDRBG allocated\n");
 
 	return 0;
 }
@@ -142,12 +142,12 @@ static void esdm_leancrypto_drbg_dealloc(void *drng)
 
 	lc_rng_zero_free(ctx);
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-		    "cSHAKE DRNG core zeroized and freed\n");
+		    "XDRBG zeroized and freed\n");
 }
 
 static const char *esdm_leancrypto_drbg_name(void)
 {
-	return "Leancrypto cSHAKE DRNG";
+	return "Leancrypto XDRBG with SHAKE256 core";
 }
 
 static int esdm_leancrypto_drbg_selftest(void)

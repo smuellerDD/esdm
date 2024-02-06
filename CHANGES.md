@@ -1,3 +1,6 @@
+Changes 1.0.3-prerelease:
+* fix: name of leancrypto DRNG
+
 Changes 1.0.2:
 * hardening: enable -fzero-call-used-regs=used-gpr
 
