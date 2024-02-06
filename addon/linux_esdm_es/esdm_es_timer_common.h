@@ -2,7 +2,7 @@
 /*
  * ESDM Slow Noise Source: Time stamp array handling
  *
- * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2024, Stephan Mueller <smueller@chronox.de>
  */
 
 #ifndef _ESDM_ES_TIMER_COMMON_H

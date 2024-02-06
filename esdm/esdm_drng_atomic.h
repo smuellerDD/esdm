@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2024, Stephan Mueller <smueller@chronox.de>
  */
 
 #ifndef _ESDM_DRNG_ATOMIC_H

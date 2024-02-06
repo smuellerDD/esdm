@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2024, Stephan Mueller <smueller@chronox.de>
  *
  * Definition of an entropy source.
  *

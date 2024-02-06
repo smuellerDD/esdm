@@ -41,7 +41,7 @@ index 000000000000..d42f4997b8ca
 @@ -0,0 +1,40 @@
 +/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 +/*
-+ * Copyright (C) 2023, Stephan Mueller <smueller@chronox.de>
++ * Copyright (C) 2024, Stephan Mueller <smueller@chronox.de>
 + *
 + * ESDM entropy source user space interface.
 + */
@@ -87,7 +87,7 @@ index 000000000000..f5935eca193a
 @@ -0,0 +1,20 @@
 +/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 +/*
-+ * Copyright (C) 2023, Stephan Mueller <smueller@chronox.de>
++ * Copyright (C) 2024, Stephan Mueller <smueller@chronox.de>
 + */
 +
 +#ifndef _ESDM_SCHED_H

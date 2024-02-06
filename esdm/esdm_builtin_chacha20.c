@@ -1,7 +1,7 @@
 /*
  * Backend for the ESDM providing a ChaCha20-based DRNG
  *
- * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2024, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *

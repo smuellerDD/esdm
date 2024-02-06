@@ -2,7 +2,7 @@
 /*
  * Entropy Source and DRNG Manager (ESDM) Health Testing
  *
- * Copyright (C) 2022 - 2023, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2024, Stephan Mueller <smueller@chronox.de>
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
