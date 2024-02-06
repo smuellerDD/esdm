@@ -145,7 +145,8 @@ The ESDM build system supports various configuration options which are
 listed and documented when invoking `meson configure build`.
 
 The options can be altered with `meson configure build -D<option>=<value>`
-where `<value>` is either `enabled` or `disabled`.
+where `<value>` is either `enabled` or `disabled`, or `true` or `false` as
+documented.
 
 Besides different entropy sources, multiple cryptographic backends can be
 configured. Please note, that backends based on libraries like OpenSSL or

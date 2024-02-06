@@ -86,7 +86,7 @@ is present.
 
 ## AIS 20/31 (2022) Compliance
 
-When enabling the compile time option either `ais2031`, the ESDM server
+When enabling the compile time option of `ais2031`, the ESDM server
 operates NTG.1 compliant to AIS 20/31 (2022 draft version) right away when using
 the interfaces that are documented to block until sufficient initial entropy
 is present.
