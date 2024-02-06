@@ -1,7 +1,13 @@
-Changes 1.0.2-prerelease:
+Changes 1.0.2:
 * hardening: enable -fzero-call-used-regs=used-gpr
 
-* editorial: rename logging* symbols to esdm_logging* - this is purely internal, but considering some of these symbols are externally visible, libesdm_rpc_client polutes the namespace of consumers
+* editorial: rename logging* symbols to esdm_logging* - this is purely internal, but considering some of these symbols are externally visible, libesdm_rpc_client pollutes the namespace of consumers
+
+* enhancement: significant performance increase of RPC communication
+
+* fix: Poll writer woke up as status variable was not properly initialized
+
+* fix: proper shut down sequence of ESDM daemons
 
 Changes 1.0.1:
 * enhancement/fix: add support for multiple ESDM RPC client connection initializations
