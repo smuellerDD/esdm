@@ -77,12 +77,12 @@ is enabled during compile time:
 
 * Jitter RNG: If the Jitter RNG entropy source is enabled as a compile time
   option, install the Jitter RNG library from your distribution or from the
-  [Jitter RNG homepage](https://www.chronox.de/jent.html).
+  [Jitter RNG homepage](https://www.chronox.de/jent).
 
 * kcapi library: If the kernel-based jitter source is enabled as a compile time
   option, the kcapi library is required, either from your distribution or from
   the
-  [libkcapi website](http://www.chronox.de/libkcapi.html).
+  [libkcapi website](http://www.chronox.de/libkcapi).
 
 * SELinux library: If your system uses SELinux and you compile the CUSE device
   file support (compile time option), the SELinux library is needed for proper
@@ -103,6 +103,10 @@ is enabled during compile time:
   used and is enabled as a compile time option, or if the OpenSSL ESDM seed
   source shall be compiled when the compile time option is enabled, obtain OpenSSL either from your distribution or from the
   [OpenSSL website](https://www.openssl.org/source/).
+
+* leancrypto: If the leancrypto backend for cryptographic operations shall be
+  enabled during compile time, obtain leancrypto from the
+  [leancrypto](https://leancrypto.org) website.
 
 Beyond those dependencies, only POSIX support is required.
 
