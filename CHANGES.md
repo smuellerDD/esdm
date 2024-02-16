@@ -3,6 +3,8 @@ Changes 1.0.3-prerelease:
 
 * fix: getentropy returns 0 on success
 
+* enhancement: only establish connection to server once and when needed
+
 Changes 1.0.2:
 * hardening: enable -fzero-call-used-regs=used-gpr
 

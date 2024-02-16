@@ -529,7 +529,12 @@ static void esdm_client_invoke(ProtobufCService *service,
 	mutex_w_lock(&rpc_conn->lock);
 
 	do {
-		CKINT(esdm_connect_proto_service(rpc_conn));
+		/*
+		 * Connect to the server if we do not have a connection,
+		 * otherwise reuse the session.
+		 */
+		if (rpc_conn->fd == -1)
+			CKINT(esdm_connect_proto_service(rpc_conn));
 
 		/* Pack the protobuf-c data and send it over the wire */
 		CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn),
