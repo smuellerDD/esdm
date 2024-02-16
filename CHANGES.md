@@ -1,6 +1,8 @@
 Changes 1.0.3-prerelease:
 * fix: name of leancrypto DRNG
 
+* fix: getentropy returns 0 on success
+
 Changes 1.0.2:
 * hardening: enable -fzero-call-used-regs=used-gpr
 

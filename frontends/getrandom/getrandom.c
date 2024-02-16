@@ -163,8 +163,21 @@ static int getentropy_common(void *buffer, size_t length)
 	}
 
 	esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
-	if (ret < 0)
-		return (int)syscall(__NR_getrandom, buffer, length, 0);
+	if (ret < 0) {
+		ssize_t rc = syscall(__NR_getrandom, buffer, length, 0);
+
+		/* Kernel returned an error */
+		if (rc < 0) {
+			/* errno is already set properly */
+			return (int)rc;
+		}
+
+		/* We received insufficient data */
+		if ((size_t)rc != length) {
+			errno = -EFAULT;
+			return -1;
+		}
+	}
 	return 0;
 }
 
