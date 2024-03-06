@@ -105,3 +105,26 @@ right away when using one of the following interfaces:
 
 * request random numbers from the getrandom(2) system call ESDM replacement
   with the flag `GRND_RANDOM`
+
+## SystemD-based Startup
+
+To start up the different ESDM components with systemd, execute the following
+commands:
+
+1. Start server: `systemctl start esdm-server`
+
+2. Enable server: `systemctl enable esdm-server`
+
+3. Enable the suspend helper: `systemctl enable esdm-server-suspend`
+
+4. Enable the resume helper: `systemctl enable esdm-server-resume`
+
+5. Start the different clients: `systemctl start esdm-linux-compat.target`
+
+5. Enable the different clients: `systemctl enable esdm-linux-compat.target`
+
+Note, a pitfall may be the use of BtrFS where `/usr/local` is a separate
+subvolume. The `esdm-server` wants to be invoked very early in the boot cycle
+at a time the `/usr/local` is not yet mounted which leads to the situation that
+the `esdm-server` is not started during boot. Thus, the `esdm-server` should
+not be deployed on a BtrFS subvolumes.
