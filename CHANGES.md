@@ -5,6 +5,8 @@ Changes 1.0.3-prerelease:
 
 * enhancement: only establish connection to server once and when needed
 
+* fix: SHM in CUSE must be attached RD/WR
+
 Changes 1.0.2:
 * hardening: enable -fzero-call-used-regs=used-gpr
 

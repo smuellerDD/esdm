@@ -140,7 +140,7 @@ static int esdm_cuse_shm_status_create_shm(void)
 		}
 	}
 
-	tmp = shmat(esdm_cuse_shmid, NULL, SHM_RDONLY);
+	tmp = shmat(esdm_cuse_shmid, NULL, 0);
 	if (tmp == (void *)-1) {
 		errsv = errno;
 		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
