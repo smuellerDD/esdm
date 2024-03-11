@@ -373,6 +373,9 @@ Using CUSE, the device files are provided.
 option('linux-getrandom', type: 'feature', value: 'enabled',
        description: 'Enable the Linux getrandom system call support.')
 
+option('linux-aux', type: 'feature', value: 'enabled',
+       description: 'Enable the Linux helper library for entropy status notifications.')
+
 option('botan-rng', type: 'feature', value: 'disabled',
        description: '''Enable the Botan >= 3 RNG support.
 

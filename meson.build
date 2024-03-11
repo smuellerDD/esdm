@@ -149,6 +149,10 @@ if get_option('linux-getrandom').enabled()
 	subdirs += [ 'frontends/getrandom' ]
 endif
 
+if get_option('linux-aux').enabled()
+	subdirs += [ 'frontends/aux' ]
+endif
+
 if get_option('botan-rng').enabled()
 	add_languages('cpp', required: true)
 	botan_dep = dependency('botan-3', required: true)
