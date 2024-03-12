@@ -128,3 +128,18 @@ subvolume. The `esdm-server` wants to be invoked very early in the boot cycle
 at a time the `/usr/local` is not yet mounted which leads to the situation that
 the `esdm-server` is not started during boot. Thus, the `esdm-server` should
 not be deployed on a BtrFS subvolumes.
+
+## Additional Hardening Measures
+
+The ESDM already executes with different execution domains and without any
+privileges. Yet, the following measures may be taken to additionally harden
+the setup:
+
+* Create a separate unprivileged user ID only for the ESDM daemons. Then
+start all ESDM daemons such that they switch to this user instead of the user
+"nobody". The ESDM-specific user shall not be used by anyone else. This
+special user first ensures that ESDM cannot access other "nobody" processes.
+Vice versa, other "nobody" processes cannot access the ESDM resources, notably
+the processes themselves (via ptrace(2)) as well as the IPC mechanisms used
+for synchronization between the ESDM daemons (semaphore / shared memory
+segment).
