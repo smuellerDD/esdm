@@ -397,6 +397,13 @@ option('esdm-server', type: 'feature', value: 'enabled',
 # Client-related Configuration
 ################################################################################
 
+option('esdm-aux-client', type: 'feature', value: 'enabled',
+       description: '''Enable the ESDM auxliary client library
+
+With this option, the ESDM auxiliary client library is enabled allowing access
+to auxiliary functions offered by the ESDM. This library is a convenience
+wrapper around interfaces offered by ESDM that can be directly used.''')
+
 # WARNING: handle all of these options with care as they may lead to an increased
 # number of failed RPC replies to the client without random data or higher load
 # due to faster retries!

@@ -161,6 +161,10 @@ if get_option('openssl-rand-provider').enabled()
 	subdirs += [ 'frontends/openssl-provider' ]
 endif
 
+if get_option('esdm-aux-client').enabled()
+	subdirs += [ 'frontends/aux-client' ]
+endif
+
 foreach n : subdirs
 	subdir(n)
 endforeach

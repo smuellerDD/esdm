@@ -48,6 +48,7 @@ extern "C" {
 
 #define ESDM_SEM_RANDOM_NAME "esdm-random-shm-status-semaphore-testmode"
 #define ESDM_SEM_URANDOM_NAME "esdm-urandom-shm-status-semaphore-testmode"
+#define ESDM_SEM_NEED_ENTROPY_LEVEL "esdm-need-entropy-level-semaphore-testmode"
 
 #else /* ESDM_TESTMODE */
 
@@ -60,6 +61,7 @@ extern "C" {
 
 #define ESDM_SEM_RANDOM_NAME "esdm-random-shm-status-semaphore"
 #define ESDM_SEM_URANDOM_NAME "esdm-urandom-shm-status-semaphore"
+#define ESDM_SEM_NEED_ENTROPY_LEVEL "esdm-need-entropy-level-semaphore"
 
 #endif /* ESDM_TESTMODE */
 

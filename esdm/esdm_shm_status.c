@@ -43,6 +43,9 @@ static int esdm_shmid = -1;
 static sem_t *esdm_semid_random = SEM_FAILED;
 static sem_t *esdm_semid_urandom = SEM_FAILED;
 
+/* Level-triggered semaphore when the ESDM needs entropy */
+static sem_t *esdm_semid_need_entropy_level = SEM_FAILED;
+
 static void _esdm_shm_status_up(sem_t *sem)
 {
 	int semval = 0;
@@ -99,6 +102,13 @@ void esdm_shm_status_set_need_entropy(void)
 		atomic_bool_set(&esdm_shm_status->need_entropy, new);
 		esdm_shm_status_up();
 	}
+
+	/*
+	 * Implement a kind of level-triggered semaphore - i.e. it fires
+	 * as long as entropy is required.
+	 */
+	if (new)
+		_esdm_shm_status_up(esdm_semid_need_entropy_level);
 }
 
 static void esdm_shm_status_set_suspend(void)
@@ -161,6 +171,7 @@ static void esdm_shm_status_delete_sem(void)
 {
 	_esdm_shm_status_delete_sem(&esdm_semid_random);
 	_esdm_shm_status_delete_sem(&esdm_semid_urandom);
+	_esdm_shm_status_delete_sem(&esdm_semid_need_entropy_level);
 }
 
 static int esdm_shm_status_create_sem(const char *semname, sem_t **sem)
@@ -304,6 +315,14 @@ int esdm_shm_status_init(void)
 		esdm_shm_status_exit();
 		return ret;
 	}
+
+	ret = esdm_shm_status_create_sem(ESDM_SEM_NEED_ENTROPY_LEVEL,
+					 &esdm_semid_need_entropy_level);
+	if (ret) {
+		esdm_shm_status_exit();
+		return ret;
+	}
+
 
 	esdm_status(esdm_shm_status->info, sizeof(esdm_shm_status->info));
 	esdm_shm_status->infolen = strlen(esdm_shm_status->info);
