@@ -7,6 +7,8 @@ Changes 1.0.3-prerelease:
 
 * fix: SHM in CUSE must be attached RD/WR
 
+* enhancement: add esdm_aux_client library
+
 Changes 1.0.2:
 * hardening: enable -fzero-call-used-regs=used-gpr
 

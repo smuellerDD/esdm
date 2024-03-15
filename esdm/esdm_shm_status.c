@@ -76,6 +76,19 @@ static void esdm_shm_status_up(void)
 	_esdm_shm_status_up(esdm_semid_urandom);
 }
 
+/*
+ * NOTE:
+ * This function wakes up all potential waiters on any semaphore. When adding
+ * a new semaphore or any other synchronization mechanism where the remote
+ * end will sleep on, add a wakeup call here to ensure the remote end is not
+ * blocking a sleep or a shutdown!
+ */
+static void esdm_shm_wake_all(void)
+{
+	esdm_shm_status_up();
+	_esdm_shm_status_up(esdm_semid_need_entropy_level);
+}
+
 void esdm_shm_status_set_operational(bool enabled)
 {
 	if (!esdm_shm_status)
@@ -117,7 +130,9 @@ static void esdm_shm_status_set_suspend(void)
 		return;
 
 	atomic_bool_set(&esdm_shm_status->suspend_trigger, true);
-	esdm_shm_status_up();
+
+	/* Wake up all waiters */
+	esdm_shm_wake_all();
 }
 
 static void esdm_shm_status_server_exit(void)
