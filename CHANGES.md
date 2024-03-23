@@ -1,4 +1,4 @@
-Changes 1.0.3-prerelease:
+Changes 1.1.0-prerelease:
 * fix: name of leancrypto DRNG
 
 * fix: getentropy returns 0 on success
