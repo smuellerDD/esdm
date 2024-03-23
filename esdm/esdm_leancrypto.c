@@ -141,8 +141,7 @@ static void esdm_leancrypto_drbg_dealloc(void *drng)
 	struct lc_rng_ctx *ctx = drng;
 
 	lc_rng_zero_free(ctx);
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-		    "XDRBG zeroized and freed\n");
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "XDRBG zeroized and freed\n");
 }
 
 static const char *esdm_leancrypto_drbg_name(void)

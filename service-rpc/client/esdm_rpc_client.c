@@ -240,7 +240,9 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 	uint8_t *data_buf_alloc = NULL;
 	uint8_t *data_buf;
 	struct esdm_rpc_proto_cs_header *cs_header;
-	struct esdm_rpc_write_data_buf tmp = { .dst_written = 0, };
+	struct esdm_rpc_write_data_buf tmp = {
+		.dst_written = 0,
+	};
 
 	tmp.base.append = esdm_rpc_append_data;
 
@@ -279,7 +281,7 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 
 	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, data_buf,
 						ESDM_RPCC_BUF_WRITE_HEADER_SZ +
-						message_length),
+							message_length),
 		  "Submission of message data failed with error %d\n", ret);
 
 out:

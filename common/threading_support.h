@@ -63,9 +63,9 @@ extern "C" {
  * The ESDM_THREAD_MAX_SPECIAL_GROUPS specifies how many special threading
  * groups are available.
  */
-#define ESDM_THREAD_CUSE_POLL_GROUP ((uint32_t)-1)
-#define ESDM_THREAD_ES_MONITOR ((uint32_t)-2)
-#define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t)-3)
+#define ESDM_THREAD_CUSE_POLL_GROUP ((uint32_t) - 1)
+#define ESDM_THREAD_ES_MONITOR ((uint32_t) - 2)
+#define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t) - 3)
 #define ESDM_THREAD_MAX_SPECIAL_GROUPS 3
 
 enum esdm_request_type {

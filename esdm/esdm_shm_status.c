@@ -338,7 +338,6 @@ int esdm_shm_status_init(void)
 		return ret;
 	}
 
-
 	esdm_status(esdm_shm_status->info, sizeof(esdm_shm_status->info));
 	esdm_shm_status->infolen = strlen(esdm_shm_status->info);
 	esdm_shm_status->unpriv_threads = esdm_config_online_nodes();

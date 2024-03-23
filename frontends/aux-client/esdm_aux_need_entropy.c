@@ -34,8 +34,7 @@ static sem_t *esdm_semid_need_entropy_level = SEM_FAILED;
 static int esdm_cuse_shm_status_down(struct timespec *ts)
 {
 	if (esdm_semid_need_entropy_level == SEM_FAILED) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-			    "Cannot use semaphore\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot use semaphore\n");
 		errno = EINVAL;
 		return -1;
 	}
@@ -66,9 +65,8 @@ static int esdm_cuse_shm_status_create_sem(void)
 						 O_CREAT | O_EXCL, 0644, 0);
 	if (esdm_semid_need_entropy_level == SEM_FAILED) {
 		if (errno == EEXIST) {
-			esdm_semid_need_entropy_level =
-				sem_open(ESDM_SEM_NEED_ENTROPY_LEVEL, O_CREAT,
-					 0644, 0);
+			esdm_semid_need_entropy_level = sem_open(
+				ESDM_SEM_NEED_ENTROPY_LEVEL, O_CREAT, 0644, 0);
 			if (esdm_semid_need_entropy_level == SEM_FAILED)
 				goto err;
 		} else {
