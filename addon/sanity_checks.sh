@@ -168,7 +168,10 @@ check_reposanity() {
 		echo "Forgot to add $version changes to ${CHANGESFILE}" >&2
 		exit 1
 	fi
+}
 
+# Check whether we have a preliminary code drop
+check_preliminary() {
 	if $(head -n1 ${CHANGESFILE} | grep -q "prerelease" )
 	then
 		echo "Preliminary release - skipping full release validation" >&2
@@ -185,6 +188,7 @@ check_only_signed_commits() {
 	if [ "$(git log --pretty=%G? ${oldver}..HEAD | grep -v G)" != "" ]
 	then
 		echo "ERROR: Unsigned check-ins found" >&2
+		git log --pretty='format:%H|%aN|%s|%G?' $@ | awk -F '|' '{ if($4 != "G"){print $1;} }'
 		exit 1
 	fi
 }
@@ -232,7 +236,7 @@ prepare_gitrepo() {
 	check_reposanity $version
 	[ $? -ne 0 ] && exit 1
 
-	code_cleanup $(pwd) ".git" build $0
+	code_cleanup $(pwd) ".git" build $0 ".pdf"
 	[ $? -ne 0 ] && exit 1
 
 	check_only_signed_commits
@@ -243,6 +247,8 @@ prepare_gitrepo() {
 
 	check_git_blockchain
 	[ $? -ne 0 ] && exit 1
+
+	check_preliminary
 
 	tag $(basename $(pwd)) $version
 	[ $? -ne 0 ] && exit 1
