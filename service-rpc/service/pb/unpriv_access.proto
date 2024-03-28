@@ -353,7 +353,12 @@ message GetMinReseedSecsResponse {
  * Protocol handler
  ******************************************************************************/
 service UnprivAccess {
+	/* status calls */
 	rpc RpcStatus (StatusRequest) returns (StatusResponse);
+	rpc RpcGetEntLvl (GetEntLvlRequest) returns (GetEntLvlResponse);
+	rpc RpcIsMinSeeded (IsMinSeededRequest) returns (IsMinSeededResponse);
+	rpc RpcIsFullySeeded (IsFullySeededRequest) returns (IsFullySeededResponse);
+
 	rpc RpcGetRandomBytesFull (GetRandomBytesFullRequest) returns
 				  (GetRandomBytesFullResponse);
 	rpc RpcGetRandomBytesMin (GetRandomBytesMinRequest) returns
