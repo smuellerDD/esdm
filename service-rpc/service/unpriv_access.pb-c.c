@@ -83,6 +83,261 @@ void status_response__free_unpacked(StatusResponse *message,
 	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
 					 allocator);
 }
+void get_ent_lvl_request__init(GetEntLvlRequest *message)
+{
+	static const GetEntLvlRequest init_value = GET_ENT_LVL_REQUEST__INIT;
+	*message = init_value;
+}
+size_t get_ent_lvl_request__get_packed_size(const GetEntLvlRequest *message)
+{
+	assert(message->base.descriptor == &get_ent_lvl_request__descriptor);
+	return protobuf_c_message_get_packed_size(
+		(const ProtobufCMessage *)(message));
+}
+size_t get_ent_lvl_request__pack(const GetEntLvlRequest *message, uint8_t *out)
+{
+	assert(message->base.descriptor == &get_ent_lvl_request__descriptor);
+	return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t get_ent_lvl_request__pack_to_buffer(const GetEntLvlRequest *message,
+					   ProtobufCBuffer *buffer)
+{
+	assert(message->base.descriptor == &get_ent_lvl_request__descriptor);
+	return protobuf_c_message_pack_to_buffer(
+		(const ProtobufCMessage *)message, buffer);
+}
+GetEntLvlRequest *get_ent_lvl_request__unpack(ProtobufCAllocator *allocator,
+					      size_t len, const uint8_t *data)
+{
+	return (GetEntLvlRequest *)protobuf_c_message_unpack(
+		&get_ent_lvl_request__descriptor, allocator, len, data);
+}
+void get_ent_lvl_request__free_unpacked(GetEntLvlRequest *message,
+					ProtobufCAllocator *allocator)
+{
+	if (!message)
+		return;
+	assert(message->base.descriptor == &get_ent_lvl_request__descriptor);
+	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
+					 allocator);
+}
+void get_ent_lvl_response__init(GetEntLvlResponse *message)
+{
+	static const GetEntLvlResponse init_value = GET_ENT_LVL_RESPONSE__INIT;
+	*message = init_value;
+}
+size_t get_ent_lvl_response__get_packed_size(const GetEntLvlResponse *message)
+{
+	assert(message->base.descriptor == &get_ent_lvl_response__descriptor);
+	return protobuf_c_message_get_packed_size(
+		(const ProtobufCMessage *)(message));
+}
+size_t get_ent_lvl_response__pack(const GetEntLvlResponse *message,
+				  uint8_t *out)
+{
+	assert(message->base.descriptor == &get_ent_lvl_response__descriptor);
+	return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t get_ent_lvl_response__pack_to_buffer(const GetEntLvlResponse *message,
+					    ProtobufCBuffer *buffer)
+{
+	assert(message->base.descriptor == &get_ent_lvl_response__descriptor);
+	return protobuf_c_message_pack_to_buffer(
+		(const ProtobufCMessage *)message, buffer);
+}
+GetEntLvlResponse *get_ent_lvl_response__unpack(ProtobufCAllocator *allocator,
+						size_t len, const uint8_t *data)
+{
+	return (GetEntLvlResponse *)protobuf_c_message_unpack(
+		&get_ent_lvl_response__descriptor, allocator, len, data);
+}
+void get_ent_lvl_response__free_unpacked(GetEntLvlResponse *message,
+					 ProtobufCAllocator *allocator)
+{
+	if (!message)
+		return;
+	assert(message->base.descriptor == &get_ent_lvl_response__descriptor);
+	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
+					 allocator);
+}
+void is_min_seeded_request__init(IsMinSeededRequest *message)
+{
+	static const IsMinSeededRequest init_value =
+		IS_MIN_SEEDED_REQUEST__INIT;
+	*message = init_value;
+}
+size_t is_min_seeded_request__get_packed_size(const IsMinSeededRequest *message)
+{
+	assert(message->base.descriptor == &is_min_seeded_request__descriptor);
+	return protobuf_c_message_get_packed_size(
+		(const ProtobufCMessage *)(message));
+}
+size_t is_min_seeded_request__pack(const IsMinSeededRequest *message,
+				   uint8_t *out)
+{
+	assert(message->base.descriptor == &is_min_seeded_request__descriptor);
+	return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t is_min_seeded_request__pack_to_buffer(const IsMinSeededRequest *message,
+					     ProtobufCBuffer *buffer)
+{
+	assert(message->base.descriptor == &is_min_seeded_request__descriptor);
+	return protobuf_c_message_pack_to_buffer(
+		(const ProtobufCMessage *)message, buffer);
+}
+IsMinSeededRequest *is_min_seeded_request__unpack(ProtobufCAllocator *allocator,
+						  size_t len,
+						  const uint8_t *data)
+{
+	return (IsMinSeededRequest *)protobuf_c_message_unpack(
+		&is_min_seeded_request__descriptor, allocator, len, data);
+}
+void is_min_seeded_request__free_unpacked(IsMinSeededRequest *message,
+					  ProtobufCAllocator *allocator)
+{
+	if (!message)
+		return;
+	assert(message->base.descriptor == &is_min_seeded_request__descriptor);
+	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
+					 allocator);
+}
+void is_min_seeded_response__init(IsMinSeededResponse *message)
+{
+	static const IsMinSeededResponse init_value =
+		IS_MIN_SEEDED_RESPONSE__INIT;
+	*message = init_value;
+}
+size_t
+is_min_seeded_response__get_packed_size(const IsMinSeededResponse *message)
+{
+	assert(message->base.descriptor == &is_min_seeded_response__descriptor);
+	return protobuf_c_message_get_packed_size(
+		(const ProtobufCMessage *)(message));
+}
+size_t is_min_seeded_response__pack(const IsMinSeededResponse *message,
+				    uint8_t *out)
+{
+	assert(message->base.descriptor == &is_min_seeded_response__descriptor);
+	return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t
+is_min_seeded_response__pack_to_buffer(const IsMinSeededResponse *message,
+				       ProtobufCBuffer *buffer)
+{
+	assert(message->base.descriptor == &is_min_seeded_response__descriptor);
+	return protobuf_c_message_pack_to_buffer(
+		(const ProtobufCMessage *)message, buffer);
+}
+IsMinSeededResponse *
+is_min_seeded_response__unpack(ProtobufCAllocator *allocator, size_t len,
+			       const uint8_t *data)
+{
+	return (IsMinSeededResponse *)protobuf_c_message_unpack(
+		&is_min_seeded_response__descriptor, allocator, len, data);
+}
+void is_min_seeded_response__free_unpacked(IsMinSeededResponse *message,
+					   ProtobufCAllocator *allocator)
+{
+	if (!message)
+		return;
+	assert(message->base.descriptor == &is_min_seeded_response__descriptor);
+	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
+					 allocator);
+}
+void is_fully_seeded_request__init(IsFullySeededRequest *message)
+{
+	static const IsFullySeededRequest init_value =
+		IS_FULLY_SEEDED_REQUEST__INIT;
+	*message = init_value;
+}
+size_t
+is_fully_seeded_request__get_packed_size(const IsFullySeededRequest *message)
+{
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_request__descriptor);
+	return protobuf_c_message_get_packed_size(
+		(const ProtobufCMessage *)(message));
+}
+size_t is_fully_seeded_request__pack(const IsFullySeededRequest *message,
+				     uint8_t *out)
+{
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_request__descriptor);
+	return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t
+is_fully_seeded_request__pack_to_buffer(const IsFullySeededRequest *message,
+					ProtobufCBuffer *buffer)
+{
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_request__descriptor);
+	return protobuf_c_message_pack_to_buffer(
+		(const ProtobufCMessage *)message, buffer);
+}
+IsFullySeededRequest *
+is_fully_seeded_request__unpack(ProtobufCAllocator *allocator, size_t len,
+				const uint8_t *data)
+{
+	return (IsFullySeededRequest *)protobuf_c_message_unpack(
+		&is_fully_seeded_request__descriptor, allocator, len, data);
+}
+void is_fully_seeded_request__free_unpacked(IsFullySeededRequest *message,
+					    ProtobufCAllocator *allocator)
+{
+	if (!message)
+		return;
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_request__descriptor);
+	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
+					 allocator);
+}
+void is_fully_seeded_response__init(IsFullySeededResponse *message)
+{
+	static const IsFullySeededResponse init_value =
+		IS_FULLY_SEEDED_RESPONSE__INIT;
+	*message = init_value;
+}
+size_t
+is_fully_seeded_response__get_packed_size(const IsFullySeededResponse *message)
+{
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_response__descriptor);
+	return protobuf_c_message_get_packed_size(
+		(const ProtobufCMessage *)(message));
+}
+size_t is_fully_seeded_response__pack(const IsFullySeededResponse *message,
+				      uint8_t *out)
+{
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_response__descriptor);
+	return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t
+is_fully_seeded_response__pack_to_buffer(const IsFullySeededResponse *message,
+					 ProtobufCBuffer *buffer)
+{
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_response__descriptor);
+	return protobuf_c_message_pack_to_buffer(
+		(const ProtobufCMessage *)message, buffer);
+}
+IsFullySeededResponse *
+is_fully_seeded_response__unpack(ProtobufCAllocator *allocator, size_t len,
+				 const uint8_t *data)
+{
+	return (IsFullySeededResponse *)protobuf_c_message_unpack(
+		&is_fully_seeded_response__descriptor, allocator, len, data);
+}
+void is_fully_seeded_response__free_unpacked(IsFullySeededResponse *message,
+					     ProtobufCAllocator *allocator)
+{
+	if (!message)
+		return;
+	assert(message->base.descriptor ==
+	       &is_fully_seeded_response__descriptor);
+	protobuf_c_message_free_unpacked((ProtobufCMessage *)message,
+					 allocator);
+}
 void get_random_bytes_full_request__init(GetRandomBytesFullRequest *message)
 {
 	static const GetRandomBytesFullRequest init_value =
@@ -1048,6 +1303,190 @@ const ProtobufCMessageDescriptor status_response__descriptor = {
 	1,
 	status_response__number_ranges,
 	(ProtobufCMessageInit)status_response__init,
+	NULL,
+	NULL,
+	NULL /* reserved[123] */
+};
+#define get_ent_lvl_request__field_descriptors NULL
+#define get_ent_lvl_request__field_indices_by_name NULL
+#define get_ent_lvl_request__number_ranges NULL
+const ProtobufCMessageDescriptor get_ent_lvl_request__descriptor = {
+	PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+	"GetEntLvlRequest",
+	"GetEntLvlRequest",
+	"GetEntLvlRequest",
+	"",
+	sizeof(GetEntLvlRequest),
+	0,
+	get_ent_lvl_request__field_descriptors,
+	get_ent_lvl_request__field_indices_by_name,
+	0,
+	get_ent_lvl_request__number_ranges,
+	(ProtobufCMessageInit)get_ent_lvl_request__init,
+	NULL,
+	NULL,
+	NULL /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor
+	get_ent_lvl_response__field_descriptors[2] = {
+		{
+			"ret", 1, PROTOBUF_C_LABEL_NONE, PROTOBUF_C_TYPE_INT32,
+			0, /* quantifier_offset */
+			offsetof(GetEntLvlResponse, ret), NULL, NULL,
+			0, /* flags */
+			0, NULL, NULL /* reserved1,reserved2, etc */
+		},
+		{
+			"entlvl", 2, PROTOBUF_C_LABEL_NONE,
+			PROTOBUF_C_TYPE_UINT32, 0, /* quantifier_offset */
+			offsetof(GetEntLvlResponse, entlvl), NULL, NULL,
+			0, /* flags */
+			0, NULL, NULL /* reserved1,reserved2, etc */
+		},
+	};
+static const unsigned get_ent_lvl_response__field_indices_by_name[] = {
+	1, /* field[1] = entlvl */
+	0, /* field[0] = ret */
+};
+static const ProtobufCIntRange get_ent_lvl_response__number_ranges[1 + 1] = {
+	{ 1, 0 },
+	{ 0, 2 }
+};
+const ProtobufCMessageDescriptor get_ent_lvl_response__descriptor = {
+	PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+	"GetEntLvlResponse",
+	"GetEntLvlResponse",
+	"GetEntLvlResponse",
+	"",
+	sizeof(GetEntLvlResponse),
+	2,
+	get_ent_lvl_response__field_descriptors,
+	get_ent_lvl_response__field_indices_by_name,
+	1,
+	get_ent_lvl_response__number_ranges,
+	(ProtobufCMessageInit)get_ent_lvl_response__init,
+	NULL,
+	NULL,
+	NULL /* reserved[123] */
+};
+#define is_min_seeded_request__field_descriptors NULL
+#define is_min_seeded_request__field_indices_by_name NULL
+#define is_min_seeded_request__number_ranges NULL
+const ProtobufCMessageDescriptor is_min_seeded_request__descriptor = {
+	PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+	"IsMinSeededRequest",
+	"IsMinSeededRequest",
+	"IsMinSeededRequest",
+	"",
+	sizeof(IsMinSeededRequest),
+	0,
+	is_min_seeded_request__field_descriptors,
+	is_min_seeded_request__field_indices_by_name,
+	0,
+	is_min_seeded_request__number_ranges,
+	(ProtobufCMessageInit)is_min_seeded_request__init,
+	NULL,
+	NULL,
+	NULL /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor
+	is_min_seeded_response__field_descriptors[2] = {
+		{
+			"ret", 1, PROTOBUF_C_LABEL_NONE, PROTOBUF_C_TYPE_INT32,
+			0, /* quantifier_offset */
+			offsetof(IsMinSeededResponse, ret), NULL, NULL,
+			0, /* flags */
+			0, NULL, NULL /* reserved1,reserved2, etc */
+		},
+		{
+			"min_seeded", 2, PROTOBUF_C_LABEL_NONE,
+			PROTOBUF_C_TYPE_BOOL, 0, /* quantifier_offset */
+			offsetof(IsMinSeededResponse, min_seeded), NULL, NULL,
+			0, /* flags */
+			0, NULL, NULL /* reserved1,reserved2, etc */
+		},
+	};
+static const unsigned is_min_seeded_response__field_indices_by_name[] = {
+	1, /* field[1] = min_seeded */
+	0, /* field[0] = ret */
+};
+static const ProtobufCIntRange is_min_seeded_response__number_ranges[1 + 1] = {
+	{ 1, 0 },
+	{ 0, 2 }
+};
+const ProtobufCMessageDescriptor is_min_seeded_response__descriptor = {
+	PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+	"IsMinSeededResponse",
+	"IsMinSeededResponse",
+	"IsMinSeededResponse",
+	"",
+	sizeof(IsMinSeededResponse),
+	2,
+	is_min_seeded_response__field_descriptors,
+	is_min_seeded_response__field_indices_by_name,
+	1,
+	is_min_seeded_response__number_ranges,
+	(ProtobufCMessageInit)is_min_seeded_response__init,
+	NULL,
+	NULL,
+	NULL /* reserved[123] */
+};
+#define is_fully_seeded_request__field_descriptors NULL
+#define is_fully_seeded_request__field_indices_by_name NULL
+#define is_fully_seeded_request__number_ranges NULL
+const ProtobufCMessageDescriptor is_fully_seeded_request__descriptor = {
+	PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+	"IsFullySeededRequest",
+	"IsFullySeededRequest",
+	"IsFullySeededRequest",
+	"",
+	sizeof(IsFullySeededRequest),
+	0,
+	is_fully_seeded_request__field_descriptors,
+	is_fully_seeded_request__field_indices_by_name,
+	0,
+	is_fully_seeded_request__number_ranges,
+	(ProtobufCMessageInit)is_fully_seeded_request__init,
+	NULL,
+	NULL,
+	NULL /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor
+	is_fully_seeded_response__field_descriptors[2] = {
+		{
+			"ret", 1, PROTOBUF_C_LABEL_NONE, PROTOBUF_C_TYPE_INT32,
+			0, /* quantifier_offset */
+			offsetof(IsFullySeededResponse, ret), NULL, NULL,
+			0, /* flags */
+			0, NULL, NULL /* reserved1,reserved2, etc */
+		},
+		{
+			"fully_seeded", 2, PROTOBUF_C_LABEL_NONE,
+			PROTOBUF_C_TYPE_BOOL, 0, /* quantifier_offset */
+			offsetof(IsFullySeededResponse, fully_seeded), NULL,
+			NULL, 0, /* flags */
+			0, NULL, NULL /* reserved1,reserved2, etc */
+		},
+	};
+static const unsigned is_fully_seeded_response__field_indices_by_name[] = {
+	1, /* field[1] = fully_seeded */
+	0, /* field[0] = ret */
+};
+static const ProtobufCIntRange
+	is_fully_seeded_response__number_ranges[1 + 1] = { { 1, 0 }, { 0, 2 } };
+const ProtobufCMessageDescriptor is_fully_seeded_response__descriptor = {
+	PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+	"IsFullySeededResponse",
+	"IsFullySeededResponse",
+	"IsFullySeededResponse",
+	"",
+	sizeof(IsFullySeededResponse),
+	2,
+	is_fully_seeded_response__field_descriptors,
+	is_fully_seeded_response__field_indices_by_name,
+	1,
+	is_fully_seeded_response__number_ranges,
+	(ProtobufCMessageInit)is_fully_seeded_response__init,
 	NULL,
 	NULL,
 	NULL /* reserved[123] */
