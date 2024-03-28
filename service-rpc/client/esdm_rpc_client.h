@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -189,6 +190,72 @@ int esdm_rpcc_status(char *buf, size_t buflen);
  * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
  */
 int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
+
+/**
+ * @brief RPC-version of esdm_avail_entropy
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * @param [out] entlvl overall available entropy in ESDM server
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_get_ent_lvl(unsigned int *entlvl);
+
+/**
+ * @brief See esdm_rpcc_get_ent_lvl
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_get_ent_lvl_int(unsigned int *entlvl, void *int_data);
+
+/**
+ * @brief RPC-version of esdm_state_min_seeded
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * @param [out] min_seeded true, if ESDM server is minimally seeded
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_is_min_seeded(bool *min_seeded);
+
+/**
+ * @brief See esdm_rpcc_is_min_seeded
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_is_min_seeded_int(bool *min_seeded, void *int_data);
+
+/**
+ * @brief RPC-version of esdm_state_fully_seeded
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * @param [out] fully_seeded true, if ESDM server is fully seeded
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_is_fully_seeded(bool *fully_seeded);
+
+/**
+ * @brief See esdm_rpcc_is_fully_seeded
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_is_fully_seeded_int(bool *fully_seeded, void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes_full

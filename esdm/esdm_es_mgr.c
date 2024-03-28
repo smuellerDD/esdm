@@ -393,6 +393,7 @@ bool esdm_pool_all_nodes_seeded_get(void)
 }
 
 /* Return boolean whether ESDM reached minimally seed level */
+DSO_PUBLIC
 bool esdm_state_min_seeded(void)
 {
 	return esdm_state.esdm_min_seeded;

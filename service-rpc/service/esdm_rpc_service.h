@@ -102,6 +102,21 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		     const StatusRequest *request,
 		     StatusResponse_Closure closure, void *closure_data);
 
+void esdm_rpc_is_fully_seeded(UnprivAccess_Service *service,
+			      const IsFullySeededRequest *request,
+			      IsFullySeededResponse_Closure closure,
+			      void *closure_data);
+
+void esdm_rpc_is_min_seeded(UnprivAccess_Service *service,
+			    const IsMinSeededRequest *request,
+			    IsMinSeededResponse_Closure closure,
+			    void *closure_data);
+
+void esdm_rpc_get_ent_lvl(UnprivAccess_Service *service,
+			  const GetEntLvlRequest *request,
+			  GetEntLvlResponse_Closure closure,
+			  void *closure_data);
+
 void esdm_rpc_get_random_bytes_full(UnprivAccess_Service *service,
 				    const GetRandomBytesFullRequest *request,
 				    GetRandomBytesFullResponse_Closure closure,
