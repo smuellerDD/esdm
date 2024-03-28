@@ -1,7 +1,8 @@
 # for i in $(ls *.c | sort); do echo "'$i',"; done
 client_rpc_src = files([
-	'esdm_rpc_get_min_reseed_secs_c.c',
 	'esdm_rpc_client.c',
+	'esdm_rpc_get_ent_lvl_c.c',
+	'esdm_rpc_get_min_reseed_secs_c.c',
 	'esdm_rpc_get_poolsize_c.c',
 	'esdm_rpc_get_random_bytes_c.c',
 	'esdm_rpc_get_random_bytes_full_c.c',
@@ -9,6 +10,8 @@ client_rpc_src = files([
 	'esdm_rpc_get_random_bytes_pr_c.c',
 	'esdm_rpc_get_seed_c.c',
 	'esdm_rpc_get_write_wakeup_thresh_c.c',
+	'esdm_rpc_is_fully_seeded_c.c',
+	'esdm_rpc_is_min_seeded_c.c',
 	'esdm_rpc_rnd_add_entropy_c.c',
 	'esdm_rpc_rnd_add_to_ent_cnt_c.c',
 	'esdm_rpc_rnd_clear_pool_c.c',
