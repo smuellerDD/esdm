@@ -32,6 +32,74 @@ message StatusResponse {
 }
 
 /******************************************************************************
+ * get_ent_level
+ ******************************************************************************/
+
+/**
+ * @brief Request to obtain the overall available entropy level
+ */
+message GetEntLvlRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response returning the overall available entropy level
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param entcnt Available entropy in bits
+ */
+message GetEntLvlResponse {
+	int32 ret = 1;
+	uint32 entlvl = 2;
+}
+
+/******************************************************************************
+ * is_min_seeded
+ ******************************************************************************/
+
+/**
+ * @brief Request to get min. seeded status
+ *
+ */
+message IsMinSeededRequest {
+}
+
+/**
+ * @brief Response to get min. seeded status
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param min_seeded minimally seeded status (true if minimally seeded,
+ *					 false otherwise)
+ */
+message IsMinSeededResponse {
+	int32 ret = 1;
+	bool min_seeded = 2;
+}
+
+/******************************************************************************
+ * is_fully_seeded
+ ******************************************************************************/
+
+/**
+ * @brief Request to get fully seeded status
+ *
+ */
+message IsFullySeededRequest {
+}
+
+/**
+ * @brief Response to get fully seeded status
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ * @param fully_seeded fully seeded status (true if fully seeded,
+ *					   false otherwise)
+ */
+message IsFullySeededResponse {
+	int32 ret = 1;
+	bool fully_seeded = 2;
+}
+
+/******************************************************************************
  * get_random_bytes_full
  ******************************************************************************/
 
@@ -198,14 +266,14 @@ message WriteDataResponse {
  ******************************************************************************/
 
 /**
- * @brief Request to obtain the available entropy
+ * @brief Request to obtain the available entropy in auxiliary pool
  */
 message RndGetEntCntRequest {
 	/* No message */
 }
 
 /**
- * @brief Response returning the available entropy
+ * @brief Response returning the available entropy in auxiliary pool
  *
  * @param ret Return code (0 on success, < 0 on error)
  * @param entcnt Available entropy in bits
@@ -285,7 +353,12 @@ message GetMinReseedSecsResponse {
  * Protocol handler
  ******************************************************************************/
 service UnprivAccess {
+	/* status calls */
 	rpc RpcStatus (StatusRequest) returns (StatusResponse);
+	rpc RpcGetEntLvl (GetEntLvlRequest) returns (GetEntLvlResponse);
+	rpc RpcIsMinSeeded (IsMinSeededRequest) returns (IsMinSeededResponse);
+	rpc RpcIsFullySeeded (IsFullySeededRequest) returns (IsFullySeededResponse);
+
 	rpc RpcGetRandomBytesFull (GetRandomBytesFullRequest) returns
 				  (GetRandomBytesFullResponse);
 	rpc RpcGetRandomBytesMin (GetRandomBytesMinRequest) returns

@@ -59,6 +59,22 @@ if get_option('esdm-server').enabled()
 			dependencies: [ dependencies_client ],
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
+	
+	rpc_ent_lvl_test = executable(
+			'rpc_ent_lvl_test',
+			[ esdm_tester_common, 'rpc_ent_lvl.c' ],
+			include_directories: include_dirs_client,
+			dependencies: [ dependencies_client ],
+			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
+		)
+
+	rpc_seed_lvl_test = executable(
+			'rpc_seed_lvl_test',
+			[ esdm_tester_common, 'rpc_seed_lvl.c' ],
+			include_directories: include_dirs_client,
+			dependencies: [ dependencies_client ],
+			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
+		)
 
 	# Available test targets:
 	#	esdm-server: esdm_server
@@ -90,6 +106,14 @@ if get_option('esdm-server').enabled()
 		is_parallel: false)
 
 	test('RPC call status_test', rpc_status_test,
+		env: [ tester_esdm_env ],
+		is_parallel: false)
+
+	test('RPC call ent_lvl_test', rpc_ent_lvl_test,
+		env: [ tester_esdm_env ],
+		is_parallel: false)
+
+	test('RPC call seed_lvl_test', rpc_seed_lvl_test,
 		env: [ tester_esdm_env ],
 		is_parallel: false)
 endif
