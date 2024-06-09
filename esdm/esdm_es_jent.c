@@ -324,8 +324,10 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 {
 	snprintf(buf, buflen,
 		 " Available entropy: %u\n"
-		 " Library version: %u\n",
-		 esdm_jent_poolsize(), jent_version());
+		 " Library version: %u\n"
+		 " Entropy Rate per 256 data bits: %u\n",
+		 esdm_jent_poolsize(), jent_version(),
+		 esdm_jent_entropylevel(256));
 }
 
 static bool esdm_jent_active(void)
