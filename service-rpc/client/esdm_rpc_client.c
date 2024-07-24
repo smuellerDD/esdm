@@ -66,6 +66,9 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		protobuf_c_service_destroy(service);
 		service->descriptor = NULL;
 	}
+
+	mutex_w_destroy(&rpc_conn->lock);
+	mutex_w_destroy(&rpc_conn->ref_cnt);
 }
 
 static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
@@ -618,13 +621,19 @@ static uint32_t esdm_rpcc_curr_node(void)
 static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 				   uint32_t *num)
 {
-	const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
-	esdm_rpc_client_connection_t *rpc_conn_array = *rpc_conn;
-	esdm_rpc_client_connection_t *rpc_conn_p = rpc_conn_array;
+	struct timespec abstime;
+	esdm_rpc_client_connection_t *rpc_conn_array;
+	esdm_rpc_client_connection_t *rpc_conn_p;
 	uint32_t i, num_conn = *num;
+	int lock_res;
 
+	/* Atomic exchange */
+	*num = 0;
+	rpc_conn_array = __sync_lock_test_and_set(rpc_conn, NULL);
 	if (!rpc_conn_array)
 		return;
+
+	rpc_conn_p = rpc_conn_array;
 
 	esdm_test_shm_status_fini();
 
@@ -644,7 +653,10 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 		 * we want to avoid a deadlock as the lock will not be released
 		 * by a killed thread.
 		 */
-		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime))
+		clock_gettime(CLOCK_REALTIME, &abstime);
+		abstime.tv_sec += 1;
+		lock_res = mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime);
+		if (lock_res == 0 || lock_res == ETIMEDOUT)
 			mutex_w_unlock(&rpc_conn_p->ref_cnt);
 
 		/* Terminate the handle */
@@ -652,8 +664,6 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 	}
 
 	free(rpc_conn_array);
-	*rpc_conn = NULL;
-	*num = 0;
 }
 
 static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
@@ -719,7 +729,10 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 
 	CKINT(esdm_test_shm_status_init());
 
-	*rpc_conn = tmp;
+	if (__sync_val_compare_and_swap(rpc_conn, NULL, tmp) != NULL) {
+		ret = -EAGAIN;
+		goto out;
+	}
 	*num_conn = nodes;
 
 	esdm_logger(
