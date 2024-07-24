@@ -66,6 +66,9 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		protobuf_c_service_destroy(service);
 		service->descriptor = NULL;
 	}
+
+	mutex_w_destroy(&rpc_conn->lock);
+	mutex_w_destroy(&rpc_conn->ref_cnt);
 }
 
 static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
@@ -622,6 +625,7 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 	esdm_rpc_client_connection_t *rpc_conn_p = rpc_conn_array;
 	uint32_t i, num_conn = *num;
 	struct timespec abstime;
+	int lock_res;
 
 	if (!rpc_conn_array)
 		return;
@@ -646,7 +650,8 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 		 */
 		clock_gettime(CLOCK_REALTIME, &abstime);
 		abstime.tv_sec += 1;
-		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime))
+		lock_res = mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime);
+		if (lock_res == 0 || lock_res == ETIMEDOUT)
 			mutex_w_unlock(&rpc_conn_p->ref_cnt);
 
 		/* Terminate the handle */
