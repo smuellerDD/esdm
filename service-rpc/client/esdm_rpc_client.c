@@ -618,10 +618,10 @@ static uint32_t esdm_rpcc_curr_node(void)
 static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 				   uint32_t *num)
 {
-	const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
 	esdm_rpc_client_connection_t *rpc_conn_array = *rpc_conn;
 	esdm_rpc_client_connection_t *rpc_conn_p = rpc_conn_array;
 	uint32_t i, num_conn = *num;
+	struct timespec abstime;
 
 	if (!rpc_conn_array)
 		return;
@@ -644,6 +644,8 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 		 * we want to avoid a deadlock as the lock will not be released
 		 * by a killed thread.
 		 */
+		clock_gettime(CLOCK_REALTIME, &abstime);
+		abstime.tv_sec += 1;
 		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime))
 			mutex_w_unlock(&rpc_conn_p->ref_cnt);
 
