@@ -58,6 +58,8 @@ extern "C" {
  * The are API and functional identical to fprintf(3) except that the
  * string is printed with the respective color.
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
 TERM_COLOR_PRINT(red, TERM_COLOR_RED)
 TERM_COLOR_PRINT(green, TERM_COLOR_GREEN)
 TERM_COLOR_PRINT(yellow, TERM_COLOR_YELLOW)
@@ -65,6 +67,7 @@ TERM_COLOR_PRINT(blue, TERM_COLOR_BLUE)
 TERM_COLOR_PRINT(magenta, TERM_COLOR_MAGENTA)
 TERM_COLOR_PRINT(cyan, TERM_COLOR_CYAN)
 TERM_COLOR_PRINT(white, TERM_COLOR_WHITE)
+#pragma GCC diagnostic pop
 
 #ifdef __cplusplus
 }
