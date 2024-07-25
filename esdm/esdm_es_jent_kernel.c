@@ -29,10 +29,12 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_jent_kernel.h"
 #include "helper.h"
+#include "mutex.h"
 
 static struct kcapi_handle *jent_rng = NULL;
+static DEFINE_MUTEX_UNLOCKED(jent_rng_mutex);
 
-static void esdm_jent_kernel_finalize(void)
+static void esdm_jent_kernel_finalize_locked(void)
 {
 	if (jent_rng == NULL)
 		return;
@@ -41,12 +43,22 @@ static void esdm_jent_kernel_finalize(void)
 	jent_rng = NULL;
 }
 
+static void esdm_jent_kernel_finalize(void)
+{
+	mutex_lock(&jent_rng_mutex);
+	esdm_jent_kernel_finalize_locked();
+	mutex_unlock(&jent_rng_mutex);
+}
+
+
 static int esdm_jent_kernel_init(void)
 {
 	int ret;
 
+	mutex_lock(&jent_rng_mutex);
+
 	/* Allow the init function to be called multiple times */
-	esdm_jent_kernel_finalize();
+	esdm_jent_kernel_finalize_locked();
 
 	ret = kcapi_rng_init(&jent_rng, "jitterentropy_rng", 0);
 	if (ret != 0) {
@@ -54,8 +66,9 @@ static int esdm_jent_kernel_init(void)
 			LOGGER_WARN, LOGGER_C_ES,
 			"Disabling kernel-based jitter entropy source as it is not present, error: %s\n",
 			strerror(errno));
-		return 0;
 	}
+
+	mutex_unlock(&jent_rng_mutex);
 
 	return 0;
 }
@@ -80,8 +93,12 @@ static uint32_t esdm_jent_kernel_poolsize(void)
 static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 				 uint32_t requested_bits, bool __unused unsused)
 {
-	if (jent_rng == NULL)
+	mutex_reader_lock(&jent_rng_mutex);
+
+	if (jent_rng == NULL) {
+		mutex_reader_unlock(&jent_rng_mutex);
 		goto err;
+	}
 
 	if (kcapi_rng_generate(jent_rng, eb_es->e, requested_bits >> 3) < 0)
 		goto err;
@@ -92,9 +109,12 @@ static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 		"obtained %u bits of entropy from kernel-based jitter RNG entropy source\n",
 		eb_es->e_bits);
 
+	mutex_reader_unlock(&jent_rng_mutex);
+
 	return;
 
 err:
+	mutex_reader_unlock(&jent_rng_mutex);
 	eb_es->e_bits = 0;
 }
 
