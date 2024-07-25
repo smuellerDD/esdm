@@ -18,5 +18,9 @@ After=esdm-server.service
 Requires=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service
 After=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service
 
+# explicitly define this, as DefaultDependencies=no is used
+Conflicts=shutdown.target
+Before=shutdown.target
+
 [Install]
 WantedBy=basic.target
