@@ -95,10 +95,8 @@ static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 {
 	mutex_reader_lock(&jent_rng_mutex);
 
-	if (jent_rng == NULL) {
-		mutex_reader_unlock(&jent_rng_mutex);
+	if (jent_rng == NULL)
 		goto err;
-	}
 
 	if (kcapi_rng_generate(jent_rng, eb_es->e, requested_bits >> 3) < 0)
 		goto err;
