@@ -71,7 +71,6 @@ struct thread_ctx {
 					 * is ready for pickup? */
 
 	pthread_cond_t worker_cv;
-	pthread_mutex_t worker_lock;
 };
 
 /*
@@ -159,7 +158,6 @@ static inline void thread_cleanup_full(struct thread_ctx *tctx)
 	tctx->scheduled = false;
 	tctx->ret_ancestor = 0;
 	mutex_w_destroy(&tctx->inuse);
-	pthread_mutex_destroy(&tctx->worker_lock);
 }
 
 int thread_init(uint32_t groups)
@@ -192,7 +190,6 @@ int thread_init(uint32_t groups)
 		atomic_bool_set_false(&threads[i].thread_pending);
 		mutex_w_init(&threads[i].inuse, false, 1);
 		atomic_bool_set_false(&threads[i].shutdown);
-		pthread_mutex_init(&threads[i].worker_lock, NULL);
 	}
 
 	threads_groups = groups;
@@ -238,6 +235,7 @@ static void *thread_worker(void *arg)
 	while (1) {
 		mutex_w_lock(&tctx->inuse);
 
+locked:
 		if (atomic_bool_read(&tctx->shutdown)) {
 			/* Request for termination */
 			mutex_w_unlock(&tctx->inuse);
@@ -260,10 +258,11 @@ static void *thread_worker(void *arg)
 			mutex_w_unlock(&tctx->inuse);
 			pthread_cond_broadcast(&thread_wait_cv);
 		} else {
-			mutex_w_unlock(&tctx->inuse);
-
 			/* Idle */
-			thread_block(&tctx->worker_cv, &tctx->worker_lock);
+			/* inuse.lock is locked */
+			pthread_cond_wait(&tctx->worker_cv, &tctx->inuse.lock);
+			/* inuse.lock is locked */
+			goto locked;
 		}
 	}
 
