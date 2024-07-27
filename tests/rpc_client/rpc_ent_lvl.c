@@ -48,8 +48,10 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	/* ESDM should be configured with some source for this test 
-     * and already accumulated entropy */
+	/*
+	 * ESDM should be configured with some source for this test
+	 * and already accumulated entropy.
+	 */
 	if (entlvl == 0) {
 		printf("RPC get_ent_lvl returned zero entropy\n");
 		ret = 1;
