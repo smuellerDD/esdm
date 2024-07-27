@@ -1,4 +1,4 @@
-Changes 1.1.1-prerelease:
+Changes 1.1.1:
 * fix: properly use the mutex absolute time argument, timedlock handling and mutex destruction in the ESDM RPC client lib
 
 * fix: race condition in worker thread execution
