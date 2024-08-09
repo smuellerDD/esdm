@@ -310,7 +310,7 @@ static void daemonize(void)
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot change directory\n");
 
-		/* Redirect standard files to /dev/null */
+	/* Redirect standard files to /dev/null */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-result"
 	freopen("/dev/null", "r", stdin);
