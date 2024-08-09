@@ -59,7 +59,6 @@ static char *mount_dst = NULL;
  ******************************************************************************/
 
 static struct esdm_shm_status *esdm_cuse_shm_status = NULL;
-static int esdm_cuse_shmid = -1;
 static atomic_64_t next_fh = ATOMIC_64_INIT(1);
 
 static int esdm_cuse_shm_status_avail(void)
@@ -89,6 +88,7 @@ static void esdm_cuse_shm_status_close_shm(void)
 
 static int esdm_cuse_shm_status_create_shm(void)
 {
+	int esdm_cuse_shmid = -1;
 	int errsv, create_shm;
 	void *tmp;
 
