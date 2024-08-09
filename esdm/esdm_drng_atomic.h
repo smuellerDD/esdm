@@ -8,6 +8,18 @@
 
 #include "esdm_drng_mgr.h"
 
+/*
+ * This header file currently is a stub for adding an atomic DRNG. An atomic
+ * DRNG is usable in atomic context, i.e. it will never sleep. The notion
+ * of an atomic DRNG comes from the LRNG kernel patch series where atomic
+ * contexts are present which must not use code paths that have the capability
+ * to sleep (e.g. with locks or with a memory allocation). In user space,
+ * currently there is no need for such atomic behavior. Yet, leave the stubs
+ * in the code to (a) be as close as possible to the LRNG patch series and (b)
+ * keep our options open in the future in case a need arises for an atomic
+ * behavior.
+ */
+
 #ifdef ESDM_DRNG_ATOMIC
 void esdm_drng_atomic_reset(void);
 void esdm_drng_atomic_seed_drng(struct esdm_drng *drng);
