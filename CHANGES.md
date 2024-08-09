@@ -1,3 +1,6 @@
+Changes 1.1.2-prerelease:
+* fix: to prevent a DoS against the RPC channel, limit the slow operations of esdm_get_random_bytes_pr and esdm_get_seed to allow only one call in flight. If another call comes in while one process is ongoing, return -EAGAIN to free the RPC channel.
+
 Changes 1.1.1:
 * fix: properly use the mutex absolute time argument, timedlock handling and mutex destruction in the ESDM RPC client lib
 

@@ -909,6 +909,7 @@ DSO_PUBLIC
 ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		      enum esdm_get_seed_flags flags)
 {
+	static DEFINE_MUTEX_W_UNLOCKED(esdm_get_seed_lock);
 	struct entropy_buf *eb = (struct entropy_buf *)(buf + 2);
 	uint64_t buflen = sizeof(struct entropy_buf) + 2 * sizeof(uint64_t);
 	uint64_t collected_bits = 0;
@@ -924,10 +925,15 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	if (nbytes < buflen)
 		return -EMSGSIZE;
 
-	ret = esdm_drng_sleep_while_not_all_nodes_seeded(
-		flags & ESDM_GET_SEED_NONBLOCK);
-	if (ret < 0)
-		return ret;
+	/*
+	 * We only allow ONE caller at any time to prevent a DoS on the RPC
+	 * interface considering this is a slow operation.
+	 */
+	if (!mutex_w_trylock(&esdm_get_seed_lock))
+		return -EAGAIN;
+
+	CKINT(esdm_drng_sleep_while_not_all_nodes_seeded(
+		flags & ESDM_GET_SEED_NONBLOCK));
 
 	/* Try to get the pool lock and sleep on it to get it. */
 	esdm_pool_lock();
@@ -935,7 +941,8 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	/* If an ESDM DRNG becomes unseeded, give this DRNG precedence. */
 	if (!esdm_pool_all_nodes_seeded_get()) {
 		esdm_pool_unlock();
-		return 0;
+		buflen = 0;
+		goto out;
 	}
 
 	/*
@@ -969,14 +976,30 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	/* Write collected entropy size into second word */
 	buf[1] = collected_bits;
 
-	return (ssize_t)buflen;
+out:
+	mutex_w_unlock(&esdm_get_seed_lock);
+	return ret ? ret : (ssize_t)buflen;
 }
 
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 {
+	static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
+	ssize_t ret;
+
 	esdm_drng_sleep_while_nonoperational(0);
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+
+	/*
+	 * We only allow one call in flight which is a precaution that
+	 * a caller cannot flood the RPC lines with requests to the slow
+	 * PR DRNG and cause a denial of service to the others.
+	 */
+	if (!mutex_w_trylock(&esdm_pr_lock))
+		return -EAGAIN;
+
+	ret = esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+	mutex_w_unlock(&esdm_pr_lock);
+	return ret;
 }
 
 DSO_PUBLIC
