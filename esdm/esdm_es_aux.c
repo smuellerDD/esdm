@@ -129,6 +129,12 @@ static int esdm_aux_init(void)
 
 	esdm_init_wakeup_bits();
 
+	/*
+	 * Announce that the aux pool needs entropy - after startup, the aux
+	 * pool is empty and should wake up any waiters right away.
+	 */
+	esdm_shm_status_set_need_entropy();
+
 out:
 	mutex_unlock(&drng->hash_lock);
 	return ret;
