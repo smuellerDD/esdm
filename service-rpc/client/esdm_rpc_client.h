@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdbool.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -282,6 +283,35 @@ ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *buf, size_t buflen);
  */
 ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 					    void *int_data);
+
+/**
+ * @brief RPC-version of esdm_rpcc_get_random_bytes_full_timeout
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * This function blocks until the ESDM is fully seeded.
+ *
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
+ * @param [in] ts maximum timeout after which the waiting will be stopped
+ *
+ * @return: read data length on success, < 0 on error (-EINTR means connection
+ *	    was interrupted and the caller may try again)
+ */
+ssize_t esdm_rpcc_get_random_bytes_full_timeout(uint8_t *buf, size_t buflen,
+						struct timespec *ts);
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes_full_timeout
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
+						    struct timespec *ts,
+						    void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes_min

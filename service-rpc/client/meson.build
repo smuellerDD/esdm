@@ -6,6 +6,7 @@ client_rpc_src = files([
 	'esdm_rpc_get_poolsize_c.c',
 	'esdm_rpc_get_random_bytes_c.c',
 	'esdm_rpc_get_random_bytes_full_c.c',
+	'esdm_rpc_get_random_bytes_full_timeout.c',
 	'esdm_rpc_get_random_bytes_min_c.c',
 	'esdm_rpc_get_random_bytes_pr_c.c',
 	'esdm_rpc_get_seed_c.c',

@@ -4,6 +4,7 @@ server_rpc_src = files([
 	'esdm_rpc_get_min_reseed_secs_s.c',
 	'esdm_rpc_get_poolsize_s.c',
 	'esdm_rpc_get_random_bytes_full_s.c',
+	'esdm_rpc_get_random_bytes_full_timeout_s.c',
 	'esdm_rpc_get_random_bytes_min_s.c',
 	'esdm_rpc_get_random_bytes_pr_s.c',
 	'esdm_rpc_get_random_bytes_s.c',

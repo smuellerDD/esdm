@@ -127,6 +127,35 @@ message GetRandomBytesFullResponse {
 }
 
 /******************************************************************************
+ * get_random_bytes_full_timeout
+ ******************************************************************************/
+
+/**
+ * @brief Request to get random bytes from fully seeded DRNG
+ *
+ * @param len number of random bytes that are requested
+ */
+message GetRandomBytesFullTimeoutRequest {
+	uint64 len = 1;
+	uint64 tv_sec = 2;
+	uint32 tv_nsec = 3;
+}
+
+/**
+ * @brief Response providing random bytes from fully seeded DRNG
+ *
+ * @param ret Return code of generation request (> 0 on success with the value
+ *	      indicating the generated number of random bytes,
+ *	      < -255 indicating the maximum number of bytes that can be
+ *	      transferred in one request, < 0 on error)
+ * @param randval Random bytes
+ */
+message GetRandomBytesFullTimeoutResponse {
+	int64 ret = 1;
+	bytes randval = 2;
+}
+
+/******************************************************************************
  * get_random_bytes_min
  ******************************************************************************/
 
@@ -361,6 +390,9 @@ service UnprivAccess {
 
 	rpc RpcGetRandomBytesFull (GetRandomBytesFullRequest) returns
 				  (GetRandomBytesFullResponse);
+	rpc RpcGetRandomBytesFullTimeout
+		(GetRandomBytesFullTimeoutRequest) returns
+		(GetRandomBytesFullTimeoutResponse);
 	rpc RpcGetRandomBytesMin (GetRandomBytesMinRequest) returns
 				 (GetRandomBytesMinResponse);
 	rpc RpcGetRandomBytesPr (GetRandomBytesPrRequest) returns
