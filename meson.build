@@ -80,10 +80,8 @@ add_project_link_arguments('-Wl,-z,noexecstack', language : 'c')
 dist_script = find_program('addon/sanity_checks.sh', required: true)
 meson.add_dist_script(dist_script, meson.project_version())
 
-# check for modern clock-based mutex locking
-if cc.has_function('pthread_mutex_clocklock')
-	add_global_arguments([ '-DHAS_PTHREAD_MUTEX_CLOCKLOCK' ], language: 'c')
-endif
+cc.has_function('pthread_mutex_clocklock', required: true)
+cc.has_function('pthread_cond_clockwait', required: true)
 
 ################################################################################
 # Project-specific defines

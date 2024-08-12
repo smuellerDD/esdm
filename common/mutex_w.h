@@ -20,6 +20,7 @@
 #ifndef _MUTEX_W_PTHREAD_H
 #define _MUTEX_W_PTHREAD_H
 
+#define _GNU_SOURCE
 #include <pthread.h>
 #include <time.h>
 
@@ -102,7 +103,6 @@ static inline bool mutex_w_trylock(mutex_w_t *mutex)
 	return true;
 }
 
-#ifdef HAS_PTHREAD_MUTEX_CLOCKLOCK
 /*
  * both current glibc and musl libc implement a clock-based
  * timed locking, which can use a monotonic clock.
@@ -116,13 +116,5 @@ static inline int mutex_w_timedlock(mutex_w_t *mutex,
 {
 	return pthread_mutex_clocklock(&mutex->lock, CLOCK_MONOTONIC, abstime);
 }
-#else
-static inline int mutex_w_timedlock(mutex_w_t *mutex,
-				    const struct timespec *abstime)
-{
-	return pthread_mutex_timedlock(&mutex->lock, abstime);
-}
-#endif
-
 
 #endif /* _MUTEX_W_PTHREAD_H */

@@ -20,11 +20,15 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
+#define _GNU_SOURCE
 #include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+extern int pthread_cond_clockwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
+				  clockid_t clockid, const struct timespec *abstime);
 
 struct thread_wait_queue {
 	pthread_cond_t thread_wait_cv;
@@ -32,16 +36,8 @@ struct thread_wait_queue {
 };
 
 #define WAIT_QUEUE_INIT(name) {							\
-	pthread_condattr_t attr;						\
-										\
 	CKINT(pthread_mutex_init(&(name).thread_wait_lock, NULL)); 		\
-	CKINT(pthread_condattr_init(&attr));					\
-	ret = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);		\
-	if (ret) {								\
-		pthread_condattr_destroy(&attr);				\
-	}									\
-	CKINT(ret);								\
-	CKINT(pthread_cond_init(&(name).thread_wait_cv, &attr));		\
+	CKINT(pthread_cond_init(&(name).thread_wait_cv, NULL));		\
 	}
 
 #define WAIT_QUEUE_FINI(name) 							\
@@ -73,8 +69,10 @@ struct thread_wait_queue {
 			__ts.tv_sec += __ts.tv_nsec / 1000000000;	       \
 			__ts.tv_nsec = __ts.tv_nsec % 1000000000;	       \
 		}							       \
-		ret = -pthread_cond_timedwait(&(queue)->thread_wait_cv,        \
-					      &(queue)->thread_wait_lock, &__ts);\
+		ret = -pthread_cond_clockwait(&(queue)->thread_wait_cv,	       \
+					      &(queue)->thread_wait_lock,      \
+					      CLOCK_MONOTONIC,		       \
+					      &__ts);			       \
 		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
 	} while (0)
 
