@@ -151,7 +151,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	/* Ensure reseed during next call */
 	atomic_set(&drng->requests, 1);
 	atomic_set(&drng->requests_since_fully_seeded, 0);
-	drng->last_seeded = time(NULL);
+	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
 	drng->fully_seeded = false;
 	/* Do not set force, as this flag is used for the emergency reseeding */
 	drng->force_reseed = false;
@@ -280,8 +280,9 @@ int esdm_drng_mgr_initialize(void)
 	CKINT(esdm_drng_mgr_selftest());
 
 out:
-	if (ret)
+	if (ret) {
 		atomic_set(&esdm_avail, 0);
+	}
 	return ret;
 }
 
@@ -340,22 +341,28 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 
 /************************* Random Number Generation ***************************/
 
-static bool esdm_time_after(time_t curr, time_t base)
+static bool esdm_time_after(struct timespec *curr, struct timespec *timeout)
 {
-	if (curr == (time_t)-1)
+	if (curr == NULL || timeout == NULL)
 		return false;
-	if (base == (time_t)-1)
+
+	if (curr->tv_sec > timeout->tv_sec)
 		return true;
-	return (curr > base) ? true : false;
+	if (curr->tv_sec == timeout->tv_sec && curr->tv_nsec > timeout->tv_nsec)
+		return true;
+
+	return false;
 }
 
-static time_t esdm_time_after_now(time_t base)
+static time_t esdm_time_after_now(struct timespec *timeout)
 {
-	time_t curr = time(NULL);
+	struct timespec curr;
 
-	if (curr == (time_t)-1)
+	if (clock_gettime(CLOCK_MONOTONIC, &curr) == -1)
 		return 0;
-	return esdm_time_after(curr, base) ? (curr - base) : 0;
+
+	return esdm_time_after(&curr, timeout) ?
+			       (curr.tv_sec - timeout->tv_sec) : 0;
 }
 
 /* Inject a data buffer into the DRNG - caller must hold its lock */
@@ -379,7 +386,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
 			"%s DRNG stats since last seeding: %lu secs; generate calls: %d\n",
-			drng_type, esdm_time_after_now(drng->last_seeded), gc);
+			drng_type, esdm_time_after_now(&drng->last_seeded), gc);
 
 		/* Count the numbers of generate ops since last fully seeded */
 		if (fully_seeded)
@@ -387,7 +394,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		else
 			atomic_add(&drng->requests_since_fully_seeded, gc);
 
-		drng->last_seeded = time(NULL);
+		clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
 		atomic_set(&drng->requests, ESDM_DRNG_RESEED_THRESH);
 		drng->force_reseed = false;
 
@@ -512,7 +519,7 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	esdm_drng_seed(drng);
 	if (drng->fully_seeded) {
 		/* Prevent reseed storm */
-		drng->last_seeded += node * 60;
+		drng->last_seeded.tv_sec += node * 60;
 	}
 }
 
@@ -636,9 +643,11 @@ out:
 
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
+	struct timespec check_time = drng->last_seeded;
+
+	check_time.tv_sec += esdm_drng_reseed_max_time;
 	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed ||
-		esdm_time_after_now(drng->last_seeded +
-				    esdm_drng_reseed_max_time));
+		esdm_time_after_now(&check_time));
 }
 
 /**

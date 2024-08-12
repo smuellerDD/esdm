@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>

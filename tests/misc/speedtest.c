@@ -69,7 +69,7 @@ static inline uint64_t ts2u64(struct timespec *ts)
 
 static inline void get_nstime(struct timespec *ts)
 {
-	clock_gettime(CLOCK_REALTIME, ts);
+	clock_gettime(CLOCK_MONOTONIC, ts);
 }
 
 static inline void start_time(struct timespec *ts)
