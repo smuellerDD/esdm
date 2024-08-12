@@ -36,7 +36,11 @@ struct thread_wait_queue {
 										\
 	CKINT(pthread_mutex_init(&(name).thread_wait_lock, NULL)); 		\
 	CKINT(pthread_condattr_init(&attr));					\
-	CKINT(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC));		\
+	ret = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);		\
+	if (ret) {								\
+		pthread_condattr_destroy(&attr);				\
+	}									\
+	CKINT(ret);								\
 	CKINT(pthread_cond_init(&(name).thread_wait_cv, &attr));		\
 	}
 
