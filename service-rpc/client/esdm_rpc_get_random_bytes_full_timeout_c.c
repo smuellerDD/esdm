@@ -131,6 +131,6 @@ DSO_PUBLIC
 ssize_t esdm_rpcc_get_random_bytes_full_timeout(uint8_t *buf, size_t buflen,
 						struct timespec *ts)
 {
-	return esdm_rpcc_get_random_bytes_full_timeout_int(buf, buflen, NULL,
-							   ts);
+	return esdm_rpcc_get_random_bytes_full_timeout_int(buf, buflen, ts,
+							   NULL);
 }
