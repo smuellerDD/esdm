@@ -3,6 +3,10 @@ Changes 1.1.2-prerelease:
 
 * fix: handle rogue libesdm-aux clients more gracefully - if a client received a notification to supply entropy, but it fails to send anything, the ESDM will not send a notification again. This issue is alleviated by checking the need_entropy common variable
 
+* switch from CLOCK_REALTIME to CLOCK_MONOTONIC for wait operations
+
+* add esdm.spec file for generating an RPM
+
 Changes 1.1.1:
 * fix: properly use the mutex absolute time argument, timedlock handling and mutex destruction in the ESDM RPC client lib
 
