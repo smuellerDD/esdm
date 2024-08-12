@@ -892,6 +892,20 @@ static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 	return 0;
 }
 
+static int esdm_drng_sleep_while_nonoperational_timeout(struct timespec *ts)
+{
+	int ret = 0;
+
+	esdm_force_fully_seeded();
+	if (esdm_state_operational())
+		return 0;
+	thread_timedwait_event(&esdm_init_wait,
+			       esdm_state_operational() &&
+					!atomic_read(&esdm_drng_mgr_terminate),
+			       ts);
+	return ret;
+}
+
 static int esdm_drng_sleep_while_non_min_seeded(unsigned int nonblock)
 {
 	esdm_force_fully_seeded();
@@ -1026,6 +1040,18 @@ DSO_PUBLIC
 ssize_t esdm_get_random_bytes_full(uint8_t *buf, size_t nbytes)
 {
 	esdm_drng_sleep_while_nonoperational(0);
+	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
+}
+
+DSO_PUBLIC
+ssize_t esdm_get_random_bytes_full_timeout(uint8_t *buf, size_t nbytes,
+					   struct timespec *ts)
+{
+	int ret = esdm_drng_sleep_while_nonoperational_timeout(ts);
+
+	if (ret)
+		return ret;
+
 	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
 }
 

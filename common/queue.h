@@ -55,8 +55,8 @@ struct thread_wait_queue {
 		clock_gettime(CLOCK_REALTIME, &__ts);                          \
 		__ts.tv_sec += (reltime)->tv_sec;                              \
 		__ts.tv_nsec += (reltime)->tv_nsec;                            \
-		pthread_cond_timedwait(&(queue)->thread_wait_cv,               \
-				       &(queue)->thread_wait_lock, &__ts);     \
+		ret = -pthread_cond_timedwait(&(queue)->thread_wait_cv,        \
+					      &(queue)->thread_wait_lock, &__ts);\
 		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
 	} while (0)
 
@@ -66,7 +66,7 @@ struct thread_wait_queue {
 	}
 
 #define thread_timedwait_event(queue, condition, reltime)                      \
-	while (!condition) {                                                   \
+	while (!condition && !ret) {                                           \
 		thread_timedwait_no_event(queue, reltime);                     \
 	}
 
