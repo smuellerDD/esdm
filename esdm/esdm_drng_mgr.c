@@ -281,8 +281,10 @@ int esdm_drng_mgr_initialize(void)
 	CKINT(esdm_drng_mgr_selftest());
 
 out:
-	if (ret)
+	if (ret) {
 		atomic_set(&esdm_avail, 0);
+		WAIT_QUEUE_FINI(esdm_init_wait);
+	}
 	return ret;
 }
 
