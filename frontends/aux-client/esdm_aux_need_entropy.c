@@ -82,7 +82,6 @@ static int esdm_cuse_shm_status_create_shm(void)
 			esdm_cuse_shm_status_close_shm();
 			if (esdm_cuse_shmid >= 0) {
 				shmctl(esdm_cuse_shmid, IPC_RMID, NULL);
-				esdm_cuse_shmid = -1;
 			}
 			return -errsv;
 		}
