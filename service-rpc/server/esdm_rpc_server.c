@@ -137,6 +137,12 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 				LOGGER_VERBOSE, LOGGER_C_RPC,
 				"Writting of data to file descriptor %d failed: %s\n",
 				rpc_conn->child_fd, strerror(errsv));
+
+			if (errno == EPIPE) {
+				close(rpc_conn->child_fd);
+				rpc_conn->child_fd = -1;
+			}
+
 			return -errsv;
 		}
 
