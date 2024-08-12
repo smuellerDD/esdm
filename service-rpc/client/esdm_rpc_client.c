@@ -653,7 +653,11 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 		 * we want to avoid a deadlock as the lock will not be released
 		 * by a killed thread.
 		 */
+		#ifdef HAS_PTHREAD_MUTEX_CLOCKLOCK
+		clock_gettime(CLOCK_MONOTONIC, &abstime);
+		#else
 		clock_gettime(CLOCK_REALTIME, &abstime);
+		#endif
 		abstime.tv_sec += 1;
 		lock_res = mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime);
 		if (lock_res == 0 || lock_res == ETIMEDOUT)
