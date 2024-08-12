@@ -263,6 +263,7 @@ int esdm_drng_mgr_initialize(void)
 		mutex_w_init(&esdm_drng_init.lock, 1, 1);
 		ret = esdm_drng_alloc_common(&esdm_drng_init,
 					     esdm_default_drng_cb);
+		WAIT_QUEUE_INIT(esdm_init_wait);
 		mutex_w_unlock(&esdm_drng_init.lock);
 		if (!ret) {
 			atomic_set(&esdm_avail, 2);
@@ -290,6 +291,7 @@ void esdm_drng_mgr_finalize(void)
 	atomic_set(&esdm_drng_mgr_terminate, 1);
 	esdm_drng_dealloc_common(esdm_drng_init_instance());
 	esdm_drng_dealloc_common(&esdm_drng_pr);
+	WAIT_QUEUE_FINI(esdm_init_wait);
 }
 
 DSO_PUBLIC

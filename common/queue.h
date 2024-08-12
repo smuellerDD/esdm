@@ -34,10 +34,10 @@ struct thread_wait_queue {
 #define WAIT_QUEUE_INIT(name) {							\
 	pthread_condattr_t attr;						\
 										\
-	pthread_mutex_init(&(name).thread_wait_lock, NULL); 			\
-	pthread_condattr_init(&attr);						\
-	pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);			\
-	pthread_cond_init(&(name).thread_wait_cv, &attr);			\
+	CKINT(pthread_mutex_init(&(name).thread_wait_lock, NULL)); 		\
+	CKINT(pthread_condattr_init(&attr));					\
+	CKINT(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC));		\
+	CKINT(pthread_cond_init(&(name).thread_wait_cv, &attr));		\
 	}
 
 #define WAIT_QUEUE_FINI(name) 							\
