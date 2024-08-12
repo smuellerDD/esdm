@@ -80,8 +80,13 @@ add_project_link_arguments('-Wl,-z,noexecstack', language : 'c')
 dist_script = find_program('addon/sanity_checks.sh', required: true)
 meson.add_dist_script(dist_script, meson.project_version())
 
-cc.has_function('pthread_mutex_clocklock', required: true)
-cc.has_function('pthread_cond_clockwait', required: true)
+# use "required: true" in more recent meson version >= 1.3.0
+if not cc.has_function('pthread_mutex_clocklock')
+assert(false, 'pthread_mutex_clocklock not found')
+endif
+if not cc.has_function('pthread_cond_clockwait')
+assert(false, 'pthread_cond_clockwait not found')
+endif
 
 ################################################################################
 # Project-specific defines
