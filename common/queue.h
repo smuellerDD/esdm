@@ -31,9 +31,19 @@ struct thread_wait_queue {
 	pthread_mutex_t thread_wait_lock;
 };
 
-#define WAIT_QUEUE_INIT(name) pthread_mutex_init(&(name).thread_wait_lock, NULL)
+#define WAIT_QUEUE_INIT(name) {							\
+	pthread_condattr_t attr;						\
+										\
+	pthread_mutex_init(&(name).thread_wait_lock, NULL); 			\
+	pthread_condattr_init(&attr);						\
+	pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);			\
+	pthread_cond_init(&(name).thread_wait_cv, &attr);			\
+	}
 
-#define WAIT_QUEUE_FINI(name) pthread_mutex_destroy(&(name).thread_wait_lock)
+#define WAIT_QUEUE_FINI(name) 							\
+	pthread_cond_destroy(&(name).thread_wait_cv);				\
+	pthread_mutex_destroy(&(name).thread_wait_lock);
+
 
 #define DECLARE_WAIT_QUEUE(name)                                               \
 	struct thread_wait_queue name = {                                      \
@@ -52,7 +62,7 @@ struct thread_wait_queue {
 		struct timespec __ts;                                          \
                                                                                \
 		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
-		clock_gettime(CLOCK_REALTIME, &__ts);                          \
+		clock_gettime(CLOCK_MONOTONIC, &__ts);                         \
 		__ts.tv_sec += (reltime)->tv_sec;                              \
 		__ts.tv_nsec += (reltime)->tv_nsec;			       \
 		if (__ts.tv_nsec > 1000000000) {			       \
