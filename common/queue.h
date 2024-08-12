@@ -35,19 +35,10 @@ struct thread_wait_queue {
 	pthread_mutex_t thread_wait_lock;
 };
 
-#define WAIT_QUEUE_INIT(name) {							\
-	CKINT(pthread_mutex_init(&(name).thread_wait_lock, NULL)); 		\
-	CKINT(pthread_cond_init(&(name).thread_wait_cv, NULL));		\
-	}
-
-#define WAIT_QUEUE_FINI(name) 							\
-	pthread_cond_destroy(&(name).thread_wait_cv);				\
-	pthread_mutex_destroy(&(name).thread_wait_lock);
-
-
 #define DECLARE_WAIT_QUEUE(name)                                               \
 	struct thread_wait_queue name = {                                      \
-		.thread_wait_lock = PTHREAD_MUTEX_INITIALIZER,                 \
+		.thread_wait_cv = PTHREAD_COND_INITIALIZER,                    \
+		.thread_wait_lock = PTHREAD_MUTEX_INITIALIZER,		       \
 	}
 
 #define thread_wait_no_event(queue)                                            \
