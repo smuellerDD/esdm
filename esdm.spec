@@ -34,8 +34,8 @@ To seed the DRNGs, a set of entropy sources are managed by the ESDM. The
 cryptographic strength of the entire ESDM is always 256 bits. All entropy
 processing is designed to maintain this strength.
 
-This subpackage holds the ESDM server, the RPC client library and the CUSE
-daemons.
+This subpackage holds the ESDM server, and the RPC client library allowing
+users to interact with the ESDM via its APIs.
 
 %package -n %{name}-cuse
 Summary:        Entropy Source and DRNG Manager CUSE device files
@@ -50,7 +50,9 @@ cryptographic strength of the entire ESDM is always 256 bits. All entropy
 processing is designed to maintain this strength.
 
 This subpackage holds the ESDM CUSE device files of /dev/random and
-/dev/urandom as well as the files in /proc/sys/kernel/random/.
+/dev/urandom as well as the files in /proc/sys/kernel/random/. Therefore, this
+package turns the ESDM in an API and ABI drop-in replacement of the Linux
+/dev/random device for user space.
 
 %package devel
 Summary:        Entropy Source and DRNG Manager
