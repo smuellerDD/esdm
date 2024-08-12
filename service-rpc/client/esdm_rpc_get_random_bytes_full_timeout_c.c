@@ -58,13 +58,18 @@ esdm_rpcc_get_random_bytes_full_timeout_cb(
 	/* Zeroization of response is handled in esdm_rpc_client_read_handler */
 }
 
-static bool esdm_time_after(time_t curr, time_t base)
+static bool esdm_time_after(struct timespec *curr, struct timespec *timeout)
 {
-	if (curr == (time_t)-1)
+	if (curr == NULL || timeout == NULL) {
 		return false;
-	if (base == (time_t)-1)
+	}
+
+	if (curr->tv_sec > timeout->tv_sec)
 		return true;
-	return (curr > base) ? true : false;
+	if (curr->tv_sec == timeout->tv_sec && curr->tv_nsec > timeout->tv_nsec)
+		return true;
+
+	return false;
 }
 
 DSO_PUBLIC
@@ -77,15 +82,20 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_random_bytes_full_timeout_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
-	time_t base;
+	struct timespec timeout;
 	ssize_t ret = 0;
 
 	CKNULL(ts, -EINVAL);
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
-	base = time(NULL);
-	base += ts->tv_sec;
+	CKINT(clock_gettime(CLOCK_MONOTONIC, &timeout));
+	timeout.tv_sec += ts->tv_sec;
+	timeout.tv_nsec += ts->tv_nsec;
+	if (timeout.tv_nsec > 1000000000) {
+		timeout.tv_sec += timeout.tv_nsec / 1000000000;
+		timeout.tv_nsec = timeout.tv_nsec % 1000000000;
+	}
 
 	while (buflen) {
 		buffer.ret = -ETIMEDOUT;
@@ -104,10 +114,11 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
 		} else if (buffer.ret == -EAGAIN) {
-			time_t curr = time(NULL);
+			struct timespec curr;
+			CKINT(clock_gettime(CLOCK_MONOTONIC, &curr));
 
 			/* Terminate the endless loop if the timeout hits */
-			if (esdm_time_after(curr, base))
+			if (esdm_time_after(&curr, &timeout))
 				break;
 
 			nanosleep(&esdm_client_poll_ts, NULL);
