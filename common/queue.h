@@ -54,7 +54,11 @@ struct thread_wait_queue {
 		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
 		clock_gettime(CLOCK_REALTIME, &__ts);                          \
 		__ts.tv_sec += (reltime)->tv_sec;                              \
-		__ts.tv_nsec += (reltime)->tv_nsec;                            \
+		__ts.tv_nsec += (reltime)->tv_nsec;			       \
+		if (__ts.tv_nsec > 1000000000) {			       \
+			__ts.tv_sec += __ts.tv_nsec / 1000000000;	       \
+			__ts.tv_nsec = __ts.tv_nsec % 1000000000;	       \
+		}							       \
 		ret = -pthread_cond_timedwait(&(queue)->thread_wait_cv,        \
 					      &(queue)->thread_wait_lock, &__ts);\
 		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
