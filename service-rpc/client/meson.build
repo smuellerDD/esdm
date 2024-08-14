@@ -24,7 +24,7 @@ client_rpc_src = files([
 	'esdm_rpc_write_data_c.c'
 ])
 
-esdm_rpc_client_lib = library('esdm_rpc_client',
+esdm_rpc_client_lib = both_libraries('esdm_rpc_client',
 	[ service_rpc_src, client_rpc_src ],
 	include_directories: include_dirs_client,
 	dependencies: [ dependencies_client ],
