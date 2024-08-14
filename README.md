@@ -134,8 +134,6 @@ At the time of writing this, it was located in:
 ```
 nixpkgs/nixos/modules/services/security/esdm.nix
 ```
-The first release including ESDM support will be 23.11. Beforehand use either
-the master or unstable branch of nixpkgs.
 
 ### Using ESDM from Rust
 
