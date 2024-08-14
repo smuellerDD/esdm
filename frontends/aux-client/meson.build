@@ -3,7 +3,7 @@ aux_client_src = files([
 	'esdm_aux_need_entropy.c'
 ])
 
-esdm_aux_client_lib = library('esdm_aux_client',
+esdm_aux_client_lib = both_libraries('esdm_aux_client',
 	[ aux_client_src ],
 	include_directories: include_dirs_client,
 	link_with: esdm_common_static_lib,
