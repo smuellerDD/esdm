@@ -373,6 +373,9 @@ Using CUSE, the device files are provided.
 option('linux-getrandom', type: 'feature', value: 'enabled',
        description: 'Enable the Linux getrandom system call support.')
 
+option('linux-getrandom-num-nodes', type: 'integer', value: 1, min: 0, max: 64,
+       description: 'Number of DRNG nodes to allocate for getrandom. 0 means no limit.')
+
 option('botan-rng', type: 'feature', value: 'disabled',
        description: '''Enable the Botan >= 3 RNG support.
 

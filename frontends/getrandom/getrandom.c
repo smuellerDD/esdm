@@ -56,6 +56,10 @@ static void esdm_getrandom_lib_init(void)
 {
 	mutex_lock(&getrandom_mutex);
 
+#if ESDM_GETRANDOM_NUM_NODES > 0
+	esdm_rpcc_set_max_online_nodes(ESDM_GETRANDOM_NUM_NODES);
+#endif
+
 	/* Return code irrelevant due to fallback in functions below */
 	esdm_rpcc_init_unpriv_service(NULL);
 
