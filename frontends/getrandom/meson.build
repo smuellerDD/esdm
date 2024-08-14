@@ -2,7 +2,7 @@ getrandom_src = [
 	'getrandom.c'
 ]
 
-esdm_getrandom_lib = library(
+esdm_getrandom_lib = both_libraries(
 		'esdm-getrandom',
 		[ getrandom_src ],
 		version: meson.project_version(),
