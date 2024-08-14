@@ -259,7 +259,7 @@ The ESDM consists of the following components:
   `getentropy` libc library calls. To use the library for other consumers, use
   one of the following  considerations:
 
-	- Use LD_PRELOAD="/path/to/libesdm-getentropy.so" with the intended
+	- Use LD_PRELOAD="/path/to/libesdm-getrandom.so" with the intended
 	  application.
 
         - Create / update `/etc/ld.so.preload` to add the entry
