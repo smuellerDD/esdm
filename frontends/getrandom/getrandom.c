@@ -24,9 +24,11 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "atomic_bool.h"
 #include "bool.h"
 #include "constructor.h"
 #include "esdm_rpc_client.h"
+#include "mutex.h"
 #include "visibility.h"
 
 /**
@@ -47,13 +49,19 @@
  */
 #define GRND_FULLY_SEEDED 0x0020
 
-static bool initialized = false;
+static atomic_bool_t is_initialized = ATOMIC_BOOL_INIT(false);
+static DEFINE_MUTEX_UNLOCKED(getrandom_mutex);
 
 static void esdm_getrandom_lib_init(void)
 {
+	mutex_lock(&getrandom_mutex);
+
 	esdm_rpcc_set_max_online_nodes(1);
 	/* Return code irrelevant due to fallback in functions below */
 	esdm_rpcc_init_unpriv_service(NULL);
+
+	atomic_bool_set_true(&is_initialized);
+	mutex_unlock(&getrandom_mutex);
 }
 
 ESDM_DEFINE_DESTRUCTOR(esdm_getrandom_lib_exit);
@@ -94,9 +102,8 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 	if (length > INT_MAX)
 		length = INT_MAX;
 
-	if (!initialized) {
+	if (!atomic_bool_read(&is_initialized)) {
 		esdm_getrandom_lib_init();
-		initialized = true;
 	}
 
 	if (flags & GRND_INSECURE) {
@@ -157,9 +164,8 @@ static int getentropy_common(void *buffer, size_t length)
 	if (length > 256)
 		return -EIO;
 
-	if (!initialized) {
+	if (!atomic_bool_read(&is_initialized)) {
 		esdm_getrandom_lib_init();
-		initialized = true;
 	}
 
 	esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
