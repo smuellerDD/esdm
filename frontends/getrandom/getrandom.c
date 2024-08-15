@@ -26,6 +26,7 @@
 
 #include "atomic_bool.h"
 #include "bool.h"
+#include "config.h"
 #include "constructor.h"
 #include "esdm_rpc_client.h"
 #include "mutex.h"
