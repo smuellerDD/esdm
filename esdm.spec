@@ -5,7 +5,7 @@
 #
 
 Name:           esdm
-Version:        1.1.2
+Version:        1.2.0
 Release:        1.1
 Summary:        Entropy Source and DRNG Manager
 License:        GPL-2.0 OR BSD-2-Clause
