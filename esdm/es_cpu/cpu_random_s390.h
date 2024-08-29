@@ -57,7 +57,7 @@ static inline void cpacf_trng(uint8_t *ucbuf, unsigned long ucbuf_len,
 
 static inline bool cpu_es_get(unsigned long *buf)
 {
-	cpacf_trng(NULL, 0, buf, sizeof(unsigned long));
+	cpacf_trng(NULL, 0, (uint8_t *)buf, sizeof(unsigned long));
 	return true;
 }
 
