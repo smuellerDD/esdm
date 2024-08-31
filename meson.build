@@ -51,6 +51,11 @@ if cc.has_argument('-fzero-call-used-regs=used-gpr')
 			     language: 'c')
 endif
 
+if cc.has_argument('-ffat-lto-objects')
+	add_global_arguments([ '-ffat-lto-objects' ],
+			     language: 'c')
+endif
+
 if get_option('optimization') != '0'
 	add_global_arguments([ '-D_FORTIFY_SOURCE=2' ], language: 'c')
 else
