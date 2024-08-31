@@ -22,6 +22,8 @@
 
 #if defined(__s390__)
 
+#include <stdint.h>
+
 #include "bool.h"
 
 #define ESDM_CPU_ES_IMPLEMENTED
