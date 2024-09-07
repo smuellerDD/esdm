@@ -54,6 +54,10 @@ endif
 if cc.has_argument('-ffat-lto-objects')
 	add_global_arguments([ '-ffat-lto-objects' ],
 			     language: 'c')
+	if get_option('botan-rng').enabled()
+		add_global_arguments([ '-ffat-lto-objects' ],
+				language: 'cpp')
+	endif
 endif
 
 if get_option('optimization') != '0'
