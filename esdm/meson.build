@@ -64,7 +64,6 @@ if get_option('crypto_backend') == 'builtin'
 		esdm_src += files([ 'esdm_builtin_sha512.c' ])
 	endif
 elif get_option('crypto_backend') == 'botan'
-	add_languages('cpp')
 	esdm_src += files([ 'esdm_botan.cpp' ])
 	dependencies_esdm_lib += [ dependency('botan', version: '>=3.0', required: true) ]
 elif get_option('crypto_backend') == 'gnutls'
