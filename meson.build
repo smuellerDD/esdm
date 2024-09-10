@@ -54,7 +54,7 @@ endif
 if cc.has_argument('-ffat-lto-objects')
 	add_global_arguments([ '-ffat-lto-objects' ],
 			     language: 'c')
-	if get_option('botan-rng').enabled()
+	if get_option('crypto_backend') == 'botan' or get_option('botan-rng').enabled()
 		add_global_arguments([ '-ffat-lto-objects' ],
 				language: 'cpp')
 	endif
@@ -166,15 +166,21 @@ if get_option('linux-getrandom').enabled()
 	subdirs += [ 'frontends/getrandom' ]
 endif
 
-if get_option('botan-rng').enabled()
+if get_option('crypto_backend') == 'botan' or get_option('botan-rng').enabled()
 	add_languages('cpp', required: true)
 	botan_dep = dependency('botan-3', required: true)
+endif
+
+if get_option('crypto_backend') == 'openssl' or get_option('openssl-rand-provider').enabled()
+	openssl_dep = dependency('openssl', required: true, version : '>=3.0')
+endif
+
+if get_option('botan-rng').enabled()
 	subdirs += [ 'frontends/botan-rng' ]
 	include_dirs_botan_rng = [ include_directories('frontends/botan-rng') ]
 endif
 
 if get_option('openssl-rand-provider').enabled()
-	openssl_dep = dependency('openssl', required: true, version : '>=3.0')
 	subdirs += [ 'frontends/openssl-provider' ]
 endif
 
