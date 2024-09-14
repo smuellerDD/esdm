@@ -111,7 +111,12 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 
 	/* Connect to the Unix domain socket */
 	addr.sun_family = AF_UNIX;
+
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wstringop-truncation"
 	strncpy(addr.sun_path, socketname, sizeof(addr.sun_path));
+	#pragma GCC diagnostic pop
+
 	rpc_conn->fd = socket(addr.sun_family, SOCK_SEQPACKET, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;

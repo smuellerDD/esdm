@@ -276,7 +276,10 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 			snprintf(buf, buflen,
 				 " failure in reading kernel status\n");
 		} else if (buflen < sizeof(status)) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
 			snprintf(buf, buflen, "%s", status_p);
+#pragma GCC diagnostic pop
 		}
 	} else {
 		snprintf(buf, buflen, " disabled - missing kernel support\n");

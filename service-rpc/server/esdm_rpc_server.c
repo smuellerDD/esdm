@@ -720,8 +720,11 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		protocol_family = PF_UNIX;
 		memset(&addr_un, 0, sizeof(addr_un));
 		addr_un.sun_family = AF_UNIX;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 		strncpy(addr_un.sun_path, unix_socket,
 			sizeof(addr_un.sun_path));
+#pragma GCC diagnostic pop
 		address_len = sizeof(addr_un);
 		address = (struct sockaddr *)(&addr_un);
 

@@ -460,7 +460,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi, get_func_t get,
 			     int fallback_fd)
 {
-	uint8_t tmpbuf_s[64], *tmpbuf_p = tmpbuf_s, *tmpbuf = NULL;
+	uint8_t tmpbuf_s[64] = { 0 }, *tmpbuf_p = tmpbuf_s, *tmpbuf = NULL;
 	size_t read_bytes = 0;
 	ssize_t ret = 0;
 
