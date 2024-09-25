@@ -249,7 +249,7 @@ esdm_openssl_drbg_dealloc_internal(struct esdm_openssl_drng_state *state)
 
 static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 {
-	OSSL_PARAM params[4];
+	OSSL_PARAM params[3];
 	struct esdm_openssl_drng_state *state =
 		calloc(1, sizeof(struct esdm_openssl_drng_state));
 	EVP_RAND *rand = NULL;
@@ -288,9 +288,7 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	params[0] = OSSL_PARAM_construct_int(OSSL_DRBG_PARAM_USE_DF, &df);
 	params[1] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
 						     "SHA512", 6);
-	params[2] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_MAC,
-						     "HMAC", 0);
-	params[3] = OSSL_PARAM_construct_end();
+	params[2] = OSSL_PARAM_construct_end();
 	if (!EVP_RAND_CTX_set_params(state->drbg, params)) {
 		ret = -EFAULT;
 		goto out;
