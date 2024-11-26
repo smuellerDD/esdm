@@ -312,7 +312,7 @@ int esdm_ntg1_compliant(void)
 }
 
 DSO_PUBLIC
-int esdm_ntg1_2022_compliant(void)
+int esdm_ntg1_2024_compliant(void)
 {
 	return
 #ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
@@ -486,7 +486,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	 * producing data while this is ongoing.
 	 */
 	} while (forced && !drng->fully_seeded &&
-		 num_es_delivered >= (esdm_ntg1_2022_compliant() ? 2 : 1));
+		 num_es_delivered >= (esdm_ntg1_2024_compliant() ? 2 : 1));
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 

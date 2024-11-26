@@ -84,10 +84,10 @@ the ESDM server operates compliant to SP800-90C right away when using the
 interfaces that are documented to block until sufficient initial entropy
 is present.
 
-## AIS 20/31 (2022) Compliance
+## AIS 20/31 (2024) Compliance
 
 When enabling the compile time option of `ais2031`, the ESDM server
-operates NTG.1 compliant to AIS 20/31 (2022 draft version) right away when using
+operates NTG.1 compliant to AIS 20/31 (2024, version 3.0) right away when using
 the interfaces that are documented to block until sufficient initial entropy
 is present.
 

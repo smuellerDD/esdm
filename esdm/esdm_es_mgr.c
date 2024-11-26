@@ -435,8 +435,8 @@ static uint32_t esdm_avail_entropy_thresh(void)
 bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 		       struct entropy_buf *eb)
 {
-	/* AIS20/31 NTG.1: two entropy sources with each delivering 220 bits */
-	if (esdm_ntg1_2022_compliant()) {
+	/* AIS20/31 NTG.1: two entropy sources with each delivering 240 bits */
+	if (esdm_ntg1_2024_compliant()) {
 		uint32_t i, result = 0,
 			    ent_thresh = esdm_avail_entropy_thresh();
 
@@ -552,8 +552,8 @@ void esdm_set_write_wakeup_bits(uint32_t val)
 
 static uint32_t esdm_init_entropy_level(bool fully_seeded)
 {
-	return esdm_ntg1_2022_compliant() ?
-		       /* Approximation so that two ES should deliver 220 bits each */
+	return esdm_ntg1_2024_compliant() ?
+		       /* Approximation so that two ES should deliver 240 bits each */
 		       (2 * ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
 		       /* Apply SP800-90C oversampling if applicable */
 		       esdm_get_seed_entropy_osr(fully_seeded);

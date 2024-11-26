@@ -80,7 +80,7 @@ void esdm_status(char *buf, size_t buflen)
 		 esdm_nodes, esdm_config_fips_enabled() ? "FIPS 140 " : "",
 		 esdm_sp80090c_compliant() ? "SP800-90C " : "",
 		 esdm_ntg1_compliant() ? "NTG.1(2011) " : "",
-		 esdm_ntg1_2022_compliant() ? "NTG.1(2022)" : "",
+		 esdm_ntg1_2024_compliant() ? "NTG.1(2024)" : "",
 		 esdm_state_min_seeded() ? "true" : "false",
 		 esdm_state_fully_seeded() ? "true" : "false",
 		 esdm_avail_entropy());
