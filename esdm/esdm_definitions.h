@@ -80,7 +80,7 @@
 #define ESDM_INIT_ENTROPY_BITS 32
 
 /* AIS20/31: NTG.1.4 minimum entropy rate for one entropy source*/
-#define ESDM_AIS2031_NPTRNG_MIN_ENTROPY 220
+#define ESDM_AIS2031_NPTRNG_MIN_ENTROPY 240
 
 /*
  * Wakeup value

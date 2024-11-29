@@ -274,18 +274,18 @@ The following oversampling is applied:
 
 # Option for: ESDM_AIS2031_NTG1_SEEDING_STRATEGY
 option('ais2031', type: 'boolean', value: false,
-       description:'''German AIS 20/31 (2022) compliance.
+       description:'''German AIS 20/31 3.0 (2024) compliance.
 
 When enabling this option, two entropy sources must
-deliver 220 bits of entropy each to consider a DRNG
+deliver 240 bits of entropy each to consider a DRNG
 as fully seeded. Any two entropy sources can be used
 to fulfill this requirement. If specific entropy sources
 shall not be capable of contributing to this seeding
 strategy, the respective entropy source must be configured
-to provide less than 220 bits of entropy.
+to provide less than 240 bits of entropy.
 
 The strategy is consistent with the requirements for
-NTG.1 compliance in German AIS 20/31 draft from 2022.
+NTG.1 compliance in German AIS 20/31 3.0 from 2024.
 
 Compliance with German AIS 20/31 from 2011 is always
 present when using /dev/random with the flag O_SYNC or
