@@ -254,14 +254,14 @@ option('node', type: 'feature', value: 'enabled',
        description: 'Enable support for multiple DRNG nodes.')
 
 # Enable FIPS 140 support
-option('fips140', type: 'boolean', value: 'false',
+option('fips140', type: 'boolean', value: false,
        description: '''Enable FIPS 140 support.
 
 This option implicitly enables the SP800-90C compliance mode.
 ''')
 
 # Option for: ESDM_OVERSAMPLE_ENTROPY_SOURCES
-option('sp80090c', type: 'boolean', value: 'false',
+option('sp80090c', type: 'boolean', value: false,
        description:'''SP800-90C compliance
 
 If enabled, the ESDM oversamples the entropy sources compliant to SP800-90C.
@@ -273,7 +273,7 @@ The following oversampling is applied:
 ''')
 
 # Option for: ESDM_AIS2031_NTG1_SEEDING_STRATEGY
-option('ais2031', type: 'boolean', value: 'false',
+option('ais2031', type: 'boolean', value: false,
        description:'''German AIS 20/31 (2022) compliance.
 
 When enabling this option, two entropy sources must
@@ -437,7 +437,7 @@ Change the default with care/know the consequences!
 # Server-related Configuration
 ################################################################################
 
-option('esdm-server-term-on-signal', type: 'boolean', value: 'true',
+option('esdm-server-term-on-signal', type: 'boolean', value: true,
        description:'''ESDM-Server: Terminate on signal
 
 When enabled, the ESDM server sleeps on accept() either until a connection
@@ -454,7 +454,7 @@ even though the server shall exit.
 # Auxiliary Options
 ################################################################################
 
-option('small_memory', type: 'boolean', value: 'false',
+option('small_memory', type: 'boolean', value: false,
        description:'''Reduce Memory Footprint
 
 When enabled, the code is compiled such that it attempts to reduce the memory
