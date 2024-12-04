@@ -47,7 +47,7 @@ struct esdm_logger_class_map {
 static FILE *esdm_logger_stream = NULL;
 static bool use_syslog = false;
 
-void log_syslog(int severity, const char *format, ...);
+static void log_syslog(int severity, const char *format, ...);
 
 static const struct esdm_logger_class_map esdm_logger_class_mapping[] = {
 	{ LOGGER_C_ANY, NULL },
@@ -134,7 +134,7 @@ static int esdm_logger_class(const enum esdm_logger_class class, char *s,
 	return 0;
 }
 
-void log_syslog(int severity, const char *format, ...)
+static void log_syslog(int severity, const char *format, ...)
 {
 	va_list args;
 	int log_prio = LOG_NOTICE;
