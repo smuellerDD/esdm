@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <syslog.h>
 #include <time.h>
 
 #include "binhexbin.h"
@@ -44,6 +45,9 @@ struct esdm_logger_class_map {
 };
 
 static FILE *esdm_logger_stream = NULL;
+static bool use_syslog = false;
+
+void log_syslog(int severity, const char *format, ...);
 
 static const struct esdm_logger_class_map esdm_logger_class_mapping[] = {
 	{ LOGGER_C_ANY, NULL },
@@ -117,12 +121,51 @@ static int esdm_logger_class(const enum esdm_logger_class class, char *s,
 		return ret;
 
 	if (esdm_logger_class_mapping[idx].logdata)
-		snprintf(s, slen, " - %s",
-			 esdm_logger_class_mapping[idx].logdata);
+		if (use_syslog) {
+			snprintf(s, slen, "%s",
+				 esdm_logger_class_mapping[idx].logdata);
+		} else {
+			snprintf(s, slen, " - %s",
+				 esdm_logger_class_mapping[idx].logdata);
+		}
 	else
 		s[0] = '\0';
 
 	return 0;
+}
+
+void log_syslog(int severity, const char *format, ...)
+{
+	va_list args;
+	int log_prio = LOG_NOTICE;
+
+	va_start(args, format);
+	va_end(args);
+	switch (severity) {
+	case LOGGER_DEBUG2:
+		log_prio = LOG_DEBUG;
+		break;
+	case LOGGER_DEBUG:
+		log_prio = LOG_DEBUG;
+		break;
+	case LOGGER_VERBOSE:
+		log_prio = LOG_DEBUG;
+		break;
+	case LOGGER_WARN:
+		log_prio = LOG_WARNING;
+		break;
+	case LOGGER_ERR:
+		log_prio = LOG_ERR;
+		break;
+	case LOGGER_STATUS:
+		log_prio = LOG_NOTICE;
+		break;
+	case LOGGER_NONE:
+	case LOGGER_MAX_LEVEL:
+	default:
+		log_prio = LOG_INFO;
+	}
+	vsyslog(log_prio, format, args);
 }
 
 DSO_PUBLIC
@@ -188,11 +231,18 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	switch (esdm_logger_verbosity_level) {
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
-		fprintf_color(esdm_logger_stream,
-			      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s [%s:%s:%u]: ",
-			      now_detail.tm_hour, now_detail.tm_min,
-			      now_detail.tm_sec, thread_name, sev, c, file,
-			      func, line);
+		if (use_syslog) {
+			log_syslog(esdm_logger_verbosity_level,
+				   "(%s) {%s} [%s:%s:%u] %s", thread_name, c,
+				   file, func, line, msg);
+		} else {
+			fprintf_color(
+				esdm_logger_stream,
+				"ESDM (%.2d:%.2d:%.2d) (%s) %s%s [%s:%s:%u]: ",
+				now_detail.tm_hour, now_detail.tm_min,
+				now_detail.tm_sec, thread_name, sev, c, file,
+				func, line);
+		}
 		break;
 	case LOGGER_VERBOSE:
 	case LOGGER_WARN:
@@ -201,16 +251,26 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	case LOGGER_NONE:
 	case LOGGER_MAX_LEVEL:
 	default:
-		fprintf_color(esdm_logger_stream,
-			      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s: ",
-			      now_detail.tm_hour, now_detail.tm_min,
-			      now_detail.tm_sec, thread_name, sev, c);
+		if (use_syslog) {
+			log_syslog(esdm_logger_verbosity_level, "(%s) {%s} %s",
+				   thread_name, c, msg);
+		} else {
+			fprintf_color(esdm_logger_stream,
+				      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s: ",
+				      now_detail.tm_hour, now_detail.tm_min,
+				      now_detail.tm_sec, thread_name, sev, c);
+		}
 		break;
 	}
 
-	fprintf(esdm_logger_stream, "%s", msg);
+	if (!use_syslog) {
+		fprintf(esdm_logger_stream, "%s", msg);
+	}
 }
 
+/* this function is currently not used besides debugging and not
+ * connected to syslog therefore. Change if necessary in the future.
+ */
 void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
 			 const enum esdm_logger_class class,
 			 const unsigned char *bin, const uint32_t binlen,
@@ -260,6 +320,9 @@ void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
 	bin2print(bin, binlen, esdm_logger_stream, msg);
 }
 
+/* this function is currently not used besides debugging/development and not
+ * connected to syslog therefore. Change if necessary in the future.
+ */
 void esdm_logger_spinner(const unsigned int percentage, const char *fmt, ...)
 {
 	static unsigned int start = 0;
@@ -301,6 +364,9 @@ static void esdm_logger_destructor(void)
 {
 	if (esdm_logger_stream && esdm_logger_stream != stderr)
 		fclose(esdm_logger_stream);
+
+	if (use_syslog)
+		closelog();
 }
 
 ESDM_DEFINE_CONSTRUCTOR(esdm_logger_constructor);
@@ -385,4 +451,11 @@ void esdm_logger_inc_verbosity(void)
 		return;
 
 	esdm_logger_verbosity_level++;
+}
+
+DSO_PUBLIC
+void esdm_logger_enable_syslog(void)
+{
+	use_syslog = true;
+	openlog("ESDM", LOG_NDELAY, LOG_DAEMON);
 }
