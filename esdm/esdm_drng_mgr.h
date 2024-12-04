@@ -45,6 +45,8 @@ struct esdm_drng {
 	atomic_t requests_since_fully_seeded; /* Number DRNG requests since
 						 * last fully seeded
 						 */
+	atomic_t internal_bits; /* DRG.4.10 AIS 20/31 Version 3.0 */
+
 	struct timespec last_seeded; /* Last time it was seeded */
 	bool fully_seeded; /* Is DRNG fully seeded? */
 	bool force_reseed; /* Force a reseed */
@@ -57,7 +59,9 @@ struct esdm_drng {
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
 	.drng = d, .drng_cb = d_cb, .hash_cb = h_cb,                           \
 	.requests = ATOMIC_INIT(ESDM_DRNG_RESEED_THRESH),                      \
-	.requests_since_fully_seeded = ATOMIC_INIT(0), .last_seeded = {0},     \
+	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
+	.internal_bits = ATOMIC_INIT(0),                                       \
+	.last_seeded = {0},                                                    \
 	.fully_seeded = false, .force_reseed = true,                           \
 	.hash_lock = MUTEX_UNLOCKED
 

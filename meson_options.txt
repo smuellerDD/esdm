@@ -311,6 +311,10 @@ shall be adjusted.
 The value must not be lower than 1.
 ''')
 
+option('drng_max_reseed_bits', type: 'integer', value: 131072,
+       description: '''Set this to 131072 (2**17) to enforce
+       DRG.4.10 of AIS 20/31 Version 3.0''')
+
 ################################################################################
 # Cryptographic backends configuration
 ################################################################################

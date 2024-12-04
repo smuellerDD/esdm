@@ -151,6 +151,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	/* Ensure reseed during next call */
 	atomic_set(&drng->requests, 1);
 	atomic_set(&drng->requests_since_fully_seeded, 0);
+	atomic_set(&drng->internal_bits, 0);
 	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
 	drng->fully_seeded = false;
 	/* Do not set force, as this flag is used for the emergency reseeding */
@@ -644,9 +645,10 @@ out:
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
 	struct timespec check_time = drng->last_seeded;
+	bool internal_bits_reached = atomic_read(&drng->internal_bits) >= (ESDM_DRNG_MAX_RESEED_BITS);
 
 	check_time.tv_sec += esdm_drng_reseed_max_time;
-	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed ||
+	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed || internal_bits_reached ||
 		esdm_time_after_now(&check_time));
 }
 
@@ -751,6 +753,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 			/* Do not produce more than DRNG security strength. */
 			todo = min_uint32(todo, esdm_security_strength() >> 3);
+
+			atomic_set(&drng->internal_bits, 0);
 		}
 
 		/* Now, generate random bits from the properly seeded DRNG. */
@@ -764,6 +768,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				ret);
 			return -EFAULT;
 		}
+		atomic_add(&drng->internal_bits, (int) ret << 3);
 		processed += ret;
 		outbuflen -= (size_t)ret;
 
