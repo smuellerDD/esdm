@@ -27,7 +27,6 @@
 #include <syslog.h>
 #include <time.h>
 
-#include "binhexbin.h"
 #include "build_bug_on.h"
 #include "constructor.h"
 #include "helper.h"
@@ -266,98 +265,6 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	if (!use_syslog) {
 		fprintf(esdm_logger_stream, "%s", msg);
 	}
-}
-
-/* this function is currently not used besides debugging and not
- * connected to syslog therefore. Change if necessary in the future.
- */
-void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
-			 const enum esdm_logger_class class,
-			 const unsigned char *bin, const uint32_t binlen,
-			 const char *str, const char *file, const char *func,
-			 const uint32_t line)
-{
-	time_t now;
-	struct tm now_detail;
-	int ret;
-	char sev[10];
-	char msg[4096];
-	char c[30];
-
-	if (severity > esdm_logger_verbosity_level)
-		return;
-
-	esdm_logger_severity(severity, sev, sizeof(sev));
-
-	now = time(NULL);
-	localtime_r(&now, &now_detail);
-
-	ret = esdm_logger_class(class, c, sizeof(c));
-	if (ret)
-		return;
-
-	switch (esdm_logger_verbosity_level) {
-	case LOGGER_DEBUG2:
-	case LOGGER_DEBUG:
-		snprintf(msg, sizeof(msg),
-			 "ESDM (%.2d:%.2d:%.2d) %s%s [%s:%s:%u]: %s",
-			 now_detail.tm_hour, now_detail.tm_min,
-			 now_detail.tm_sec, sev, c, file, func, line, str);
-		break;
-	case LOGGER_VERBOSE:
-	case LOGGER_WARN:
-	case LOGGER_ERR:
-	case LOGGER_STATUS:
-	case LOGGER_NONE:
-	case LOGGER_MAX_LEVEL:
-	default:
-		snprintf(msg, sizeof(msg), "ESDM (%.2d:%.2d:%.2d) %s%s: %s",
-			 now_detail.tm_hour, now_detail.tm_min,
-			 now_detail.tm_sec, sev, c, str);
-		break;
-	}
-
-	bin2print(bin, binlen, esdm_logger_stream, msg);
-}
-
-/* this function is currently not used besides debugging/development and not
- * connected to syslog therefore. Change if necessary in the future.
- */
-void esdm_logger_spinner(const unsigned int percentage, const char *fmt, ...)
-{
-	static unsigned int start = 0;
-
-	if (esdm_logger_verbosity_level > LOGGER_ERR)
-		return;
-
-	if (percentage >= 100) {
-		if (start < 2) {
-			fprintf(stderr, "\n");
-			start = 2;
-		}
-		return;
-	}
-
-	if (start) {
-		unsigned int i;
-
-		for (i = 0; i < 4; i++)
-			fprintf(stderr, "\b");
-	} else {
-		va_list args;
-		char msg[4096];
-
-		va_start(args, fmt);
-		vsnprintf(msg, sizeof(msg), fmt, args);
-		va_end(args);
-
-		fprintf(stderr, "ESDM progress: %s ", msg);
-		start = 1;
-	}
-
-	fprintf(stderr, "%.3u%%", percentage);
-
-	fflush(stderr);
 }
 
 static void esdm_logger_destructor(void)

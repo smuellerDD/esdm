@@ -103,32 +103,6 @@ void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
 #pragma GCC diagnostic pop
 
 /**
- * logger_binary - log binary string as hex
- * @param severity maximum severity level that causes the log entry to be logged
- * @param class logging class
- * @param bin binary string
- * @param binlen length of binary string
- * @param str string that is prepended to hex-converted binary string
- */
-#define esdm_logger_binary(severity, class_, bin, binlen, str)                 \
-	do {                                                                   \
-		_Pragma("GCC diagnostic push")                                 \
-			_Pragma("GCC diagnostic ignored \"-Wpedantic\"")       \
-				_esdm_logger_binary(severity, class_, bin,     \
-						    binlen, str, __FILE__,     \
-						    __FUNCTION__, __LINE__);   \
-		_Pragma("GCC diagnostic pop")                                  \
-	} while (0);
-
-/**
- * logger - log a percentage only if LOG_NONE is given
- * @param percentage Integer indicating a percentage value
- * @param fmt format string printed during first call
- */
-void esdm_logger_spinner(const unsigned int percentage, const char *fmt, ...)
-	__attribute__((format(printf, 2, 3)));
-
-/**
  * logger_set_verbosity - set verbosity level
  */
 void esdm_logger_set_verbosity(const enum esdm_logger_verbosity level);
