@@ -26,7 +26,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "binhexbin.h"
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_rpc_server.h"
