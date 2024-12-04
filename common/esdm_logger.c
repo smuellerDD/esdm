@@ -454,8 +454,8 @@ void esdm_logger_inc_verbosity(void)
 }
 
 DSO_PUBLIC
-void esdm_logger_enable_syslog(void)
+void esdm_logger_enable_syslog(const char *daemon_name)
 {
 	use_syslog = true;
-	openlog("ESDM", LOG_NDELAY, LOG_DAEMON);
+	openlog(daemon_name ? daemon_name : "ESDM", LOG_NDELAY, LOG_DAEMON);
 }

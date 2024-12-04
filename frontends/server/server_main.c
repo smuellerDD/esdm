@@ -145,7 +145,7 @@ static void parse_opts(int argc, char *argv[])
 
 			case 9:
 				/* syslog */
-				esdm_logger_enable_syslog();
+				esdm_logger_enable_syslog("esdm-server");
 				break;
 
 			default:
@@ -168,7 +168,7 @@ static void parse_opts(int argc, char *argv[])
 			foreground = 1;
 			break;
 		case 'S':
-			esdm_logger_enable_syslog();
+			esdm_logger_enable_syslog("esdm-server");
 			break;
 
 		case 'i':
