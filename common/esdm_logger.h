@@ -157,7 +157,7 @@ void esdm_logger_inc_verbosity(void);
 /**
  * Log into the given file
  *
- * Note: The status logging will always log to stderr and will be always
+ * Note: The status logging will always log to stderr/syslog and will be always
  *	 active if a log file is set.
  *
  * @param [in] pathname Path name of log file
@@ -169,6 +169,11 @@ int esdm_logger_set_file(const char *pathname);
  * Retrieve the file stream to log to.
  */
 FILE *esdm_logger_log_stream(void);
+
+/**
+ * enable logging to syslog instead of stderr
+ */
+void esdm_logger_enable_syslog(void);
 
 #ifdef __cplusplus
 }

@@ -72,6 +72,8 @@ static void usage(void)
 	fprintf(stderr, "\t\t\t\tretries enabling it\n");
 	fprintf(stderr,
 		"\t   --jent_block_disable\tDisable Jitter RNG block collection\n");
+	fprintf(stderr,
+		"\t-S --syslog\tLog to syslog instead of stdout/stderr\n");
 	exit(1);
 }
 
@@ -92,8 +94,9 @@ static void parse_opts(int argc, char *argv[])
 						{ "force_schedes", 0, 0, 0 },
 						{ "jent_block_disable", 0, 0,
 						  0 },
+						{ "syslog", 0, 0, 0 },
 						{ 0, 0, 0, 0 } };
-		c = getopt_long(argc, argv, "hvp:u:fis", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fisS", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -140,6 +143,11 @@ static void parse_opts(int argc, char *argv[])
 				esdm_config_es_jent_async_enabled_set(0);
 				break;
 
+			case 9:
+				/* syslog */
+				esdm_logger_enable_syslog();
+				break;
+
 			default:
 				usage();
 			}
@@ -158,6 +166,9 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'f':
 			foreground = 1;
+			break;
+		case 'S':
+			esdm_logger_enable_syslog();
 			break;
 
 		case 'i':
