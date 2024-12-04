@@ -1026,6 +1026,7 @@ struct esdm_cuse_param {
 	unsigned int verbosity;
 	int is_help;
 	int disable_fallback;
+	int syslog;
 };
 
 #define ESDM_CUSE_OPT(t, p)                                                    \
@@ -1046,6 +1047,7 @@ static const char *usage =
 	"    -d   -o debug           enable debug output (implies -f)\n"
 	"    -f                      foreground operation\n"
 	"    -s                      disable multi-threaded operation\n"
+	"    -S                      log via syslog\n"
 	"\n";
 
 /* The CUSE code seems to have a conversion issue with FUSE_OPT_KEY */
@@ -1069,6 +1071,8 @@ static const struct fuse_opt esdm_cuse_opts[] = {
 #endif
 	FUSE_OPT_KEY("-h", 0),
 	FUSE_OPT_KEY("--help", 0),
+	FUSE_OPT_KEY("-S", 1),
+	FUSE_OPT_KEY("--syslog", 1),
 	FUSE_OPT_END
 };
 #pragma GCC diagnostic pop
@@ -1086,6 +1090,9 @@ static int esdm_cuse_process_arg(void *data, const char *arg, int key,
 		param->is_help = 1;
 		fprintf(stderr, "%s", usage);
 		return fuse_opt_add_arg(outargs, "-ho");
+	case 1:
+		param->syslog = 1;
+		return 0;
 	default:
 		return 1;
 	}
@@ -1095,7 +1102,7 @@ int main_common(const char *_devname, const char *target, const char *semname,
 		const struct cuse_lowlevel_ops *clop, int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0 };
+	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0, 0 };
 	char dev_name[128] = "DEVNAME=";
 	char devname[20];
 	const char *dev_info_argv[] = { dev_name };
@@ -1111,6 +1118,10 @@ int main_common(const char *_devname, const char *target, const char *semname,
 	}
 
 	esdm_logger_set_verbosity(param.verbosity);
+
+	if (param.syslog) {
+		esdm_logger_enable_syslog("esdm-cuse");
+	}
 
 	esdm_test_disable_fallback(param.disable_fallback);
 

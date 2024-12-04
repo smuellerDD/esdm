@@ -570,6 +570,7 @@ static struct esdm_proc_options {
 	int show_help;
 	int relabel;
 	unsigned int verbosity;
+	int syslog;
 } esdm_proc_options;
 
 #define OPTION(t, p)                                                           \
@@ -579,7 +580,8 @@ static struct esdm_proc_options {
 static const struct fuse_opt esdm_proc_options_spec[] = {
 	OPTION("-v %u", verbosity),   OPTION("--verbosity=%u", verbosity),
 	OPTION("--relabel", relabel), OPTION("-h", show_help),
-	OPTION("--help", show_help),  FUSE_OPT_END
+	OPTION("--syslog", syslog), OPTION("--help", show_help),
+	FUSE_OPT_END
 };
 
 static void show_help(const char *progname)
@@ -588,6 +590,7 @@ static void show_help(const char *progname)
 	printf("File-system specific options:\n"
 	       "    --verbosity=<u>     Verbosity level\n"
 	       "    --relabel           Perform automatic SELinux relabeling"
+	       "    --syslog            Log via syslog"
 	       "\n");
 }
 
@@ -604,6 +607,10 @@ int main(int argc, char *argv[])
 	}
 
 	esdm_logger_set_verbosity(esdm_proc_options.verbosity);
+
+	if (esdm_proc_options.syslog) {
+		esdm_logger_enable_syslog("esdm-proc");
+	}
 
 	/*
 	 * When --help is specified, first print our own file-system
