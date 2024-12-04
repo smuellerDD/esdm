@@ -160,9 +160,14 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 			 * claim it has entropy. Conversely, if the IRQ ES is
 			 * not enabled* it has its main entropy source and is
 			 * credited with entropy by the ESDM. This implies
-			 * we cannot inject data that we claim has entropy.
+			 * we cannot inject data that we claim has entropy
+			 * unless other entropy sources are accessible in
+			 * ESDM (e.g. a smartcard feeding the auxiliary pool).
+			 *
+			 * You can change ESDM_LINUX_RESEED_ENTROPY_COUNT
+			 * in these cases.
 			 */
-			if (status.es_irq_enabled)
+			if (status.es_irq_enabled && ESDM_LINUX_RESEED_ENTROPY_COUNT == 0)
 				rpi->entropy_count = (int)((ret) << 3);
 			else
 				rpi->entropy_count = ESDM_LINUX_RESEED_ENTROPY_COUNT;
