@@ -393,6 +393,11 @@ if you want to use the OpenSSL as a provider for ESDM-internal crypto algorithms
 like hash algorithms.
 ''')
 
+option('linux-reseed-interval', type: 'integer', value: 120,
+       description: 'interval between forced Linux kernel RNG reseeds (in seconds)')
+option('linux-reseed-entropy-count', type: 'integer', value: 0, min: 0, max: 256,
+       description: 'amount of entropy to account on kernel reseed (without es_irq)')
+
 option('esdm-server', type: 'feature', value: 'enabled',
        description: 'Enable the ESDM server')
 
