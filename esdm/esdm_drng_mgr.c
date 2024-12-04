@@ -605,6 +605,26 @@ void esdm_drng_seed_work(void)
 	esdm_pool_unlock();
 }
 
+/**
+ * @brief Check if DRNG has to be temporarily disabled because of failed seedings
+ *
+ * @param [in] drng DRNG instance
+ * 
+ * @return
+ * * true request or bit limit reached
+ * * false no disable condition triggered
+ */
+static bool esdm_drng_check_disable_threshold(struct esdm_drng *drng)
+{
+	bool request_limit_reached = atomic_read_u32(&drng->requests_since_fully_seeded) >
+	    			     esdm_config_drng_max_wo_reseed();
+	bool bit_limit_reached = (esdm_config_drng_max_wo_reseed_bits() > 0) &&
+				 (atomic_read_u32(&drng->internal_bits) >
+				 ((uint32_t) esdm_config_drng_max_wo_reseed_bits()));
+
+	return request_limit_reached || bit_limit_reached;
+}
+
 /* Force all DRNGs to reseed before next generation */
 DSO_PUBLIC
 void esdm_drng_force_reseed(void)
@@ -617,9 +637,7 @@ void esdm_drng_force_reseed(void)
 	 * reseed only for the initial DRNG as this is the fallback for all. It
 	 * must be kept seeded before all others to keep the ESDM operational.
 	 */
-	if (!esdm_drng ||
-	    (atomic_read_u32(&esdm_drng_init.requests_since_fully_seeded) >
-	     ESDM_DRNG_RESEED_THRESH)) {
+	if (!esdm_drng || esdm_drng_check_disable_threshold(&esdm_drng_init)) {
 		esdm_drng_init.force_reseed = esdm_drng_init.fully_seeded;
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 			    "force reseed of initial DRNG\n");
@@ -651,26 +669,6 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 	check_time.tv_sec += esdm_drng_reseed_max_time;
 	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed || internal_bits_reached ||
 		esdm_time_after_now(&check_time));
-}
-
-/**
- * @brief Check if DRNG has to be temporarily disabled because of failed seedings
- *
- * @param [in] drng DRNG instance
- * 
- * @return
- * * true request or bit limit reached
- * * false no disable condition triggered
- */
-static bool esdm_drng_check_disable_threshold(struct esdm_drng *drng)
-{
-	bool request_limit_reached = atomic_read_u32(&drng->requests_since_fully_seeded) >
-	    			     esdm_config_drng_max_wo_reseed();
-	bool bit_limit_reached = (ESDM_DRNG_MAX_RESEED_BITS > 0) &&
-				 (atomic_read_u32(&drng->internal_bits) >
-				 ESDM_DRNG_MAX_RESEED_BITS);
-
-	return request_limit_reached || bit_limit_reached;
 }
 
 /**
