@@ -134,8 +134,8 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
 	struct esdm_status_st status;
 
-	/* Wake up every 2 minutes */
-	struct timespec ts = { .tv_sec = 120, .tv_nsec = 0 };
+	/* Wake up every 2 minutes by default */
+	struct timespec ts = { .tv_sec = ESDM_LINUX_RESEED_INTERVAL_SEC, .tv_nsec = 0 };
 	ssize_t ret;
 
 	thread_set_name(es_kernel_feeder, 0);
@@ -165,7 +165,7 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 			if (status.es_irq_enabled)
 				rpi->entropy_count = (int)((ret) << 3);
 			else
-				rpi->entropy_count = 0;
+				rpi->entropy_count = ESDM_LINUX_RESEED_ENTROPY_COUNT;
 			esdm_rpcs_linux_insert_entropy(rpi);
 		}
 

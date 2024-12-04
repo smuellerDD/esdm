@@ -132,4 +132,7 @@ conf_data.set('ESDM_RPCS_BUF_WRITE', not get_option('small_memory'))
 
 conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'))
 
+conf_data.set('ESDM_LINUX_RESEED_INTERVAL_SEC', get_option('linux-reseed-interval'))
+conf_data.set('ESDM_LINUX_RESEED_ENTROPY_COUNT', get_option('linux-reseed-entropy-count'))
+
 configure_file(output: 'config.h', configuration : conf_data)
