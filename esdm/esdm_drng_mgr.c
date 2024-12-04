@@ -390,9 +390,10 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 			drng_type, esdm_time_after_now(&drng->last_seeded), gc);
 
 		/* Count the numbers of generate ops since last fully seeded */
-		if (fully_seeded)
+		if (fully_seeded) {
 			atomic_set(&drng->requests_since_fully_seeded, 0);
-		else
+			atomic_set(&drng->internal_bits, 0);
+		} else
 			atomic_add(&drng->requests_since_fully_seeded, gc);
 
 		clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
@@ -645,11 +646,31 @@ out:
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
 	struct timespec check_time = drng->last_seeded;
-	bool internal_bits_reached = atomic_read(&drng->internal_bits) >= (ESDM_DRNG_MAX_RESEED_BITS);
+	bool internal_bits_reached = (ESDM_DRNG_RESEED_THRESH_BITS > 0) && (atomic_read(&drng->internal_bits) >= ESDM_DRNG_RESEED_THRESH_BITS);
 
 	check_time.tv_sec += esdm_drng_reseed_max_time;
 	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed || internal_bits_reached ||
 		esdm_time_after_now(&check_time));
+}
+
+/**
+ * @brief Check if DRNG has to be temporarily disabled because of failed seedings
+ *
+ * @param [in] drng DRNG instance
+ * 
+ * @return
+ * * true request or bit limit reached
+ * * false no disable condition triggered
+ */
+static bool esdm_drng_check_disable_threshold(struct esdm_drng *drng)
+{
+	bool request_limit_reached = atomic_read_u32(&drng->requests_since_fully_seeded) >
+	    			     esdm_config_drng_max_wo_reseed();
+	bool bit_limit_reached = (ESDM_DRNG_MAX_RESEED_BITS > 0) &&
+				 (atomic_read_u32(&drng->internal_bits) >
+				 ESDM_DRNG_MAX_RESEED_BITS);
+
+	return request_limit_reached || bit_limit_reached;
 }
 
 /**
@@ -685,8 +706,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	 * does not imply that sufficient entropy was received to fill the DRNG.
 	 * If this state persists, then the following check applies.
 	 */
-	if (atomic_read_u32(&drng->requests_since_fully_seeded) >
-	    esdm_config_drng_max_wo_reseed())
+	if (esdm_drng_check_disable_threshold(drng))
 		esdm_unset_fully_seeded(drng);
 
 	/* Loop to collect random bits for the caller. */

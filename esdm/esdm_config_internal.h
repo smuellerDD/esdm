@@ -28,6 +28,7 @@ int esdm_config_reinit(void);
 
 #ifdef ESDM_TESTMODE
 void esdm_config_drng_max_wo_reseed_set(uint32_t val);
+void esdm_config_drng_max_wo_reseed_bits_set(int32_t val);
 void esdm_config_max_nodes_set(uint32_t val);
 #endif
 

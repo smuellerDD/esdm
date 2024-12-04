@@ -311,9 +311,19 @@ shall be adjusted.
 The value must not be lower than 1.
 ''')
 
-option('drng_max_reseed_bits', type: 'integer', value: 131072,
+option('drng_reseed_threshold_bits', type: 'integer', value: -1,
+       description: '''Set this to anything lower than 131072 (2**17) to enforce
+       DRG.4.10 of AIS 20/31 Version 3.0
+       
+       If you wan't to disable this strict check, simply set it -1.
+       ''')
+
+option('drng_max_reseed_bits', type: 'integer', value: -1,
        description: '''Set this to 131072 (2**17) to enforce
-       DRG.4.10 of AIS 20/31 Version 3.0''')
+       DRG.4.10 of AIS 20/31 Version 3.0
+       
+       If you wan't to disable this strict check, simply set it -1.
+       ''')
 
 ################################################################################
 # Cryptographic backends configuration
