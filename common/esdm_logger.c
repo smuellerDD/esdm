@@ -373,6 +373,7 @@ ESDM_DEFINE_CONSTRUCTOR(esdm_logger_constructor);
 static void esdm_logger_constructor(void)
 {
 	esdm_logger_stream = stderr;
+	atexit(esdm_logger_destructor);
 }
 
 FILE *esdm_logger_log_stream(void)
@@ -395,7 +396,6 @@ int esdm_logger_set_file(const char *pathname)
 			    "Reject to set new log file\n");
 		return -EFAULT;
 	}
-	atexit(esdm_logger_destructor);
 
 	return 0;
 }
