@@ -29,10 +29,10 @@
 
 uint32_t esdm_online_nodes(void)
 {
-	static uint32_t cpus = 0xFFFFFFFF;
+	static uint32_t cpus = UINT32_MAX;
 
 	/* We do not need more DRNGs than we have CPUs */
-	if (cpus == 0xFFFFFFFF) {
+	if (cpus == UINT32_MAX) {
 #ifdef _POSIX_SOURCE
 		long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 

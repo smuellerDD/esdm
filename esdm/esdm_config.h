@@ -225,7 +225,7 @@ uint32_t esdm_config_drng_max_wo_reseed(void);
  * @return Number of DRNG internal random numbers which are allowed to deliver
  *	   after a full entropy reseed.
  */
-int32_t esdm_config_drng_max_wo_reseed_bits(void);
+uint32_t esdm_config_drng_max_wo_reseed_bits(void);
 
 /**
  * @brief DRNG Manager configuration: get number of DRNG instances
