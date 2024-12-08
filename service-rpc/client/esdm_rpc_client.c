@@ -604,7 +604,7 @@ out:
 /******************************************************************************
  * General service handlers
  ******************************************************************************/
-static uint32_t esdm_rpcc_max_nodes = 0xffffffff;
+static uint32_t esdm_rpcc_max_nodes = UINT32_MAX;
 
 DSO_PUBLIC
 int esdm_rpcc_set_max_online_nodes(uint32_t nodes)

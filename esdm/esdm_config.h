@@ -200,7 +200,7 @@ uint32_t esdm_config_es_jent_kernel_entropy_rate(void);
 
 /**
  * @brief DRNG Manager configuration: get maximum value without successful
- *	  reseed
+ *	  reseed (number of requests)
  *
  * If the DRNG is reseeded but insufficient entropy is present, the DRNG
  * continues to operate. However, if the reseed with insufficient entropy
@@ -211,6 +211,21 @@ uint32_t esdm_config_es_jent_kernel_entropy_rate(void);
  *	   an full entropy.
  */
 uint32_t esdm_config_drng_max_wo_reseed(void);
+
+/**
+ * @brief DRNG Manager configuration: get maximum number of bits drawn before
+ *	  reseed
+ *
+ * Class DRG.4 in German AIS 20/31 version 3.0 enforces a limit of 2**17
+ * bits drawn at max from a DRNG instance before the next reseeding is enforced.
+ * If you encounter similar limits, this setting can be used to enforced them.
+ * Otherwise set to a sufficiently large value, such that the request count triggers
+ * first.
+ *
+ * @return Number of DRNG internal random numbers which are allowed to deliver
+ *	   after a full entropy reseed.
+ */
+uint32_t esdm_config_drng_max_wo_reseed_bits(void);
 
 /**
  * @brief DRNG Manager configuration: get number of DRNG instances
