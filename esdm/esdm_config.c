@@ -310,7 +310,7 @@ void esdm_config_drng_max_wo_reseed_set(uint32_t val)
 	esdm_config.esdm_drng_max_wo_reseed = val;
 }
 
-void esdm_config_drng_max_wo_reseed_bits_set(int32_t val)
+void esdm_config_drng_max_wo_reseed_bits_set(uint32_t val)
 {
 	esdm_config.esdm_drng_max_wo_reseed_bits = val;
 }
