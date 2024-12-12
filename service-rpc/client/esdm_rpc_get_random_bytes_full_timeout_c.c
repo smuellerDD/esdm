@@ -37,10 +37,8 @@ struct esdm_get_random_bytes_full_timeout_buf {
 	size_t buflen;
 };
 
-static void
-esdm_rpcc_get_random_bytes_full_timeout_cb(
-	const GetRandomBytesFullTimeoutResponse *response,
-	void *closure_data)
+static void esdm_rpcc_get_random_bytes_full_timeout_cb(
+	const GetRandomBytesFullTimeoutResponse *response, void *closure_data)
 {
 	struct esdm_get_random_bytes_full_timeout_buf *buffer =
 		(struct esdm_get_random_bytes_full_timeout_buf *)closure_data;

@@ -28,7 +28,8 @@ extern "C" {
 #endif
 
 extern int pthread_cond_clockwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
-				  clockid_t clockid, const struct timespec *abstime);
+				  clockid_t clockid,
+				  const struct timespec *abstime);
 
 struct thread_wait_queue {
 	pthread_cond_t thread_wait_cv;
@@ -38,7 +39,7 @@ struct thread_wait_queue {
 #define DECLARE_WAIT_QUEUE(name)                                               \
 	struct thread_wait_queue name = {                                      \
 		.thread_wait_cv = PTHREAD_COND_INITIALIZER,                    \
-		.thread_wait_lock = PTHREAD_MUTEX_INITIALIZER,		       \
+		.thread_wait_lock = PTHREAD_MUTEX_INITIALIZER,                 \
 	}
 
 #define thread_wait_no_event(queue)                                            \
@@ -55,15 +56,14 @@ struct thread_wait_queue {
 		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
 		clock_gettime(CLOCK_MONOTONIC, &__ts);                         \
 		__ts.tv_sec += (reltime)->tv_sec;                              \
-		__ts.tv_nsec += (reltime)->tv_nsec;			       \
-		if (__ts.tv_nsec > 1000000000) {			       \
-			__ts.tv_sec += __ts.tv_nsec / 1000000000;	       \
-			__ts.tv_nsec = __ts.tv_nsec % 1000000000;	       \
-		}							       \
-		ret = -pthread_cond_clockwait(&(queue)->thread_wait_cv,	       \
+		__ts.tv_nsec += (reltime)->tv_nsec;                            \
+		if (__ts.tv_nsec > 1000000000) {                               \
+			__ts.tv_sec += __ts.tv_nsec / 1000000000;              \
+			__ts.tv_nsec = __ts.tv_nsec % 1000000000;              \
+		}                                                              \
+		ret = -pthread_cond_clockwait(&(queue)->thread_wait_cv,        \
 					      &(queue)->thread_wait_lock,      \
-					      CLOCK_MONOTONIC,		       \
-					      &__ts);			       \
+					      CLOCK_MONOTONIC, &__ts);         \
 		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
 	} while (0)
 

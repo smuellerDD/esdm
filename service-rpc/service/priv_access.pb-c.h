@@ -42,11 +42,7 @@ struct RndAddToEntCntRequest {
 	uint32_t entcnt;
 };
 #define RND_ADD_TO_ENT_CNT_REQUEST__INIT                                       \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(                                       \
-			&rnd_add_to_ent_cnt_request__descriptor)               \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_add_to_ent_cnt_request__descriptor), 0 }
 
 /*
  **
@@ -58,11 +54,7 @@ struct RndAddToEntCntResponse {
 	int32_t ret;
 };
 #define RND_ADD_TO_ENT_CNT_RESPONSE__INIT                                      \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(                                       \
-			&rnd_add_to_ent_cnt_response__descriptor)              \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_add_to_ent_cnt_response__descriptor), 0 }
 
 /*
  **
@@ -78,10 +70,9 @@ struct RndAddEntropyRequest {
 	uint32_t entcnt;
 };
 #define RND_ADD_ENTROPY_REQUEST__INIT                                          \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(&rnd_add_entropy_request__descriptor)  \
-		, { 0, NULL }, 0                                               \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_add_entropy_request__descriptor),       \
+	  { 0, NULL },                                                         \
+	  0 }
 
 /*
  **
@@ -93,10 +84,7 @@ struct RndAddEntropyResponse {
 	int32_t ret;
 };
 #define RND_ADD_ENTROPY_RESPONSE__INIT                                         \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(&rnd_add_entropy_response__descriptor) \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_add_entropy_response__descriptor), 0 }
 
 /*
  **
@@ -106,9 +94,7 @@ struct RndClearPoolRequest {
 	ProtobufCMessage base;
 };
 #define RND_CLEAR_POOL_REQUEST__INIT                                           \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(&rnd_clear_pool_request__descriptor)   \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_clear_pool_request__descriptor) }
 
 /*
  **
@@ -120,10 +106,7 @@ struct RndClearPoolResponse {
 	int32_t ret;
 };
 #define RND_CLEAR_POOL_RESPONSE__INIT                                          \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(&rnd_clear_pool_response__descriptor)  \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_clear_pool_response__descriptor), 0 }
 
 /*
  **
@@ -133,9 +116,7 @@ struct RndReseedCRNGRequest {
 	ProtobufCMessage base;
 };
 #define RND_RESEED_CRNGREQUEST__INIT                                           \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(&rnd_reseed_crngrequest__descriptor)   \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_reseed_crngrequest__descriptor) }
 
 /*
  **
@@ -147,10 +128,7 @@ struct RndReseedCRNGResponse {
 	int32_t ret;
 };
 #define RND_RESEED_CRNGRESPONSE__INIT                                          \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(&rnd_reseed_crngresponse__descriptor)  \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&rnd_reseed_crngresponse__descriptor), 0 }
 
 /*
  **
@@ -161,11 +139,9 @@ struct SetWriteWakeupThreshRequest {
 	uint32_t wakeup;
 };
 #define SET_WRITE_WAKEUP_THRESH_REQUEST__INIT                                  \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(                                       \
-			&set_write_wakeup_thresh_request__descriptor)          \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(                                             \
+		  &set_write_wakeup_thresh_request__descriptor),               \
+	  0 }
 
 /*
  **
@@ -177,11 +153,9 @@ struct SetWriteWakeupThreshResponse {
 	int32_t ret;
 };
 #define SET_WRITE_WAKEUP_THRESH_RESPONSE__INIT                                 \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(                                       \
-			&set_write_wakeup_thresh_response__descriptor)         \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(                                             \
+		  &set_write_wakeup_thresh_response__descriptor),              \
+	  0 }
 
 /*
  **
@@ -192,11 +166,7 @@ struct SetMinReseedSecsRequest {
 	uint32_t seconds;
 };
 #define SET_MIN_RESEED_SECS_REQUEST__INIT                                      \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(                                       \
-			&set_min_reseed_secs_request__descriptor)              \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&set_min_reseed_secs_request__descriptor), 0 }
 
 /*
  **
@@ -208,11 +178,8 @@ struct SetMinReseedSecsResponse {
 	int32_t ret;
 };
 #define SET_MIN_RESEED_SECS_RESPONSE__INIT                                     \
-	{                                                                      \
-		PROTOBUF_C_MESSAGE_INIT(                                       \
-			&set_min_reseed_secs_response__descriptor)             \
-		, 0                                                            \
-	}
+	{ PROTOBUF_C_MESSAGE_INIT(&set_min_reseed_secs_response__descriptor),  \
+	  0 }
 
 /* RndAddToEntCntRequest methods */
 void rnd_add_to_ent_cnt_request__init(RndAddToEntCntRequest *message);
@@ -441,20 +408,15 @@ typedef void (*PrivAccess_ServiceDestroy)(PrivAccess_Service *);
 void priv_access__init(PrivAccess_Service *service,
 		       PrivAccess_ServiceDestroy destroy);
 #define PRIV_ACCESS__BASE_INIT                                                 \
-	{                                                                      \
-		&priv_access__descriptor, protobuf_c_service_invoke_internal,  \
-			NULL                                                   \
-	}
+	{ &priv_access__descriptor, protobuf_c_service_invoke_internal, NULL }
 #define PRIV_ACCESS__INIT(function_prefix__)                                   \
-	{                                                                      \
-		PRIV_ACCESS__BASE_INIT,                                        \
-			function_prefix__##rpc_rnd_add_to_ent_cnt,             \
-			function_prefix__##rpc_rnd_add_entropy,                \
-			function_prefix__##rpc_rnd_clear_pool,                 \
-			function_prefix__##rpc_rnd_reseed_crng,                \
-			function_prefix__##rpc_set_write_wakeup_thresh,        \
-			function_prefix__##rpc_set_min_reseed_secs             \
-	}
+	{ PRIV_ACCESS__BASE_INIT,                                              \
+	  function_prefix__##rpc_rnd_add_to_ent_cnt,                           \
+	  function_prefix__##rpc_rnd_add_entropy,                              \
+	  function_prefix__##rpc_rnd_clear_pool,                               \
+	  function_prefix__##rpc_rnd_reseed_crng,                              \
+	  function_prefix__##rpc_set_write_wakeup_thresh,                      \
+	  function_prefix__##rpc_set_min_reseed_secs }
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
 					 const RndAddToEntCntRequest *input,
 					 RndAddToEntCntResponse_Closure closure,

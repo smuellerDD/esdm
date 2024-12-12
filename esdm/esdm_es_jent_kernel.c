@@ -50,7 +50,6 @@ static void esdm_jent_kernel_finalize(void)
 	mutex_unlock(&jent_rng_mutex);
 }
 
-
 static int esdm_jent_kernel_init(void)
 {
 	int ret;

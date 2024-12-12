@@ -148,7 +148,7 @@ FILE *esdm_logger_log_stream(void);
  * enable logging to syslog instead of stderr
  * @param [in] daemon_name may be null (then ESDM)
  */
-void esdm_logger_enable_syslog(const char* daemon_name);
+void esdm_logger_enable_syslog(const char *daemon_name);
 
 #ifdef __cplusplus
 }

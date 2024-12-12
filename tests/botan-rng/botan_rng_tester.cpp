@@ -34,8 +34,8 @@ bool performTest(std::shared_ptr<Botan::RandomNumberGenerator> &rng)
 	std::vector<uint8_t> bytes(300);
 	try {
 		rng->randomize(bytes);
-		Botan::ECDSA_PrivateKey key_ecdsa(*rng,
-						  Botan::EC_Group::from_name("secp521r1"));
+		Botan::ECDSA_PrivateKey key_ecdsa(
+			*rng, Botan::EC_Group::from_name("secp521r1"));
 		Botan::RSA_PrivateKey key_rsa(*rng, 2048);
 	} catch (const Botan::System_Error &err) {
 		std::cerr

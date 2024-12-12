@@ -1029,10 +1029,7 @@ struct esdm_cuse_param {
 	int syslog;
 };
 
-#define ESDM_CUSE_OPT(t, p)                                                    \
-	{                                                                      \
-		t, offsetof(struct esdm_cuse_param, p), 1                      \
-	}
+#define ESDM_CUSE_OPT(t, p) { t, offsetof(struct esdm_cuse_param, p), 1 }
 
 static const char *usage =
 	"usage: esdm_cuse [options]\n"

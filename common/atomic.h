@@ -41,10 +41,7 @@ static inline void mb(void)
 	__sync_synchronize();
 }
 
-#define ATOMIC_INIT(i)                                                         \
-	{                                                                      \
-		(i)                                                            \
-	}
+#define ATOMIC_INIT(i) { (i) }
 
 /**
  * Read atomic variable

@@ -45,7 +45,7 @@ static inline uint16_t _bswap16(uint16_t x)
 }
 #define _swap16(x) _bswap16(x)
 #else
-#define _swap16(x) (uint16_t) __builtin_bswap16((uint16_t)(x))
+#define _swap16(x) (uint16_t)__builtin_bswap16((uint16_t)(x))
 #endif
 
 #if !defined(__HAVE_BUILTIN_BSWAP32__) || !defined(__HAVE_BUILTIN_BSWAP64__)
@@ -55,7 +55,7 @@ static inline uint32_t _bswap32(uint32_t x)
 }
 #define _swap32(x) _bswap32(x)
 #else
-#define _swap32(x) (uint32_t) __builtin_bswap32((uint32_t)(x))
+#define _swap32(x) (uint32_t)__builtin_bswap32((uint32_t)(x))
 #endif
 
 #ifndef __HAVE_BUILTIN_BSWAP64__
@@ -66,7 +66,7 @@ static inline uint64_t _bswap64(uint64_t x)
 }
 #define _swap64(x) _bswap64(x)
 #else
-#define _swap64(x) (uint64_t) __builtin_bswap64((uint64_t)(x))
+#define _swap64(x) (uint64_t)__builtin_bswap64((uint64_t)(x))
 #endif
 
 /* Endian dependent byte swap operations.  */

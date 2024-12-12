@@ -235,7 +235,7 @@ static void *thread_worker(void *arg)
 	while (1) {
 		mutex_w_lock(&tctx->inuse);
 
-locked:
+	locked:
 		if (atomic_bool_read(&tctx->shutdown)) {
 			/* Request for termination */
 			mutex_w_unlock(&tctx->inuse);

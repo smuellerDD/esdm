@@ -573,14 +573,14 @@ static struct esdm_proc_options {
 	int syslog;
 } esdm_proc_options;
 
-#define OPTION(t, p)                                                           \
-	{                                                                      \
-		t, offsetof(struct esdm_proc_options, p), 1                    \
-	}
+#define OPTION(t, p) { t, offsetof(struct esdm_proc_options, p), 1 }
 static const struct fuse_opt esdm_proc_options_spec[] = {
-	OPTION("-v %u", verbosity),   OPTION("--verbosity=%u", verbosity),
-	OPTION("--relabel", relabel), OPTION("-h", show_help),
-	OPTION("--syslog", syslog), OPTION("--help", show_help),
+	OPTION("-v %u", verbosity),
+	OPTION("--verbosity=%u", verbosity),
+	OPTION("--relabel", relabel),
+	OPTION("-h", show_help),
+	OPTION("--syslog", syslog),
+	OPTION("--help", show_help),
 	FUSE_OPT_END
 };
 

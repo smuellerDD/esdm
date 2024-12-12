@@ -33,8 +33,7 @@
 void esdm_rpc_get_random_bytes_full_timeout(
 	UnprivAccess_Service *service,
 	const GetRandomBytesFullTimeoutRequest *request,
-	GetRandomBytesFullTimeoutResponse_Closure closure,
-	void *closure_data)
+	GetRandomBytesFullTimeoutResponse_Closure closure, void *closure_data)
 {
 	GetRandomBytesFullTimeoutResponse response =
 		GET_RANDOM_BYTES_FULL_TIMEOUT_RESPONSE__INIT;
@@ -51,9 +50,8 @@ void esdm_rpc_get_random_bytes_full_timeout(
 			.tv_nsec = request->tv_nsec,
 		};
 
-		response.ret = esdm_get_random_bytes_full_timeout(rndval,
-								  request->len,
-								  &ts);
+		response.ret = esdm_get_random_bytes_full_timeout(
+			rndval, request->len, &ts);
 
 		if (response.ret > 0) {
 			esdm_test_shm_status_add_rpc_server_written(

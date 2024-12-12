@@ -35,10 +35,7 @@ typedef struct {
 	pthread_mutexattr_t ma;
 } mutex_w_t;
 
-#define MUTEX_W_UNLOCKED                                                       \
-	{                                                                      \
-		.lock = PTHREAD_MUTEX_INITIALIZER, .ma_used = 0                \
-	}
+#define MUTEX_W_UNLOCKED { .lock = PTHREAD_MUTEX_INITIALIZER, .ma_used = 0 }
 #define DEFINE_MUTEX_W_UNLOCKED(name) mutex_w_t name = MUTEX_W_UNLOCKED
 
 #define DEFINE_MUTEX_W_LOCKED(name) error "DEFINE_MUTEX_LOCKED not implemented"
@@ -107,8 +104,7 @@ static inline bool mutex_w_trylock(mutex_w_t *mutex)
  * both current glibc and musl libc implement a clock-based
  * timed locking, which can use a monotonic clock.
 */
-extern int pthread_mutex_clocklock(pthread_mutex_t *mutex,
-				   clockid_t clockid,
+extern int pthread_mutex_clocklock(pthread_mutex_t *mutex, clockid_t clockid,
 				   const struct timespec *abstime);
 
 static inline int mutex_w_timedlock(mutex_w_t *mutex,
