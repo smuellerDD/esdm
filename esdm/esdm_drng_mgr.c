@@ -622,9 +622,8 @@ static bool esdm_drng_check_disable_threshold(struct esdm_drng *drng)
 {
 	bool request_limit_reached = atomic_read_u32(&drng->requests_since_fully_seeded) >
 	    			     esdm_config_drng_max_wo_reseed();
-	bool bit_limit_reached = (esdm_config_drng_max_wo_reseed_bits() != UINT32_MAX) &&
-				 (atomic_read_u32(&drng->request_bits_since_fully_seeded) >
-				 (esdm_config_drng_max_wo_reseed_bits()));
+	bool bit_limit_reached = atomic_read_u32(&drng->request_bits_since_fully_seeded) >
+				 esdm_config_drng_max_wo_reseed_bits();
 
 	return request_limit_reached || bit_limit_reached;
 }
@@ -668,7 +667,7 @@ out:
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
 	struct timespec check_time = drng->last_seeded;
-	bool request_bits_since_fully_seeded_reached = (ESDM_DRNG_RESEED_THRESH_BITS != UINT32_MAX) && (atomic_read_u32(&drng->request_bits_since_fully_seeded) >= ESDM_DRNG_RESEED_THRESH_BITS);
+	bool request_bits_since_fully_seeded_reached = atomic_read_u32(&drng->request_bits_since_fully_seeded) > ESDM_DRNG_RESEED_THRESH_BITS;
 
 	check_time.tv_sec += esdm_drng_reseed_max_time;
 	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed || request_bits_since_fully_seeded_reached ||
