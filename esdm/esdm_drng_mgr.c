@@ -396,6 +396,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		 */
 		if (fully_seeded) {
 			atomic_set(&drng->requests_since_fully_seeded, 0);
+			atomic_set(&drng->request_bits_since_fully_seeded, 0);
 		} else
 			atomic_add(&drng->requests_since_fully_seeded, gc);
 
@@ -494,8 +495,6 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		 num_es_delivered >= (esdm_ntg1_2024_compliant() ? 2 : 1));
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
-
-	atomic_set(&drng->request_bits_since_fully_seeded, 0);
 
 	return collected_entropy;
 }
@@ -623,8 +622,9 @@ static bool esdm_drng_check_disable_threshold(struct esdm_drng *drng)
 {
 	bool request_limit_reached = atomic_read_u32(&drng->requests_since_fully_seeded) >=
 	    			     esdm_config_drng_max_wo_reseed();
-	bool bit_limit_reached = atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
-				 esdm_config_drng_max_wo_reseed_bits();
+	bool bit_limit_reached = (esdm_config_drng_max_wo_reseed_bits() != UINT32_MAX) &&
+				 (atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
+				 esdm_config_drng_max_wo_reseed_bits());
 
 	return request_limit_reached || bit_limit_reached;
 }
@@ -668,7 +668,9 @@ out:
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
 	struct timespec check_time = drng->last_seeded;
-	bool request_bits_since_fully_seeded_reached = atomic_read_u32(&drng->request_bits_since_fully_seeded) >= ESDM_DRNG_RESEED_THRESH_BITS;
+	bool request_bits_since_fully_seeded_reached = (ESDM_DRNG_RESEED_THRESH_BITS != UINT32_MAX) &&
+						       (atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
+						       ESDM_DRNG_RESEED_THRESH_BITS);
 
 	check_time.tv_sec += esdm_drng_reseed_max_time;
 	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed || request_bits_since_fully_seeded_reached ||
@@ -775,8 +777,6 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 			/* Do not produce more than DRNG security strength. */
 			todo = min_uint32(todo, esdm_security_strength() >> 3);
-
-			atomic_set(&drng->request_bits_since_fully_seeded, 0);
 		}
 
 		/* Now, generate random bits from the properly seeded DRNG. */
