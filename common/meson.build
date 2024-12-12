@@ -135,4 +135,6 @@ conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'
 conf_data.set('ESDM_LINUX_RESEED_INTERVAL_SEC', get_option('linux-reseed-interval'))
 conf_data.set('ESDM_LINUX_RESEED_ENTROPY_COUNT', get_option('linux-reseed-entropy-count'))
 
+conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH', get_option('esdm-server-rpc-path'))
+
 configure_file(output: 'config.h', configuration : conf_data)
