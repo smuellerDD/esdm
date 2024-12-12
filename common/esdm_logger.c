@@ -301,6 +301,7 @@ int esdm_logger_set_file(const char *pathname)
 	else {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Reject to set new log file\n");
+		fclose(out);
 		return -EFAULT;
 	}
 
