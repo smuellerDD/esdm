@@ -45,6 +45,15 @@ struct esdm_drng {
 	atomic_t requests_since_fully_seeded; /* Number DRNG requests since
 						 * last fully seeded
 						 */
+	/* tracks number of bits this DRNG has output since beeing fully seeded for
+	 * the last time. This is used to implement AIS 20/31 Version 3.0, DRG.4.10.
+	 * This requirement states, that a DRG.4 should be reseeded after at max 2**17
+	 * bits were returned to consumers. This cannot be checked against the number of
+	 * requests without overestimating by a large margin (alway maximum request size)
+	 * and therefore reseeding way too often.
+	 */
+	atomic_t request_bits_since_fully_seeded;
+
 	struct timespec last_seeded; /* Last time it was seeded */
 	bool fully_seeded; /* Is DRNG fully seeded? */
 	bool force_reseed; /* Force a reseed */
@@ -57,8 +66,9 @@ struct esdm_drng {
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
 	.drng = d, .drng_cb = d_cb, .hash_cb = h_cb,                           \
 	.requests = ATOMIC_INIT(ESDM_DRNG_RESEED_THRESH),                      \
-	.requests_since_fully_seeded = ATOMIC_INIT(0), .last_seeded = {0},     \
-	.fully_seeded = false, .force_reseed = true,                           \
+	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
+	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
+	.last_seeded = { 0 }, .fully_seeded = false, .force_reseed = true,     \
 	.hash_lock = MUTEX_UNLOCKED
 
 struct esdm_drng *esdm_drng_init_instance(void);

@@ -311,6 +311,34 @@ shall be adjusted.
 The value must not be lower than 1.
 ''')
 
+option('drng_reseed_threshold_bits', type: 'integer', value: 0xffffffff,
+       description: '''Besides request count based reseeding, this option can
+       be used to enable request size (Bit) based reseeding. Set this to
+       UINT32_MAX (0xffffffff) to disable it (default).
+
+       Request size based reseeding works in two stages.
+       After 'drng_reseed_threshold_bits' (this option) the DRNG code
+       tries to reseed the DRNG instance.
+
+       If this was unsucessful multiple times, the DRNG changes into
+       the unseeded state after 'drng_max_reseed_bits' bits.
+       Therefore 'drng_max_reseed_bits' always has to be larger than
+       'drng_reseed_threshold_bits'.
+
+       Set this setting to anything lower than 131072 (2**17) to enforce
+       DRG.4.10 of AIS 20/31 Version 3.0. E.g. 65536 (2**16) and
+       'drng_max_reseed_bits' to 131072 (2**17).
+       ''')
+
+option('drng_max_reseed_bits', type: 'integer', value: 0xffffffff,
+       description: '''This sets the maximum number of output/request bits before
+       the DRNG instances become loose their fully seeded state without
+       successful reseeding.
+
+       UINT32_MAX (0xffffffff) disables this setting. For more details on this
+       setting see the description of 'drng_reseed_threshold_bits'.
+       ''')
+
 ################################################################################
 # Cryptographic backends configuration
 ################################################################################

@@ -135,4 +135,7 @@ conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'
 conf_data.set('ESDM_LINUX_RESEED_INTERVAL_SEC', get_option('linux-reseed-interval'))
 conf_data.set('ESDM_LINUX_RESEED_ENTROPY_COUNT', get_option('linux-reseed-entropy-count'))
 
+conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', get_option('drng_reseed_threshold_bits'))
+conf_data.set('ESDM_DRNG_MAX_RESEED_BITS', get_option('drng_max_reseed_bits'))
+
 configure_file(output: 'config.h', configuration : conf_data)

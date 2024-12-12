@@ -112,10 +112,10 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	/* Connect to the Unix domain socket */
 	addr.sun_family = AF_UNIX;
 
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-Wstringop-truncation"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 	strncpy(addr.sun_path, socketname, sizeof(addr.sun_path));
-	#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 
 	rpc_conn->fd = socket(addr.sun_family, SOCK_SEQPACKET, 0);
 	if (rpc_conn->fd < 0) {
@@ -604,7 +604,7 @@ out:
 /******************************************************************************
  * General service handlers
  ******************************************************************************/
-static uint32_t esdm_rpcc_max_nodes = 0xffffffff;
+static uint32_t esdm_rpcc_max_nodes = UINT32_MAX;
 
 DSO_PUBLIC
 int esdm_rpcc_set_max_online_nodes(uint32_t nodes)

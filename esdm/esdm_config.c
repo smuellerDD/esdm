@@ -40,6 +40,7 @@ struct esdm_config {
 	uint32_t esdm_es_hwrand_entropy_rate_bits;
 	uint32_t esdm_es_jent_kernel_entropy_rate_bits;
 	uint32_t esdm_drng_max_wo_reseed;
+	uint32_t esdm_drng_max_wo_reseed_bits;
 	uint32_t esdm_max_nodes;
 	enum esdm_config_force_fips force_fips;
 
@@ -98,9 +99,14 @@ static struct esdm_config esdm_config = {
 	.esdm_drng_max_wo_reseed = ESDM_DRNG_MAX_WITHOUT_RESEED,
 
 	/*
+	 * See documentation of ESDM_DRNG_MAX_RESEED_BITS.
+	 */
+	.esdm_drng_max_wo_reseed_bits = ESDM_DRNG_MAX_RESEED_BITS,
+
+	/*
 	 * Upper limit of DRNG nodes
 	 */
-	.esdm_max_nodes = 0xffffffff,
+	.esdm_max_nodes = UINT32_MAX,
 
 	/* Shall the FIPS mode be forcefully set/unset? */
 	.force_fips = esdm_config_force_fips_unset,
@@ -284,6 +290,14 @@ uint32_t esdm_config_drng_max_wo_reseed(void)
 }
 
 DSO_PUBLIC
+uint32_t esdm_config_drng_max_wo_reseed_bits(void)
+{
+	/* If DRNG operated without proper reseed for too long, block ESDM */
+	BUILD_BUG_ON(ESDM_DRNG_MAX_RESEED_BITS < ESDM_DRNG_RESEED_THRESH_BITS);
+	return esdm_config.esdm_drng_max_wo_reseed_bits;
+}
+
+DSO_PUBLIC
 uint32_t esdm_config_max_nodes(void)
 {
 	return esdm_config.esdm_max_nodes;
@@ -293,6 +307,11 @@ uint32_t esdm_config_max_nodes(void)
 void esdm_config_drng_max_wo_reseed_set(uint32_t val)
 {
 	esdm_config.esdm_drng_max_wo_reseed = val;
+}
+
+void esdm_config_drng_max_wo_reseed_bits_set(uint32_t val)
+{
+	esdm_config.esdm_drng_max_wo_reseed_bits = val;
 }
 
 void esdm_config_max_nodes_set(uint32_t val)

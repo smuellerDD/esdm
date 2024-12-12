@@ -151,6 +151,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	/* Ensure reseed during next call */
 	atomic_set(&drng->requests, 1);
 	atomic_set(&drng->requests_since_fully_seeded, 0);
+	atomic_set(&drng->request_bits_since_fully_seeded, 0);
 	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
 	drng->fully_seeded = false;
 	/* Do not set force, as this flag is used for the emergency reseeding */
@@ -362,7 +363,8 @@ static time_t esdm_time_after_now(struct timespec *timeout)
 		return 0;
 
 	return esdm_time_after(&curr, timeout) ?
-			       (curr.tv_sec - timeout->tv_sec) : 0;
+		       (curr.tv_sec - timeout->tv_sec) :
+		       0;
 }
 
 /* Inject a data buffer into the DRNG - caller must hold its lock */
@@ -388,10 +390,15 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 			"%s DRNG stats since last seeding: %lu secs; generate calls: %d\n",
 			drng_type, esdm_time_after_now(&drng->last_seeded), gc);
 
-		/* Count the numbers of generate ops since last fully seeded */
-		if (fully_seeded)
+		/* Count the numbers of generate ops and output bits
+		 * since last fully seeded. The DRNG can be configured
+		 * to stop operation, if too many generate ops and/or output bits
+		 * were produced, without full reseeding again.
+		 */
+		if (fully_seeded) {
 			atomic_set(&drng->requests_since_fully_seeded, 0);
-		else
+			atomic_set(&drng->request_bits_since_fully_seeded, 0);
+		} else
 			atomic_add(&drng->requests_since_fully_seeded, gc);
 
 		clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
@@ -472,7 +479,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		if (init_ops)
 			esdm_init_ops(&collected_seedbuf);
 
-	/*
+		/*
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for
@@ -603,6 +610,28 @@ void esdm_drng_seed_work(void)
 	esdm_pool_unlock();
 }
 
+/**
+ * @brief Check if DRNG has to be temporarily disabled because of failed seedings
+ *
+ * @param [in] drng DRNG instance
+ * 
+ * @return
+ * * true request or bit limit reached
+ * * false no disable condition triggered
+ */
+static bool esdm_drng_check_disable_threshold(struct esdm_drng *drng)
+{
+	bool request_limit_reached =
+		atomic_read_u32(&drng->requests_since_fully_seeded) >=
+		esdm_config_drng_max_wo_reseed();
+	bool bit_limit_reached =
+		(esdm_config_drng_max_wo_reseed_bits() != UINT32_MAX) &&
+		(atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
+		 esdm_config_drng_max_wo_reseed_bits());
+
+	return request_limit_reached || bit_limit_reached;
+}
+
 /* Force all DRNGs to reseed before next generation */
 DSO_PUBLIC
 void esdm_drng_force_reseed(void)
@@ -615,9 +644,7 @@ void esdm_drng_force_reseed(void)
 	 * reseed only for the initial DRNG as this is the fallback for all. It
 	 * must be kept seeded before all others to keep the ESDM operational.
 	 */
-	if (!esdm_drng ||
-	    (atomic_read_u32(&esdm_drng_init.requests_since_fully_seeded) >
-	     ESDM_DRNG_RESEED_THRESH)) {
+	if (!esdm_drng || esdm_drng_check_disable_threshold(&esdm_drng_init)) {
 		esdm_drng_init.force_reseed = esdm_drng_init.fully_seeded;
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 			    "force reseed of initial DRNG\n");
@@ -644,9 +671,14 @@ out:
 static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 {
 	struct timespec check_time = drng->last_seeded;
+	bool request_bits_since_fully_seeded_reached =
+		(ESDM_DRNG_RESEED_THRESH_BITS != UINT32_MAX) &&
+		(atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
+		 ESDM_DRNG_RESEED_THRESH_BITS);
 
 	check_time.tv_sec += esdm_drng_reseed_max_time;
 	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed ||
+		request_bits_since_fully_seeded_reached ||
 		esdm_time_after_now(&check_time));
 }
 
@@ -683,8 +715,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	 * does not imply that sufficient entropy was received to fill the DRNG.
 	 * If this state persists, then the following check applies.
 	 */
-	if (atomic_read_u32(&drng->requests_since_fully_seeded) >
-	    esdm_config_drng_max_wo_reseed())
+	if (esdm_drng_check_disable_threshold(drng))
 		esdm_unset_fully_seeded(drng);
 
 	/* Loop to collect random bits for the caller. */
@@ -764,6 +795,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				ret);
 			return -EFAULT;
 		}
+		atomic_add(&drng->request_bits_since_fully_seeded,
+			   (int)ret << 3);
 		processed += ret;
 		outbuflen -= (size_t)ret;
 
@@ -910,7 +943,7 @@ static int esdm_drng_sleep_while_nonoperational_timeout(struct timespec *ts)
 		return 0;
 	thread_timedwait_event(&esdm_init_wait,
 			       esdm_state_operational() &&
-					!atomic_read(&esdm_drng_mgr_terminate),
+				       !atomic_read(&esdm_drng_mgr_terminate),
 			       ts);
 	return ret;
 }

@@ -47,6 +47,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_drng_mgr_max_wo_reseed_bits_test = executable(
+		'esdm_drng_mgr_max_wo_reseed_bits_test',
+		[ 'esdm_drng_mgr_max_wo_reseed_bits_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_drng_seed_entropy_test = executable(
 		'esdm_drng_seed_entropy_test',
 		[ 'esdm_drng_seed_entropy_test.c' ],
@@ -72,6 +80,13 @@ if get_option('esdm-server').enabled()
 		args : [ '1' ],
 		is_parallel: false)
 	test('ESDM DRNG manager max w/o reseed - 2 DRNG', esdm_drng_mgr_max_wo_reseed_test,
+		args : [ '2' ],
+		is_parallel: false)
+
+	test('ESDM DRNG manager max w/o reseed bits - 1 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
+		args : [ '1' ],
+		is_parallel: false)
+	test('ESDM DRNG manager max w/o reseed bits - 2 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
 		args : [ '2' ],
 		is_parallel: false)
 
