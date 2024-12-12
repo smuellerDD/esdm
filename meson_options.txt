@@ -429,6 +429,13 @@ option('linux-reseed-entropy-count', type: 'integer', value: 0, min: 0, max: 256
 option('esdm-server', type: 'feature', value: 'enabled',
        description: 'Enable the ESDM server')
 
+option('esdm-server-rpc-path', type: 'string', value: '/var/run',
+       description: '''Sets the base path of ESDM's RPC sockets (default: /var/run)
+
+       If this value is changed from the default, the systemd units need to be adapted accordingly
+       by the integrator of ESDM (if systemd is used at all).
+       ''')
+
 ################################################################################
 # Client-related Configuration
 ################################################################################
