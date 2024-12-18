@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <stdbool.h>
 #include <time.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
