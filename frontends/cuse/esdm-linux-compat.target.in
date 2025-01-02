@@ -8,7 +8,8 @@
 Description=Entropy Source and DRNG Manager Linux compatibility target
 DefaultDependencies=no
 After=local-fs.target
-Before=sysinit.target
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
 

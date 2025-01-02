@@ -9,7 +9,8 @@
 Description=Entropy Source and DRNG Manager /dev/random
 DefaultDependencies=no
 After=local-fs.target
-Before=sysinit.target
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
 StartLimitIntervalSec=500
 StartLimitBurst=5
 Wants=esdm-server.service
