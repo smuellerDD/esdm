@@ -441,7 +441,7 @@ option('esdm-server-rpc-path', type: 'string', value: '/var/run',
 ################################################################################
 
 option('esdm-aux-client', type: 'feature', value: 'enabled',
-       description: '''Enable the ESDM auxliary client library
+       description: '''Enable the ESDM auxiliary client library
 
 With this option, the ESDM auxiliary client library is enabled allowing access
 to auxiliary functions offered by the ESDM. This library is a convenience
@@ -472,6 +472,9 @@ With this option, you have the possibility to increase the reconnect attempts
 when decreasing the client connection timeout.
 Change the default with care/know the consequences!
 (perform tests under load, ...)''')
+
+option('esdm-tool', type: 'feature', value: 'enabled',
+       description: '''Enable the ESDM client CLI tool''')
 
 ################################################################################
 # Server-related Configuration

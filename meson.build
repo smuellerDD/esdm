@@ -202,6 +202,10 @@ if get_option('esdm-aux-client').enabled()
 	subdirs += [ 'frontends/aux-client' ]
 endif
 
+if get_option('esdm-tool').enabled()
+	subdirs += [ 'frontends/tool' ]
+endif
+
 foreach n : subdirs
 	subdir(n)
 endforeach
