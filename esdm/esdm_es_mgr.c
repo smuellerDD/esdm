@@ -697,10 +697,14 @@ int esdm_es_mgr_initialize(void)
 	seed.time = time(NULL);
 
 	for (i = 0; i < ARRAY_SIZE(seed.data); i++) {
+#ifdef ESDM_ES_CPU
 		if (!cpu_es_get(&(seed.data[i]))) {
+#endif
 			clock_gettime(CLOCK_REALTIME, &timeval);
 			seed.data[i] = (unsigned long)timeval.tv_nsec;
+#ifdef ESDM_ES_CPU
 		}
+#endif
 	}
 
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
