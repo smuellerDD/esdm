@@ -20,11 +20,16 @@
 #ifndef _CPU_RANDOM
 #define _CPU_RANDOM
 
+#include "config.h"
+
+/* Only enable support for CPU ES, if requested */
+#ifdef ESDM_ES_CPU
 #include "cpu_random_arm.h"
 #include "cpu_random_powerpc.h"
 #include "cpu_random_riscv.h"
 #include "cpu_random_s390.h"
 #include "cpu_random_x86.h"
+#endif
 
 #ifndef ESDM_CPU_ES_IMPLEMENTED
 
