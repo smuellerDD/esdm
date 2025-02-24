@@ -116,7 +116,9 @@ static const struct file_operations esdm_cdev_fops = {
 	.open = esdm_cdev_open,
 	.release = esdm_cdev_release,
 	.unlocked_ioctl = esdm_cdev_ioctl,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 	.llseek = no_llseek,
+#endif
 };
 
 static int __init esdm_es_mgr_dev_init(void)
