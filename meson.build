@@ -138,18 +138,6 @@ if get_option('esdm-server').disabled() and get_option('openssl-rand-provider').
 	error('OpenSSL RAND provider support requires the ESDM server')
 endif
 
-if get_option('crypto_backend') == 'builtin'
-	if get_option('drng_hash_drbg').enabled() and \
-	   get_option('drng_chacha20').enabled()
-		error('Only one DRNG can be enabled')
-	endif
-
-	if get_option('hash_sha512').enabled() and \
-	   get_option('hash_sha3_512').enabled()
-		error('Only one conditioning hash can be enabled')
-	endif
-endif
-
 if get_option('es_jent_kernel').enabled()
 	dependencies_server += [ dependency('libkcapi', required: true) ]
 endif
@@ -166,13 +154,36 @@ if get_option('linux-getrandom').enabled()
 	subdirs += [ 'frontends/getrandom' ]
 endif
 
+################################################################################
+# Crypto Backends/Frontends
+################################################################################
+if get_option('crypto_backend') == 'builtin'
+	if get_option('drng_hash_drbg').enabled() and \
+	   get_option('drng_chacha20').enabled()
+		error('Only one DRNG can be enabled')
+	endif
+
+	if get_option('hash_sha512').enabled() and \
+	   get_option('hash_sha3_512').enabled()
+		error('Only one conditioning hash can be enabled')
+	endif
+endif
+
+if get_option('crypto_backend') == 'gnutls'
+	gnutls_dep = dependency('gnutls', version: '>= 3.5', required: true)
+endif
+
+if get_option('crypto_backend') == 'leancrypto'
+	leancrypto_dep = dependency('leancrypto', version: '>= 1.0', required: true)
+endif
+
 if get_option('crypto_backend') == 'botan' or get_option('botan-rng').enabled()
 	add_languages('cpp', required: true)
-	botan_dep = dependency('botan-3', required: true)
+	botan_dep = dependency('botan-3', version: '>= 3.0', required: true)
 endif
 
 if get_option('crypto_backend') == 'openssl' or get_option('openssl-rand-provider').enabled()
-	openssl_dep = dependency('openssl', required: true, version : '>=3.0')
+	openssl_dep = dependency('openssl', version : '>=3.0', required: true)
 endif
 
 if get_option('botan-rng').enabled()
@@ -184,6 +195,9 @@ if get_option('openssl-rand-provider').enabled()
 	subdirs += [ 'frontends/openssl-provider' ]
 endif
 
+################################################################################
+# ESDM and client libraries
+################################################################################
 if get_option('esdm-aux-client').enabled()
 	subdirs += [ 'frontends/aux-client' ]
 endif
