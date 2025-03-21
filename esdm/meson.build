@@ -65,16 +65,16 @@ if get_option('crypto_backend') == 'builtin'
 	endif
 elif get_option('crypto_backend') == 'botan'
 	esdm_src += files([ 'esdm_botan.cpp' ])
-	dependencies_esdm_lib += [ dependency('botan', version: '>=3.0', required: true) ]
+	dependencies_esdm_lib += [ botan_dep ]
 elif get_option('crypto_backend') == 'gnutls'
 	esdm_src += files([ 'esdm_gnutls.c' ])
-	dependencies_esdm_lib += [ dependency('gnutls') ]
+	dependencies_esdm_lib += [ gnutls_dep ]
 elif get_option('crypto_backend') == 'leancrypto'
 	esdm_src += files([ 'esdm_leancrypto.c' ])
-	dependencies_esdm_lib += [ cc.find_library( 'leancrypto' ) ]
+	dependencies_esdm_lib += [ leancrypto_dep ]
 elif get_option('crypto_backend') == 'openssl'
 	esdm_src += files([ 'esdm_openssl.c' ])
-	dependencies_esdm_lib += [ dependency('openssl') ]
+	dependencies_esdm_lib += [ openssl_dep ]
 else
 	error('Unknown crypto backend')
 endif
