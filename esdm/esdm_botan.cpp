@@ -24,12 +24,20 @@
 #include <cassert>
 #include <botan/hash.h>
 #include <botan/exceptn.h>
-#include <botan/hmac_drbg.h>
 
 #include "esdm_crypto.h"
 #include "esdm_botan.h"
 #include "esdm_logger.h"
 #include "ret_checkers.h"
+
+#include "config.h"
+
+#ifdef ESDM_BOTAN_DRNG_CHACHA20
+#include <botan/chacha_rng.h>
+#endif
+#ifdef ESDM_BOTAN_DRNG_HMAC
+#include <botan/hmac_drbg.h>
+#endif
 
 static const std::string DEFAULT_BOTAN_HASH{ "SHA-3(512)" };
 
@@ -158,7 +166,12 @@ const struct esdm_hash_cb esdm_botan_hash_cb = {
 };
 
 struct esdm_botan_drng_state {
+#ifdef ESDM_BOTAN_DRNG_CHACHA20
+	std::unique_ptr<Botan::ChaCha_RNG> drbg;
+#endif
+#ifdef ESDM_BOTAN_DRNG_HMAC
 	std::unique_ptr<Botan::HMAC_DRBG> drbg;
+#endif
 };
 
 static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
@@ -201,11 +214,16 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (!state)
 		return -ENOMEM;
 
+	#ifdef ESDM_BOTAN_DRNG_CHACHA20
+	state->drbg.reset(new Botan::ChaCha_RNG());
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Botan ChaCha20 DRNG core allocated\n");
+	#endif
+	#ifdef ESDM_BOTAN_DRNG_HMAC
 	state->drbg.reset(new Botan::HMAC_DRBG("SHA-512"));
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Botan SP800-90A HMAC-DRBG core allocated\n");
+	#endif
 
 	*drng = state;
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "DRBG core allocated\n");
-
 	if (state->drbg == nullptr) {
 		esdm_botan_drbg_dealloc_internal(state);
 		return -1;
@@ -229,11 +247,20 @@ static void esdm_botan_drbg_dealloc(void *drng)
 
 static const char *esdm_botan_drbg_name(void)
 {
+#ifdef ESDM_BOTAN_DRNG_CHACHA20
+	return "Botan ChaCha20 DRNG";
+#endif
+
+#ifdef ESDM_BOTAN_DRNG_HMAC
 	return "Botan SP800-90A DRBG";
+#endif
 }
 
 static int esdm_botan_drbg_selftest(void)
 {
+	void *drng = NULL;
+	int ret;
+
 	static const uint8_t ent_nonce[] = {
 		0xBF, 0x26, 0x84, 0xC8, 0xA6, 0x9E, 0x68, 0x6E, 0xAE, 0x68,
 		0x25, 0x1F, 0x33, 0x26, 0xBA, 0x4F, 0xB0, 0x82, 0x05, 0x0C,
@@ -249,6 +276,31 @@ static int esdm_botan_drbg_selftest(void)
 					  0xE0, 0xC2, 0xE8, 0x27, 0x60, 0x1A,
 					  0x82, 0x4B, 0x0F, 0x68, 0x3C, 0x61,
 					  0x40, 0x11 };
+
+	CKINT(esdm_botan_drbg_alloc(&drng, 256));
+	CKINT(esdm_botan_drbg_seed(drng, ent_nonce, sizeof(ent_nonce)));
+	CKINT(esdm_botan_drbg_seed(drng, reseed, sizeof(reseed)));
+
+#ifdef ESDM_BOTAN_DRNG_CHACHA20
+	static const uint8_t exp[] = {
+		0xb2, 0xe0, 0x1c, 0x33, 0xf7, 0x38, 0xd8, 0x34, 0xb9, 0xc8,
+		0xf2, 0x72, 0xcf, 0x05, 0x4e, 0x8a, 0x77, 0x10, 0x93, 0x7d,
+		0xa6, 0xcc, 0xeb, 0xd2, 0x94, 0x11, 0x4d, 0x51, 0x5e, 0x8f,
+		0x76, 0xc4, 0x77, 0x94, 0x02, 0x5b, 0xdf, 0x55, 0x71, 0xea,
+		0xd7, 0x3d, 0x9f, 0xad, 0xc0, 0x44, 0x6c, 0xc6, 0x13, 0x20,
+		0x35, 0x4c, 0xa8, 0x38, 0x6f, 0x0f, 0x4c, 0x42, 0xd6, 0xb6,
+		0xf1, 0x54, 0x96, 0xf2, 0xbb, 0x7c, 0xd3, 0xbe, 0xdd, 0x2f,
+		0xb5, 0xcc, 0xa8, 0xb3, 0x49, 0x83, 0x1f, 0xda, 0x23, 0x0d,
+		0x7a, 0x52, 0x23, 0xc8, 0xd7, 0x0b, 0x73, 0xf3, 0x3f, 0x59,
+		0xde, 0xe1, 0xf1, 0x05, 0xad, 0x7b, 0x60, 0xe1, 0xaf, 0x52,
+		0xd7, 0xad, 0xdc, 0xd3, 0x8a, 0x7c, 0x46, 0xd8, 0x57, 0xb9,
+		0x60, 0xed, 0x2a, 0x0d, 0x6b, 0x68, 0xae, 0xdb, 0xd3, 0xe0,
+		0xf4, 0xa3, 0xcf, 0x3e, 0xdb, 0x53, 0x62, 0x02,
+	};
+	uint8_t act[sizeof(exp)];
+#endif
+
+#ifdef ESDM_BOTAN_DRNG_HMAC
 	static const uint8_t exp[] = {
 		0x70, 0x21, 0x48, 0x5f, 0x5d, 0x6c, 0x65, 0x93, 0xe8, 0xe2,
 		0x6d, 0x82, 0x98, 0x5a, 0x73, 0xaa, 0x17, 0x29, 0x24, 0xff,
@@ -265,12 +317,7 @@ static int esdm_botan_drbg_selftest(void)
 		0xbf, 0x2a, 0xb4, 0x7f, 0x51, 0x40, 0xeb, 0xa8
 	};
 	uint8_t act[sizeof(exp)];
-	void *drng = NULL;
-	int ret;
-
-	CKINT(esdm_botan_drbg_alloc(&drng, 256));
-	CKINT(esdm_botan_drbg_seed(drng, ent_nonce, sizeof(ent_nonce)));
-	CKINT(esdm_botan_drbg_seed(drng, reseed, sizeof(reseed)));
+#endif
 	if (esdm_botan_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
 		ret = -EFAULT;
 		goto out;
@@ -281,8 +328,10 @@ static int esdm_botan_drbg_selftest(void)
 		goto out;
 	}
 
-	if (memcmp(act, exp, sizeof(exp)))
+	if (memcmp(act, exp, sizeof(exp))) {
 		ret = -EFAULT;
+		goto out;
+	}
 
 out:
 	esdm_botan_drbg_dealloc(drng);

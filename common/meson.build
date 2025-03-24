@@ -64,6 +64,14 @@ else
 	conf_data.set('ESDM_BOTAN', false)
 endif
 
+if get_option('botan_drng_type') == 'chacha20'
+	conf_data.set('ESDM_BOTAN_DRNG_CHACHA20', true)
+	conf_data.set('ESDM_BOTAN_DRNG_HMAC', false)
+else
+	conf_data.set('ESDM_BOTAN_DRNG_CHACHA20', false)
+	conf_data.set('ESDM_BOTAN_DRNG_HMAC', true)
+endif
+
 # This option currently is not configurable!
 conf_data.set('CONFIG_ESDM_USE_PTHREAD', true)
 conf_data.set('THREADING_MAX_THREADS', get_option('threading_max_threads'))
