@@ -104,18 +104,12 @@ static int esdm_rand_uninstantiate(void *ctx __unused)
 static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 			      size_t outlen, unsigned int strength __unused,
 			      int prediction_resistance,
-			      const unsigned char *addin, size_t addin_len)
+			      const unsigned char *addin __unused, size_t addin_len __unused)
 {
 	ssize_t ret;
 
 	if (!out)
 		goto err;
-
-	if (addin && addin_len > 0) {
-		esdm_invoke(esdm_rpcc_write_data(addin, addin_len));
-		if (ret != 0)
-			goto err;
-	}
 
 	if (prediction_resistance) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(out, outlen));
@@ -133,16 +127,10 @@ err:
 
 static int esdm_rand_reseed(void *ctx __unused,
 			    int prediction_resistance __unused,
-			    const unsigned char *ent, size_t ent_len,
-			    const unsigned char *addin, size_t addin_len)
+			    const unsigned char *ent __unused, size_t ent_len __unused,
+			    const unsigned char *addin __unused, size_t addin_len __unused)
 {
-	ssize_t ret;
-
-	/* unaccounted writing of additional data does no harm */
-	if (ent && ent_len > 0)
-		esdm_invoke(esdm_rpcc_write_data(ent, ent_len));
-	if (addin && addin_len > 0)
-		esdm_invoke(esdm_rpcc_write_data(addin, addin_len));
+	/* Do nothing here, reseeding is done by ESDM itself */
 
 	return 1;
 }
@@ -168,7 +156,7 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 				 int entropy_bits, size_t min_len __unused,
 				 size_t max_len __unused,
 				 int prediction_resistance __unused,
-				 const unsigned char *addin, size_t addin_len)
+				 const unsigned char *addin __unused, size_t addin_len __unused)
 {
 #define ENTROPY_BUFFER_SIZE 2048
 	struct esdm_seed_buffer {
@@ -185,12 +173,6 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 		goto err;
 	if (ENTROPY_BUFFER_SIZE >= max_len)
 		goto err;
-
-	if (addin && addin_len > 0) {
-		esdm_invoke(esdm_rpcc_write_data(addin, addin_len));
-		if (ret != 0)
-			goto err;
-	}
 
 	seed_buffer = OPENSSL_secure_zalloc(ENTROPY_BUFFER_SIZE);
 	esdm_invoke(esdm_rpcc_get_seed((uint8_t *)seed_buffer,
