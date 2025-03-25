@@ -39,6 +39,10 @@
 #include <botan/hmac_drbg.h>
 #endif
 
+#if (defined(ESDM_BOTAN_DRNG_CHACHA20) && defined(ESDM_BOTAN_DRNG_HMAC)) || (!defined(ESDM_BOTAN_DRNG_CHACHA20) && !defined(ESDM_BOTAN_DRNG_HMAC))
+#error "Only define one Botan DRNG implementation and/or at least one!"
+#endif
+
 static const std::string DEFAULT_BOTAN_HASH{ "SHA-3(512)" };
 
 /* introduced, as Botan only exposes unique_ptr for its digests */
