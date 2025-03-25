@@ -41,12 +41,6 @@ void esdm_rpc_write_data(UnprivAccess_Service *service,
 						    request->data.len, 0);
 		memset_secure(request->data.data, 0, request->data.len);
 
-		/*
-		 * And now force a reseed to ensure the data is properly
-		 * dispersed into the DRNGs.
-		 */
-		esdm_drng_force_reseed();
-
 		closure(&response, closure_data);
 	}
 }
