@@ -86,17 +86,8 @@ void ESDM_RNG::clear()
 
 DSO_PUBLIC
 void ESDM_RNG::fill_bytes_with_input(std::span<uint8_t> out,
-				     std::span<const uint8_t> in)
+				     std::span<const uint8_t>)
 {
-	if (in.size() > 0) {
-		ssize_t ret = 0;
-		// we take additional input, but do not account entropy for it
-		esdm_invoke(esdm_rpcc_write_data(in.data(), in.size()));
-		if (ret != 0) {
-			throw Botan::System_Error(
-				"Writing additional input to ESDM failed");
-		}
-	}
 	if (out.size() > 0) {
 		ssize_t ret = 0;
 		if (m_prediction_resistance)
