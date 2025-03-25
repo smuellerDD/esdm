@@ -117,7 +117,7 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	strncpy(addr.sun_path, socketname, sizeof(addr.sun_path));
 #pragma GCC diagnostic pop
 
-	rpc_conn->fd = socket(addr.sun_family, SOCK_SEQPACKET, 0);
+	rpc_conn->fd = socket(addr.sun_family, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
