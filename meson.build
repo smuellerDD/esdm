@@ -20,6 +20,8 @@ project('esdm', 'c',
 		'b_staticpic=true',
 		'b_pie=true',
 		'b_asneeded=true',
+		# set a fixed C std in order to not be compiler dependent here
+		'c_std=gnu17',
 		# set the C++ std for the botan frontend here, C++ only gets used if botan-rng is enabled
 		'cpp_std=c++20',
 	])
