@@ -57,6 +57,11 @@ static void esdm_getrandom_lib_init(void)
 {
 	mutex_lock(&getrandom_mutex);
 
+	// are we may already initialized from another thread?
+	if (atomic_bool_read(&is_initialized)) {
+		goto out;
+	}
+
 #if ESDM_GETRANDOM_NUM_NODES > 0
 	esdm_rpcc_set_max_online_nodes(ESDM_GETRANDOM_NUM_NODES);
 #endif
@@ -65,6 +70,8 @@ static void esdm_getrandom_lib_init(void)
 	esdm_rpcc_init_unpriv_service(NULL);
 
 	atomic_bool_set_true(&is_initialized);
+
+out:
 	mutex_unlock(&getrandom_mutex);
 }
 
