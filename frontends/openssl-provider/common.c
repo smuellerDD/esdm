@@ -104,7 +104,8 @@ static int esdm_rand_uninstantiate(void *ctx __unused)
 static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 			      size_t outlen, unsigned int strength __unused,
 			      int prediction_resistance,
-			      const unsigned char *addin __unused, size_t addin_len __unused)
+			      const unsigned char *addin __unused,
+			      size_t addin_len __unused)
 {
 	ssize_t ret;
 
@@ -125,10 +126,10 @@ err:
 	return 0;
 }
 
-static int esdm_rand_reseed(void *ctx __unused,
-			    int prediction_resistance __unused,
-			    const unsigned char *ent __unused, size_t ent_len __unused,
-			    const unsigned char *addin __unused, size_t addin_len __unused)
+static int
+esdm_rand_reseed(void *ctx __unused, int prediction_resistance __unused,
+		 const unsigned char *ent __unused, size_t ent_len __unused,
+		 const unsigned char *addin __unused, size_t addin_len __unused)
 {
 	/* Do nothing here, reseeding is done by ESDM itself */
 
@@ -156,7 +157,8 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 				 int entropy_bits, size_t min_len __unused,
 				 size_t max_len __unused,
 				 int prediction_resistance __unused,
-				 const unsigned char *addin __unused, size_t addin_len __unused)
+				 const unsigned char *addin __unused,
+				 size_t addin_len __unused)
 {
 #define ENTROPY_BUFFER_SIZE 2048
 	struct esdm_seed_buffer {
