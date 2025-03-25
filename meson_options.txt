@@ -374,14 +374,12 @@ ESDM for the conditioning operation as well as random number generation. Only
 one backend can be enabled.
 ''')
 
-option('botan_drng_type', type: 'combo', value: 'chacha20',
-       choices: ['chacha20',
-                 'hmac'
-                ],
+option('botan_drng_type', type: 'combo', value: 'hmac',
+       choices: [ 'chacha20', 'hmac' ],
        description: '''Selects the botan DRNG implementation
 
 Botan supports a faster ChaCha20 DRNG and a more conservative HMAC-DRBG implementation,
-which conforms to SP800-90A.
+which conforms to SP800-90A. Default to the conservative option 'hmac'.
 ''')
 
 ################################################################################
