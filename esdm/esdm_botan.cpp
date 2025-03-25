@@ -39,7 +39,8 @@
 #include <botan/hmac_drbg.h>
 #endif
 
-#if (defined(ESDM_BOTAN_DRNG_CHACHA20) && defined(ESDM_BOTAN_DRNG_HMAC)) || (!defined(ESDM_BOTAN_DRNG_CHACHA20) && !defined(ESDM_BOTAN_DRNG_HMAC))
+#if (defined(ESDM_BOTAN_DRNG_CHACHA20) && defined(ESDM_BOTAN_DRNG_HMAC)) ||    \
+	(!defined(ESDM_BOTAN_DRNG_CHACHA20) && !defined(ESDM_BOTAN_DRNG_HMAC))
 #error "Only define one Botan DRNG implementation and/or at least one!"
 #endif
 
@@ -218,14 +219,16 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (!state)
 		return -ENOMEM;
 
-	#ifdef ESDM_BOTAN_DRNG_CHACHA20
+#ifdef ESDM_BOTAN_DRNG_CHACHA20
 	state->drbg.reset(new Botan::ChaCha_RNG());
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Botan ChaCha20 DRNG core allocated\n");
-	#endif
-	#ifdef ESDM_BOTAN_DRNG_HMAC
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "Botan ChaCha20 DRNG core allocated\n");
+#endif
+#ifdef ESDM_BOTAN_DRNG_HMAC
 	state->drbg.reset(new Botan::HMAC_DRBG("SHA-512"));
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Botan SP800-90A HMAC-DRBG core allocated\n");
-	#endif
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "Botan SP800-90A HMAC-DRBG core allocated\n");
+#endif
 
 	*drng = state;
 	if (state->drbg == nullptr) {
