@@ -32,6 +32,7 @@
 
 #include "config.h"
 
+#include <botan/stateful_rng.h>
 #ifdef ESDM_BOTAN_DRNG_CHACHA20
 #include <botan/chacha_rng.h>
 #endif
@@ -171,12 +172,7 @@ const struct esdm_hash_cb esdm_botan_hash_cb = {
 };
 
 struct esdm_botan_drng_state {
-#ifdef ESDM_BOTAN_DRNG_CHACHA20
-	std::unique_ptr<Botan::ChaCha_RNG> drbg;
-#endif
-#ifdef ESDM_BOTAN_DRNG_HMAC
-	std::unique_ptr<Botan::HMAC_DRBG> drbg;
-#endif
+	std::unique_ptr<Botan::Stateful_RNG> drbg;
 };
 
 static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
