@@ -1,0 +1,21 @@
+[Unit]
+Description=Entropy Source and DRNG Manager Kernel Seeder
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+Wants=esdm-server.service
+After=esdm-server.service
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+ExecStart=@PATH@/esdm-kernel-seeder -i 10 --syslog
+KillMode=mixed
+
+[Install]
+WantedBy=basic.target
+Alias=esdm-kernel-seeder.service
