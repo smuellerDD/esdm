@@ -79,6 +79,8 @@ static void usage(void)
 		"\t   --jent_block_disable\tDisable Jitter RNG block collection\n");
 	fprintf(stderr,
 		"\t-S --syslog\tLog to syslog instead of stdout/stderr\n");
+	fprintf(stderr,
+		"\t-P --raise_sched_priority\tRaise scheduling priority/nice level\n");
 	exit(1);
 }
 

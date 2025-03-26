@@ -553,7 +553,8 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	 * to pay for not using malloc and a thread-local storage
 	 * buffer.
 	 */
-	struct timeval tv = { .tv_sec = 2, .tv_usec = 0 };
+	struct timeval tv = { .tv_sec = 0,
+			      .tv_usec = ESDM_RPC_IDLE_TIMEOUT_USEC };
 	struct esdm_rpcs_connection *rpc_conn = NULL;
 	struct sockaddr addr;
 	socklen_t addr_len = sizeof(addr);

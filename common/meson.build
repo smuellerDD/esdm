@@ -143,4 +143,6 @@ conf_data.set('ESDM_DRNG_MAX_RESEED_BITS', get_option('drng_max_reseed_bits'))
 
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH', get_option('esdm-server-rpc-path'))
 
+conf_data.set('ESDM_RPC_IDLE_TIMEOUT_USEC', get_option('esdm-server-rpc-idle-timeout-usec'))
+
 configure_file(output: 'config.h', configuration : conf_data)
