@@ -79,24 +79,29 @@ static void do_benchmark_single(bool pr, size_t buffer_size)
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &before);
-	
+
 	ssize_t ret = 0;
 	for (size_t i = 0; i < num_iterations; ++i) {
 		if (pr) {
-			esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer, buffer_size));
+			esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer,
+								  buffer_size));
 		} else {
-			esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, buffer_size));
+			esdm_invoke(esdm_rpcc_get_random_bytes_full(
+				buffer, buffer_size));
 		}
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &after);
 
-	double duration = (double)after.tv_sec + (double)after.tv_nsec / 1E9 - ((double)before.tv_sec + (double)before.tv_nsec / 1E9);
+	double duration =
+		(double)after.tv_sec + (double)after.tv_nsec / 1E9 -
+		((double)before.tv_sec + (double)before.tv_nsec / 1E9);
 	double bytes_total = (double)num_iterations * (double)buffer_size;
 	double data_rate_kb_s = bytes_total / duration / 1000;
 	double iteration_rate = (double)num_iterations / duration;
 
-	printf("PR: %i | Req. Size: %4zu | Data Rate: %11.3lf KB/s | Iter. Rate: %9.2lf 1/s\n", pr, buffer_size, data_rate_kb_s, iteration_rate);
+	printf("PR: %i | Req. Size: %4zu | Data Rate: %11.3lf KB/s | Iter. Rate: %9.2lf 1/s\n",
+	       pr, buffer_size, data_rate_kb_s, iteration_rate);
 
 	free(buffer);
 }
