@@ -17,13 +17,19 @@
  * DAMAGE.
  */
 
+#include "bits/time.h"
 #include <errno.h>
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <esdm_rpc_client.h>
+#include <time.h>
+
+#define xstr(s) str(s)
+#define str(s) #s
 
 #define min(a, b)                                                              \
 	__extension__({                                                        \
@@ -34,15 +40,74 @@
 
 static void usage(void)
 {
-	fprintf(stderr, "esdm-tool [--help]\n"
-			"   [--status]\n"
-			"   [--is-fully-seeded]\n"
-			"   [--is-fully-seeded]\n"
-			"   [--get-random BYTE_COUNT]\n"
-			"   [--entropy-count]\n"
-			"   [--entropy-level]\n"
-			"   [--wait-until-seeded TIMEOUT_SECS]\n"
-			"   [--write-to-aux-pool ENTROPY_ESTIMATE_BITS]\n");
+	fprintf(stderr, "\nesdm-tool\n\n");
+	fprintf(stderr, "Version: " xstr(VERSION) "\n\n");
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "\t-h --help\t\t\tThis help information\n");
+	fprintf(stderr,
+		"\t-s --status\t\t\tShow status string of all entropy sources.\n");
+	fprintf(stderr,
+		"\t-S --is-fully-seeded\t\tCheck if ESDM is ready to return random bytes\n");
+	fprintf(stderr,
+		"\t-r --get-random BYTE\t\tGet BYTE random bytes (hex formatted)\n");
+	fprintf(stderr,
+		"\t-e --entropy-count\t\tGet number of accounted bits in entropy aux. pool\n");
+	fprintf(stderr,
+		"\t-E --entropy-level\t\tGet number of accounted bits in internal state\n");
+	fprintf(stderr,
+		"\t-w --wait-until-seeded\t\tRepeatedly check if fully seeded level is reached. Exit afterwards.\n");
+	fprintf(stderr,
+		"\t-W --write-to-aux-pool BYTES\tWrite BYTES to the aux. pool.\n");
+	fprintf(stderr,
+		"\t-B --write-entropy-bits BITS\tSet number of bits to account the write to aux. pool with.\n");
+	fprintf(stderr,
+		"\t-b --benchmark\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
+}
+
+static const size_t MAX_BENCHMARK_BUFFER_EXP = 14;
+
+static void do_benchmark_single(bool pr, size_t buffer_size)
+{
+	struct timespec before, after;
+	size_t num_iterations;
+	uint8_t *buffer = malloc(buffer_size);
+
+	if (pr) {
+		num_iterations = 500;
+	} else {
+		num_iterations = 20000;
+	}
+
+	clock_gettime(CLOCK_MONOTONIC, &before);
+	
+	ssize_t ret = 0;
+	for (size_t i = 0; i < num_iterations; ++i) {
+		if (pr) {
+			esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer, buffer_size));
+		} else {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, buffer_size));
+		}
+	}
+
+	clock_gettime(CLOCK_MONOTONIC, &after);
+
+	double duration = (double)after.tv_sec + (double)after.tv_nsec / 1E9 - ((double)before.tv_sec + (double)before.tv_nsec / 1E9);
+	double bytes_total = (double)num_iterations * (double)buffer_size;
+	double data_rate_kb_s = bytes_total / duration / 1000;
+	double iteration_rate = (double)num_iterations / duration;
+
+	printf("PR: %i | Req. Size: %4zu | Data Rate: %11.3lf KB/s | Iter. Rate: %9.2lf 1/s\n", pr, buffer_size, data_rate_kb_s, iteration_rate);
+
+	free(buffer);
+}
+
+static void do_benchmark(void)
+{
+	for (int pr = 0; pr < 2; ++pr) {
+		for (size_t exp = 0; exp < MAX_BENCHMARK_BUFFER_EXP; ++exp) {
+			do_benchmark_single(pr, 1 << exp);
+		}
+	}
 }
 
 int main(int argc, char **argv)
@@ -59,6 +124,7 @@ int main(int argc, char **argv)
 	size_t seed_test_tries = 10;
 	bool write_to_aux_pool = false;
 	uint32_t write_entropy_bits = 0;
+	bool benchmark = false;
 	char *aux_data = NULL;
 	int return_val = EXIT_SUCCESS;
 
@@ -74,9 +140,10 @@ int main(int argc, char **argv)
 			{ "wait-until-seeded", 1, 0, 0 },
 			{ "write-to-aux-pool", 1, 0, 0 },
 			{ "write-entropy-bits", 1, 0, 0 },
+			{ "benchmark", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "sSr:eEhw:W:B:", opts, &opt_index);
+		c = getopt_long(argc, argv, "sSr:eEhw:W:B:b", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -142,6 +209,10 @@ int main(int argc, char **argv)
 					exit(EXIT_FAILURE);
 				}
 				break;
+			case 9:
+				/* benchmark */
+				benchmark = true;
+				break;
 			}
 			break;
 		case 's':
@@ -191,6 +262,9 @@ int main(int argc, char **argv)
 				perror("conversion of bytes failed, exiting:");
 				exit(EXIT_FAILURE);
 			}
+			break;
+		case 'b':
+			benchmark = true;
 			break;
 		}
 	}
@@ -294,6 +368,8 @@ int main(int argc, char **argv)
 		free(aux_data);
 		aux_data = NULL;
 		esdm_rpcc_fini_priv_service();
+	} else if (benchmark) {
+		do_benchmark();
 	} else if (errno) {
 		perror("Unknown mode or error:");
 		usage();
