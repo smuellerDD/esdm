@@ -24,6 +24,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include "esdm.h"
@@ -38,6 +39,11 @@ static unsigned int foreground = 0;
 static char *pidfile = NULL;
 static int pidfile_fd = -1;
 static const char *username = NULL;
+
+/*******************************************************************
+ * Forward Declarations
+ *******************************************************************/
+static void daemon_raise_sched_priority(void);
 
 /*******************************************************************
  * General helper functions
@@ -94,8 +100,9 @@ static void parse_opts(int argc, char *argv[])
 						{ "jent_block_disable", 0, 0,
 						  0 },
 						{ "syslog", 0, 0, 0 },
+						{ "raise_sched_priority", 0, 0, 0 },
 						{ 0, 0, 0, 0 } };
-		c = getopt_long(argc, argv, "hvp:u:fisS", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fisSP", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -147,6 +154,11 @@ static void parse_opts(int argc, char *argv[])
 				esdm_logger_enable_syslog("esdm-server");
 				break;
 
+			case 10:
+				/* raise_sched_priority */
+				daemon_raise_sched_priority();
+				break;
+
 			default:
 				usage();
 			}
@@ -168,6 +180,10 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'S':
 			esdm_logger_enable_syslog("esdm-server");
+			break;
+		case 'P':
+			/* raise_sched_priority */
+			daemon_raise_sched_priority();
 			break;
 
 		case 'i':
@@ -205,6 +221,13 @@ static void daemon_release(void)
 {
 	esdm_rpc_server_fini();
 	esdm_fini();
+}
+
+static void daemon_raise_sched_priority(void) {
+	/* set nice priority */
+	if (setpriority(PRIO_PROCESS, 0, -15) == -1) {
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER, "Raising scheduling priority failed!\n");
+	}
 }
 
 static void dealloc(void)
