@@ -64,7 +64,7 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-B --write-entropy-bits BITS\tSet number of bits to account the write to aux. pool with.\n");
 	fprintf(stderr,
-		"\t-b --benchmark\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
+		"\t-b --benchmark\t\t\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
 }
 
 static void handle_status()
