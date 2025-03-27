@@ -17,16 +17,16 @@
  * DAMAGE.
  */
 
-#include "bits/time.h"
 #include <errno.h>
+#include <esdm_rpc_client.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
-#include <esdm_rpc_client.h>
 #include <time.h>
+#include <unistd.h>
 
 #define xstr(s) str(s)
 #define str(s) #s
@@ -38,7 +38,10 @@
 		_a < _b ? _a : _b;                                             \
 	})
 
-static void usage(void)
+/*
+ * Commands
+ */
+static void handle_usage(void)
 {
 	fprintf(stderr, "\nesdm-tool\n\n");
 	fprintf(stderr, "Version: " xstr(VERSION) "\n\n");
@@ -64,7 +67,137 @@ static void usage(void)
 		"\t-b --benchmark\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
 }
 
-static const size_t MAX_BENCHMARK_BUFFER_EXP = 14;
+static void handle_status()
+{
+	const size_t ESDM_RPC_MAX_MSG_SIZE = 65536;
+	char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
+	memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
+	int ret;
+	esdm_invoke(esdm_rpcc_status(&status_buffer[0], ESDM_RPC_MAX_MSG_SIZE));
+	if (ret != 0) {
+		perror("Fetching ESDM status failed!");
+	} else {
+		printf("%s", status_buffer);
+	}
+}
+
+static int handle_is_fully_seeded()
+{
+	int ret = 0;
+	bool fully_seeded = false;
+	esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
+	if (ret != 0) {
+		perror("Fetching ESDM fully seeded status failed!");
+		return EXIT_FAILURE;
+	}
+
+	printf("ESDM fully seeded: %i\n", (int)fully_seeded);
+	return fully_seeded ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+static int handle_get_random(size_t num_rand_bytes)
+{
+	size_t bytes_to_fetch = num_rand_bytes;
+	const size_t BUFFER_SIZE = 8192;
+	uint8_t bytes[BUFFER_SIZE];
+	ssize_t ret = 0;
+	while (bytes_to_fetch > 0) {
+		size_t chunk_size = min(BUFFER_SIZE, bytes_to_fetch);
+		ret = 0;
+		esdm_invoke(esdm_rpcc_get_random_bytes_full(bytes, chunk_size));
+		if (ret == (ssize_t)chunk_size) {
+			for (size_t i = 0; i < chunk_size; ++i) {
+				printf("%02hhX", bytes[i]);
+			}
+		} else {
+			perror("fetching random data failed, exiting");
+			return EXIT_FAILURE;
+		}
+		bytes_to_fetch -= chunk_size;
+	}
+	printf("\n");
+
+	return EXIT_SUCCESS;
+}
+
+static int handle_entropy_count()
+{
+	int ret = 0;
+	unsigned int ent_cnt = 0;
+
+	esdm_invoke(esdm_rpcc_rnd_get_ent_cnt(&ent_cnt));
+	if (ret != 0) {
+		perror("fetching entropy count failed:");
+		return EXIT_FAILURE;
+	}
+
+	printf("Entropy count: %u\n", ent_cnt);
+
+	return EXIT_SUCCESS;
+}
+
+static int handle_entropy_level()
+{
+	int ret = 0;
+	unsigned int ent_lvl = 0;
+
+	esdm_invoke(esdm_rpcc_get_ent_lvl(&ent_lvl));
+	if (ret != 0) {
+		perror("fetching entropy level failed:");
+		return EXIT_FAILURE;
+	}
+
+	printf("Entropy level: %u\n", ent_lvl);
+
+	return EXIT_SUCCESS;
+}
+
+static int handle_wait_until_seeded(size_t seed_test_tries)
+{
+	while (seed_test_tries > 0) {
+		int ret = 0;
+		bool fully_seeded = false;
+		esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
+		if (ret == 0 && fully_seeded) {
+			printf("ESDM is fully seeded!\n");
+			return EXIT_SUCCESS;
+		}
+
+		printf("Waiting another round for ESDM to become fully seeded.\n");
+		struct timespec sleep_time;
+		clock_gettime(CLOCK_MONOTONIC, &sleep_time);
+		sleep_time.tv_sec += 1;
+		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_time,
+				NULL);
+	}
+
+	return EXIT_FAILURE;
+}
+
+static int handle_write_to_aux_pool(const char *aux_data,
+				    uint32_t write_entropy_bits)
+{
+	if (geteuid()) {
+		fprintf(stderr, "Program must start as root!\n");
+		return EXIT_FAILURE;
+	}
+
+	esdm_rpcc_init_priv_service(NULL);
+	int ret = 0;
+	size_t len = strlen(aux_data);
+	esdm_invoke(esdm_rpcc_rnd_add_entropy((const uint8_t *)aux_data, len,
+					      write_entropy_bits));
+	if (ret != 0) {
+		perror("unable to write entropy to aux pool:");
+		exit(EXIT_FAILURE);
+	}
+
+	esdm_rpcc_fini_priv_service();
+
+	return EXIT_SUCCESS;
+}
+
+static const size_t MAX_BENCHMARK_BUFFER_EXP = 12;
 
 static void do_benchmark_single(bool pr, size_t buffer_size)
 {
@@ -73,9 +206,9 @@ static void do_benchmark_single(bool pr, size_t buffer_size)
 	uint8_t *buffer = malloc(buffer_size);
 
 	if (pr) {
-		num_iterations = 500;
+		num_iterations = 20;
 	} else {
-		num_iterations = 20000;
+		num_iterations = 10000;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &before);
@@ -110,6 +243,10 @@ static void do_benchmark(void)
 {
 	for (int pr = 0; pr < 2; ++pr) {
 		for (size_t exp = 0; exp < MAX_BENCHMARK_BUFFER_EXP; ++exp) {
+			/* skip larger tests for prediction resistant mode, as this is mostly
+			 * used for seeding purposes with <= 512 Bit */
+			if (pr && (1 << exp) > 64)
+				continue;
 			do_benchmark_single(pr, 1 << exp);
 		}
 	}
@@ -133,6 +270,9 @@ int main(int argc, char **argv)
 	char *aux_data = NULL;
 	int return_val = EXIT_SUCCESS;
 
+	/*
+	 * parse CLI arguments
+	 */
 	while (1) {
 		int opt_index = 0;
 		static struct option opts[] = {
@@ -277,107 +417,37 @@ int main(int argc, char **argv)
 	esdm_rpcc_set_max_online_nodes(1);
 	esdm_rpcc_init_unpriv_service(NULL);
 
+	/*
+	 * handle individual commands
+	 */
 	if (help) {
-		usage();
+		handle_usage();
 		return_val = EXIT_FAILURE;
 	} else if (status) {
-		const size_t ESDM_RPC_MAX_MSG_SIZE = 65536;
-		char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
-		memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
-		int ret;
-		esdm_invoke(esdm_rpcc_status(&status_buffer[0],
-					     ESDM_RPC_MAX_MSG_SIZE));
-		if (ret != 0) {
-			perror("Fetching ESDM status failed!");
-		} else {
-			printf("%s", status_buffer);
-		}
+		handle_status();
 	} else if (is_fully_seeded) {
-		int ret = 0;
-		bool fully_seeded = false;
-		esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
-		if (ret != 0) {
-			perror("Fetching ESDM fully seeded status failed!");
-		} else {
-			printf("ESDM fully seeded: %i\n", (int)fully_seeded);
-			return_val = fully_seeded ? EXIT_SUCCESS : EXIT_FAILURE;
-		}
+		return_val = handle_is_fully_seeded();
 	} else if (get_random) {
-		size_t bytes_to_fetch = num_rand_bytes;
-		const size_t BUFFER_SIZE = 8192;
-		uint8_t bytes[BUFFER_SIZE];
-		ssize_t ret = 0;
-		while (bytes_to_fetch > 0) {
-			size_t chunk_size = min(BUFFER_SIZE, bytes_to_fetch);
-			ret = 0;
-			esdm_invoke(esdm_rpcc_get_random_bytes_full(
-				bytes, chunk_size));
-			if (ret == (ssize_t)chunk_size) {
-				for (size_t i = 0; i < chunk_size; ++i) {
-					printf("%02hhX", bytes[i]);
-				}
-			} else {
-				perror("fetching random data failed, exiting");
-				exit(EXIT_FAILURE);
-			}
-			bytes_to_fetch -= chunk_size;
-		}
-		printf("\n");
+		handle_get_random(num_rand_bytes);
 	} else if (entropy_count) {
-		int ret = 0;
-		unsigned int ent_cnt = 0;
-		esdm_invoke(esdm_rpcc_rnd_get_ent_cnt(&ent_cnt));
-		if (ret == 0) {
-			printf("Entropy count: %u\n", ent_cnt);
-		} else {
-			perror("fetching entropy count failed:");
-			return_val = EXIT_FAILURE;
-		}
+		return_val = handle_entropy_count();
 	} else if (entropy_level) {
-		int ret = 0;
-		unsigned int ent_lvl = 0;
-		esdm_invoke(esdm_rpcc_get_ent_lvl(&ent_lvl));
-		if (ret == 0) {
-			printf("Entropy level: %u\n", ent_lvl);
-		} else {
-			perror("fetching entropy level failed:");
-			return_val = EXIT_FAILURE;
-		}
+		return_val = handle_entropy_level();
 	} else if (wait_until_seeded) {
-		while (seed_test_tries > 0) {
-			int ret = 0;
-			bool fully_seeded = false;
-			esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
-			if (ret == 0 && fully_seeded) {
-				printf("ESDM is fully seeded!\n");
-				exit(EXIT_SUCCESS);
-			} else {
-				printf("Waiting another round for ESDM to become fully seeded.\n");
-				struct timespec sleep_time;
-				clock_gettime(CLOCK_MONOTONIC, &sleep_time);
-				sleep_time.tv_sec += 1;
-				clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
-						&sleep_time, NULL);
-			}
-		}
+		return_val = handle_wait_until_seeded(seed_test_tries);
 	} else if (write_to_aux_pool) {
-		esdm_rpcc_init_priv_service(NULL);
-		int ret = 0;
-		size_t len = strlen(aux_data);
-		esdm_invoke(esdm_rpcc_rnd_add_entropy((const uint8_t *)aux_data,
-						      len, write_entropy_bits));
-		if (ret != 0) {
-			perror("unable to write entropy to aux pool:");
-			exit(EXIT_FAILURE);
-		}
+		return_val =
+			handle_write_to_aux_pool(aux_data, write_entropy_bits);
 		free(aux_data);
 		aux_data = NULL;
-		esdm_rpcc_fini_priv_service();
 	} else if (benchmark) {
 		do_benchmark();
 	} else if (errno) {
 		perror("Unknown mode or error:");
-		usage();
+		handle_usage();
+		return_val = EXIT_FAILURE;
+	} else {
+		handle_usage();
 		return_val = EXIT_FAILURE;
 	}
 
