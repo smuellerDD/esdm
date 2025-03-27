@@ -133,6 +133,7 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 		 ESDM_SERVER_LINUX_ENTROPY_BYTES] __aligned(sizeof(uint32_t));
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
 	struct esdm_status_st status;
+	struct timespec ts_startup = { .tv_sec = 1, .tv_nsec = 0, };
 
 	/* Wake up every 2 minutes by default */
 	struct timespec ts = { .tv_sec = ESDM_LINUX_RESEED_INTERVAL_SEC,
@@ -146,8 +147,11 @@ static int esdm_rpcs_linux_feed_kernel(void __unused *unused)
 	for (;;) {
 		esdm_status_machine(&status);
 
-		ret = esdm_get_random_bytes_full((uint8_t *)rpi->buf,
-						 (size_t)rpi->buf_size);
+		do {
+			ret = esdm_get_random_bytes_full_timeout(
+				(uint8_t *)rpi->buf, (size_t)rpi->buf_size,
+				&ts_startup);
+		} while (ret == -ETIMEDOUT);
 		if (ret < 0) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 				    "Failure in generating random bits: %zd\n",

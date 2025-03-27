@@ -14,12 +14,17 @@ Source0:        https://www.chronox.de/%{name}/releases/%{version}/%{name}-%{ver
 BuildRequires:  meson
 BuildRequires:  gcc
 BuildRequires:  fuse3
-#BuildRequires:  libleancrypto-devel
+BuildRequires:  fuse3-devel
+BuildRequires:  leancrypto-devel
 BuildRequires:  libjitterentropy3
 BuildRequires:  libprotobuf-c-devel
 BuildRequires:  pkgconfig
 BuildRequires:  libbotan-devel
 BuildRequires:  libopenssl-devel
+BuildRequires:  gcc-c++
+BuildRequires:  meson
+BuildRequires:  ninja
+BuildRequires:  systemd-rpm-macros
 
 %description
 The Entropy Source and DRNG Manager (ESDM) manages a set of deterministic
@@ -31,7 +36,7 @@ processing is designed to maintain this strength.
 %package %{name}
 Summary:        Entropy Source and DRNG Manager
 Requires:       libjitterentropy
-#Requires:       libleancrypto
+Requires:       libleancrypto1
 Requires:       libprotobuf
 
 %description %{name}
@@ -48,7 +53,7 @@ users to interact with the ESDM via its APIs.
 Summary:        Entropy Source and DRNG Manager
 Requires:       glibc-devel
 Requires:       libjitterentropy3
-#Requires:       libleancrypto-devel
+Requires:       leancrypto-devel
 Requires:       libprotobuf-c-devel
 
 %description devel
@@ -59,6 +64,21 @@ cryptographic strength of the entire ESDM is always 256 bits. All entropy
 processing is designed to maintain this strength.
 
 This subpackage holds the development headers for the libraries.
+
+%package devel-static
+Summary:        Static library for ESDM
+Requires:       %{name}-devel = %{version}
+Provides:       %{name}-devel:%{_libdir}/lib%{name}_rpc_client.a
+
+%description devel-static
+The Entropy Source and DRNG Manager (ESDM) manages a set of deterministic
+random number generators (DRNG) and ensures their proper seeding and reseeding.
+To seed the DRNGs, a set of entropy sources are managed by the ESDM. The
+cryptographic strength of the entire ESDM is always 256 bits. All entropy
+processing is designed to maintain this strength.
+
+This subpackage contains the static version of the library
+used for development.
 
 %package -n %{name}-cuse
 Summary:        Entropy Source and DRNG Manager CUSE device files
@@ -93,7 +113,6 @@ This subpackage holds RNG entropy provider for Botan 3.
 
 %package -n %{name}-openssl
 Summary:        Entropy Source and DRNG Manager OpenSSL RAND Provider
-Requires:       botan-3
 Requires:       %{name} = %{version}
 
 %description -n %{name}-openssl
@@ -119,11 +138,19 @@ This subpackage holds the OpenSSL 3 RAND provider
 %install
 %meson_install
 
+%pre -n %{name}
+%systemd_add_pre %{name}-server.service
+%systemd_add_pre %{name}-server-suspend.service
+%systemd_add_pre %{name}-server-resume.service
+
+%pre -n %{name}-cuse
+%systemd_add_pre %{name}-linux-compat.target
+
 %post -n %{name}
 /sbin/ldconfig
-%systemd_post %{name}-server.service
-%systemd_post %{name}-server-suspend.service
-%systemd_post %{name}-server-resume.service
+%systemd_add_post %{name}-server.service
+%systemd_add_post %{name}-server-suspend.service
+%systemd_add_post %{name}-server-resume.service
 
   if [ $1 -eq 1 ]; then
     /usr/bin/systemctl daemon-reload
@@ -141,7 +168,7 @@ This subpackage holds the OpenSSL 3 RAND provider
   fi
 
 %post -n %{name}-cuse
-%systemd_post %{name}-linux-compat.target
+%systemd_add_post %{name}-linux-compat.target
 
   if [ $1 -eq 1 ]; then
     /usr/bin/systemctl daemon-reload
@@ -159,14 +186,21 @@ This subpackage holds the OpenSSL 3 RAND provider
 %post -n %{name}-openssl -p /sbin/ldconfig
 
 %preun -n %{name}
-%systemd_preun %{name}-server.service
-%systemd_preun %{name}-server-suspend.service
-%systemd_preun %{name}-server-resume.service
+%systemd_del_preun %{name}-server.service
+%systemd_del_preun %{name}-server-suspend.service
+%systemd_del_preun %{name}-server-resume.service
 
 %preun -n %{name}-cuse
-%systemd_preun %{name}-linux-compat.target
+%systemd_del_preun %{name}-linux-compat.target
 
-%postun -n %{name} -p /sbin/ldconfig
+%postun -n %{name}
+/sbin/ldconfig
+%systemd_del_postun %{name}-server.service
+%systemd_del_postun %{name}-server-suspend.service
+%systemd_del_postun %{name}-server-resume.service
+
+%postun -n %{name}-cuse
+%systemd_del_postun %{name}-linux-compat.target
 
 %postun -n %{name}-botan -p /sbin/ldconfig
 
@@ -201,3 +235,8 @@ This subpackage holds the OpenSSL 3 RAND provider
 %files devel
 %doc CHANGES.md
 %{_includedir}/%{name}
+
+%files devel-static
+%{_libdir}/lib%{name}_aux_client.a
+%{_libdir}/lib%{name}-getrandom.a
+%{_libdir}/lib%{name}_rpc_client.a
