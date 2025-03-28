@@ -26,6 +26,8 @@
 #include "mutex_w.h"
 #include "queue.h"
 
+#include <time.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,6 +54,15 @@ struct esdm_rpc_client_connection {
 	mutex_w_t lock;
 	mutex_w_t ref_cnt;
 	atomic_t state;
+
+	/*
+	 * Used to track successfull reads from esdm-server.
+	 * esdm-server closes idle connections after ESDM_RPC_IDLE_TIMEOUT_USEC.
+	 * Only update this, when data is received or on new connections.
+	 * Otherwise, we may update on writes without answer and keep
+	 * dead connections open for too long.
+	 */
+	struct timespec last_used;
 };
 
 /* Sleep time for poll operations */
