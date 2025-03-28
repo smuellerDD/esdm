@@ -16,8 +16,8 @@ StartLimitBurst=5
 Wants=esdm-server.service
 After=esdm-server.service
 
-Requires=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service
-After=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service
+Requires=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service esdm-kernel-seeder.service
+After=esdm-cuse-random.service esdm-cuse-urandom.service esdm-proc.service esdm-kernel-seeder.service
 
 [Install]
 WantedBy=basic.target

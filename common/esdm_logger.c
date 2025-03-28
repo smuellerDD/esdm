@@ -57,6 +57,7 @@ static const struct esdm_logger_class_map esdm_logger_class_mapping[] = {
 	{ LOGGER_C_CUSE, "Linux device files" },
 	{ LOGGER_C_RPC, "RPC" },
 	{ LOGGER_C_SERVER, "ESDM server" },
+	{ LOGGER_C_SEEDER, "Kernel Seeder" },
 };
 
 static void esdm_logger_severity(enum esdm_logger_verbosity severity, char *sev,

@@ -44,7 +44,6 @@
 #include "esdm_rpc_protocol.h"
 #include "esdm_rpc_protocol_helper.h"
 #include "esdm_rpc_server.h"
-#include "esdm_rpc_server_linux.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "linux_support.h"
@@ -1065,9 +1064,6 @@ int esdm_rpc_server_init(const char *username)
 		 */
 		server_pid = pid;
 		esdm_rpcs_cleanup_signals(esdm_rpcs_cleanup_term);
-
-		/* Cannot do anything with the return code, ignoring. */
-		esdm_rpcs_linux_init_feeder();
 
 		/* Now wait for the server to finish. */
 		waitpid(pid, NULL, 0);
