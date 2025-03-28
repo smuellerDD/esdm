@@ -18,6 +18,7 @@
  */
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,9 +27,11 @@
 #include <openssl/provider.h>
 #include <openssl/core_names.h>
 
+#include "bool.h"
 #include "esdm_crypto.h"
 #include "esdm_openssl.h"
 #include "esdm_logger.h"
+#include "memset_secure.h"
 #include "ret_checkers.h"
 
 #define ESDM_OPENSSL_HASH (EVP_sha3_512())
@@ -76,7 +79,7 @@ static int esdm_openssl_hash_final(void *hash, uint8_t *digest)
 	unsigned int maclen = 0;
 	int ret = EVP_DigestFinal(ctx, digest, &maclen);
 
-	if (ret != 1) {
+	if (ret != 1 || maclen != esdm_openssl_hash_digestsize(hash)) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 			    "EVP_DigestFinal() failed %s\n",
 			    ERR_error_string(ERR_get_error(), NULL));
@@ -164,56 +167,154 @@ struct esdm_openssl_drng_state {
 	int seeded;
 };
 
+static int esdm_openssl_drbg_derive_seed_nonce(const uint8_t *inbuf,
+					       size_t inbuflen,
+					       uint8_t **entropy_buf,
+					       bool need_nonce,
+					       uint8_t **nonce_buf)
+{
+	const char *dom_sep_nonce = "NONCE";
+	const char *dom_sep_seed = "SEED0";
+
+	/*
+	 * Use simple derivation fn in order to have enough length with only
+	 * the aux entropy source. OpenSSL needs at least 48 Byte for initial
+	 * seeding in the test entropy.
+	 *
+	 * Always perform this step in order to make things easier to analyze.
+	 * TEST_ENTROPY = SHA3-512("SEED0"||inbuf)
+	 * TEST_NONCE   = SHA3-512("NONCE"||inbuf)
+	 */
+	void *hash = NULL;
+	int ret;
+
+	/*
+	 * entropy in
+	 */
+	CKINT(esdm_openssl_hash_alloc(&hash));
+	CKINT(esdm_openssl_hash_init(hash));
+	CKINT(esdm_openssl_hash_update(hash, (const uint8_t *)dom_sep_seed, 5));
+	CKINT(esdm_openssl_hash_update(hash, inbuf, inbuflen));
+
+	/*
+	 * we need to allocate these buffers on the heap, as OpenSSL frees them
+	 * when setting new test entropy the next time.
+	 */
+	*entropy_buf = OPENSSL_zalloc(esdm_openssl_hash_digestsize(hash));
+	CKINT(esdm_openssl_hash_final(hash, *entropy_buf));
+
+	if (!need_nonce)
+		goto out;
+	esdm_openssl_hash_dealloc(hash);
+
+	/*
+	 * nonce in
+	 */
+	CKINT(esdm_openssl_hash_alloc(&hash));
+	CKINT(esdm_openssl_hash_init(hash));
+	CKINT(esdm_openssl_hash_update(hash, (const uint8_t *)dom_sep_nonce,
+				       5));
+	CKINT(esdm_openssl_hash_update(hash, inbuf, inbuflen));
+	/*
+	 * we need to allocate these buffers on the heap, as OpenSSL frees them
+	 * when setting new test entropy the next time.
+	 */
+	*nonce_buf = OPENSSL_zalloc(esdm_openssl_hash_digestsize(hash));
+	CKINT(esdm_openssl_hash_final(hash, *nonce_buf));
+
+out:
+	if (ret) {
+		OPENSSL_free(*entropy_buf);
+		OPENSSL_free(*nonce_buf);
+		*entropy_buf = NULL;
+		*nonce_buf = NULL;
+	}
+
+	esdm_openssl_hash_dealloc(hash);
+	return ret;
+}
+
 static int esdm_openssl_drbg_seed(void *drng, const uint8_t *inbuf,
 				  size_t inbuflen)
 {
-	OSSL_PARAM params[3];
+	OSSL_PARAM params[3] = { 0 };
 	struct esdm_openssl_drng_state *state = drng;
+	uint8_t *entropy_buf = NULL;
+	uint8_t *nonce_buf = NULL;
+	bool free_buffers = true;
+	int ret = 0;
+
+	if (esdm_openssl_drbg_derive_seed_nonce(inbuf, inbuflen, &entropy_buf,
+						!state->seeded,
+						&nonce_buf) != 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Failed to derive seed material: %s\n",
+			    ERR_error_string(ERR_get_error(), NULL));
+		ret = -EFAULT;
+		goto out;
+	};
 
 	if (!state->seeded) {
 		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf,
-			inbuflen / 2);
+			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)entropy_buf,
+			(size_t)EVP_MD_size(ESDM_OPENSSL_HASH));
 		params[1] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_NONCE,
-			(void *)(inbuf + inbuflen / 2), inbuflen / 2);
+			OSSL_RAND_PARAM_TEST_NONCE, (void *)nonce_buf,
+			(size_t)EVP_MD_size(ESDM_OPENSSL_HASH));
 		params[2] = OSSL_PARAM_construct_end();
+
 		if (!EVP_RAND_instantiate(state->seed_source, state->strength,
 					  0, NULL, 0, params)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 				    "Failed to instantiate seed source: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
-			return -EFAULT;
+			ret = -EFAULT;
+			goto out;
 		}
+		free_buffers = false;
 
 		if (!EVP_RAND_instantiate(state->drbg, state->strength, 0,
 					  (unsigned char *)"", 0, NULL)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 				    "Failed to instantiate DRBG: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
-			return -EFAULT;
+			ret = -EFAULT;
+			goto out;
 		}
 
 		state->seeded = 1;
 	} else {
 		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
+			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)entropy_buf,
+			(size_t)EVP_MD_size(ESDM_OPENSSL_HASH));
 		params[1] = OSSL_PARAM_construct_end();
+
 		if (!EVP_RAND_CTX_set_params(state->seed_source, params)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 				    "Failed to reseed seed source: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
-			return -EFAULT;
+			ret = -EFAULT;
+			goto out;
 		}
+		free_buffers = false;
 
 		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, NULL, 0)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 				    "Failed to reseed DRBG\n");
-			return -EFAULT;
+			ret = -EFAULT;
+			goto out;
 		}
 	}
 
-	return 0;
+out:
+	if (free_buffers) {
+		OPENSSL_free(entropy_buf);
+		entropy_buf = NULL;
+		OPENSSL_free(nonce_buf);
+		nonce_buf = NULL;
+	}
+
+	return ret;
 }
 
 static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
@@ -341,19 +442,18 @@ static int esdm_openssl_drbg_selftest(void)
 					  0xEC, 0x88, 0x01, 0xD8, 0xAD, 0x61,
 					  0x8C, 0x0A };
 	static const uint8_t exp[] = {
-		0x18, 0x6e, 0xc4, 0x3e, 0x05, 0x95, 0xf6, 0xb1, 0x81, 0xf2,
-		0x85, 0x78, 0x5c, 0x45, 0x65, 0x90, 0x28, 0xd2, 0x2f, 0xc2,
-		0xe6, 0xc3, 0x0b, 0x6e, 0xb8, 0x77, 0xa0, 0x1b, 0xb0, 0xbe,
-		0xc6, 0x21, 0xfa, 0x94, 0x18, 0xff, 0x6e, 0xe2, 0x99, 0x29,
-		0x1f, 0x97, 0x83, 0xb8, 0x8e, 0x3d, 0x8c, 0x71, 0xe6, 0x6c,
-		0xfb, 0x0c, 0xf5, 0x4f, 0xf0, 0x75, 0x14, 0x58, 0x45, 0x6c,
-		0x79, 0x9a, 0xa7, 0x78, 0x4f, 0xfe, 0x1c, 0x01, 0xf6, 0xc2,
-		0xe6, 0xa2, 0x76, 0x49, 0x97, 0xf6, 0xf1, 0x8b, 0x9c, 0x35,
-		0xaa, 0x68, 0x95, 0x44, 0x15, 0xce, 0x67, 0xa0, 0xa6, 0xfd,
-		0x3c, 0xcc, 0xad, 0x2b, 0xd7, 0xdb, 0xa3, 0xf7, 0x71, 0xce,
-		0x17, 0xca, 0xa6, 0x2f, 0x16, 0x6a, 0x81, 0x3f, 0xbc, 0x3a,
-		0x15, 0x91, 0x20, 0x58, 0xe8, 0x98, 0xbb, 0x7e, 0x46, 0xbc,
-		0xfe, 0x50, 0x82, 0x1a, 0xdf, 0xaa, 0xf1, 0x78
+		0xc3, 0xc2, 0x05, 0x21, 0x37, 0x5c, 0xcc, 0x58, 0x85, 0x33,
+		0x2b, 0x28, 0x5f, 0xa9, 0x51, 0xc2, 0x0f, 0x36, 0xb2, 0xc0,
+		0x68, 0x53, 0xdf, 0x46, 0xdd, 0xdb, 0xf4, 0x7d, 0x2f, 0x4d,
+		0xeb, 0xdf, 0x8c, 0xe1, 0x69, 0x4b, 0x32, 0xd1, 0x22, 0x4a,
+		0xdb, 0xf2, 0x01, 0x92, 0x02, 0xde, 0x0f, 0xad, 0x57, 0x49,
+		0x69, 0x6d, 0x61, 0x7e, 0xc4, 0xe4, 0x5b, 0xc0, 0x0a, 0x26,
+		0xf3, 0x5c, 0xcf, 0x7d, 0x9e, 0xe8, 0x48, 0x73, 0x5e, 0xbd,
+		0xb8, 0xdd, 0xf8, 0x93, 0xb6, 0x6c, 0xce, 0xe1, 0x24, 0xea,
+		0x8c, 0xff, 0x65, 0x64, 0xd1, 0x61, 0x20, 0xb3, 0x14, 0x71,
+		0x51, 0xbb, 0x3d, 0xe4, 0xf6, 0x63, 0x55, 0x9c, 0x7a, 0xa5,
+		0x4b, 0xe1, 0x5b, 0x97, 0xbb, 0x74, 0x97, 0x31, 0xe4, 0x1a,
+		0xf3, 0x52, 0x30, 0x50, 0xe5, 0x40, 0xdf, 0xba, 0x3b, 0x4d,
 	};
 	uint8_t act[sizeof(exp)];
 	void *drng = NULL;
@@ -372,8 +472,9 @@ static int esdm_openssl_drbg_selftest(void)
 		goto out;
 	}
 
-	if (memcmp(act, exp, sizeof(exp)))
+	if (memcmp(act, exp, sizeof(exp))) {
 		ret = -EFAULT;
+	}
 
 out:
 	esdm_openssl_drbg_dealloc(drng);
