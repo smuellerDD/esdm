@@ -17,6 +17,8 @@
  * DAMAGE.
  */
 
+#include "tool.h"
+
 #include <errno.h>
 #include <esdm_rpc_client.h>
 #include <getopt.h>
@@ -65,6 +67,9 @@ static void handle_usage(void)
 		"\t-B --write-entropy-bits BITS\tSet number of bits to account the write to aux. pool with.\n");
 	fprintf(stderr,
 		"\t-b --benchmark\t\t\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
+	fprintf(stderr, "\t--stress-delay\t\t\tTBD\n");
+	fprintf(stderr, "\t--stress-process\t\t\tTBD\n");
+	fprintf(stderr, "\t--stress-thread\t\t\tTBD\n");
 }
 
 static void handle_status()
@@ -268,6 +273,9 @@ int main(int argc, char **argv)
 	uint32_t write_entropy_bits = 0;
 	bool benchmark = false;
 	char *aux_data = NULL;
+	bool stress_delay = false;
+	bool stress_process = false;
+	bool stress_thread = false;
 	int return_val = EXIT_SUCCESS;
 
 	/*
@@ -286,6 +294,9 @@ int main(int argc, char **argv)
 			{ "write-to-aux-pool", 1, 0, 0 },
 			{ "write-entropy-bits", 1, 0, 0 },
 			{ "benchmark", 0, 0, 0 },
+			{ "stress-delay", 0, 0, 0 },
+			{ "stress-thread", 0, 0, 0 },
+			{ "stress-process", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:b", opts, &opt_index);
@@ -358,6 +369,18 @@ int main(int argc, char **argv)
 				/* benchmark */
 				benchmark = true;
 				break;
+			case 10:
+				/* stress-delay */
+				stress_delay = true;
+				break;
+			case 11:
+				/* stress-thread */
+				stress_thread = true;
+				break;
+			case 12:
+				/* stress-process */
+				stress_process = true;
+				break;
 			}
 			break;
 		case 's':
@@ -414,8 +437,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	esdm_rpcc_set_max_online_nodes(1);
 	esdm_rpcc_init_unpriv_service(NULL);
+
+	const double stress_test_timeout_sec = 65.0;
 
 	/*
 	 * handle individual commands
@@ -442,6 +466,13 @@ int main(int argc, char **argv)
 		aux_data = NULL;
 	} else if (benchmark) {
 		do_benchmark();
+	} else if (stress_delay) {
+		handle_stress_thread(stress_test_timeout_sec, 1);
+	} else if (stress_process) {
+		handle_stress_process(stress_test_timeout_sec);
+	} else if (stress_thread) {
+		/* -1 means not thread restriction (use number of cores online) */
+		handle_stress_thread(stress_test_timeout_sec, -1);
 	} else if (errno) {
 		perror("Unknown mode or error:");
 		handle_usage();
