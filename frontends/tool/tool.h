@@ -20,6 +20,7 @@
 #ifndef ESDM_TOOL_H
 #define ESDM_TOOL_H
 
+#include <stdint.h>
 #include <time.h>
 
 struct test_msg {
@@ -32,6 +33,8 @@ struct test_msg {
 	double mean_duration;
 	double max_duration;
 	double req_per_sec;
+
+	uint64_t iterations;
 };
 
 extern double timespec_diff(const struct timespec *start,
