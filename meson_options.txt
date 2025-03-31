@@ -293,7 +293,7 @@ getrandom(2) with GRND_RANDOM.
 ''')
 
 # Option for: THREADING_MAX_THREADS
-option('threading_max_threads', type: 'integer', min: 1, value: 64,
+option('threading_max_threads', type: 'integer', min: 1, value: 128,
        description:'''Maximum number of concurrent threads supported.
 
 This value can be set to any arbitrary number. Depending on the number
@@ -500,6 +500,18 @@ the termination signal was received.
 This option is intended when for unknown reasons the accept() does not terminate
 even though the server shall exit.
 ''')
+
+option('esdm-server-rpc-idle-timeout-usec', type: 'integer', value: 2000000,
+       description:'''ESDM-Server: idle connection timeout
+
+Defines the period of time, in which idle/stale RPC sockets are kept in a server
+thread. The client code also uses this value to close idle connections after half
+of this time in order to reduce timeouts.
+
+Lower this value further, when the amount of worker threads shall be not increased
+further and a high rate of short connections may saturates them.
+''')
+
 
 ################################################################################
 # Auxiliary Options

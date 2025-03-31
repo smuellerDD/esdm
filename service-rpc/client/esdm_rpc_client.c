@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -49,6 +50,17 @@ struct esdm_rpcc_write_buf {
 	esdm_rpc_client_connection_t *rpc_conn;
 };
 
+static void reset_conn_socket(esdm_rpc_client_connection_t *rpc_conn)
+{
+	if (rpc_conn == NULL) {
+		return;
+	}
+	if (rpc_conn->fd >= 0)
+		close(rpc_conn->fd);
+	rpc_conn->fd = -1;
+	memset(&rpc_conn->last_used, 0, sizeof(rpc_conn->last_used));
+}
+
 static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 {
 	ProtobufCService *service;
@@ -57,8 +69,7 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		return;
 
 	if (rpc_conn->fd >= 0) {
-		close(rpc_conn->fd);
-		rpc_conn->fd = -1;
+		reset_conn_socket(rpc_conn);
 	}
 
 	service = &rpc_conn->service;
@@ -88,8 +99,7 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	int errsv;
 
 	if (rpc_conn->fd >= 0) {
-		close(rpc_conn->fd);
-		rpc_conn->fd = -1;
+		reset_conn_socket(rpc_conn);
 	}
 
 	/* Does the path exist? */
@@ -117,12 +127,16 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	strncpy(addr.sun_path, socketname, sizeof(addr.sun_path));
 #pragma GCC diagnostic pop
 
-	rpc_conn->fd = socket(addr.sun_family, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+	rpc_conn->fd =
+		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Error creating socket: %s\n", strerror(errsv));
+
+		reset_conn_socket(rpc_conn);
+
 		return -errsv;
 	}
 
@@ -136,6 +150,9 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Error setting timeout on socket: %s\n",
 			    strerror(errsv));
+
+		reset_conn_socket(rpc_conn);
+
 		return -errsv;
 	}
 
@@ -158,10 +175,14 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	} while (attempts < (ESDM_CLIENT_RECONNECT_ATTEMPTS) &&
 		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR));
 
-	if (errsv) {
+	if (errsv || attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Connection attempt using socket %s failed\n",
 			    socketname);
+		reset_conn_socket(rpc_conn);
+	} else {
+		/* only update this time on a successful connection */
+		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 	}
 
 	return -errsv;
@@ -201,6 +222,8 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 				esdm_logger(
 					LOGGER_DEBUG, LOGGER_C_RPC,
 					"Connection to server needs to be re-established\n");
+
+				reset_conn_socket(rpc_conn);
 
 				int rc = esdm_connect_proto_service(rpc_conn);
 				if (rc)
@@ -251,6 +274,7 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 	struct esdm_rpc_write_data_buf tmp = {
 		.dst_written = 0,
 	};
+	size_t buf_alloc_size;
 
 	tmp.base.append = esdm_rpc_append_data;
 
@@ -261,8 +285,9 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 		return -EFAULT;
 	}
 
-	data_buf_alloc = malloc(ESDM_RPCC_BUF_WRITE_HEADER_SZ + message_length +
-				sizeof(uint64_t) - 1);
+	buf_alloc_size = ESDM_RPCC_BUF_WRITE_HEADER_SZ + message_length +
+			 sizeof(uint64_t) - 1;
+	data_buf_alloc = malloc(buf_alloc_size);
 	CKNULL(data_buf_alloc, -ENOMEM);
 
 	data_buf = ALIGN_PTR_8(data_buf_alloc, sizeof(uint64_t));
@@ -294,12 +319,16 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 
 out:
 	/*
-	 * Zeroization not needed, as data will go out through unprotected
-	 * channel anyway. If the data is not already protected, there is a
-	 * bigger problem.
+	 * Zeroization only here is not sufficient.
+	 * Make sure to enable zeroize on alloc and free in your Linux kernel
+	 * and clear data from ESDM in your application or patch
+	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	if (data_buf_alloc)
+	if (data_buf_alloc) {
+		memset_secure(data_buf_alloc, 0, buf_alloc_size);
 		free(data_buf_alloc);
+		data_buf_alloc = NULL;
+	}
 	return ret;
 }
 
@@ -503,6 +532,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			msg = ERR_PTR(-EFAULT);
 			closure(msg, closure_data);
 		}
+		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
 
@@ -534,17 +564,32 @@ static void esdm_client_invoke(ProtobufCService *service,
 	const ProtobufCMethodDescriptor *method = desc->methods + method_index;
 	esdm_rpc_client_connection_t *rpc_conn =
 		(esdm_rpc_client_connection_t *)service;
+	static const double half_server_timeout =
+		(double)ESDM_RPC_IDLE_TIMEOUT_USEC / 1E6 / 2.0;
+	struct timespec current_time;
+	double used_before_secs;
 	int ret;
 
 	mutex_w_lock(&rpc_conn->lock);
 
 	do {
+		clock_gettime(CLOCK_MONOTONIC, &current_time);
+		used_before_secs = (double)current_time.tv_sec -
+				   (double)rpc_conn->last_used.tv_sec;
+		used_before_secs += (double)current_time.tv_nsec / 1E9 -
+				    (double)rpc_conn->last_used.tv_nsec / 1E9;
+
 		/*
 		 * Connect to the server if we do not have a connection,
 		 * otherwise reuse the session.
+		 *
+		 * Server keeps the connection open for ESDM_RPC_IDLE_TIMEOUT_USEC, consider it closed a bit earlier.
 		 */
-		if (rpc_conn->fd == -1)
+		if (rpc_conn->fd == -1 ||
+		    used_before_secs >= half_server_timeout) {
+			reset_conn_socket(rpc_conn);
 			CKINT(esdm_connect_proto_service(rpc_conn));
+		}
 
 		/* Pack the protobuf-c data and send it over the wire */
 		CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn),
@@ -567,8 +612,7 @@ static void esdm_client_destroy(ProtobufCService *service)
 
 	mutex_w_lock(&rpc_conn->lock);
 	if (rpc_conn->fd >= 0) {
-		close(rpc_conn->fd);
-		rpc_conn->fd = -1;
+		reset_conn_socket(rpc_conn);
 	}
 	mutex_w_unlock(&rpc_conn->lock);
 }
@@ -594,6 +638,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 
 	mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
 	rpc_conn->fd = -1;
+	reset_conn_socket(rpc_conn);
 	mutex_w_init(&rpc_conn->lock, 0, 1);
 	atomic_set(&rpc_conn->state, esdm_rpcc_initialized);
 
