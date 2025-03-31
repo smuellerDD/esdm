@@ -816,22 +816,54 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	struct esdm_drng *drng = &esdm_drng_init;
+	uint32_t num_nodes = esdm_config_online_nodes();
 	uint32_t node = esdm_config_curr_node();
+	bool found_drng = false;
 	ssize_t ret;
+	uint32_t j;
+	int32_t i;
 
 	if (pr) {
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
 			"Using prediction resistance DRNG instance to service generate request\n");
 		drng = &esdm_drng_pr;
-	} else if (esdm_drng && esdm_drng[node] &&
-		   esdm_drng[node]->fully_seeded) {
+		found_drng = true;
+	}
+
+	if (!found_drng && esdm_drng && esdm_drng[node] && esdm_drng[node]->fully_seeded && mutex_w_trylock(&esdm_drng[node]->lock)) {
+		mutex_w_unlock(&esdm_drng[node]->lock);
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
 			"Using DRNG instance on node %u to service generate request\n",
 			node);
 		drng = esdm_drng[node];
-	} else {
+		found_drng = true;
+	}
+
+	/*
+	 * try to find free drng heuristically first in order to better utilize
+	 * systems with RPC high load and a low total core count
+	 */
+	if (!found_drng && esdm_drng) {
+		for (i = (int32_t)num_nodes - 1; i >= 0; --i) {
+			/* every node starts probing at different offsets */
+			j = ((uint32_t)i + node) % num_nodes;
+			if (esdm_drng[j] && esdm_drng[j]->fully_seeded &&
+			    mutex_w_trylock(&drng->lock)) {
+				mutex_w_unlock(&drng->lock);
+				found_drng = true;
+				drng = esdm_drng[j];
+				esdm_logger(
+					LOGGER_DEBUG, LOGGER_C_DRNG,
+					"Using DRNG instance on node %u to service generate request\n",
+					j);
+				break;
+			}
+		}
+	}
+
+	if (!found_drng) {
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
 			"Using DRNG instance on node 0 to service generate request\n");
