@@ -155,10 +155,11 @@ static void handle_message(struct test_msg *m)
 
 void handle_messages(int *sockets, size_t num_sockets)
 {
-	const long report_interval_sec = 8;
-	struct timespec start;
 	struct itimerspec timeout_timer = { 0 };
+	static const long report_interval_sec = 8;
 	size_t num_exits_seen = 0;
+	struct timespec start;
+	double total_calls = 0.0;
 	int util_timer_fd;
 	double loadavg;
 	int ret;
@@ -213,6 +214,7 @@ void handle_messages(int *sockets, size_t num_sockets)
 				if (m.is_exit) {
 					num_exits_seen++;
 					sockets[i] = -1;
+					total_calls += m.req_per_sec;
 				}
 			}
 		}
@@ -221,7 +223,10 @@ void handle_messages(int *sockets, size_t num_sockets)
 	ret = getloadavg(&loadavg, 1);
 	assert(ret == 1);
 
+	printf("\n\n");
+
 	printf("Average Load: %lf\n", loadavg);
+	printf("Total calls/sec: %.2lf\n", total_calls);
 
 	close(util_timer_fd);
 }

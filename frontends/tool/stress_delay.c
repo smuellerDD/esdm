@@ -63,6 +63,7 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
 			msg.max_duration = max_duration;
 			msg.mean_duration = mean_duration;
 			msg.req_per_sec = (double)iterations / total_duration;
+			msg.iterations = iterations;
 
 			ssize_t written =
 				write(sock_fd, &msg, sizeof(struct test_msg));
@@ -83,6 +84,7 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
 	msg.duration = 0.0;
 	msg.max_duration = max_duration;
 	msg.mean_duration = mean_duration;
+	msg.iterations = iterations;
 	msg.req_per_sec = (double)iterations / total_duration;
 
 	ssize_t written = write(sock_fd, &msg, sizeof(struct test_msg));

@@ -67,9 +67,10 @@ static void handle_usage(void)
 		"\t-B --write-entropy-bits BITS\tSet number of bits to account the write to aux. pool with.\n");
 	fprintf(stderr,
 		"\t-b --benchmark\t\t\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
-	fprintf(stderr, "\t--stress-delay\t\t\tTBD\n");
-	fprintf(stderr, "\t--stress-process\t\t\tTBD\n");
-	fprintf(stderr, "\t--stress-thread\t\t\tTBD\n");
+	fprintf(stderr, "\t--stress-delay\t\t\tRun single threaded delay measurement\n");
+	fprintf(stderr, "\t--stress-process\t\t\tRun delay stress test on all cores in processes\n");
+	fprintf(stderr, "\t--stress-thread\t\t\tRun delay stress test on all cores in threads\n");
+	fprintf(stderr, "\t--stress-duration\t\t\tSet timeout of stress tests to SECS, Default: 65.0\n");
 }
 
 static void handle_status()
@@ -276,6 +277,7 @@ int main(int argc, char **argv)
 	bool stress_delay = false;
 	bool stress_process = false;
 	bool stress_thread = false;
+	long stress_duration_sec = 65;
 	int return_val = EXIT_SUCCESS;
 
 	/*
@@ -297,6 +299,7 @@ int main(int argc, char **argv)
 			{ "stress-delay", 0, 0, 0 },
 			{ "stress-thread", 0, 0, 0 },
 			{ "stress-process", 0, 0, 0 },
+			{ "stress-duration", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:b", opts, &opt_index);
@@ -381,6 +384,10 @@ int main(int argc, char **argv)
 				/* stress-process */
 				stress_process = true;
 				break;
+			case 13:
+				/* stress-duration */
+				stress_duration_sec = strtol(optarg, NULL, 10);
+				break;
 			}
 			break;
 		case 's':
@@ -437,9 +444,10 @@ int main(int argc, char **argv)
 		}
 	}
 
-	esdm_rpcc_init_unpriv_service(NULL);
-
-	const double stress_test_timeout_sec = 65.0;
+	/* initialized in child processes in this test */
+	if (!stress_process) {
+		esdm_rpcc_init_unpriv_service(NULL);
+	}
 
 	/*
 	 * handle individual commands
@@ -467,12 +475,12 @@ int main(int argc, char **argv)
 	} else if (benchmark) {
 		do_benchmark();
 	} else if (stress_delay) {
-		handle_stress_thread(stress_test_timeout_sec, 1);
+		handle_stress_thread((double)stress_duration_sec, 1);
 	} else if (stress_process) {
-		handle_stress_process(stress_test_timeout_sec);
+		handle_stress_process((double)stress_duration_sec);
 	} else if (stress_thread) {
 		/* -1 means not thread restriction (use number of cores online) */
-		handle_stress_thread(stress_test_timeout_sec, -1);
+		handle_stress_thread((double)stress_duration_sec, -1);
 	} else if (errno) {
 		perror("Unknown mode or error:");
 		handle_usage();
@@ -482,7 +490,10 @@ int main(int argc, char **argv)
 		return_val = EXIT_FAILURE;
 	}
 
-	esdm_rpcc_fini_unpriv_service();
+	/* finished in child processes in this test */
+	if (!stress_process) {
+		esdm_rpcc_fini_unpriv_service();
+	}
 
 	return return_val;
 }
