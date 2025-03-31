@@ -811,19 +811,64 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 	esdm_rpc_client_connection_t *rpc_conn_p;
 	/* Protection against client programming errors */
 	uint32_t node = min_uint32(esdm_rpcc_curr_node(), num_conn);
+	bool found_unused_conn = false;
+	struct timespec abstime;
+	int lock_res;
 	int ret = 0;
+	uint32_t i;
+	int32_t j;
 
 	CKNULL(rpc_conn_array, -EFAULT);
 	CKNULL(ret_rpc_conn, -EFAULT);
 
-	rpc_conn_p = rpc_conn_array + node;
-
 	/*
-	 * Wait until the previous call completed - each connection handle is
-	 * has only one caller at one given time. Lock the ref_cnt if we
-	 * obtained the connection handle.
+	 * Always using a fixed connection based on the current
+	 * core slows the client down, as under load a thread waiting
+	 * on a reply from ESDM is paused and probably another thread
+	 * also communicating with ESDM scheduled on the same node
+	 * waiting for the RPC connection to become available again
+	 * with no gain.
+	 *
+	 * Try to optimistically find a free connection slot first.
 	 */
-	mutex_w_lock(&rpc_conn_p->ref_cnt);
+	for (i = 0; i < num_conn; ++i) {
+		rpc_conn_p = rpc_conn_array + (i + node) % num_conn;
+		if (mutex_w_trylock(&rpc_conn_p->ref_cnt)) {
+			found_unused_conn = true;
+			break;
+		}
+	}
+
+	/* as escalation step try timed locking */
+	if (!found_unused_conn && num_conn > 0) {
+		/* try in reverse order of probing above for less lock contention */
+		for (j = (int32_t)num_conn - 1; j >= 0; --j) {
+			/* every core probes at another offset */
+			rpc_conn_p = rpc_conn_array + ((uint32_t)j + node) % num_conn;
+
+			clock_gettime(CLOCK_MONOTONIC, &abstime);
+			// 5ms
+			abstime.tv_nsec += 5000000;
+			lock_res = mutex_w_timedlock(&rpc_conn_p->ref_cnt,
+						     &abstime);
+
+			if (lock_res == 0) {
+				found_unused_conn = true;
+				break;
+			}
+		}
+	}
+
+	if (!found_unused_conn) {
+		rpc_conn_p = rpc_conn_array + node;
+
+		/*
+		* Wait until the previous call completed - each connection handle is
+		* has only one caller at one given time. Lock the ref_cnt if we
+		* obtained the connection handle.
+		*/
+		mutex_w_lock(&rpc_conn_p->ref_cnt);
+	}
 
 	if (atomic_read(&rpc_conn_p->state) != esdm_rpcc_initialized) {
 		mutex_w_unlock(&rpc_conn_p->ref_cnt);
