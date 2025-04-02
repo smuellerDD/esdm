@@ -201,7 +201,12 @@ endif
 # ESDM and client libraries
 ################################################################################
 if get_option('esdm-aux-client').enabled()
+	include_dirs_aux_client = [
+		include_directories('frontends/aux-client')
+	]
 	subdirs += [ 'frontends/aux-client' ]
+else
+	include_dirs_aux_client = []
 endif
 
 if get_option('esdm-tool').enabled()

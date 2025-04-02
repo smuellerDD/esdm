@@ -18,9 +18,13 @@
  */
 
 #include "tool.h"
+#include "config.h"
 
 #include <errno.h>
 #include <esdm_rpc_client.h>
+#ifdef ESDM_HAS_AUX_CLIENT
+#include <esdm_aux_client.h>
+#endif
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -62,15 +66,29 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-w --wait-until-seeded\t\tRepeatedly check if fully seeded level is reached. Exit afterwards.\n");
 	fprintf(stderr,
-		"\t-W --write-to-aux-pool BYTES\tWrite BYTES to the aux. pool.\n");
+		"\t-W --write-to-aux-pool BYTES\tWrite BYTES to the aux. pool. (needs root)\n");
 	fprintf(stderr,
 		"\t-B --write-entropy-bits BITS\tSet number of bits to account the write to aux. pool with.\n");
 	fprintf(stderr,
 		"\t-b --benchmark\t\t\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
-	fprintf(stderr, "\t--stress-delay\t\t\tRun single threaded delay measurement\n");
-	fprintf(stderr, "\t--stress-process\t\t\tRun delay stress test on all cores in processes\n");
-	fprintf(stderr, "\t--stress-thread\t\t\tRun delay stress test on all cores in threads\n");
-	fprintf(stderr, "\t--stress-duration\t\t\tSet timeout of stress tests to SECS, Default: 65.0\n");
+	fprintf(stderr,
+		"\t--stress-delay\t\t\tRun single threaded delay measurement\n");
+	fprintf(stderr,
+		"\t--stress-process\t\t\tRun delay stress test on all cores in processes\n");
+	fprintf(stderr,
+		"\t--stress-thread\t\t\tRun delay stress test on all cores in threads\n");
+	fprintf(stderr,
+		"\t--stress-duration\t\t\tSet timeout of stress tests to SECS, Default: 65.0\n");
+	fprintf(stderr,
+		"\t--clear-pool\t\t\tClear the entropy pool for testing (needs root)\n");
+	fprintf(stderr,
+		"\t--reseed-crng\t\t\tReseed the CRNGs for testing (needs root)\n");
+	fprintf(stderr,
+		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
+#ifdef ESDM_HAS_AUX_CLIENT
+	fprintf(stderr,
+		"\t--reseed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Automatic reseeding via getentropy/getrandom. (needs root)\n");
+#endif
 }
 
 static void handle_status()
@@ -101,7 +119,7 @@ static int handle_is_fully_seeded()
 	return fully_seeded ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static int handle_get_random(size_t num_rand_bytes)
+static int handle_get_random(size_t num_rand_bytes, bool use_pr)
 {
 	size_t bytes_to_fetch = num_rand_bytes;
 	const size_t BUFFER_SIZE = 8192;
@@ -110,7 +128,13 @@ static int handle_get_random(size_t num_rand_bytes)
 	while (bytes_to_fetch > 0) {
 		size_t chunk_size = min(BUFFER_SIZE, bytes_to_fetch);
 		ret = 0;
-		esdm_invoke(esdm_rpcc_get_random_bytes_full(bytes, chunk_size));
+		if (use_pr) {
+			esdm_invoke(esdm_rpcc_get_random_bytes_pr(bytes,
+								  chunk_size));
+		} else {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full(
+				bytes, chunk_size));
+		}
 		if (ret == (ssize_t)chunk_size) {
 			for (size_t i = 0; i < chunk_size; ++i) {
 				printf("%02hhX", bytes[i]);
@@ -258,6 +282,105 @@ static void do_benchmark(void)
 	}
 }
 
+static int handle_clear_pool(void)
+{
+	int ret;
+
+	esdm_rpcc_init_priv_service(NULL);
+	esdm_invoke(esdm_rpcc_rnd_clear_pool());
+	esdm_rpcc_fini_priv_service();
+
+	return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+static int handle_reseed_crng(void)
+{
+	int ret;
+
+	esdm_rpcc_init_priv_service(NULL);
+	esdm_invoke(esdm_rpcc_rnd_reseed_crng());
+	esdm_rpcc_fini_priv_service();
+
+	return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+#ifdef ESDM_HAS_AUX_CLIENT
+static int handle_reseed_via_os(void)
+{
+	const uint32_t timeout_secs = 100;
+	struct timespec start, wait, before, after;
+	uint8_t reseed_buffer[512 / 8];
+	int ret_val = EXIT_SUCCESS;
+	bool should_finish = false;
+	uint64_t wakeups = 0;
+	char *t1 = NULL;
+	char *t2 = NULL;
+	int ret;
+
+	if (esdm_rpcc_init_priv_service(NULL) != 0) {
+		ret_val = EXIT_FAILURE;
+		goto out_ret;
+	}
+	if (esdm_aux_init_wait_for_need_entropy() != 0) {
+		ret_val = EXIT_FAILURE;
+		goto out_2;
+	}
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	while (!should_finish) {
+		clock_gettime(CLOCK_MONOTONIC, &wait);
+		before = wait;
+		wait.tv_sec += timeout_secs;
+		ret = esdm_aux_timedwait_for_need_entropy(&wait);
+		clock_gettime(CLOCK_MONOTONIC, &after);
+		/* inc wakeups */
+		++wakeups;
+		t1 = format_time_sec(timespec_diff(&start, &after));
+		t2 = format_time_sec(timespec_diff(&before, &after));
+		printf("Wakeup %li after %s: ", wakeups, t1);
+		if (ret == 0) {
+			printf("handling conditional wake after %s", t2);
+		} else if (ret == -1 && errno == ETIMEDOUT) {
+			printf("handling timeout wake after %s", t2);
+		} else {
+			printf("failure or signal, exiting!");
+			should_finish = true;
+		}
+		printf("\n");
+		free(t1);
+		free(t2);
+		t1 = NULL;
+		t2 = NULL;
+
+		if (getentropy(reseed_buffer, sizeof(reseed_buffer)) != 0) {
+			fprintf(stderr,
+				"failed to get entropy from OS, exiting.");
+			ret_val = EXIT_FAILURE;
+			goto out_1;
+		}
+
+		esdm_invoke(esdm_rpcc_rnd_add_entropy(
+			reseed_buffer, sizeof(reseed_buffer),
+			sizeof(reseed_buffer) * 8));
+		if (ret != 0) {
+			fprintf(stderr, "reseeding ESDM failed, exiting!");
+			ret_val = EXIT_FAILURE;
+			goto out_1;
+		}
+	}
+
+out_1:
+	esdm_aux_fini_wait_for_need_entropy();
+
+out_2:
+	esdm_rpcc_fini_priv_service();
+
+out_ret:
+	return ret_val;
+}
+#endif /* ESDM_HAS_AUX_CLIENT */
+
 int main(int argc, char **argv)
 {
 	int c = 0;
@@ -278,6 +401,10 @@ int main(int argc, char **argv)
 	bool stress_process = false;
 	bool stress_thread = false;
 	long stress_duration_sec = 65;
+	bool clear_pool = false;
+	bool reseed_crng = false;
+	bool use_pr = false;
+	bool reseed_via_os = false;
 	int return_val = EXIT_SUCCESS;
 
 	/*
@@ -300,6 +427,10 @@ int main(int argc, char **argv)
 			{ "stress-thread", 0, 0, 0 },
 			{ "stress-process", 0, 0, 0 },
 			{ "stress-duration", 1, 0, 0 },
+			{ "clear-pool", 0, 0, 0 },
+			{ "reseed-crng", 0, 0, 0 },
+			{ "use-pr", 0, 0, 0 },
+			{ "reseed-via-os", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:b", opts, &opt_index);
@@ -388,6 +519,22 @@ int main(int argc, char **argv)
 				/* stress-duration */
 				stress_duration_sec = strtol(optarg, NULL, 10);
 				break;
+			case 14:
+				/* clear-pool */
+				clear_pool = true;
+				break;
+			case 15:
+				/* reseed-crng */
+				reseed_crng = true;
+				break;
+			case 16:
+				/* use prediction resistance mode */
+				use_pr = true;
+				break;
+			case 17:
+				/* DO NOT USE IN PRODUCTION: reseed via OS kernel */
+				reseed_via_os = true;
+				break;
 			}
 			break;
 		case 's':
@@ -444,6 +591,15 @@ int main(int argc, char **argv)
 		}
 	}
 
+	/* check for privileged commands */
+	if (geteuid() &&
+	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os)) {
+		fprintf(stderr,
+			"Program must start as root for this command!\n");
+		return_val = EXIT_FAILURE;
+		goto out;
+	}
+
 	/* initialized in child processes in this test */
 	if (!stress_process) {
 		esdm_rpcc_init_unpriv_service(NULL);
@@ -460,7 +616,7 @@ int main(int argc, char **argv)
 	} else if (is_fully_seeded) {
 		return_val = handle_is_fully_seeded();
 	} else if (get_random) {
-		handle_get_random(num_rand_bytes);
+		handle_get_random(num_rand_bytes, use_pr);
 	} else if (entropy_count) {
 		return_val = handle_entropy_count();
 	} else if (entropy_level) {
@@ -481,6 +637,14 @@ int main(int argc, char **argv)
 	} else if (stress_thread) {
 		/* -1 means not thread restriction (use number of cores online) */
 		handle_stress_thread((double)stress_duration_sec, -1);
+	} else if (clear_pool) {
+		return_val = handle_clear_pool();
+	} else if (reseed_crng) {
+		return_val = handle_reseed_crng();
+#ifdef ESDM_HAS_AUX_CLIENT
+	} else if (reseed_via_os) {
+		handle_reseed_via_os();
+#endif
 	} else if (errno) {
 		perror("Unknown mode or error:");
 		handle_usage();
@@ -495,5 +659,6 @@ int main(int argc, char **argv)
 		esdm_rpcc_fini_unpriv_service();
 	}
 
+out:
 	return return_val;
 }
