@@ -1,3 +1,14 @@
+Changes 1.x.0
+* fix: split kernel seeding into own tool to allow fetching fresh entropy
+
+* fix: close RPC client sockets on exec
+
+* fix: OpenSSL backend now also works with a single entropy source
+
+* improved RPC call rate per second by lowering lock contention
+
+* add esdm-tool cli helper for interacting with ESDM and using it for testing purposes.
+
 Changes 1.2.0
 * fix: to prevent a DoS against the RPC channel, limit the slow operations of esdm_get_random_bytes_pr and esdm_get_seed to allow only one call in flight. If another call comes in while one process is ongoing, return -EAGAIN to free the RPC channel.
 

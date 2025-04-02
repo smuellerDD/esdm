@@ -287,6 +287,13 @@ The ESDM consists of the following components:
   wakeup. The associated systemd unit files of `esdm-server-suspend.service`
   and `esdm-server-resume.service` obtain the suspend/resume trigger.
 
+* `esdm-kernel-seeder`: Can be used to periodically seed the Linux kernel from
+  ESDM. Configure its interval and entropy rate via the respective meson options
+  (`linux-reseed-interval` and `linux-reseed-entropy-count`).
+
+* `esdm-tool`: This tool can be used to test ESDM and interact with it without
+  building an own tool with the rpc_client library or using the CUSE devices.
+
 IMPORTANT NOTE: The RPC interfaces between the components are present to ensure
 there is a proper security domain separation. The RPC protocol is not considered
 to constitute a stable API that should be used to program against.
