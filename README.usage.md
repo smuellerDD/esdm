@@ -121,7 +121,14 @@ commands:
 
 5. Start the different clients: `systemctl start esdm-linux-compat.target`
 
-5. Enable the different clients: `systemctl enable esdm-linux-compat.target`
+6. Enable the different clients: `systemctl enable esdm-linux-compat.target`
+
+7. Optional (if the esdm_es_irq kernel patch is applied and thus the kernel
+   random number generator must be seeded from user space):
+   `systemctl start esdm-kernel-seeder`
+
+8. Optional (if step 7 identified that it needs to be started):
+   `systemctl enable esdm-kernel-seeder`
 
 Note, a pitfall may be the use of BtrFS where `/usr/local` is a separate
 subvolume. The `esdm-server` wants to be invoked very early in the boot cycle
