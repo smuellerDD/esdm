@@ -52,7 +52,8 @@ extern "C" {
 
 #else /* ESDM_TESTMODE */
 
-#define ESDM_RPC_UNPRIV_SOCKET ESDM_SERVER_RPC_BASE_PATH "/esdm-rpc-unpriv.socket"
+#define ESDM_RPC_UNPRIV_SOCKET                                                 \
+	ESDM_SERVER_RPC_BASE_PATH "/esdm-rpc-unpriv.socket"
 
 #define ESDM_RPC_PRIV_SOCKET ESDM_SERVER_RPC_BASE_PATH "/esdm-rpc-priv.socket"
 

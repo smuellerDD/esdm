@@ -91,19 +91,20 @@ static void parse_opts(int argc, char *argv[])
 
 	while (1) {
 		int opt_index = 0;
-		static struct option opts[] = { { "verbose", 0, 0, 0 },
-						{ "pid", 1, 0, 0 },
-						{ "help", 0, 0, 0 },
-						{ "version", 0, 0, 0 },
-						{ "username", 0, 0, 0 },
-						{ "foreground", 0, 0, 0 },
-						{ "force_irqes", 0, 0, 0 },
-						{ "force_schedes", 0, 0, 0 },
-						{ "jent_block_disable", 0, 0,
-						  0 },
-						{ "syslog", 0, 0, 0 },
-						{ "raise_sched_priority", 0, 0, 0 },
-						{ 0, 0, 0, 0 } };
+		static struct option opts[] = {
+			{ "verbose", 0, 0, 0 },
+			{ "pid", 1, 0, 0 },
+			{ "help", 0, 0, 0 },
+			{ "version", 0, 0, 0 },
+			{ "username", 0, 0, 0 },
+			{ "foreground", 0, 0, 0 },
+			{ "force_irqes", 0, 0, 0 },
+			{ "force_schedes", 0, 0, 0 },
+			{ "jent_block_disable", 0, 0, 0 },
+			{ "syslog", 0, 0, 0 },
+			{ "raise_sched_priority", 0, 0, 0 },
+			{ 0, 0, 0, 0 }
+		};
 		c = getopt_long(argc, argv, "hvp:u:fisSP", opts, &opt_index);
 		if (-1 == c)
 			break;
@@ -225,10 +226,12 @@ static void daemon_release(void)
 	esdm_fini();
 }
 
-static void daemon_raise_sched_priority(void) {
+static void daemon_raise_sched_priority(void)
+{
 	/* set nice priority */
 	if (setpriority(PRIO_PROCESS, 0, -15) == -1) {
-		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER, "Raising scheduling priority failed!\n");
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
+			    "Raising scheduling priority failed!\n");
 	}
 }
 
