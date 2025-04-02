@@ -74,11 +74,11 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--stress-delay\t\t\tRun single threaded delay measurement\n");
 	fprintf(stderr,
-		"\t--stress-process\t\t\tRun delay stress test on all cores in processes\n");
+		"\t--stress-process\t\tRun delay stress test on all cores in processes\n");
 	fprintf(stderr,
 		"\t--stress-thread\t\t\tRun delay stress test on all cores in threads\n");
 	fprintf(stderr,
-		"\t--stress-duration\t\t\tSet timeout of stress tests to SECS, Default: 65.0\n");
+		"\t--stress-duration\t\tSet timeout of stress tests to SECS, Default: 65.0\n");
 	fprintf(stderr,
 		"\t--clear-pool\t\t\tClear the entropy pool for testing (needs root)\n");
 	fprintf(stderr,
