@@ -145,4 +145,6 @@ conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH', get_option('esdm-server-rpc-pa
 
 conf_data.set('ESDM_RPC_IDLE_TIMEOUT_USEC', get_option('esdm-server-rpc-idle-timeout-usec'))
 
+conf_data.set('ESDM_HAS_AUX_CLIENT', get_option('esdm-aux-client').enabled())
+
 configure_file(output: 'config.h', configuration : conf_data)
