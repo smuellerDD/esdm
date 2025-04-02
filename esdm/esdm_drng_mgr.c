@@ -831,7 +831,9 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 		found_drng = true;
 	}
 
-	if (!found_drng && esdm_drng && esdm_drng[node] && esdm_drng[node]->fully_seeded && mutex_w_trylock(&esdm_drng[node]->lock)) {
+	if (!found_drng && esdm_drng && esdm_drng[node] &&
+	    esdm_drng[node]->fully_seeded &&
+	    mutex_w_trylock(&esdm_drng[node]->lock)) {
 		mutex_w_unlock(&esdm_drng[node]->lock);
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,

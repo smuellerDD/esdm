@@ -844,7 +844,8 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 		/* try in reverse order of probing above for less lock contention */
 		for (j = (int32_t)num_conn - 1; j >= 0; --j) {
 			/* every core probes at another offset */
-			rpc_conn_p = rpc_conn_array + ((uint32_t)j + node) % num_conn;
+			rpc_conn_p = rpc_conn_array +
+				     ((uint32_t)j + node) % num_conn;
 
 			clock_gettime(CLOCK_MONOTONIC, &abstime);
 			// 5ms
