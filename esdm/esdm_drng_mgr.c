@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "build_bug_on.h"
 #include "config.h"
@@ -696,7 +697,13 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng)
 static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			     size_t outbuflen)
 {
+	/* produce max. 128 Byte in pr mode without yielding */
+	const size_t pr_yield_iterations =
+		128 / (esdm_security_strength() >> 3);
+	/* should be greater than 1 for speedup */
+	assert(pr_yield_iterations > 1);
 	ssize_t processed = 0;
+	size_t iterations = 0;
 	bool pr = (drng == &esdm_drng_pr) ? true : false;
 
 	if (!outbuf || !outbuflen)
@@ -723,6 +730,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		uint32_t todo =
 			min_uint32((uint32_t)outbuflen, ESDM_DRNG_MAX_REQSIZE);
 		ssize_t ret;
+
+		iterations++;
 
 		/* In normal operation, check whether to reseed */
 		if (!pr && esdm_drng_must_reseed(drng)) {
@@ -803,7 +812,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		if (pr) {
 			/* Force the async reseed for PR DRNG */
 			esdm_unset_fully_seeded(drng);
-			if (outbuflen)
+			if (outbuflen && iterations % pr_yield_iterations == 0)
 				sched_yield();
 		}
 	}
