@@ -64,7 +64,7 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-E --entropy-level\t\tGet number of accounted bits in internal state\n");
 	fprintf(stderr,
-		"\t-w --wait-until-seeded\t\tRepeatedly check if fully seeded level is reached. Exit afterwards.\n");
+		"\t-w --wait-until-seeded TRIES\tRepeatedly check if fully seeded level is reached and sleep for 1s. Exit afterwards.\n");
 	fprintf(stderr,
 		"\t-W --write-to-aux-pool BYTES\tWrite BYTES to the aux. pool. (needs root)\n");
 	fprintf(stderr,
@@ -184,21 +184,43 @@ static int handle_entropy_level()
 
 static int handle_wait_until_seeded(size_t seed_test_tries)
 {
+	struct timespec sleep_time;
+	bool fully_seeded = false;
+	uint8_t b;
+
 	while (seed_test_tries > 0) {
-		int ret = 0;
-		bool fully_seeded = false;
-		esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
-		if (ret == 0 && fully_seeded) {
-			printf("ESDM is fully seeded!\n");
-			return EXIT_SUCCESS;
+		{
+			int ret;
+
+			esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
+			if (ret == 0 && fully_seeded) {
+				printf("ESDM is fully seeded!\n");
+				return EXIT_SUCCESS;
+			}
 		}
 
-		printf("Waiting another round for ESDM to become fully seeded.\n");
-		struct timespec sleep_time;
-		clock_gettime(CLOCK_MONOTONIC, &sleep_time);
-		sleep_time.tv_sec += 1;
-		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &sleep_time,
-				NULL);
+		printf("%lu: Waiting another round for ESDM to become fully seeded.\n",
+		       seed_test_tries);
+
+		/*
+		 * we have to trigger seeding by fetching bytes,
+		 * if no other tool does it
+		 */
+		{
+			ssize_t ret;
+
+			sleep_time.tv_sec = 1;
+			sleep_time.tv_nsec = 0;
+			esdm_invoke(esdm_rpcc_get_random_bytes_full_timeout(
+				&b, sizeof(b), &sleep_time));
+
+			/*
+			 * we can safely ignore the return value,
+			 * as we will check for fully seeded status nevertheless
+			 */
+		}
+
+		seed_test_tries--;
 	}
 
 	return EXIT_FAILURE;
