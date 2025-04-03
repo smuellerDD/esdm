@@ -64,6 +64,10 @@ else
 	conf_data.set('ESDM_BOTAN', false)
 endif
 
+conf_data.set('ESDM_OPENSSL_DRNG_CTR', get_option('openssl_drng_type') == 'ctr')
+conf_data.set('ESDM_OPENSSL_DRNG_HASH', get_option('openssl_drng_type') == 'hash')
+conf_data.set('ESDM_OPENSSL_DRNG_HMAC', get_option('openssl_drng_type') == 'hmac')
+
 conf_data.set('ESDM_BOTAN_DRNG_CHACHA20', get_option('botan_drng_type') == 'chacha20')
 conf_data.set('ESDM_BOTAN_DRNG_HMAC', get_option('botan_drng_type') == 'hmac')
 

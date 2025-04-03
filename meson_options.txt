@@ -374,6 +374,14 @@ ESDM for the conditioning operation as well as random number generation. Only
 one backend can be enabled.
 ''')
 
+option('openssl_drng_type', type: 'combo', value: 'hash',
+       choices: [ 'ctr', 'hash', 'hmac' ],
+       description: '''Selects the OpenSSL DRNG implementation
+
+In addition to the Hash DRBG, OpenSSL supports a faster CTR DRBG and a more conservative HMAC-DRBG implementation,
+which conforms to SP800-90A. Default to the middle ground option 'hash'.
+''')
+
 option('botan_drng_type', type: 'combo', value: 'hmac',
        choices: [ 'chacha20', 'hmac' ],
        description: '''Selects the botan DRNG implementation
