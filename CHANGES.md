@@ -1,3 +1,20 @@
+Changes 1.2.1-prerelease
+* Reduce lock contention and increase throughput (thanks to Markus Theil)
+
+* Add helper tool to externalize the C API to command line (thanks to Markus Theil)
+
+* Update OpenSSL backend (thanks to Markus Theil)
+
+* Update Botan backend (thanks to Markus Theil)
+
+* Update systemd for SLES / Tumbleweed to prevent shutdown hangs
+
+* Establish AIS20/31 DRG.4 compliance (thanks to Markus Theil)
+
+* Place Linux RNG seeder into its own application to avoid chicken-egg problem inside the ESDM (thanks to Markus Theil)
+
+* NTG.1 updates to comply with AIS 20/31 v3.0
+
 Changes 1.2.0
 * fix: to prevent a DoS against the RPC channel, limit the slow operations of esdm_get_random_bytes_pr and esdm_get_seed to allow only one call in flight. If another call comes in while one process is ongoing, return -EAGAIN to free the RPC channel.
 
