@@ -120,7 +120,7 @@ char *format_time_sec(double time_sec)
 	if (time_sec < 1e-6) {
 		snprintf(buffer, buffer_size, "%.0f ns", time_sec * 1e9);
 	} else if (time_sec < 1e-3) {
-		snprintf(buffer, buffer_size, "%.3f µs", time_sec * 1e6);
+		snprintf(buffer, buffer_size, "%.3f us", time_sec * 1e6);
 	} else if (time_sec < 1) {
 		snprintf(buffer, buffer_size, "%.3f ms", time_sec * 1e3);
 	} else {
