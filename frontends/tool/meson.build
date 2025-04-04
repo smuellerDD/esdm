@@ -11,6 +11,6 @@ esdm_tool = executable(
 		esdm_tool_src,
 		include_directories: [ include_dirs_client, include_dirs_aux_client ],
         dependencies: [ dependencies_client ],
-		link_with:  [ esdm_rpc_client_lib, esdm_aux_client_lib ],
+		link_with:  [ esdm_common_static_lib, esdm_rpc_client_lib ] + (get_option('esdm-aux-client').enabled() ? [esdm_aux_client_lib] : []),
 		install: true
 		)

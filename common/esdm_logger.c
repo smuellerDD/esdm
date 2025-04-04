@@ -58,6 +58,7 @@ static const struct esdm_logger_class_map esdm_logger_class_mapping[] = {
 	{ LOGGER_C_RPC, "RPC" },
 	{ LOGGER_C_SERVER, "ESDM server" },
 	{ LOGGER_C_SEEDER, "Kernel Seeder" },
+	{ LOGGER_C_TOOL, "CLI Tool" },
 };
 
 static void esdm_logger_severity(enum esdm_logger_verbosity severity, char *sev,

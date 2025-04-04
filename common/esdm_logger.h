@@ -49,6 +49,7 @@ enum esdm_logger_class {
 	LOGGER_C_RPC,
 	LOGGER_C_SERVER,
 	LOGGER_C_SEEDER,
+	LOGGER_C_TOOL,
 
 	LOGGER_C_LAST /* This must be last entry */
 };

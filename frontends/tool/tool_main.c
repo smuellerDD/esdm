@@ -19,6 +19,7 @@
 
 #include "tool.h"
 #include "config.h"
+#include "esdm_logger.h"
 
 #include <errno.h>
 #include <esdm_rpc_client.h>
@@ -72,6 +73,10 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-b --benchmark\t\t\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
 	fprintf(stderr,
+		"\t-v --verbose\t\t\tIncrease logging verbosity (can be used multiple times).\n");
+	fprintf(stderr,
+		"\t--use-syslog\t\t\tLog to syslog instead of stdout/stderr.\n");
+	fprintf(stderr,
 		"\t--stress-delay\t\t\tRun single threaded delay measurement\n");
 	fprintf(stderr,
 		"\t--stress-process\t\tRun delay stress test on all cores in processes\n");
@@ -85,6 +90,8 @@ static void handle_usage(void)
 		"\t--reseed-crng\t\t\tReseed the CRNGs for testing (needs root)\n");
 	fprintf(stderr,
 		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
+	fprintf(stderr,
+		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");
 #ifdef ESDM_HAS_AUX_CLIENT
 	fprintf(stderr,
 		"\t--reseed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Automatic reseeding via getentropy/getrandom. (needs root)\n");
@@ -99,9 +106,11 @@ static void handle_status()
 	int ret;
 	esdm_invoke(esdm_rpcc_status(&status_buffer[0], ESDM_RPC_MAX_MSG_SIZE));
 	if (ret != 0) {
-		perror("Fetching ESDM status failed!");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Fetching ESDM status failed!\n");
 	} else {
-		printf("%s", status_buffer);
+		esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Status --\n%s",
+			    status_buffer);
 	}
 }
 
@@ -111,15 +120,17 @@ static int handle_is_fully_seeded()
 	bool fully_seeded = false;
 	esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
 	if (ret != 0) {
-		perror("Fetching ESDM fully seeded status failed!");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Fetching ESDM fully seeded status failed!");
 		return EXIT_FAILURE;
 	}
 
-	printf("ESDM fully seeded: %i\n", (int)fully_seeded);
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "ESDM fully seeded: %i\n",
+		    (int)fully_seeded);
 	return fully_seeded ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static int handle_get_random(size_t num_rand_bytes, bool use_pr)
+static int handle_get_random(size_t num_rand_bytes, bool use_pr, bool raw)
 {
 	size_t bytes_to_fetch = num_rand_bytes;
 	const size_t BUFFER_SIZE = 8192;
@@ -136,16 +147,30 @@ static int handle_get_random(size_t num_rand_bytes, bool use_pr)
 				bytes, chunk_size));
 		}
 		if (ret == (ssize_t)chunk_size) {
-			for (size_t i = 0; i < chunk_size; ++i) {
-				printf("%02hhX", bytes[i]);
+			if (raw) {
+				ret = write(1, bytes, chunk_size);
+				if (ret != (ssize_t)chunk_size) {
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"error writing bytes to stdout\n");
+					return EXIT_FAILURE;
+				}
+			} else {
+				for (size_t i = 0; i < chunk_size; ++i) {
+					/* don't log via esdm_logger to make it directly consumable for other tools */
+					printf("%02hhX", bytes[i]);
+				}
 			}
 		} else {
-			perror("fetching random data failed, exiting");
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "fetching random data failed, exiting\n");
 			return EXIT_FAILURE;
 		}
 		bytes_to_fetch -= chunk_size;
 	}
-	printf("\n");
+	/* don't log via esdm_logger to make it directly consumable for other tools */
+	if (!raw)
+		printf("\n");
 
 	return EXIT_SUCCESS;
 }
@@ -157,11 +182,13 @@ static int handle_entropy_count()
 
 	esdm_invoke(esdm_rpcc_rnd_get_ent_cnt(&ent_cnt));
 	if (ret != 0) {
-		perror("fetching entropy count failed:");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "fetching entropy count failed\n");
 		return EXIT_FAILURE;
 	}
 
-	printf("Entropy count: %u\n", ent_cnt);
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Entropy count: %u\n",
+		    ent_cnt);
 
 	return EXIT_SUCCESS;
 }
@@ -173,11 +200,13 @@ static int handle_entropy_level()
 
 	esdm_invoke(esdm_rpcc_get_ent_lvl(&ent_lvl));
 	if (ret != 0) {
-		perror("fetching entropy level failed:");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "fetching entropy level failed\n");
 		return EXIT_FAILURE;
 	}
 
-	printf("Entropy level: %u\n", ent_lvl);
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Entropy level: %u\n",
+		    ent_lvl);
 
 	return EXIT_SUCCESS;
 }
@@ -195,13 +224,16 @@ static int handle_wait_until_seeded(long seed_test_tries)
 
 			esdm_invoke(esdm_rpcc_is_fully_seeded(&fully_seeded));
 			if (ret == 0 && fully_seeded) {
-				printf("ESDM is fully seeded!\n");
+				esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
+					    "ESDM is fully seeded!\n");
 				return EXIT_SUCCESS;
 			}
 		}
 
-		printf("%lu: Waiting another round for ESDM to become fully seeded.\n",
-		       seed_test_tries);
+		esdm_logger(
+			LOGGER_STATUS, LOGGER_C_TOOL,
+			"%lu: Waiting another round for ESDM to become fully seeded.\n",
+			seed_test_tries);
 
 		/*
 		 * we have to trigger seeding by fetching bytes,
@@ -233,7 +265,8 @@ static int handle_write_to_aux_pool(const char *aux_data,
 				    uint32_t write_entropy_bits)
 {
 	if (geteuid()) {
-		fprintf(stderr, "Program must start as root!\n");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Program must start as root!\n");
 		return EXIT_FAILURE;
 	}
 
@@ -243,7 +276,8 @@ static int handle_write_to_aux_pool(const char *aux_data,
 	esdm_invoke(esdm_rpcc_rnd_add_entropy((const uint8_t *)aux_data, len,
 					      write_entropy_bits));
 	if (ret != 0) {
-		perror("unable to write entropy to aux pool:");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "unable to write entropy to aux pool\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -363,24 +397,30 @@ static int handle_reseed_via_os(void)
 		++wakeups;
 		t1 = format_time_sec(timespec_diff(&start, &after));
 		t2 = format_time_sec(timespec_diff(&before, &after));
-		printf("Wakeup %li after %s: ", wakeups, t1);
 		if (ret == 0) {
-			printf("handling conditional wake after %s", t2);
+			esdm_logger(
+				LOGGER_STATUS, LOGGER_C_TOOL,
+				"Wakeup %li after %s: handling conditional wake after %s\n",
+				wakeups, t1, t2);
 		} else if (ret == -1 && errno == ETIMEDOUT) {
-			printf("handling timeout wake after %s", t2);
+			esdm_logger(
+				LOGGER_STATUS, LOGGER_C_TOOL,
+				"Wakeup %li after %s: handling timeout wake after %s\n",
+				wakeups, t1, t2);
 		} else {
-			printf("failure or signal, exiting!");
+			esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
+				    "failure or signal, exiting!");
 			should_finish = true;
 		}
-		printf("\n");
 		free(t1);
 		free(t2);
 		t1 = NULL;
 		t2 = NULL;
 
 		if (getentropy(reseed_buffer, sizeof(reseed_buffer)) != 0) {
-			fprintf(stderr,
-				"failed to get entropy from OS, exiting.");
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_TOOL,
+				"failed to get entropy from OS, exiting.\n");
 			ret_val = EXIT_FAILURE;
 			goto out_1;
 		}
@@ -389,7 +429,8 @@ static int handle_reseed_via_os(void)
 			reseed_buffer, sizeof(reseed_buffer),
 			sizeof(reseed_buffer) * 8));
 		if (ret != 0) {
-			fprintf(stderr, "reseeding ESDM failed, exiting!");
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "reseeding ESDM failed, exiting!\n");
 			ret_val = EXIT_FAILURE;
 			goto out_1;
 		}
@@ -430,7 +471,11 @@ int main(int argc, char **argv)
 	bool reseed_crng = false;
 	bool use_pr = false;
 	bool reseed_via_os = false;
+	int verbosity = 2;
+	bool use_syslog = false;
 	int return_val = EXIT_SUCCESS;
+	bool raw_bytes = false;
+	int i;
 
 	/*
 	 * parse CLI arguments
@@ -456,9 +501,13 @@ int main(int argc, char **argv)
 			{ "reseed-crng", 0, 0, 0 },
 			{ "use-pr", 0, 0, 0 },
 			{ "reseed-via-os", 0, 0, 0 },
+			{ "verbose", 0, 0, 0 },
+			{ "use-syslog", 0, 0, 0 },
+			{ "raw-bytes", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "sSr:eEhw:W:B:b", opts, &opt_index);
+		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bv", opts,
+				&opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -483,7 +532,10 @@ int main(int argc, char **argv)
 				num_rand_bytes =
 					(size_t)strtol(optarg, NULL, 10);
 				if (errno) {
-					perror("conversion of bytes failed, exiting:");
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of bytes failed, exiting: %s\n",
+						strerror(errno));
 					exit(EXIT_FAILURE);
 				}
 				break;
@@ -501,7 +553,10 @@ int main(int argc, char **argv)
 				errno = 0;
 				seed_test_tries = strtol(optarg, NULL, 10);
 				if (errno) {
-					perror("conversion of seed tries failed, exiting:");
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of seed tries failed, exiting: %s\n",
+						strerror(errno));
 					exit(EXIT_FAILURE);
 				}
 				break;
@@ -519,7 +574,10 @@ int main(int argc, char **argv)
 				write_entropy_bits =
 					(uint32_t)strtol(optarg, NULL, 10);
 				if (errno) {
-					perror("conversion of bytes failed, exiting:");
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of bytes failed, exiting: %s\n",
+						strerror(errno));
 					exit(EXIT_FAILURE);
 				}
 				break;
@@ -559,6 +617,18 @@ int main(int argc, char **argv)
 				/* DO NOT USE IN PRODUCTION: reseed via OS kernel */
 				reseed_via_os = true;
 				break;
+			case 18:
+				/* verbose */
+				verbosity++;
+				break;
+			case 19:
+				/* use-syslog */
+				use_syslog = true;
+				break;
+			case 20:
+				/* raw-bytes */
+				raw_bytes = true;
+				break;
 			}
 			break;
 		case 's':
@@ -575,7 +645,10 @@ int main(int argc, char **argv)
 			errno = 0;
 			num_rand_bytes = (size_t)strtol(optarg, NULL, 10);
 			if (errno) {
-				perror("conversion of bytes failed, exiting:");
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_TOOL,
+					"conversion of bytes failed, exiting: %s\n",
+					strerror(errno));
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -590,7 +663,10 @@ int main(int argc, char **argv)
 			errno = 0;
 			seed_test_tries = strtol(optarg, NULL, 10);
 			if (errno) {
-				perror("conversion of seed tries failed, exiting:");
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_TOOL,
+					"conversion of seed tries failed, exiting: %s\n",
+					strerror(errno));
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -605,21 +681,35 @@ int main(int argc, char **argv)
 			errno = 0;
 			write_entropy_bits = (uint32_t)strtol(optarg, NULL, 10);
 			if (errno) {
-				perror("conversion of bytes failed, exiting:");
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_TOOL,
+					"conversion of bytes failed, exiting: %s\n",
+					strerror(errno));
 				exit(EXIT_FAILURE);
 			}
 			break;
 		case 'b':
 			benchmark = true;
 			break;
+		case 'v':
+			verbosity++;
+			break;
 		}
 	}
+
+	for (i = 0; i < verbosity; ++i) {
+		esdm_logger_inc_verbosity();
+	}
+
+	if (use_syslog)
+		esdm_logger_enable_syslog("esdm-tool");
 
 	/* check for privileged commands */
 	if (geteuid() &&
 	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os)) {
-		fprintf(stderr,
-			"Program must start as root for this command!\n");
+		esdm_logger_inc_verbosity();
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Program must start as root for this command!\n");
 		return_val = EXIT_FAILURE;
 		goto out;
 	}
@@ -640,7 +730,7 @@ int main(int argc, char **argv)
 	} else if (is_fully_seeded) {
 		return_val = handle_is_fully_seeded();
 	} else if (get_random) {
-		handle_get_random(num_rand_bytes, use_pr);
+		handle_get_random(num_rand_bytes, use_pr, raw_bytes);
 	} else if (entropy_count) {
 		return_val = handle_entropy_count();
 	} else if (entropy_level) {
@@ -670,7 +760,8 @@ int main(int argc, char **argv)
 		handle_reseed_via_os();
 #endif
 	} else if (errno) {
-		perror("Unknown mode or error:");
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Unknown mode or error: %s\n", strerror(errno));
 		handle_usage();
 		return_val = EXIT_FAILURE;
 	} else {
