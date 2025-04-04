@@ -288,11 +288,17 @@ static int handle_write_to_aux_pool(const char *aux_data,
 
 static const size_t MAX_BENCHMARK_BUFFER_EXP = 12;
 
-static void do_benchmark_single(bool pr, size_t buffer_size)
+static int do_benchmark_single(bool pr, size_t buffer_size)
 {
 	struct timespec before, after;
 	size_t num_iterations;
 	uint8_t *buffer = malloc(buffer_size);
+
+	if (buffer == NULL) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Failed to allocate buffer, exiting!\n");
+		return EXIT_FAILURE;
+	}
 
 	if (pr) {
 		num_iterations = 20;
@@ -313,6 +319,14 @@ static void do_benchmark_single(bool pr, size_t buffer_size)
 		}
 	}
 
+	if (ret != (ssize_t)buffer_size) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Failed to get bytes from ESDM, exiting!\n");
+		free(buffer);
+		buffer = NULL;
+		return EXIT_FAILURE;
+	}
+
 	clock_gettime(CLOCK_MONOTONIC, &after);
 
 	double duration =
@@ -326,9 +340,12 @@ static void do_benchmark_single(bool pr, size_t buffer_size)
 	       pr, buffer_size, data_rate_kb_s, iteration_rate);
 
 	free(buffer);
+	buffer = NULL;
+
+	return EXIT_SUCCESS;
 }
 
-static void do_benchmark(void)
+static int do_benchmark(void)
 {
 	for (int pr = 0; pr < 2; ++pr) {
 		for (size_t exp = 0; exp < MAX_BENCHMARK_BUFFER_EXP; ++exp) {
@@ -336,9 +353,13 @@ static void do_benchmark(void)
 			 * used for seeding purposes with <= 512 Bit */
 			if (pr && (1 << exp) > 64)
 				continue;
-			do_benchmark_single(pr, 1 << exp);
+			if (do_benchmark_single(pr, 1 << exp) != EXIT_SUCCESS) {
+				return EXIT_FAILURE;
+			}
 		}
 	}
+
+	return EXIT_SUCCESS;
 }
 
 static int handle_clear_pool(void)
@@ -743,7 +764,7 @@ int main(int argc, char **argv)
 		free(aux_data);
 		aux_data = NULL;
 	} else if (benchmark) {
-		do_benchmark();
+		return_val = do_benchmark();
 	} else if (stress_delay) {
 		handle_stress_thread((double)stress_duration_sec, 1);
 	} else if (stress_process) {
