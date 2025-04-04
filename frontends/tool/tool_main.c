@@ -182,13 +182,14 @@ static int handle_entropy_level()
 	return EXIT_SUCCESS;
 }
 
-static int handle_wait_until_seeded(size_t seed_test_tries)
+static int handle_wait_until_seeded(long seed_test_tries)
 {
 	struct timespec sleep_time;
 	bool fully_seeded = false;
 	uint8_t b;
 
-	while (seed_test_tries > 0) {
+	/* run forever with negative argument, stop at 0 with positive argument */
+	while (seed_test_tries != 0) {
 		{
 			int ret;
 
@@ -220,7 +221,9 @@ static int handle_wait_until_seeded(size_t seed_test_tries)
 			 */
 		}
 
-		seed_test_tries--;
+		/* run forever with negative argument */
+		if (seed_test_tries > 0)
+			seed_test_tries--;
 	}
 
 	return EXIT_FAILURE;
@@ -414,7 +417,7 @@ int main(int argc, char **argv)
 	bool entropy_count = false;
 	bool entropy_level = false;
 	bool wait_until_seeded = false;
-	size_t seed_test_tries = 10;
+	long seed_test_tries = 10;
 	bool write_to_aux_pool = false;
 	uint32_t write_entropy_bits = 0;
 	bool benchmark = false;
@@ -496,8 +499,7 @@ int main(int argc, char **argv)
 				/* wait-until-seeded */
 				wait_until_seeded = true;
 				errno = 0;
-				seed_test_tries =
-					(size_t)strtol(optarg, NULL, 10);
+				seed_test_tries = strtol(optarg, NULL, 10);
 				if (errno) {
 					perror("conversion of seed tries failed, exiting:");
 					exit(EXIT_FAILURE);
@@ -586,7 +588,7 @@ int main(int argc, char **argv)
 		case 'w':
 			wait_until_seeded = true;
 			errno = 0;
-			seed_test_tries = (size_t)strtol(optarg, NULL, 10);
+			seed_test_tries = strtol(optarg, NULL, 10);
 			if (errno) {
 				perror("conversion of seed tries failed, exiting:");
 				exit(EXIT_FAILURE);
