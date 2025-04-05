@@ -94,6 +94,8 @@ static void handle_usage(void)
 		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");
 #ifdef ESDM_HAS_AUX_CLIENT
 	fprintf(stderr,
+		"\t--seed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Single shot seeding via getentropy/getrandom. (needs root)\n");
+	fprintf(stderr,
 		"\t--reseed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Automatic reseeding via getentropy/getrandom. (needs root)\n");
 	fprintf(stderr,
 		"\t--reseed-delay-ms\t\t\tDO NOT USE IN PRODUCTION: Set delay before each reseed to ESDM from OS. Can be used to emulate effects of smartcards or TPMs.\n");
@@ -387,6 +389,44 @@ static int handle_reseed_crng(void)
 }
 
 #ifdef ESDM_HAS_AUX_CLIENT
+static int handle_seed_via_os()
+{
+	uint8_t seed_buffer[512 / 8];
+	int ret_val = EXIT_SUCCESS;
+	int ret;
+
+	if (esdm_rpcc_init_priv_service(NULL) != 0) {
+		ret_val = EXIT_FAILURE;
+		goto out_ret;
+	}
+
+	if (getentropy(seed_buffer, sizeof(seed_buffer)) != 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "failed to get entropy from OS, exiting.\n");
+		ret_val = EXIT_FAILURE;
+		goto out_1;
+	}
+
+	esdm_invoke(esdm_rpcc_rnd_add_entropy(seed_buffer, sizeof(seed_buffer),
+					      sizeof(seed_buffer) * 8));
+	if (ret != 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "seeding ESDM failed, exiting!\n");
+		ret_val = EXIT_FAILURE;
+		goto out_1;
+	}
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_TOOL,
+		"Inserted %li byte into ESDM, accounted with %li bit of entropy\n",
+		sizeof(seed_buffer), sizeof(seed_buffer) * 8);
+
+out_1:
+	esdm_rpcc_fini_priv_service();
+
+out_ret:
+	return ret_val;
+}
+
 static int handle_reseed_via_os(long reseed_delay_ms)
 {
 	const uint32_t timeout_secs = 100;
@@ -468,6 +508,10 @@ static int handle_reseed_via_os(long reseed_delay_ms)
 			ret_val = EXIT_FAILURE;
 			goto out_1;
 		}
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_TOOL,
+			"Inserted %li byte into ESDM, accounted with %li bit of entropy\n",
+			sizeof(reseed_buffer), sizeof(reseed_buffer) * 8);
 	}
 
 out_1:
@@ -504,6 +548,7 @@ int main(int argc, char **argv)
 	bool clear_pool = false;
 	bool reseed_crng = false;
 	bool use_pr = false;
+	bool seed_via_os = false;
 	bool reseed_via_os = false;
 	int verbosity = 2;
 	bool use_syslog = false;
@@ -541,6 +586,7 @@ int main(int argc, char **argv)
 			{ "use-syslog", 0, 0, 0 },
 			{ "raw-bytes", 0, 0, 0 },
 			{ "reseed-delay-ms", 1, 0, 0 },
+			{ "seed-via-os", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bv", opts,
@@ -670,6 +716,10 @@ int main(int argc, char **argv)
 				/* reseed-delay-ms */
 				reseed_delay_ms = strtol(optarg, NULL, 10);
 				break;
+			case 22:
+				/* seed-via-os */
+				seed_via_os = true;
+				break;
 			}
 			break;
 		case 's':
@@ -746,8 +796,8 @@ int main(int argc, char **argv)
 		esdm_logger_enable_syslog("esdm-tool");
 
 	/* check for privileged commands */
-	if (geteuid() &&
-	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os)) {
+	if (geteuid() && (write_to_aux_pool || clear_pool || reseed_crng ||
+			  reseed_via_os || seed_via_os)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -798,7 +848,9 @@ int main(int argc, char **argv)
 		return_val = handle_reseed_crng();
 #ifdef ESDM_HAS_AUX_CLIENT
 	} else if (reseed_via_os) {
-		handle_reseed_via_os(reseed_delay_ms);
+		return_val = handle_reseed_via_os(reseed_delay_ms);
+	} else if (seed_via_os) {
+		return_val = handle_seed_via_os();
 #endif
 	} else if (errno) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
