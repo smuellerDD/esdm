@@ -95,6 +95,8 @@ static void handle_usage(void)
 #ifdef ESDM_HAS_AUX_CLIENT
 	fprintf(stderr,
 		"\t--reseed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Automatic reseeding via getentropy/getrandom. (needs root)\n");
+	fprintf(stderr,
+		"\t--reseed-delay-ms\t\t\tDO NOT USE IN PRODUCTION: Set delay before each reseed to ESDM from OS. Can be used to emulate effects of smartcards or TPMs.\n");
 #endif
 }
 
@@ -385,7 +387,7 @@ static int handle_reseed_crng(void)
 }
 
 #ifdef ESDM_HAS_AUX_CLIENT
-static int handle_reseed_via_os(void)
+static int handle_reseed_via_os(long reseed_delay_ms)
 {
 	const uint32_t timeout_secs = 100;
 	struct timespec start, wait, before, after;
@@ -446,6 +448,17 @@ static int handle_reseed_via_os(void)
 			goto out_1;
 		}
 
+		if (reseed_delay_ms > 0) {
+			ret = usleep((unsigned int)reseed_delay_ms * 1000);
+			if (ret != 0 && errno == EINVAL) {
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_TOOL,
+					"Invalid sleep timeout for reseed delay ms: %li, exiting!\n",
+					reseed_delay_ms) ret_val = EXIT_FAILURE;
+				goto out_1;
+			}
+		}
+
 		esdm_invoke(esdm_rpcc_rnd_add_entropy(
 			reseed_buffer, sizeof(reseed_buffer),
 			sizeof(reseed_buffer) * 8));
@@ -495,6 +508,8 @@ int main(int argc, char **argv)
 	int verbosity = 2;
 	bool use_syslog = false;
 	int return_val = EXIT_SUCCESS;
+	/* can be used to simulate smartcards/TPMs in "--reseed-via-os" mode */
+	long reseed_delay_ms = -1;
 	bool raw_bytes = false;
 	int i;
 
@@ -525,6 +540,7 @@ int main(int argc, char **argv)
 			{ "verbose", 0, 0, 0 },
 			{ "use-syslog", 0, 0, 0 },
 			{ "raw-bytes", 0, 0, 0 },
+			{ "reseed-delay-ms", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bv", opts,
@@ -649,6 +665,10 @@ int main(int argc, char **argv)
 			case 20:
 				/* raw-bytes */
 				raw_bytes = true;
+				break;
+			case 21:
+				/* reseed-delay-ms */
+				reseed_delay_ms = strtol(optarg, NULL, 10);
 				break;
 			}
 			break;
@@ -778,7 +798,7 @@ int main(int argc, char **argv)
 		return_val = handle_reseed_crng();
 #ifdef ESDM_HAS_AUX_CLIENT
 	} else if (reseed_via_os) {
-		handle_reseed_via_os();
+		handle_reseed_via_os(reseed_delay_ms);
 #endif
 	} else if (errno) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
