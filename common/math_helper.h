@@ -24,24 +24,40 @@
 extern "C" {
 #endif
 
+/* prevents double evaluation */
+#define min(a, b)                                                              \
+	__extension__({                                                        \
+		__typeof__(a) _a = (a);                                        \
+		__typeof__(b) _b = (b);                                        \
+		_a < _b ? _a : _b;                                             \
+	})
+
+#define max(a, b)                                                              \
+	__extension__({                                                        \
+		__typeof__(a) _a = (a);                                        \
+		__typeof__(b) _b = (b);                                        \
+		_a > _b ? _a : _b;                                             \
+	})
+
+
 static inline uint32_t min_uint32(uint32_t a, uint32_t b)
 {
-	return a < b ? a : b;
+	return min(a, b);
 }
 
 static inline uint64_t min_uint64(uint64_t a, uint64_t b)
 {
-	return a < b ? a : b;
+	return min(a, b);
 }
 
 static inline size_t min_size(size_t a, size_t b)
 {
-	return a < b ? a : b;
+	return min(a, b);
 }
 
 static inline uint32_t max_uint32(uint32_t a, uint32_t b)
 {
-	return a > b ? a : b;
+	return max(a, b);
 }
 
 #ifdef __cplusplus
