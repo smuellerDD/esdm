@@ -113,6 +113,12 @@ double timespec_diff(const struct timespec *start, const struct timespec *end)
 	       ((double)end->tv_nsec - (double)start->tv_nsec) / 1E9;
 }
 
+long timespec_diff_ns(const struct timespec *start, const struct timespec *end)
+{
+	return (end->tv_sec - start->tv_sec) * 1000000000 +
+	       (end->tv_nsec - start->tv_nsec);
+}
+
 char *format_time_sec(double time_sec)
 {
 	const size_t buffer_size = 32;
