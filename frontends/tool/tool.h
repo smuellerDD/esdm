@@ -39,6 +39,8 @@ struct test_msg {
 
 extern double timespec_diff(const struct timespec *start,
 			    const struct timespec *end);
+extern long timespec_diff_ns(const struct timespec *start,
+			     const struct timespec *end);
 extern char *format_time_sec(double time_sec);
 
 extern void handle_stress_delay_one_core(double timeout_sec, long id,

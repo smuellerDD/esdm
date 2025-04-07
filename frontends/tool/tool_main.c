@@ -217,6 +217,7 @@ static int handle_entropy_level()
 
 static int handle_wait_until_seeded(long seed_test_tries)
 {
+	struct timespec before, after;
 	struct timespec sleep_time;
 	bool fully_seeded = false;
 	uint8_t b;
@@ -244,17 +245,24 @@ static int handle_wait_until_seeded(long seed_test_tries)
 		 * if no other tool does it
 		 */
 		{
+			long sleep_diff_ns;
 			ssize_t ret;
 
 			sleep_time.tv_sec = 1;
 			sleep_time.tv_nsec = 0;
+			clock_gettime(CLOCK_MONOTONIC, &before);
 			esdm_invoke(esdm_rpcc_get_random_bytes_full_timeout(
 				&b, sizeof(b), &sleep_time));
+			clock_gettime(CLOCK_MONOTONIC, &after);
 
-			/*
-			 * we can safely ignore the return value,
-			 * as we will check for fully seeded status nevertheless
-			 */
+			sleep_diff_ns = timespec_diff_ns(&before, &after);
+			/* test if we slept less than 0.95s */
+			if (ret != sizeof(b) && sleep_diff_ns < 950000000) {
+				sleep_time.tv_sec = 0;
+				sleep_time.tv_nsec = 1000000000 - sleep_diff_ns;
+				clock_nanosleep(CLOCK_MONOTONIC, 0, &sleep_time,
+						NULL);
+			}
 		}
 
 		/* run forever with negative argument */
