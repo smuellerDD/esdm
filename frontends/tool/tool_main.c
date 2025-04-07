@@ -20,6 +20,7 @@
 #include "tool.h"
 #include "config.h"
 #include "esdm_logger.h"
+#include "math_helper.h"
 
 #include <errno.h>
 #include <esdm_rpc_client.h>
@@ -37,13 +38,6 @@
 
 #define xstr(s) str(s)
 #define str(s) #s
-
-#define min(a, b)                                                              \
-	__extension__({                                                        \
-		__typeof__(a) _a = (a);                                        \
-		__typeof__(b) _b = (b);                                        \
-		_a < _b ? _a : _b;                                             \
-	})
 
 /*
  * Commands
@@ -141,7 +135,7 @@ static int handle_get_random(size_t num_rand_bytes, bool use_pr, bool raw)
 	uint8_t bytes[BUFFER_SIZE];
 	ssize_t ret = 0;
 	while (bytes_to_fetch > 0) {
-		size_t chunk_size = min(BUFFER_SIZE, bytes_to_fetch);
+		size_t chunk_size = min_size(BUFFER_SIZE, bytes_to_fetch);
 		ret = 0;
 		if (use_pr) {
 			esdm_invoke(esdm_rpcc_get_random_bytes_pr(bytes,
