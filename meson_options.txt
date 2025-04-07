@@ -339,6 +339,42 @@ option('drng_max_reseed_bits', type: 'integer', value: 0xffffffff,
        setting see the description of 'drng_reseed_threshold_bits'.
        ''')
 
+# Enable entropy buffering aux source mode
+option('multi-block-aux', type: 'feature', value: 'disabled',
+       description: '''Enable support for another version of the aux source.
+
+       CAUTION: THE CODE OF THIS SOURCE NEEDS FURTHER ANALYSIS AND IS
+                DISABLED BY DEFAULT. ONLY ENABLE AFTER TALKING TO A
+                CRYPTOGRAPHIC AUTHORITY AND BEEING ABSOLUTELY SURE,
+                WHAT YOU ARE DOING!!!
+
+       The default aux source contains a hash state and therefore can hold
+       up to hash digestsize bits of entropy.
+
+       Some use cases which only use the aux source together with the drng
+       reseed limits for DRG.4, this leads to out of entropy situations already
+       at low rates. Lowering the drng_reseed_threshold_bits value was also
+       found to be not helpful here.
+
+       The multi block aux source uses an array of hash digests, which gets
+       mixed on every input and output via left-over hashing. It can accumulate
+       more entropy and therefore can raise the limit until the external entropy
+       source (like a smartcard or TPM 2.0) is too slow, to reseed the DRG.4 in
+       a timely manner.
+''')
+
+option('multi-block-aux-factor', type: 'integer', value: 4,
+       description: '''Multi-Block Aux. ES block number multiplier
+
+       CAUTION: THE CODE OF THIS SOURCE NEEDS FURTHER ANALYSIS AND IS
+                DISABLED BY DEFAULT. ONLY ENABLE AFTER TALKING TO A
+                CRYPTOGRAPHIC AUTHORITY AND BEEING ABSOLUTELY SURE,
+                WHAT YOU ARE DOING!!!
+
+       By default number of online CPUs + 2 blocks are allocated.
+       The number is than stretched further multiplying with this factor.
+''')
+
 ################################################################################
 # Cryptographic backends configuration
 ################################################################################

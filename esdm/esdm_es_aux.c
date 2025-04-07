@@ -35,6 +35,10 @@
 #include "ret_checkers.h"
 #include "visibility.h"
 
+#ifdef ESDM_HAS_AUX_MULTI_BLOCK
+#error "Config error, multi block auxiliary source enabled and single block code compiled in!"
+#endif
+
 /*
  * This is the auxiliary pool
  *

@@ -431,7 +431,11 @@ static int handle_reseed_via_os(long reseed_delay_ms)
 {
 	const uint32_t timeout_secs = 100;
 	struct timespec start, wait, before, after;
+#ifdef ESDM_HAS_AUX_MULTI_BLOCK
+	uint8_t reseed_buffer[200];
+#else
 	uint8_t reseed_buffer[512 / 8];
+#endif
 	int ret_val = EXIT_SUCCESS;
 	bool should_finish = false;
 	uint64_t wakeups = 0;

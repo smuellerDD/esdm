@@ -2,7 +2,6 @@
 esdm_src = files([
 	'esdm_config.c',
 	'esdm_drng_mgr.c',
-	'esdm_es_aux.c',
 	'esdm_es_mgr.c',
 	'esdm_info.c',
 	'esdm_interface_dev_common.c',
@@ -44,6 +43,12 @@ endif
 
 if get_option('node').enabled()
 	esdm_src += files('esdm_node.c')
+endif
+
+if get_option('multi-block-aux').enabled()
+	esdm_src += files('esdm_es_aux_multi_block.c')
+else
+	esdm_src += files('esdm_es_aux.c')
 endif
 
 if get_option('fips140')
