@@ -294,6 +294,9 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 	 */
 	esdm_shm_status_set_need_entropy();
 
+	/* notify others about newly added entropy */
+	esdm_es_add_entropy();
+
 	return ret;
 }
 
