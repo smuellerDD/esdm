@@ -339,6 +339,11 @@ option('drng_max_reseed_bits', type: 'integer', value: 0xffffffff,
        setting see the description of 'drng_reseed_threshold_bits'.
        ''')
 
+option('num-aux-pools', type: 'integer', value: 1, min: 1, max: 1024,
+       description: '''Increases the number of aux pools in order to be more robust
+       on seed bursts.
+       ''')
+
 ################################################################################
 # Cryptographic backends configuration
 ################################################################################
