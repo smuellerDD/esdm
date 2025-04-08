@@ -88,7 +88,7 @@
  * This value is allowed to be changed but must not be larger than the
  * digest size of the hash operation used update the aux_pool.
  */
-#define ESDM_WRITE_WAKEUP_ENTROPY SHA512_DIGEST_SIZE
+#define ESDM_WRITE_WAKEUP_ENTROPY (ESDM_NUM_AUX_POOLS * SHA512_DIGEST_SIZE)
 
 /*
  * Define the digest size for the conditioning components

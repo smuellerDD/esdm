@@ -151,4 +151,6 @@ conf_data.set('ESDM_RPC_IDLE_TIMEOUT_USEC', get_option('esdm-server-rpc-idle-tim
 
 conf_data.set('ESDM_HAS_AUX_CLIENT', get_option('esdm-aux-client').enabled())
 
+conf_data.set('ESDM_NUM_AUX_POOLS', get_option('num-aux-pools'))
+
 configure_file(output: 'config.h', configuration : conf_data)
