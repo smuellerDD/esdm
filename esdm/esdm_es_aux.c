@@ -19,7 +19,6 @@
  * DAMAGE.
  */
 
-#include "esdm_definitions.h"
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
@@ -30,6 +29,7 @@
 #include "build_bug_on.h"
 #include "esdm.h"
 #include "esdm_crypto.h"
+#include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "esdm_shm_status.h"
@@ -53,34 +53,33 @@ struct esdm_pool {
 	/* Aux pool: digest state */
 	void *aux_pool;
 
+	/* Serialize read of entropy pool and update of aux pool */
+	mutex_w_t lock;
+
 	/* tracks entropy estimate in this pool */
 	atomic_t aux_entropy_bits;
 
 	/* Digest size of used hash */
 	atomic_t digestsize;
 
+	/* used for domain separation of inputs inserted into multiple pools */
+	uint16_t idx;
+
 	/* Aux pool initialized? */
 	bool initialized;
-
-	/* used for domain separation of inputs inserted into multiple pools */
-	uint32_t idx;
-
-	/* Serialize read of entropy pool and update of aux pool */
-	mutex_w_t lock;
 } __aligned(ESDM_KCAPI_ALIGN);
 
 /*
- * global array of pools, use constant number of members
+ * Global array of pools, use constant number of members
  * such that compiler optimizations can take place
  * e.g. eliminate loops, when only one pool is used.
  */
-static struct esdm_pool esdm_pools[ESDM_NUM_AUX_POOLS];
+static struct esdm_pool esdm_pools[ESDM_NUM_AUX_POOLS] = { 0 };
 
 /********************************** Helper ***********************************/
 
 /* Entropy in bits present in aux pool */
-static uint32_t esdm_aux_avail_entropy_pool(struct esdm_pool *pool,
-					    uint32_t __unused u)
+static uint32_t esdm_aux_avail_entropy_pool(struct esdm_pool *pool)
 {
 	/* Cap available entropy with max entropy */
 	uint32_t avail_bits =
@@ -91,14 +90,13 @@ static uint32_t esdm_aux_avail_entropy_pool(struct esdm_pool *pool,
 	return esdm_reduce_by_osr(avail_bits);
 }
 
-static uint32_t esdm_aux_avail_entropy(uint32_t u)
+static uint32_t esdm_aux_avail_entropy(uint32_t __unused u)
 {
-	uint32_t avail_bits = 0;
 	size_t i;
+	uint32_t avail_bits = 0;
 
-	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
-		avail_bits += esdm_aux_avail_entropy_pool(&esdm_pools[i], u);
-	}
+	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i)
+		avail_bits += esdm_aux_avail_entropy_pool(&esdm_pools[i]);
 
 	return avail_bits;
 }
@@ -143,9 +141,8 @@ static void esdm_set_digestsize(uint32_t digestsize)
 {
 	size_t i;
 
-	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
+	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i)
 		esdm_set_digestsize_pool(&esdm_pools[i], digestsize);
-	}
 
 	esdm_set_wakeup_bits();
 }
@@ -169,24 +166,27 @@ out:
 
 static int esdm_aux_init(void)
 {
+	uint16_t i;
 	int ret = 0;
-	size_t i;
 
 	/* Sanity check for at least one pool */
 	BUILD_BUG_ON(ESDM_NUM_AUX_POOLS <= 0);
 
-	/* need to do this here, because no direct struct initializer is possible */
-	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
-		struct esdm_pool tmp = {
-			.aux_pool = NULL,
-			.aux_entropy_bits = ATOMIC_INIT(0),
-			.digestsize = ATOMIC_INIT(ESDM_MAX_DIGESTSIZE),
-			.initialized = false,
-			.lock = MUTEX_W_UNLOCKED,
-			.idx = i,
-		};
-		memcpy(&esdm_pools[i], &tmp, sizeof(struct esdm_pool));
-		memset_secure(&tmp, 0, sizeof(struct esdm_pool));
+	/* Sanity check to not overflow the idx variable */
+	BUILD_BUG_ON(ESDM_NUM_AUX_POOLS >
+		     (1 << (sizeof(esdm_pools[0].idx) << 3)) - 1);
+
+	/*
+	 * Initialize the member variables of the pool as we cannot do that
+	 * during compile time.
+	 */
+	for (i = 0; i < (uint16_t)ESDM_NUM_AUX_POOLS; ++i) {
+		esdm_pools[i].aux_pool = NULL;
+		atomic_set(&esdm_pools[i].aux_entropy_bits, 0);
+		atomic_set(&esdm_pools[i].digestsize, ESDM_MAX_DIGESTSIZE);
+		esdm_pools[i].initialized = false;
+		mutex_w_init(&esdm_pools[i].lock, 0, 0);
+		esdm_pools[i].idx = i;
 		esdm_aux_init_pool(&esdm_pools[i]);
 	}
 
@@ -253,7 +253,7 @@ void esdm_pool_set_entropy(uint32_t entropy_bits)
 	 * this interface can only influence the first pool
 	 * slot for security reasons, when entropy_bits > 0
 	 *
-	 * it can nevertheless reset all to zero
+	 * it can nevertheless reset all pools to zero
 	 */
 	for (i = 0; i < ESDM_NUM_AUX_POOLS; i++) {
 		esdm_pool_set_entropy_pool(&esdm_pools[i], entropy_bits);
@@ -283,7 +283,7 @@ static void esdm_aux_reset(void)
  * entire operation (e.g. it must hold the write lock against pointer updating).
  */
 static int esdm_aux_switch_hash_pool(struct esdm_pool *pool,
-				     struct esdm_drng *drng, int __unused u,
+				     struct esdm_drng *drng,
 				     const struct esdm_hash_cb *new_cb,
 				     const struct esdm_hash_cb *old_cb)
 {
@@ -342,7 +342,7 @@ static int esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
 		return 0;
 
 	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
-		CKINT(esdm_aux_switch_hash_pool(&esdm_pools[i], drng, u, new_cb,
+		CKINT(esdm_aux_switch_hash_pool(&esdm_pools[i], drng, new_cb,
 						old_cb));
 	}
 
@@ -364,26 +364,30 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	const struct esdm_hash_cb *hash_cb;
 	int ret;
 
+	/* There can never be more entropy than the size of the input buffer. */
 	entropy_bits = min_uint32(entropy_bits, (uint32_t)(inbuflen << 3));
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
 
 	if (!pool->initialized) {
-		ret = hash_cb->hash_init(shash);
-		if (ret)
-			goto out;
+		CKINT(hash_cb->hash_init(shash));
 		pool->initialized = true;
 	}
 
-	ret = hash_cb->hash_update(shash, (const uint8_t *)&pool->idx,
-				   sizeof(pool->idx));
-	if (ret)
-		goto out;
+	/*
+	 * Domain separation between pools: insert the index of the pool to
+	 * prevent any chance of identical states of the pool if the caller
+	 * might insert the same data into the pool.
+	 *
+	 * This implies that the actual data inserted into a pool is alway
+	 * idx || inbuf.
+	 */
+	CKINT(hash_cb->hash_update(shash, (const uint8_t *)&pool->idx,
+				   sizeof(pool->idx)));
 
-	ret = hash_cb->hash_update(shash, inbuf, inbuflen);
-	if (ret)
-		goto out;
+	/* Insert the actual data with or without entropy into the pool */
+	CKINT(hash_cb->hash_update(shash, inbuf, inbuflen));
 
 	/*
 	 * Cap the available entropy to the hash output size compliant to
@@ -399,48 +403,94 @@ out:
 	return ret;
 }
 
+static int esdm_pool_insert_aux_unlocked(struct esdm_pool *pool,
+					 const uint8_t *inbuf, size_t inbuflen,
+					 uint32_t entropy_bits)
+{
+	int ret;
+
+	mutex_w_lock(&pool->lock);
+	ret = esdm_aux_pool_insert_locked(pool, inbuf, inbuflen, entropy_bits);
+	mutex_w_unlock(&pool->lock);
+
+	return ret;
+}
+
 DSO_PUBLIC
 int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 			 uint32_t entropy_bits)
 {
-	uint32_t todo;
-	size_t i;
+	size_t i, pool_with_max_entropy_capacity = 0;
+	uint32_t max_entropy_capacity = 0;
 	int ret;
 
 	/*
-	 * as of now, we don't do multi pool updates for security
-	 * cap entropy to single buffer
+	 * Shortcut: if there is no entropy in the provided data, mix it into
+	 * all pools just to stir all of them.
+	 */
+	if (!entropy_bits) {
+		for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
+			CKINT(esdm_pool_insert_aux_unlocked(&esdm_pools[i],
+							    inbuf, inbuflen,
+							    entropy_bits));
+		}
+
+		/*
+		 * Return without any notifications as we did not add entropy or
+		 * change the entropy level.
+		 */
+		return 0;
+	}
+
+	/*
+	 * As of now, we don't do multi pool updates for security reasons, and
+	 * thus cap entropy to single pool capacity.
 	 */
 	if (entropy_bits > esdm_get_digestsize())
 		entropy_bits = esdm_get_digestsize();
 
-	/* only use exactly one slot */
+	/*
+	 * Now we want to find the pool to insert the entropy in. The applied
+	 * strategy is to find the pool that has the maximum amount of capacity
+	 * of yet unused entropy space or the pool that has sufficient capacity
+	 * to take our entropy.
+	 *
+	 * This approach shall ensure that we can store as much entropy of our
+	 * input block as possible.
+	 *
+	 * If all pools are full and do not have any capacity, the first pool
+	 * will receive the data.
+	 *
+	 * This strategy implies that we only insert the data into one pool
+	 * only. This may be considered inefficient (e.g. it may be nice to
+	 * spread the entropy over multiple pools if none of the existing pools
+	 * can take all entropy). But we deliberately do not apply this approach
+	 * as implementing it correctly without loosing entropy is not trivial.
+	 */
 	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
-		todo = min_uint32(
+		uint32_t unused_ent =
 			esdm_get_digestsize() -
-				esdm_aux_avail_entropy_pool(&esdm_pools[i], 0),
-			entropy_bits);
-		/*
-		 * Cases:
-		 * 1) no entropy level set -> always use first pool
-		 * 2) found non-full slot -> insert and break
-		 * 3) reached last slot -> insert, regardless of need
-		 */
-		if (entropy_bits == 0 || todo > 0 ||
-		    i == ESDM_NUM_AUX_POOLS - 1) {
-			mutex_w_lock(&esdm_pools[i].lock);
-			ret = esdm_aux_pool_insert_locked(
-				&esdm_pools[i], inbuf, inbuflen, entropy_bits);
-			mutex_w_unlock(&esdm_pools[i].lock);
+			esdm_aux_avail_entropy_pool(&esdm_pools[i]);
 
-			/*
-			 * mix entropy with zero bits into all pools for achieving
-			 * backtracking resistance
-			 */
-			if (entropy_bits != 0)
-				break;
+		/* Find the pool with the maximum capacity. */
+		if (max_entropy_capacity < unused_ent) {
+			max_entropy_capacity = unused_ent;
+			pool_with_max_entropy_capacity = i;
 		}
+
+		/* We found the pool that can already take all our entropy. */
+		if (entropy_bits < unused_ent)
+			break;
 	}
+
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "Aux Pool %zu selected to insert data\n",
+		    pool_with_max_entropy_capacity);
+
+	/* Insert the buffer with the entropy into the selected entropy pool. */
+	CKINT(esdm_pool_insert_aux_unlocked(
+		&esdm_pools[pool_with_max_entropy_capacity], inbuf, inbuflen,
+		entropy_bits));
 
 	/*
 	 * As the DRNG is newly seeded, maybe the need entropy flag can be
@@ -451,6 +501,7 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 	/* notify others about newly added entropy */
 	esdm_es_add_entropy();
 
+out:
 	return ret;
 }
 
@@ -539,41 +590,60 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 				   uint32_t requested_bits, bool __unused u)
 {
-	size_t i;
+	size_t i, pool_with_max_entropy = 0;
+	uint32_t max_entropy = 0;
 
+	/*
+	 * Now we want to find the pool to extract the entropy from. The applied
+	 * strategy is to find the pool that has the maximum amount of entropy
+	 * or the pool that has sufficient entropy to satisfy the request.
+	 *
+	 * Yet, we are only pulling data from one entropy pool (and do not)
+	 * compress the data from multiple pools to satisfy the requested
+	 * entropy. This approach currently is taken for efficiency reasons, but
+	 * can easily be revised in the future.
+	 *
+	 * If all pools are empty and do not have any entropy, the first pool
+	 * will be used for the request and let the actual extraction function
+	 * handle the situation where there is no entropy.
+	 */
 	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
-		/* 
-		 * skip pools with too small entropy level, always use at least the last one
-		 * (i+1) is only there to make compilers not complain, when ESDM_NUM_AUX_POOLS=1
-		 */
-		bool may_skip =
-			ESDM_NUM_AUX_POOLS > 1 && (i + 1) < ESDM_NUM_AUX_POOLS;
-		uint32_t ent_avail =
-			esdm_aux_avail_entropy_pool(&esdm_pools[i], 0);
+		uint32_t avail_ent =
+			esdm_aux_avail_entropy_pool(&esdm_pools[i]);
 
-		if (may_skip && ent_avail < requested_bits) {
-			continue;
+		/* Find the maximum entropy */
+		if (max_entropy < avail_ent) {
+			max_entropy = avail_ent;
+			pool_with_max_entropy = i;
 		}
 
-		/* Ensure aux pool extraction and backtracking op are atomic */
-		mutex_w_lock(&esdm_pools[i].lock);
-
-		eb_es->e_bits = esdm_aux_get_pool(&esdm_pools[i], eb_es->e,
-						  requested_bits);
-
-		/* Mix the extracted data back into pool for backtracking resistance */
-		if (esdm_aux_pool_insert_locked(&esdm_pools[i],
-						(uint8_t *)eb_es,
-						sizeof(struct entropy_es), 0))
-			esdm_logger(
-				LOGGER_WARN, LOGGER_C_ES,
-				"Backtracking resistance operation failed\n");
-
-		mutex_w_unlock(&esdm_pools[i].lock);
-
-		/* only extract from one pool */
-		break;
+		/*
+		 * We found the pool that can already provide all our entropy
+		 * needs (including the discount for the OSR), take it.
+		 */
+		if (requested_bits + esdm_compress_osr() < max_entropy)
+			break;
 	}
+
+	/* Now we have the pool that we want to extract data from. */
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "Aux Pool %zu selected to obtain data\n",
+		    pool_with_max_entropy);
+
+	/* Ensure aux pool extraction and backtracking op are atomic */
+	mutex_w_lock(&esdm_pools[pool_with_max_entropy].lock);
+
+	eb_es->e_bits = esdm_aux_get_pool(&esdm_pools[pool_with_max_entropy],
+					  eb_es->e, requested_bits);
+
+	/* Mix the extracted data back into pool for backtracking resistance */
+	if (esdm_aux_pool_insert_locked(&esdm_pools[pool_with_max_entropy],
+					(uint8_t *)eb_es,
+					sizeof(struct entropy_es), 0))
+		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
+			    "Backtracking resistance operation failed\n");
+
+	mutex_w_unlock(&esdm_pools[pool_with_max_entropy].lock);
 }
 
 static uint32_t esdm_aux_max_entropy(void)
