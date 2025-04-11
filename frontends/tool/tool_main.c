@@ -24,6 +24,7 @@
 
 #include <errno.h>
 #include <esdm_rpc_client.h>
+#include <esdm_rpc_service.h>
 #ifdef ESDM_HAS_AUX_CLIENT
 #include <esdm_aux_client.h>
 #endif
@@ -35,9 +36,18 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #define xstr(s) str(s)
 #define str(s) #s
+
+enum RANDOM_MODE {
+	RAND_MODE_NONE = 0,
+	RAND_MODE_MIN,
+	RAND_MODE_FULL,
+	RAND_MODE_FULL_TIMEOUT,
+	RAND_MODE_PR,
+};
 
 /*
  * Commands
@@ -69,6 +79,8 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-v --verbose\t\t\tIncrease logging verbosity (can be used multiple times).\n");
 	fprintf(stderr,
+		"\t-V --decrease-verbosity\t\tDecrease logging verbosity (can be used multiple times).\n");
+	fprintf(stderr,
 		"\t--use-syslog\t\t\tLog to syslog instead of stdout/stderr.\n");
 	fprintf(stderr,
 		"\t--stress-delay\t\t\tRun single threaded delay measurement\n");
@@ -86,19 +98,32 @@ static void handle_usage(void)
 		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
 	fprintf(stderr,
 		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");
+	fprintf(stderr,
+		"\t--min-seeded\t\t\tUse get-random in minimal seeded mode.\n");
+	fprintf(stderr,
+		"\t--timeout-msec MSEC\t\tUse get-random in timeout mode.\n");
+	fprintf(stderr,
+		"\t--allow-unseeded\t\tUse get-random or get_seed in allowed not fully seeded mode.\n");
+	fprintf(stderr,
+		"\t--is-running\t\t\tCheck if esdm-server is running\n");
+	fprintf(stderr,
+		"\t--get-seed\t\t\tPerform a get seed operation. Use with --raw-bytes to get raw output instead of hex.\n");
+	fprintf(stderr,
+		"\t--endless-stress\t\tPerform another stress test. esdm-server can be stopped and started if used together with --continue-on-failure\n");
+	fprintf(stderr,
+		"\t--continue-on-failure\t\tContinue in some tests, after failures happened.\n");
 #ifdef ESDM_HAS_AUX_CLIENT
 	fprintf(stderr,
 		"\t--seed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Single shot seeding via getentropy/getrandom. (needs root)\n");
 	fprintf(stderr,
 		"\t--reseed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Automatic reseeding via getentropy/getrandom. (needs root)\n");
 	fprintf(stderr,
-		"\t--reseed-delay-ms\t\t\tDO NOT USE IN PRODUCTION: Set delay before each reseed to ESDM from OS. Can be used to emulate effects of smartcards or TPMs.\n");
+		"\t--reseed-delay-ms\t\tDO NOT USE IN PRODUCTION: Set delay before each reseed to ESDM from OS. Can be used to emulate effects of smartcards or TPMs.\n");
 #endif
 }
 
 static void handle_status()
 {
-	const size_t ESDM_RPC_MAX_MSG_SIZE = 65536;
 	char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
 	memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
 	int ret;
@@ -128,21 +153,41 @@ static int handle_is_fully_seeded()
 	return fully_seeded ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static int handle_get_random(size_t num_rand_bytes, bool use_pr, bool raw)
+static int handle_get_random(size_t num_rand_bytes, enum RANDOM_MODE mode,
+			     bool raw, long timeout_msec)
 {
+	struct timespec sleep_time;
 	size_t bytes_to_fetch = num_rand_bytes;
 	const size_t BUFFER_SIZE = 8192;
 	uint8_t bytes[BUFFER_SIZE];
 	ssize_t ret = 0;
+
 	while (bytes_to_fetch > 0) {
 		size_t chunk_size = min_size(BUFFER_SIZE, bytes_to_fetch);
 		ret = 0;
-		if (use_pr) {
-			esdm_invoke(esdm_rpcc_get_random_bytes_pr(bytes,
-								  chunk_size));
-		} else {
+		switch (mode) {
+		case RAND_MODE_NONE:
+			esdm_invoke(
+				esdm_rpcc_get_random_bytes(bytes, chunk_size));
+			break;
+		case RAND_MODE_MIN:
+			esdm_invoke(esdm_rpcc_get_random_bytes_min(bytes,
+								   chunk_size));
+			break;
+		case RAND_MODE_FULL:
 			esdm_invoke(esdm_rpcc_get_random_bytes_full(
 				bytes, chunk_size));
+			break;
+		case RAND_MODE_FULL_TIMEOUT:
+			sleep_time.tv_sec = timeout_msec / 1000;
+			sleep_time.tv_nsec = (timeout_msec % 1000) * 1000000;
+			esdm_invoke(esdm_rpcc_get_random_bytes_full_timeout(
+				bytes, chunk_size, &sleep_time));
+			break;
+		case RAND_MODE_PR:
+			esdm_invoke(esdm_rpcc_get_random_bytes_pr(bytes,
+								  chunk_size));
+			break;
 		}
 		if (ret == (ssize_t)chunk_size) {
 			if (raw) {
@@ -390,6 +435,121 @@ static int handle_reseed_crng(void)
 	return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
+static int handle_is_running()
+{
+	int i;
+	const char *files_to_check[] = { ESDM_RPC_UNPRIV_SOCKET,
+					 ESDM_RPC_PRIV_SOCKET, NULL };
+	uint8_t bytes[32];
+	struct stat buffer;
+	ssize_t ret;
+
+	/* check for RPC files first */
+	for (i = 0; files_to_check[i] != NULL; ++i) {
+		if (stat(files_to_check[i], &buffer) != 0) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_TOOL,
+				"ESDM not running, file: \"%s\" not existing.\n",
+				files_to_check[i]);
+			return EXIT_FAILURE;
+		} else {
+			esdm_logger(
+				LOGGER_STATUS, LOGGER_C_TOOL,
+				"ESDM path \"%s\" exists, continue with checks.\n",
+				files_to_check[i]);
+		}
+	}
+
+	/* do a liveness check */
+	esdm_invoke(esdm_rpcc_get_random_bytes(bytes, sizeof(bytes)));
+	if (ret != (ssize_t)sizeof(bytes)) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_TOOL,
+			"ESDM is not running. Unable to fetch random bytes.\n");
+	}
+
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
+		    "ESDM is running. Checked paths and fetched bytes!.\n");
+
+	return EXIT_SUCCESS;
+}
+
+static int handle_get_seed(bool allow_not_fully_seeded, bool raw)
+{
+	uint8_t *buffer = calloc(1, ESDM_RPC_MAX_DATA);
+	unsigned int flags = 0;
+	ssize_t ret;
+
+	if (buffer == NULL) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Unable to get memory for seed buffer, exiting.\n");
+		return EXIT_FAILURE;
+	}
+
+	if (allow_not_fully_seeded)
+		flags |= ESDM_GET_SEED_FULLY_SEEDED;
+
+	esdm_invoke(esdm_rpcc_get_seed(buffer, ESDM_RPC_MAX_DATA, flags));
+	if (ret < 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Unable to fetch seed, exiting.\n");
+		free(buffer);
+		return EXIT_FAILURE;
+	}
+
+	if (raw) {
+		ssize_t written = write(1, buffer, (size_t)ret);
+		if (written != ret) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "error writing bytes to stdout\n");
+			return EXIT_FAILURE;
+		}
+	} else {
+		for (ssize_t i = 0; i < ret; ++i) {
+			/* don't log via esdm_logger to make it directly consumable for other tools */
+			printf("%02hhX", buffer[i]);
+		}
+	}
+
+	free(buffer);
+	return EXIT_SUCCESS;
+}
+
+/*
+ * Purpose of this test is to induce stress in esdm-server
+ * and test the effects of a stopped or restarted server.
+ * set continue_on_failure to not stop on the first error.
+ */
+static int handle_endless_stress(bool continue_on_failure)
+{
+	const uint32_t entropy_cnt_bits = 512;
+	uint8_t buffer[entropy_cnt_bits / 8];
+	bool no_error = true;
+	ssize_t ret;
+
+	esdm_rpcc_init_priv_service(NULL);
+
+	while (no_error || continue_on_failure) {
+		esdm_invoke(esdm_rpcc_rnd_add_entropy(buffer, sizeof(buffer),
+						      entropy_cnt_bits));
+		if (ret != 0) {
+			no_error = false;
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "failed to add entropy count\n");
+		}
+		esdm_invoke(
+			esdm_rpcc_get_random_bytes_pr(buffer, sizeof(buffer)));
+		if (ret != (ssize_t)sizeof(buffer)) {
+			no_error = false;
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "failed to fetch random bytes\n");
+		}
+	}
+
+	esdm_rpcc_fini_priv_service();
+	return EXIT_SUCCESS;
+}
+
 #ifdef ESDM_HAS_AUX_CLIENT
 static int handle_seed_via_os()
 {
@@ -549,7 +709,6 @@ int main(int argc, char **argv)
 	long stress_duration_sec = 65;
 	bool clear_pool = false;
 	bool reseed_crng = false;
-	bool use_pr = false;
 	bool seed_via_os = false;
 	bool reseed_via_os = false;
 	int verbosity = 2;
@@ -558,6 +717,12 @@ int main(int argc, char **argv)
 	/* can be used to simulate smartcards/TPMs in "--reseed-via-os" mode */
 	long reseed_delay_ms = -1;
 	bool raw_bytes = false;
+	long timeout_msec = 1;
+	enum RANDOM_MODE getrandom_mode = RAND_MODE_FULL;
+	bool is_running = false;
+	bool get_seed = false;
+	bool endless_stress = false;
+	bool continue_on_failure = false;
 	int i;
 
 	/*
@@ -589,9 +754,17 @@ int main(int argc, char **argv)
 			{ "raw-bytes", 0, 0, 0 },
 			{ "reseed-delay-ms", 1, 0, 0 },
 			{ "seed-via-os", 0, 0, 0 },
+			{ "min-seeded", 0, 0, 0 },
+			{ "timeout-msec", 1, 0, 0 },
+			{ "allow-unseeded", 0, 0, 0 },
+			{ "is-running", 0, 0, 0 },
+			{ "get-seed", 0, 0, 0 },
+			{ "endless-stress", 0, 0, 0 },
+			{ "continue-on-failure", 0, 0, 0 },
+			{ "decrease-verbosity", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bv", opts,
+		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvV", opts,
 				&opt_index);
 		if (-1 == c)
 			break;
@@ -685,6 +858,13 @@ int main(int argc, char **argv)
 			case 13:
 				/* stress-duration */
 				stress_duration_sec = strtol(optarg, NULL, 10);
+				if (errno) {
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of stress-duration failed, exiting: %s\n",
+						strerror(errno));
+					exit(EXIT_FAILURE);
+				}
 				break;
 			case 14:
 				/* clear-pool */
@@ -696,7 +876,7 @@ int main(int argc, char **argv)
 				break;
 			case 16:
 				/* use prediction resistance mode */
-				use_pr = true;
+				getrandom_mode = RAND_MODE_PR;
 				break;
 			case 17:
 				/* DO NOT USE IN PRODUCTION: reseed via OS kernel */
@@ -717,10 +897,57 @@ int main(int argc, char **argv)
 			case 21:
 				/* reseed-delay-ms */
 				reseed_delay_ms = strtol(optarg, NULL, 10);
+				if (errno) {
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of reseed-delay-ms failed, exiting: %s\n",
+						strerror(errno));
+					exit(EXIT_FAILURE);
+				}
 				break;
 			case 22:
 				/* seed-via-os */
 				seed_via_os = true;
+				break;
+			case 23:
+				/* min-seeded */
+				getrandom_mode = RAND_MODE_MIN;
+				break;
+			case 24:
+				/* timeout-msec */
+				timeout_msec = strtol(optarg, NULL, 10);
+				if (errno) {
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of timeout-msec failed, exiting: %s\n",
+						strerror(errno));
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 25:
+				/* allow-unseeded */
+				getrandom_mode = RAND_MODE_NONE;
+				break;
+			case 26:
+				/* is-running */
+				is_running = true;
+				break;
+			case 27:
+				/* get-seed */
+				get_seed = true;
+				break;
+			case 28:
+				/* endless-stress */
+				endless_stress = true;
+				break;
+			case 29:
+				/* used in endless-stress mode, server can be stopped and restarted */
+				continue_on_failure = true;
+				break;
+			case 30:
+				/* decrease-verbosity*/
+				if (verbosity > 0)
+					verbosity--;
 				break;
 			}
 			break;
@@ -787,6 +1014,11 @@ int main(int argc, char **argv)
 		case 'v':
 			verbosity++;
 			break;
+		case 'V':
+			/* decrease-verbosity*/
+			if (verbosity > 0)
+				verbosity--;
+			break;
 		}
 	}
 
@@ -799,7 +1031,7 @@ int main(int argc, char **argv)
 
 	/* check for privileged commands */
 	if (geteuid() && (write_to_aux_pool || clear_pool || reseed_crng ||
-			  reseed_via_os || seed_via_os)) {
+			  reseed_via_os || seed_via_os || endless_stress)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -823,7 +1055,8 @@ int main(int argc, char **argv)
 	} else if (is_fully_seeded) {
 		return_val = handle_is_fully_seeded();
 	} else if (get_random) {
-		handle_get_random(num_rand_bytes, use_pr, raw_bytes);
+		handle_get_random(num_rand_bytes, getrandom_mode, raw_bytes,
+				  timeout_msec);
 	} else if (entropy_count) {
 		return_val = handle_entropy_count();
 	} else if (entropy_level) {
@@ -844,6 +1077,14 @@ int main(int argc, char **argv)
 	} else if (stress_thread) {
 		/* -1 means not thread restriction (use number of cores online) */
 		handle_stress_thread((double)stress_duration_sec, -1);
+	} else if (is_running) {
+		return_val = handle_is_running();
+	} else if (get_seed) {
+		/* allow to fetch seed in non fully-seeded mode when --allow-unseeded is set */
+		return_val = handle_get_seed(getrandom_mode == RAND_MODE_NONE,
+					     raw_bytes);
+	} else if (endless_stress) {
+		return_val = handle_endless_stress(continue_on_failure);
 	} else if (clear_pool) {
 		return_val = handle_clear_pool();
 	} else if (reseed_crng) {
