@@ -735,7 +735,20 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 		/* In normal operation, check whether to reseed */
 		if (!pr && esdm_drng_must_reseed(drng)) {
-			if (!esdm_pool_trylock()) {
+			/*
+			 * enforce seeding of initial drng to stay always seeded on this drng,
+			 * otherwise under high RPC pressure, we end up completely unseeded
+			 * even with only fast sources configured.
+			 *
+			 * Only do this for the init instance, as this is already the last
+			 * resort, when all other DRNGs are not ready/fully seeded
+			 */
+			if (drng == esdm_drng_init_instance()) {
+				/* Perform synchronous reseed */
+				esdm_pool_lock();
+				esdm_drng_seed(drng);
+				esdm_pool_unlock();
+			} else if (!esdm_pool_trylock()) {
 				/*
 				 * Entropy pool cannot be locked, try to reseed
 				 * next time, but continue to generate random

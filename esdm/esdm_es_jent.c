@@ -256,7 +256,9 @@ static void esdm_jent_async_fini(void)
 static void esdm_jent_get_check(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
-	esdm_jent_get(eb_es, requested_bits, unused);
+	mutex_w_lock(&esdm_jent_lock);
+	esdm_jent_get(esdm_jent_state, eb_es, requested_bits, unused);
+	mutex_w_unlock(&esdm_jent_lock);
 }
 
 static inline int esdm_jent_async_init(void)
