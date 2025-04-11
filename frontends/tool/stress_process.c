@@ -20,6 +20,7 @@
 #include "tool.h"
 #include "atomic_bool.h"
 
+#include <stdbool.h>
 #include <signal.h>
 #include <esdm_rpc_client.h>
 #include <stdio.h>
@@ -32,11 +33,12 @@
 static pid_t *processes = NULL;
 static atomic_bool_t should_terminate = ATOMIC_BOOL_INIT(false);
 
-static void process_fn(double timeout_sec, long id, int sock_fd)
+static void process_fn(double timeout_sec, long id, int sock_fd,
+		       uint32_t request_size)
 {
 	esdm_rpcc_init_unpriv_service(NULL);
 
-	handle_stress_delay_one_core(timeout_sec, id, sock_fd);
+	handle_stress_delay_one_core(timeout_sec, id, sock_fd, request_size);
 
 	esdm_rpcc_fini_unpriv_service();
 
@@ -59,7 +61,8 @@ static void handle_sigint()
 	}
 }
 
-void handle_stress_process(double timeout_sec)
+void handle_stress_process(double timeout_sec, uint32_t request_size,
+			   bool show_cpu_usage)
 {
 	long cores = sysconf(_SC_NPROCESSORS_ONLN);
 	int *sockets = calloc((size_t)cores, sizeof(int));
@@ -113,7 +116,7 @@ void handle_stress_process(double timeout_sec)
 				exit(EXIT_FAILURE);
 			}
 
-			process_fn(timeout_sec, i, socks[1]);
+			process_fn(timeout_sec, i, socks[1], request_size);
 		}
 
 		if (pid > 0) {
@@ -122,7 +125,7 @@ void handle_stress_process(double timeout_sec)
 		}
 	}
 
-	handle_messages(sockets, (size_t)cores);
+	handle_messages(sockets, (size_t)cores, show_cpu_usage);
 
 	for (i = 0; i < cores; ++i) {
 		waitpid(processes[i], NULL, 0);

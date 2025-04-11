@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/select.h>
 #include <sys/timerfd.h>
 #include <time.h>
@@ -135,6 +136,22 @@ char *format_time_sec(double time_sec)
 	return buffer;
 }
 
+char *format_byte_sec(double byte_sec)
+{
+	const size_t buffer_size = 32;
+	char *buffer = calloc(1, buffer_size);
+	if (byte_sec < 1e3) {
+		snprintf(buffer, buffer_size, "%7.0f B/s", byte_sec);
+	} else if (byte_sec < 1e6) {
+		snprintf(buffer, buffer_size, "%7.3f KB/s", byte_sec / 1e3);
+	} else if (byte_sec < 1e9) {
+		snprintf(buffer, buffer_size, "%7.3f MB/s", byte_sec / 1e6);
+	} else {
+		snprintf(buffer, buffer_size, "%7.3f GB/s", byte_sec / 1e9);
+	}
+	return buffer;
+}
+
 static void handle_message(struct test_msg *m)
 {
 	/* don't print outliers */
@@ -159,15 +176,17 @@ static void handle_message(struct test_msg *m)
 	free(t_c);
 }
 
-void handle_messages(int *sockets, size_t num_sockets)
+void handle_messages(int *sockets, size_t num_sockets, bool show_cpu_usage)
 {
 	struct itimerspec timeout_timer = { 0 };
 	static const long report_interval_sec = 8;
 	size_t num_exits_seen = 0;
 	struct timespec start;
+	double total_bytes = 0.0;
 	double total_calls = 0.0;
 	int util_timer_fd;
 	double loadavg;
+	uint32_t request_size = 0;
 	int ret;
 
 	util_timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
@@ -206,7 +225,9 @@ void handle_messages(int *sockets, size_t num_sockets)
 			ssize_t r =
 				read(util_timer_fd, &ticks, sizeof(uint64_t));
 			assert(r == sizeof(uint64_t));
-			get_cpu_utilization(&start);
+			if (show_cpu_usage) {
+				get_cpu_utilization(&start);
+			}
 		}
 
 		for (size_t i = 0; i < num_sockets; ++i) {
@@ -221,6 +242,10 @@ void handle_messages(int *sockets, size_t num_sockets)
 					num_exits_seen++;
 					sockets[i] = -1;
 					total_calls += m.req_per_sec;
+					total_bytes += m.bytes_per_sec;
+					request_size = m.request_size;
+					assert(request_size == 0 ||
+					       m.request_size == request_size);
 				}
 			}
 		}
@@ -229,10 +254,14 @@ void handle_messages(int *sockets, size_t num_sockets)
 	ret = getloadavg(&loadavg, 1);
 	assert(ret == 1);
 
-	printf("\n\n");
+	printf("\n");
 
+	char *bytes_s = format_byte_sec(total_bytes);
+	printf("Used request size: %u\n", request_size);
 	printf("Average Load: %lf\n", loadavg);
 	printf("Total calls/sec: %.2lf\n", total_calls);
+	printf("Total Byte/sec: %s\n", bytes_s);
+	free(bytes_s);
 
 	close(util_timer_fd);
 }

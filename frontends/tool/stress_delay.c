@@ -21,11 +21,14 @@
 #include <time.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <esdm_rpc_client.h>
 #include <unistd.h>
 #include <assert.h>
 
-void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
+void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd,
+				  uint32_t request_size)
 {
 	struct timespec start;
 	struct timespec before;
@@ -33,19 +36,24 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
 	double mean_duration = 0.0;
 	double max_duration = 0.0;
 	double total_duration = 0.0;
-	uint64_t iterations = 0;
+	uint64_t requests = 0;
 	double alpha = 0.2;
 	double duration;
-	uint32_t rnd;
+	uint64_t bytes = 0;
+	uint8_t *rnd_buffer;
 	ssize_t ret;
+
+	rnd_buffer = malloc(request_size);
+	assert(rnd_buffer != NULL);
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
 	while (1) {
 		clock_gettime(CLOCK_MONOTONIC, &before);
 
-		esdm_invoke(esdm_rpcc_get_random_bytes_full((uint8_t *)&rnd,
-							    sizeof(rnd)));
+		esdm_invoke(esdm_rpcc_get_random_bytes_full(rnd_buffer,
+							    request_size));
+		bytes += request_size;
 
 		clock_gettime(CLOCK_MONOTONIC, &after);
 
@@ -53,7 +61,7 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
 		if (total_duration >= timeout_sec)
 			break;
 
-		iterations++;
+		requests++;
 		duration = timespec_diff(&before, &after);
 
 		if (mean_duration > 0.0 && duration > 100.0 * mean_duration) {
@@ -62,8 +70,11 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
 			msg.duration = duration;
 			msg.max_duration = max_duration;
 			msg.mean_duration = mean_duration;
-			msg.req_per_sec = (double)iterations / total_duration;
-			msg.iterations = iterations;
+			msg.req_per_sec = (double)requests / total_duration;
+			msg.bytes_per_sec = (double)bytes / total_duration;
+			msg.requests = requests;
+			msg.bytes = bytes;
+			msg.request_size = request_size;
 
 			ssize_t written =
 				write(sock_fd, &msg, sizeof(struct test_msg));
@@ -84,11 +95,16 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd)
 	msg.duration = 0.0;
 	msg.max_duration = max_duration;
 	msg.mean_duration = mean_duration;
-	msg.iterations = iterations;
-	msg.req_per_sec = (double)iterations / total_duration;
+	msg.req_per_sec = (double)requests / total_duration;
+	msg.bytes_per_sec = (double)bytes / total_duration;
+	msg.requests = requests;
+	msg.bytes = bytes;
+	msg.request_size = request_size;
 
 	ssize_t written = write(sock_fd, &msg, sizeof(struct test_msg));
 	assert(written == sizeof(struct test_msg));
+
+	free(rnd_buffer);
 
 	close(sock_fd);
 }
