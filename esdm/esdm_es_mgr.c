@@ -435,8 +435,12 @@ static uint32_t esdm_avail_entropy_thresh(void)
 bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 		       struct entropy_buf *eb)
 {
-	/* AIS20/31 NTG.1: two entropy sources with each delivering 240 bits */
-	if (esdm_ntg1_2024_compliant()) {
+	/*
+	 * AIS20/31 NTG.1:
+	 * - Two entropy sources with each delivering 240 bits initially
+	 * - After the initial seeding step one entropy source is sufficient
+	 */
+	if (!fully_seeded && esdm_ntg1_2024_compliant()) {
 		uint32_t i, result = 0,
 			    ent_thresh = esdm_avail_entropy_thresh();
 
