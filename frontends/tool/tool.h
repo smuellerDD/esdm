@@ -20,6 +20,7 @@
 #ifndef ESDM_TOOL_H
 #define ESDM_TOOL_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
 
@@ -29,12 +30,16 @@ struct test_msg {
 
 	long id;
 
+	uint32_t request_size;
+
 	double duration;
 	double mean_duration;
 	double max_duration;
 	double req_per_sec;
+	double bytes_per_sec;
 
-	uint64_t iterations;
+	uint64_t requests;
+	uint64_t bytes;
 };
 
 extern double timespec_diff(const struct timespec *start,
@@ -42,12 +47,16 @@ extern double timespec_diff(const struct timespec *start,
 extern long timespec_diff_ns(const struct timespec *start,
 			     const struct timespec *end);
 extern char *format_time_sec(double time_sec);
+extern char *format_byte_sec(double time_sec);
 
 extern void handle_stress_delay_one_core(double timeout_sec, long id,
-					 int sock_fd);
-extern void handle_stress_process(double timeout_sec);
-extern void handle_stress_thread(double timeout_sec, int num_threads);
+					 int sock_fd, uint32_t request_size);
+extern void handle_stress_process(double timeout_sec, uint32_t request_size,
+				  bool show_cpu_usage);
+extern void handle_stress_thread(double timeout_sec, int num_threads,
+				 uint32_t request_size, bool show_cpu_usage);
 
-extern void handle_messages(int *sockets, size_t num_sockets);
+extern void handle_messages(int *sockets, size_t num_sockets,
+			    bool show_cpu_usage);
 
 #endif /* ESDM_TOOL_H */

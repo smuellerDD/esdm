@@ -91,6 +91,10 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--stress-duration\t\tSet timeout of stress tests to SECS, Default: 65.0\n");
 	fprintf(stderr,
+		"\t--stress-request-size BYTE\tUse BYTE sized buffers for stress test, Default: 4\n");
+	fprintf(stderr,
+		"\t--stress-cpu-usage\t\tShow CPU usage during stress test.\n");
+	fprintf(stderr,
 		"\t--clear-pool\t\t\tClear the entropy pool for testing (needs root)\n");
 	fprintf(stderr,
 		"\t--reseed-crng\t\t\tReseed the CRNGs for testing (needs root)\n");
@@ -384,11 +388,15 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 		(double)after.tv_sec + (double)after.tv_nsec / 1E9 -
 		((double)before.tv_sec + (double)before.tv_nsec / 1E9);
 	double bytes_total = (double)num_iterations * (double)buffer_size;
-	double data_rate_kb_s = bytes_total / duration / 1000;
+	double data_rate_b_s = bytes_total / duration;
 	double iteration_rate = (double)num_iterations / duration;
 
-	printf("PR: %i | Req. Size: %4zu | Data Rate: %11.3lf KB/s | Iter. Rate: %9.2lf 1/s\n",
-	       pr, buffer_size, data_rate_kb_s, iteration_rate);
+	char *data_rate = format_byte_sec(data_rate_b_s);
+
+	printf("PR: %i | Req. Size: %4zu | Iter. Rate: %9.2lf 1/s | Data Rate: %s\n",
+	       pr, buffer_size, iteration_rate, data_rate);
+
+	free(data_rate);
 
 	free(buffer);
 	buffer = NULL;
@@ -723,6 +731,8 @@ int main(int argc, char **argv)
 	bool get_seed = false;
 	bool endless_stress = false;
 	bool continue_on_failure = false;
+	uint32_t stress_request_size = 4;
+	bool stress_cpu_usage = false;
 	int i;
 
 	/*
@@ -762,6 +772,8 @@ int main(int argc, char **argv)
 			{ "endless-stress", 0, 0, 0 },
 			{ "continue-on-failure", 0, 0, 0 },
 			{ "decrease-verbosity", 0, 0, 0 },
+			{ "stress-request-size", 1, 0, 0 },
+			{ "stress-cpu-usage", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvV", opts,
@@ -945,10 +957,25 @@ int main(int argc, char **argv)
 				continue_on_failure = true;
 				break;
 			case 30:
-				/* decrease-verbosity*/
+				/* decrease-verbosity */
 				if (verbosity > 0)
 					verbosity--;
 				break;
+			case 31:
+				/* stress-request-size */
+				stress_request_size =
+					(uint32_t)strtol(optarg, NULL, 10);
+				if (errno) {
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"conversion of stress-request-size failed, exiting: %s\n",
+						strerror(errno));
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 32:
+				/* stress-cpu-usage */
+				stress_cpu_usage = true;
 			}
 			break;
 		case 's':
@@ -1071,12 +1098,15 @@ int main(int argc, char **argv)
 	} else if (benchmark) {
 		return_val = do_benchmark();
 	} else if (stress_delay) {
-		handle_stress_thread((double)stress_duration_sec, 1);
+		handle_stress_thread((double)stress_duration_sec, 1,
+				     stress_request_size, stress_cpu_usage);
 	} else if (stress_process) {
-		handle_stress_process((double)stress_duration_sec);
+		handle_stress_process((double)stress_duration_sec,
+				      stress_request_size, stress_cpu_usage);
 	} else if (stress_thread) {
 		/* -1 means not thread restriction (use number of cores online) */
-		handle_stress_thread((double)stress_duration_sec, -1);
+		handle_stress_thread((double)stress_duration_sec, -1,
+				     stress_request_size, stress_cpu_usage);
 	} else if (is_running) {
 		return_val = handle_is_running();
 	} else if (get_seed) {
