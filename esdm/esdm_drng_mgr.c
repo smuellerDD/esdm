@@ -677,16 +677,24 @@ out:
 	esdm_drng_put_instances();
 }
 
-static bool esdm_drng_must_reseed(struct esdm_drng *drng)
+static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 {
 	struct timespec check_time = drng->last_seeded;
 	bool request_bits_since_fully_seeded_reached =
 		(ESDM_DRNG_RESEED_THRESH_BITS != UINT32_MAX) &&
 		(atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
 		 ESDM_DRNG_RESEED_THRESH_BITS);
+	/*
+	 * atomic_dec_and_test will only trigger for zero, but we may also are
+	 * already negative
+	 */
+	bool requests_check = atomic_read(&drng->requests) <= 0;
 
+	if (dec_requests)
+		requests_check |= atomic_dec_and_test(&drng->requests);
 	check_time.tv_sec += esdm_drng_reseed_max_time;
-	return (atomic_dec_and_test(&drng->requests) || drng->force_reseed ||
+
+	return (requests_check || drng->force_reseed ||
 		request_bits_since_fully_seeded_reached ||
 		esdm_time_after_now(&check_time));
 }
@@ -736,7 +744,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	 */
 	if (drng == esdm_drng_init_instance()) {
 		mutex_w_lock(&drng->lock);
-		if (esdm_drng_must_reseed(drng)) {
+		if (esdm_drng_must_reseed(drng, false)) {
 			esdm_pool_lock();
 			esdm_drng_seed_nolock(drng);
 			esdm_pool_unlock();
@@ -764,7 +772,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		iterations++;
 
 		/* In normal operation, check whether to reseed */
-		if (!pr && esdm_drng_must_reseed(drng)) {
+		if (!pr && esdm_drng_must_reseed(drng, true)) {
 			if (!esdm_pool_trylock()) {
 				/*
 				 * Entropy pool cannot be locked, try to reseed
