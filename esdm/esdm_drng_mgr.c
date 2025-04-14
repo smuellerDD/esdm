@@ -737,19 +737,20 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	 * This helps to get low but consistent performance when
 	 * operating in DRG.4 mode on request bursts
 	 * (e.g. in esdm-tool --benchmark).
-	 *
-	 * Do this under DRNG lock, as multiple threads my try to
-	 * reseed in parallel otherwise. Depleting slowly gathered
-	 * entropy in e.g. the aux pool unnecessarily fast.
 	 */
 	if (drng == esdm_drng_init_instance()) {
-		mutex_w_lock(&drng->lock);
 		if (esdm_drng_must_reseed(drng, false)) {
 			esdm_pool_lock();
-			esdm_drng_seed_nolock(drng);
+
+			mutex_w_lock(&drng->lock);
+			/* double check, as we did not lock the DRNG in the first check*/
+			if (esdm_drng_must_reseed(drng, false)) {
+				esdm_drng_seed_nolock(drng);
+			}
+			mutex_w_unlock(&drng->lock);
+
 			esdm_pool_unlock();
 		}
-		mutex_w_unlock(&drng->lock);
 	}
 
 	/*
@@ -780,9 +781,13 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				 * bits.
 				 */
 				drng->force_reseed = true;
-			} else {
-				/* Perform synchronous reseed */
-				esdm_drng_seed(drng);
+			} else { /* Perform synchronous reseed */
+				mutex_w_lock(&drng->lock);
+				/* double check, as we did not lock the DRNG in the first check*/
+				if (esdm_drng_must_reseed(drng, false)) {
+					esdm_drng_seed_nolock(drng);
+				}
+				mutex_w_unlock(&drng->lock);
 				esdm_pool_unlock();
 			}
 		}
