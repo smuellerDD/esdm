@@ -501,11 +501,16 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	return collected_entropy;
 }
 
-static void esdm_drng_seed_es(struct esdm_drng *drng)
+static void esdm_drng_seed_nolock(struct esdm_drng *drng)
 {
-	mutex_w_lock(&drng->lock);
+	BUILD_BUG_ON(ESDM_MIN_SEED_ENTROPY_BITS >
+		     ESDM_DRNG_SECURITY_STRENGTH_BITS);
+
+	/* (Re-)Seed DRNG */
 	esdm_drng_seed_es_nolock(drng, true, "regular");
-	mutex_w_unlock(&drng->lock);
+
+	/* (Re-)Seed atomic DRNG from regular DRNG */
+	esdm_drng_atomic_seed_drng(drng);
 }
 
 static void esdm_drng_seed(struct esdm_drng *drng)
@@ -514,7 +519,10 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 		     ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
 	/* (Re-)Seed DRNG */
-	esdm_drng_seed_es(drng);
+	mutex_w_lock(&drng->lock);
+	esdm_drng_seed_nolock(drng);
+	mutex_w_unlock(&drng->lock);
+
 	/* (Re-)Seed atomic DRNG from regular DRNG */
 	esdm_drng_atomic_seed_drng(drng);
 }
@@ -713,6 +721,28 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		return -EOPNOTSUPP;
 
 	outbuflen = min_size(outbuflen, SSIZE_MAX);
+
+	/*
+	 * try to reseed the last resort DRNG in a multi node setup
+	 * before unsetting the fully seeded state in the next check.
+	 *
+	 * This helps to get low but consistent performance when
+	 * operating in DRG.4 mode on request bursts
+	 * (e.g. in esdm-tool --benchmark).
+	 *
+	 * Do this under DRNG lock, as multiple threads my try to
+	 * reseed in parallel otherwise. Depleting slowly gathered
+	 * entropy in e.g. the aux pool unnecessarily fast.
+	 */
+	if (drng == esdm_drng_init_instance()) {
+		mutex_w_lock(&drng->lock);
+		if (esdm_drng_must_reseed(drng)) {
+			esdm_pool_lock();
+			esdm_drng_seed_nolock(drng);
+			esdm_pool_unlock();
+		}
+		mutex_w_unlock(&drng->lock);
+	}
 
 	/*
 	 * If the entire ESDM ran without full reseed for too long,
