@@ -76,21 +76,35 @@ static int esdm_drng_mgr_max_wo_reseed_test(bool success)
 	esdm_config_es_jent_kernel_entropy_rate_set(0);
 
 	if (!esdm_state_operational()) {
-		printf("failed to remain in operational mode\n");
+		printf("(1) failed to remain in operational mode\n");
 		goto err;
 	}
 
 	esdm_drng_force_reseed();
-	esdm_get_random_bytes(buf, sizeof(buf));
+
 	if (!esdm_state_operational()) {
-		printf("failed to remain in operational mode\n");
+		printf("(2) failed to remain in operational mode\n");
+		goto err;
+	}
+
+	esdm_get_random_bytes(buf, sizeof(buf));
+
+	/*
+	 * with only 1 DRNG instance, the check to reseed the initial DRNG
+	 * in esdm_drng_get before looping will render us already inoperational
+	 * with multiple DRNG instances, the others let us stay operational until
+	 * also checked in the next step.
+	 */
+	if (esdm_state_operational() != success) {
+		printf("(3) failed to %soperational mode\n",
+		       success ? "remain in " : "enter non-");
 		goto err;
 	}
 
 	esdm_drng_force_reseed();
 	esdm_get_random_bytes(buf, sizeof(buf));
 	if (esdm_state_operational() != success) {
-		printf("failed to %soperational mode\n",
+		printf("(4) failed to %soperational mode\n",
 		       success ? "remain in " : "enter non-");
 		goto err;
 	}
