@@ -592,6 +592,7 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 {
 	size_t i, pool_with_max_entropy = 0;
 	uint32_t max_entropy = 0;
+	bool locked_pool = false;
 
 	/*
 	 * Now we want to find the pool to extract the entropy from. The applied
@@ -608,6 +609,9 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 	 * handle the situation where there is no entropy.
 	 */
 	for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
+		/* Ensure aux pool level lookup, extraction and backtracking op are atomic */
+		mutex_w_lock(&esdm_pools[i].lock);
+
 		uint32_t avail_ent =
 			esdm_aux_avail_entropy_pool(&esdm_pools[i]);
 
@@ -621,17 +625,21 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 		 * We found the pool that can already provide all our entropy
 		 * needs (including the discount for the OSR), take it.
 		 */
-		if (requested_bits + esdm_compress_osr() < max_entropy)
+		if (requested_bits + esdm_compress_osr() <= max_entropy) {
+			locked_pool = true;
 			break;
+		}
+
+		mutex_w_unlock(&esdm_pools[i].lock);
 	}
+
+	if (!locked_pool)
+		mutex_w_lock(&esdm_pools[pool_with_max_entropy].lock);
 
 	/* Now we have the pool that we want to extract data from. */
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Aux Pool %zu selected to obtain data\n",
 		    pool_with_max_entropy);
-
-	/* Ensure aux pool extraction and backtracking op are atomic */
-	mutex_w_lock(&esdm_pools[pool_with_max_entropy].lock);
 
 	eb_es->e_bits = esdm_aux_get_pool(&esdm_pools[pool_with_max_entropy],
 					  eb_es->e, requested_bits);
@@ -661,7 +669,7 @@ static void esdm_aux_es_state(char *buf, size_t buflen)
 		 " Available entropy: %u\n"
 		 " Maximum entropy: %u\n"
 		 " Pools: %u\n"
-		 " Write wakeup threshold: %u"
+		 " Write wakeup threshold: %u\n"
 		 " Digestsize: %u",
 		 esdm_drng_init->hash_cb->hash_name(),
 		 esdm_aux_avail_entropy(0), esdm_aux_max_entropy(),
