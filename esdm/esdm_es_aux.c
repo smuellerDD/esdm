@@ -670,7 +670,7 @@ static void esdm_aux_es_state(char *buf, size_t buflen)
 		 " Maximum entropy: %u\n"
 		 " Pools: %u\n"
 		 " Write wakeup threshold: %u\n"
-		 " Digestsize: %u",
+		 " Digestsize: %u\n",
 		 esdm_drng_init->hash_cb->hash_name(),
 		 esdm_aux_avail_entropy(0), esdm_aux_max_entropy(),
 		 ESDM_NUM_AUX_POOLS, esdm_write_wakeup_bits,
