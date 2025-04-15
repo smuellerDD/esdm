@@ -19,6 +19,7 @@
  */
 
 #include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -49,6 +50,9 @@ struct esdm_rpcc_write_buf {
 	ProtobufCBuffer base;
 	esdm_rpc_client_connection_t *rpc_conn;
 };
+
+static void register_fork_handler_unprivileged(void);
+static void register_fork_handler_privileged(void);
 
 static void reset_conn_socket(esdm_rpc_client_connection_t *rpc_conn)
 {
@@ -918,6 +922,8 @@ void esdm_rpcc_put_unpriv_service(esdm_rpc_client_connection_t *rpc_conn)
 DSO_PUBLIC
 int esdm_rpcc_init_unpriv_service(esdm_rpcc_interrupt_func_t interrupt_func)
 {
+	register_fork_handler_unprivileged();
+
 	return esdm_rpcc_init_service(&unpriv_access__descriptor,
 				      ESDM_RPC_UNPRIV_SOCKET, interrupt_func,
 				      &unpriv_rpc_conn, &unpriv_rpc_conn_num);
@@ -952,6 +958,8 @@ void esdm_rpcc_put_priv_service(esdm_rpc_client_connection_t *rpc_conn)
 DSO_PUBLIC
 int esdm_rpcc_init_priv_service(esdm_rpcc_interrupt_func_t interrupt_func)
 {
+	register_fork_handler_privileged();
+
 	return esdm_rpcc_init_service(&priv_access__descriptor,
 				      ESDM_RPC_PRIV_SOCKET, interrupt_func,
 				      &priv_rpc_conn, &priv_rpc_conn_num);
@@ -961,4 +969,57 @@ DSO_PUBLIC
 void esdm_rpcc_fini_priv_service(void)
 {
 	esdm_rpcc_fini_service(&priv_rpc_conn, &priv_rpc_conn_num);
+}
+
+/******************************************************************************
+ * Fork Handling
+ ******************************************************************************/
+static pid_t owner_pid = -1;
+
+/* does nothing, if no connections were allocated and nums are 0 */
+static void cleanup_after_fork_unprivileged()
+{
+	uint32_t i;
+
+	/* close all unprivileged sockets */
+	for (i = 0; i < unpriv_rpc_conn_num; ++i) {
+		reset_conn_socket(&unpriv_rpc_conn[i]);
+	}
+}
+
+/* does nothing, if no connections were allocated and nums are 0 */
+static void cleanup_after_fork_privileged()
+{
+	uint32_t i;
+
+	/* close all privileged sockets */
+	for (i = 0; i < priv_rpc_conn_num; ++i) {
+		reset_conn_socket(&priv_rpc_conn[i]);
+	}
+}
+
+/* need different handlers in order to not interfere with the other case, when opened
+ * in two threads at different times */
+static void register_fork_handler_unprivileged(void)
+{
+	/* also works in the initial call */
+	if (getpid() != owner_pid) {
+		owner_pid = getpid();
+		cleanup_after_fork_unprivileged();
+	}
+
+	pthread_atfork(NULL, NULL, &register_fork_handler_unprivileged);
+}
+
+/* need different handlers in order to not interfere with the other case, when opened
+ * in two threads at different times */
+static void register_fork_handler_privileged(void)
+{
+	/* also works in the initial call */
+	if (getpid() != owner_pid) {
+		owner_pid = getpid();
+		cleanup_after_fork_privileged();
+	}
+
+	pthread_atfork(NULL, NULL, &register_fork_handler_privileged);
 }
