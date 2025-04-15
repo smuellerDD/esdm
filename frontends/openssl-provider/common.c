@@ -113,6 +113,9 @@ static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 	if (!out)
 		goto err;
 
+	if (outlen > ESDM_RPC_MAX_DATA)
+		goto err;
+
 	if (prediction_resistance) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(out, outlen));
 	} else {
