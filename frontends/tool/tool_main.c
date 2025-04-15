@@ -37,6 +37,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #define xstr(s) str(s)
 #define str(s) #s
@@ -94,6 +95,8 @@ static void handle_usage(void)
 		"\t--stress-request-size BYTE\tUse BYTE sized buffers for stress test, Default: 4\n");
 	fprintf(stderr,
 		"\t--stress-cpu-usage\t\tShow CPU usage during stress test.\n");
+	fprintf(stderr,
+		"\t--stress-fork\t\t\tchecks fork handling on current platform\n");
 	fprintf(stderr,
 		"\t--clear-pool\t\t\tClear the entropy pool for testing (needs root)\n");
 	fprintf(stderr,
@@ -558,6 +561,39 @@ static int handle_endless_stress(bool continue_on_failure)
 	return EXIT_SUCCESS;
 }
 
+static int handle_stress_fork()
+{
+	const int max_fork_depth = 5;
+	int fork_depth = 0;
+	const size_t buf_len = 32;
+	uint8_t buffer[buf_len];
+	ssize_t ret;
+	size_t i;
+
+	while (fork_depth++ < max_fork_depth) {
+		for (i = 0; i < 200; ++i) {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer,
+								    buf_len));
+			assert((ssize_t)buf_len == ret);
+		}
+
+		/* don't care. Just check in all processes involved, that we can get random bytes */
+		pid_t p = fork();
+		assert(p != -1);
+	}
+
+	while (wait(NULL) > 0) {
+	}
+
+	if (errno != ECHILD) {
+		printf("error in some child occured\n");
+		fflush(stdout);
+		return EXIT_FAILURE;
+	}
+
+	return EXIT_SUCCESS;
+}
+
 #ifdef ESDM_HAS_AUX_CLIENT
 static int handle_seed_via_os()
 {
@@ -733,6 +769,7 @@ int main(int argc, char **argv)
 	bool continue_on_failure = false;
 	uint32_t stress_request_size = 4;
 	bool stress_cpu_usage = false;
+	bool stress_fork = false;
 	int i;
 
 	/*
@@ -774,6 +811,7 @@ int main(int argc, char **argv)
 			{ "decrease-verbosity", 0, 0, 0 },
 			{ "stress-request-size", 1, 0, 0 },
 			{ "stress-cpu-usage", 0, 0, 0 },
+			{ "stress-fork", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvV", opts,
@@ -976,6 +1014,11 @@ int main(int argc, char **argv)
 			case 32:
 				/* stress-cpu-usage */
 				stress_cpu_usage = true;
+				break;
+			case 33:
+				/* stress-fork */
+				stress_fork = true;
+				break;
 			}
 			break;
 		case 's':
@@ -1067,9 +1110,7 @@ int main(int argc, char **argv)
 	}
 
 	/* initialized in child processes in this test */
-	if (!stress_process) {
-		esdm_rpcc_init_unpriv_service(NULL);
-	}
+	esdm_rpcc_init_unpriv_service(NULL);
 
 	/*
 	 * handle individual commands
@@ -1107,6 +1148,8 @@ int main(int argc, char **argv)
 		/* -1 means not thread restriction (use number of cores online) */
 		handle_stress_thread((double)stress_duration_sec, -1,
 				     stress_request_size, stress_cpu_usage);
+	} else if (stress_fork) {
+		return_val = handle_stress_fork();
 	} else if (is_running) {
 		return_val = handle_is_running();
 	} else if (get_seed) {
@@ -1135,10 +1178,7 @@ int main(int argc, char **argv)
 		return_val = EXIT_FAILURE;
 	}
 
-	/* finished in child processes in this test */
-	if (!stress_process) {
-		esdm_rpcc_fini_unpriv_service();
-	}
+	esdm_rpcc_fini_unpriv_service();
 
 out:
 	return return_val;
