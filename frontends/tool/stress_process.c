@@ -68,9 +68,12 @@ void handle_stress_process(double timeout_sec, uint32_t request_size,
 	int *sockets = calloc((size_t)cores, sizeof(int));
 	long i;
 
+	assert(sockets != NULL);
+
 	if (processes == NULL) {
 		processes = calloc((size_t)cores, sizeof(pid_t));
 	}
+	assert(processes != NULL);
 
 	{
 		struct sigaction sa;

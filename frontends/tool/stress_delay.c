@@ -53,6 +53,8 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd,
 
 		esdm_invoke(esdm_rpcc_get_random_bytes_full(rnd_buffer,
 							    request_size));
+		assert(ret == request_size);
+
 		bytes += request_size;
 
 		clock_gettime(CLOCK_MONOTONIC, &after);

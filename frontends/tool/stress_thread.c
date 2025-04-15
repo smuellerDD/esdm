@@ -45,8 +45,8 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 			  uint32_t request_size, bool show_cpu_usage)
 {
 	long cores = sysconf(_SC_NPROCESSORS_ONLN);
-	pthread_t *threads;
-	int *sockets;
+	pthread_t *threads = NULL;
+	int *sockets = NULL;
 	long i;
 
 	if (num_threads > 0) {
@@ -54,7 +54,9 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 	}
 
 	threads = calloc((size_t)cores, sizeof(pthread_t));
+	assert(threads != NULL);
 	sockets = calloc((size_t)cores, sizeof(int));
+	assert(sockets != NULL);
 
 	for (i = 0; i < cores; ++i) {
 		int socks[2];
@@ -63,11 +65,13 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 		sockets[i] = socks[0];
 
 		struct thread_arg *arg = malloc(sizeof(struct thread_arg));
+		assert(arg != NULL);
 		arg->timeout = timeout_sec;
 		arg->id = i;
 		arg->sock_fd = socks[1];
 		arg->request_size = request_size;
-		pthread_create(&threads[i], NULL, thread_fn, arg);
+		ret = pthread_create(&threads[i], NULL, thread_fn, arg);
+		assert(ret == 0);
 	}
 
 	handle_messages(sockets, (size_t)cores, show_cpu_usage);
