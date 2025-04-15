@@ -450,11 +450,24 @@ option('linux-reseed-entropy-count', type: 'integer', value: 0, min: 0, max: 256
 option('esdm-server', type: 'feature', value: 'enabled',
        description: 'Enable the ESDM server')
 
-option('esdm-server-rpc-path', type: 'string', value: '/var/run',
+option('esdm-server-rpc-path-unprivileged', type: 'string', value: '/var/run',
        description: '''Sets the base path of ESDM's RPC sockets (default: /var/run)
 
        If this value is changed from the default, the systemd units need to be adapted accordingly
        by the integrator of ESDM (if systemd is used at all).
+
+       Use this e.g. combination with chroot to create a directory
+       with only the unprivileged endpoint.
+       ''')
+
+option('esdm-server-rpc-path-privileged', type: 'string', value: '/var/run',
+       description: '''Sets the base path of ESDM's RPC sockets (default: /var/run)
+
+       If this value is changed from the default, the systemd units need to be adapted accordingly
+       by the integrator of ESDM (if systemd is used at all).
+
+       You may use this option to keep the privileged socket in a different path than
+       the unprivileged socket.
        ''')
 
 ################################################################################
