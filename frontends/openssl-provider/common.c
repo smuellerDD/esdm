@@ -26,6 +26,7 @@
 
 #include "common.h"
 #include "esdm_rpc_client.h"
+#include "esdm_rpc_service.h"
 #include "helper.h"
 #include "math_helper.h"
 #include "visibility.h"
@@ -137,20 +138,26 @@ esdm_rand_reseed(void *ctx __unused, int prediction_resistance __unused,
 }
 
 static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
-			      unsigned int outlen, size_t min_noncelen __unused,
-			      size_t max_noncelen __unused)
+			      unsigned int outlen, size_t min_noncelen,
+			      size_t max_noncelen)
 {
 	ssize_t ret;
 
 	if (out == NULL)
 		return outlen;
 
+	if (outlen < min_noncelen)
+		goto err;
+	if (outlen > max_noncelen)
+		goto err;
+
 	esdm_invoke(esdm_rpcc_get_random_bytes_min(out, outlen));
 
 	if (ret == (ssize_t)outlen)
 		return outlen;
-	else
-		return 0;
+
+err:
+	return 0;
 }
 
 static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
@@ -169,7 +176,7 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 
 	if (buf_len < min_len)
 		goto err;
-	if (buf_len / 8 > max_len)
+	if (buf_len > max_len)
 		goto err;
 
 	*buffer = OPENSSL_secure_zalloc(buf_len);
@@ -245,7 +252,7 @@ static int esdm_rand_get_ctx_params(void *ctx __unused, OSSL_PARAM params[])
 		return 1;
 
 	p = OSSL_PARAM_locate(params, OSSL_RAND_PARAM_MAX_REQUEST);
-	if (p != NULL && !OSSL_PARAM_set_size_t(p, 256))
+	if (p != NULL && !OSSL_PARAM_set_size_t(p, ESDM_RPC_MAX_DATA))
 		return 0;
 
 	p = OSSL_PARAM_locate(params, OSSL_RAND_PARAM_STRENGTH);
