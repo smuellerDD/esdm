@@ -974,7 +974,8 @@ void esdm_rpcc_fini_priv_service(void)
 /******************************************************************************
  * Fork Handling
  ******************************************************************************/
-static pid_t owner_pid = -1;
+static pid_t owner_pid_unprivileged = -1;
+static pid_t owner_pid_privileged = -1;
 
 /* does nothing, if no connections were allocated and nums are 0 */
 static void cleanup_after_fork_unprivileged()
@@ -1003,8 +1004,8 @@ static void cleanup_after_fork_privileged()
 static void register_fork_handler_unprivileged(void)
 {
 	/* also works in the initial call */
-	if (getpid() != owner_pid) {
-		owner_pid = getpid();
+	if (getpid() != owner_pid_unprivileged) {
+		owner_pid_unprivileged = getpid();
 		cleanup_after_fork_unprivileged();
 	}
 
@@ -1016,8 +1017,8 @@ static void register_fork_handler_unprivileged(void)
 static void register_fork_handler_privileged(void)
 {
 	/* also works in the initial call */
-	if (getpid() != owner_pid) {
-		owner_pid = getpid();
+	if (getpid() != owner_pid_privileged) {
+		owner_pid_privileged = getpid();
 		cleanup_after_fork_privileged();
 	}
 
