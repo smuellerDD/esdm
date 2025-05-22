@@ -38,6 +38,8 @@ After=systemd-modules-load.service
 
 [Service]
 Type=notify
+# required to allow notifications from forked children
+NotifyAccess=all
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/hwrng r
 DeviceAllow=/dev/random r
