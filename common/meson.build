@@ -15,7 +15,13 @@ if host_machine.system() == 'linux'
 	common_src += files('linux_support.c')
 endif
 
+if get_option('systemd').enabled()
+	common_src += files(['systemd_support.c'])
+endif
+
 conf_data = configuration_data()
+
+conf_data.set('ESDM_SYSTEMD_SUPPORT', get_option('systemd').enabled())
 
 conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
 	      get_option('sp80090c') or get_option('fips140'))
