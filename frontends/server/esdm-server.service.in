@@ -25,16 +25,31 @@
 
 [Unit]
 Description=Entropy Source and DRNG Manager Daemon
-DefaultDependencies=no
-After=local-fs.target
-Before=sysinit.target shutdown.target
-Conflicts=shutdown.target
+
+# NO SOCKET ACTIVATION BEGIN
+#DefaultDependencies=no
+#After=local-fs.target
+#Before=sysinit.target shutdown.target
+#Conflicts=shutdown.target
+# NO SOCKET ACTIVATION END
+
 StartLimitIntervalSec=500
 StartLimitBurst=5
 
 # Required to wait for insmod of esdm_es.ko - comment out if not needed
 Wants=systemd-modules-load.service
 After=systemd-modules-load.service
+
+# If you want to use systemd socket activation here,
+# you probably need to install systemd to the multi-user.target
+# instead of basic.target in order to break dependency cycles.
+# Therefore it is commented out by default.
+
+Requires=esdm-server-priv.socket
+After=esdm-server-priv.socket
+
+Requires=esdm-server-unpriv.socket
+After=esdm-server-unpriv.socket
 
 [Service]
 Type=notify
@@ -71,5 +86,8 @@ UMask=0077
 KillMode=mixed
 
 [Install]
-WantedBy=basic.target
+# NO SOCKET ACTIVATION
+#WantedBy=basic.target
+# SOCKET ACTIVATION
+WantedBy=multi-user.target
 Alias=esdm-server.service

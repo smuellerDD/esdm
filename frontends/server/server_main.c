@@ -395,6 +395,7 @@ int main(int argc, char *argv[])
 
 #ifdef ESDM_SYSTEMD_SUPPORT
 	systemd_notify_status("Waiting for subprocesses to terminate");
+	systemd_notify_stopping();
 #endif
 
 out:

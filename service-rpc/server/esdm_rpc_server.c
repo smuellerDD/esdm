@@ -793,9 +793,9 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 	if (systemd_listen_fds() > 0) {
 		fd = systemd_listen_fd_for_name(socket_name);
 	}
-	if (fd) {
+	if (fd >= 0) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-			    "use systemd provided socket\n");
+			    "use systemd provided socket %s = %i\n", socket_name, fd);
 
 		/* double check, that we are responsible for this socket/fd */
 		assert(systemd_listen_pid() == getppid());
@@ -823,7 +823,7 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 #endif
 
 	esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
-		    "unable to find systemd provided socket\n");
+		    "unable to find systemd provided socket %s\n", socket_name);
 	return -1;
 }
 
@@ -1160,8 +1160,9 @@ int esdm_rpc_server_init(const char *username)
 
 		esdm_rpcs_cleanup_signals(SIG_DFL);
 
-		/* Clean up all resources */
-		esdm_rpcs_cleanup();
+		/* Clean up all resources only, when no systemd provided sockets are used */
+		if (systemd_listen_fds() == 0)
+			esdm_rpcs_cleanup();
 	}
 
 out:

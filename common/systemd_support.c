@@ -144,7 +144,7 @@ static void freep(char **p)
 
 int systemd_listen_fd_for_name(const char *name)
 {
-	const char *listen_fd_names = getenv("LISTEN_FD_NAMES");
+	const char *listen_fd_names = getenv("LISTEN_FDNAMES");
 	_cleanup_(freep) char *fd_names_copy = NULL;
 	char *token = NULL;
 	char *saveptr = NULL;

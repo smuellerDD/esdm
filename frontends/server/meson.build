@@ -22,3 +22,21 @@ esdm_server_service = configure_file(
 	configuration : server_conf_data)
 install_data(esdm_server_service,
 	     install_dir: get_option('prefix') / 'lib/systemd/system')
+
+server_socket_priv_conf_data = configuration_data()
+server_socket_priv_conf_data.set('SOCKET_PATH', get_option('esdm-server-rpc-path-privileged') + '/esdm-rpc-priv.socket')
+esdm_server_priv_socket = configure_file(
+	input : 'esdm-server-priv.socket.in',
+	output : 'esdm-server-priv.socket',
+	configuration : server_socket_priv_conf_data)
+install_data(esdm_server_priv_socket,
+	     install_dir: get_option('prefix') / 'lib/systemd/system')
+
+server_socket_unpriv_conf_data = configuration_data()
+server_socket_unpriv_conf_data.set('SOCKET_PATH', get_option('esdm-server-rpc-path-unprivileged') + '/esdm-rpc-unpriv.socket')
+esdm_server_unpriv_socket = configure_file(
+	input : 'esdm-server-unpriv.socket.in',
+	output : 'esdm-server-unpriv.socket',
+	configuration : server_socket_unpriv_conf_data)
+install_data(esdm_server_unpriv_socket,
+	     install_dir: get_option('prefix') / 'lib/systemd/system')
