@@ -20,6 +20,9 @@
 #ifndef SYSTEMD_SUPPORT_H
 #define SYSTEMD_SUPPORT_H
 
+#include "config.h"
+
+#ifdef ESDM_SYSTEMD_SUPPORT
 /*
  * systemd notify related code
  *
@@ -42,5 +45,12 @@ int systemd_notify_stopping(void);
 int systemd_listen_pid(void);
 int systemd_listen_fds(void);
 int systemd_listen_fd_for_name(const char *name);
+#else
+/* can be used to simplify code, when systemd is not supported */
+inline int systemd_listen_fds(void)
+{
+	return 0;
+}
+#endif
 
 #endif

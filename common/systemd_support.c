@@ -111,11 +111,11 @@ int systemd_listen_fds()
 
 static void freep(char **p)
 {
-    if (!p || *p == NULL)
-        return;
+	if (!p || *p == NULL)
+		return;
 
-    free(*p);
-    *p = NULL;
+	free(*p);
+	*p = NULL;
 }
 
 int systemd_listen_fd_for_name(const char *name)

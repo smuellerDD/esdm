@@ -317,6 +317,17 @@ static void daemonize(void)
 {
 	pid_t pid;
 
+#ifdef ESDM_SYSTEMD_SUPPORT
+	/* forbid daemonization with socket activation */
+	if (systemd_listen_fds() > 0) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_SERVER,
+			"Do not use systemd socket activation and daemonization together.\n"
+			"Please run esdm-server in foreground mode.\n");
+		exit(1);
+	}
+#endif
+
 	/* already a daemon */
 	if (getppid() == 1)
 		return;

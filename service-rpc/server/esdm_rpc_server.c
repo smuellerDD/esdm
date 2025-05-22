@@ -52,6 +52,7 @@
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "queue.h"
+#include "systemd_support.h"
 #include "threading_support.h"
 
 struct esdm_rpcs {
@@ -779,6 +780,53 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	return 0;
 }
 
+/* Use the socket that we want to use for receiving data. */
+static int esdm_rpcs_start_systemd(const char *socket_name,
+				   ProtobufCService *service,
+				   struct esdm_rpcs *proto)
+{
+#ifdef ESDM_SYSTEMD_SUPPORT
+	int fd = -1;
+	int type;
+	socklen_t length = sizeof(type);
+
+	if (systemd_listen_fds() > 0) {
+		fd = systemd_listen_fd_for_name(socket_name);
+	}
+	if (fd) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "use systemd provided socket\n");
+
+		/* double check, that we are responsible for this socket/fd */
+		assert(systemd_listen_pid() == getppid());
+
+		if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &length) == -1) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_SERVER,
+				"unable to fetch socket type of systemd provided socket");
+			close(fd);
+			return -1;
+		}
+
+		if (type != SOCK_SEQPACKET) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_SERVER,
+				"systemd provided socket is not of type SOCK_SEQPACKET");
+			close(fd);
+			return -1;
+		}
+
+		proto->server_listening_fd = fd;
+		proto->service = service;
+		return 0;
+	}
+#endif
+
+	esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
+		    "unable to find systemd provided socket\n");
+	return -1;
+}
+
 /* Terminating the RPC server. */
 static void eesdm_rpcs_stop(struct esdm_rpcs *proto)
 {
@@ -804,8 +852,13 @@ static int esdm_rpcs_unpriv_init(void *args)
 	unpriv_proto.server_listening_fd = -1;
 
 	/* Create server handler for privileged interface in main thread */
-	CKINT(esdm_rpcs_start(ESDM_RPC_UNPRIV_SOCKET, 0, unpriv_service,
-			      &unpriv_proto));
+	if (systemd_listen_fds() > 0) {
+		CKINT(esdm_rpcs_start_systemd("ESDM_RPC_UNPRIV_SOCKET",
+					      unpriv_service, &unpriv_proto));
+	} else {
+		CKINT(esdm_rpcs_start(ESDM_RPC_UNPRIV_SOCKET, 0, unpriv_service,
+				      &unpriv_proto));
+	}
 
 	/* Make unprivileged socket available for all users */
 	if (chmod(ESDM_RPC_UNPRIV_SOCKET,
@@ -862,8 +915,13 @@ static int esdm_rpcs_interfaces_init(const char *username)
 	memset(&priv_proto, 0, sizeof(priv_proto));
 
 	/* Create server handler for privileged interface in main thread */
-	CKINT(esdm_rpcs_start(ESDM_RPC_PRIV_SOCKET, 0, priv_service,
-			      &priv_proto));
+	if (systemd_listen_fds() > 0) {
+		CKINT(esdm_rpcs_start_systemd("ESDM_RPC_PRIV_SOCKET",
+					      priv_service, &priv_proto));
+	} else {
+		CKINT(esdm_rpcs_start(ESDM_RPC_PRIV_SOCKET, 0, priv_service,
+				      &priv_proto));
+	}
 
 	/* Make privileged socket available for root only */
 	if (chmod(ESDM_RPC_PRIV_SOCKET, S_IRUSR | S_IWUSR) == -1) {
@@ -896,6 +954,10 @@ static int esdm_rpcs_interfaces_init(const char *username)
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		    "Privileged server thread for %s available\n",
 		    ESDM_RPC_PRIV_SOCKET);
+
+#ifdef ESDM_SYSTEMD_SUPPORT
+	systemd_notify_ready();
+#endif
 
 	/* Server handing privileged interface in current thread */
 	CKINT(esdm_rpcs_workerloop(&priv_proto));
@@ -1047,6 +1109,18 @@ int esdm_rpc_server_init(const char *username)
 		/* Fork the server process */
 		esdm_rpcs_interfaces_init(username);
 	} else {
+#ifdef ESDM_SYSTEMD_SUPPORT
+		/* cleanup systemd sockets */
+		if (systemd_listen_fds() > 0) {
+			for (int fd = SYSTEMD_LISTEN_FDS_START;
+			     fd <
+			     SYSTEMD_LISTEN_FDS_START + systemd_listen_fds();
+			     ++fd) {
+				close(fd);
+			}
+		}
+#endif
+
 		/*
 		 * This is the cleanup process. It simply waits for the server
 		 * to exit to clean up its resources. This is needed because
@@ -1104,4 +1178,8 @@ void esdm_rpc_server_fini(void)
 	esdm_test_shm_status_fini();
 
 	thread_release(true, false);
+
+#ifdef ESDM_SYSTEMD_SUPPORT
+	systemd_notify_stopping();
+#endif
 }
