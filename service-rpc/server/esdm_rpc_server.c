@@ -956,7 +956,12 @@ static int esdm_rpcs_interfaces_init(const char *username)
 		    ESDM_RPC_PRIV_SOCKET);
 
 #ifdef ESDM_SYSTEMD_SUPPORT
+	systemd_notify_status("ESDM ready, all sockets allocated");
 	systemd_notify_ready();
+	systemd_notify_status("Running");
+
+	/* drop notify privileges to main process only again */
+	systemd_notify_access("main");
 #endif
 
 	/* Server handing privileged interface in current thread */
@@ -1074,8 +1079,8 @@ static int esdm_rpc_server_es_monitor(void __unused *unused)
 
 int esdm_rpc_server_init(const char *username)
 {
-	pid_t pid;
 	int ret = 0;
+	pid_t pid;
 
 	/* Enter PID name space */
 	CKINT(linux_isolate_namespace_prefork());
@@ -1085,6 +1090,15 @@ int esdm_rpc_server_init(const char *username)
 
 	/* One thread group */
 	CKINT(thread_init(1));
+
+	/*
+	 * allow all child processes to notify systemd of successfull launch.
+	 * drop this again early in child after sockets are ready.
+	 */
+#ifdef ESDM_SYSTEMD_SUPPORT
+	systemd_notify_status("Waiting for RPC process to notify readiness");
+	systemd_notify_access("all");
+#endif
 
 	pid = fork();
 	if (pid < 0) {
@@ -1178,8 +1192,4 @@ void esdm_rpc_server_fini(void)
 	esdm_test_shm_status_fini();
 
 	thread_release(true, false);
-
-#ifdef ESDM_SYSTEMD_SUPPORT
-	systemd_notify_stopping();
-#endif
 }

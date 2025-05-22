@@ -89,6 +89,30 @@ int systemd_notify_stopping()
 	return systemd_notify("STOPPING=1");
 }
 
+int systemd_notify_mainpid(pid_t pid)
+{
+	char buf[64];
+	snprintf(buf, sizeof(buf), "MAINPID=%d", pid);
+
+	return systemd_notify(buf);
+}
+
+int systemd_notify_access(char *mode)
+{
+	char buf[64];
+	snprintf(buf, sizeof(buf), "NOTIFYACCESS=%s", mode);
+
+	return systemd_notify(buf);
+}
+
+int systemd_notify_status(char *msg)
+{
+	char buf[4096];
+	snprintf(buf, sizeof(buf), "STATUS=%s", msg);
+
+	return systemd_notify(buf);
+}
+
 int systemd_listen_pid()
 {
 	const char *listen_pid = getenv("LISTEN_PID");

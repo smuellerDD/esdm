@@ -38,8 +38,6 @@ After=systemd-modules-load.service
 
 [Service]
 Type=notify
-# required to allow notifications from forked children
-NotifyAccess=all
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/hwrng r
 DeviceAllow=/dev/random r
@@ -48,7 +46,7 @@ DeviceAllow=/dev/esdm_es r
 DevicePolicy=strict
 Restart=on-failure
 RestartSec=5s
-ExecStart=@PATH@/esdm-server -f --pid /var/run/esdm-server.pid
+ExecStart=@PATH@/esdm-server -f --pid /var/run/esdm-server.pid --syslog
 IPAddressDeny=any
 LimitMEMLOCK=0
 LockPersonality=yes

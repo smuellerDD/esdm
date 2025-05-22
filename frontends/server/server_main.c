@@ -393,6 +393,10 @@ int main(int argc, char *argv[])
 
 	CKINT(daemon_init());
 
+#ifdef ESDM_SYSTEMD_SUPPORT
+	systemd_notify_status("Waiting for subprocesses to terminate");
+#endif
+
 out:
 	daemon_release();
 	dealloc();

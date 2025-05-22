@@ -20,5 +20,5 @@ PartOf=esdm-linux-compat.target
 [Service]
 Restart=on-failure
 RestartSec=5s
-ExecStart=@PATH@/esdm-cuse-urandom -f
+ExecStart=@PATH@/esdm-cuse-urandom -f --syslog
 KillMode=mixed

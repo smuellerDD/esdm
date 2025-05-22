@@ -21,6 +21,7 @@
 #define SYSTEMD_SUPPORT_H
 
 #include "config.h"
+#include <unistd.h>
 
 #ifdef ESDM_SYSTEMD_SUPPORT
 /*
@@ -36,6 +37,9 @@ int systemd_notify(const char *message);
 /* helper functions with prepared messages */
 int systemd_notify_ready(void);
 int systemd_notify_stopping(void);
+int systemd_notify_mainpid(pid_t pid);
+int systemd_notify_access(char *mode);
+int systemd_notify_status(char *msg);
 
 /*
  * systemd socket activation related code
