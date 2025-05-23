@@ -27,10 +27,10 @@
 Description=Entropy Source and DRNG Manager Daemon
 
 # NO SOCKET ACTIVATION BEGIN
-#DefaultDependencies=no
-#After=local-fs.target
-#Before=sysinit.target shutdown.target
-#Conflicts=shutdown.target
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
 # NO SOCKET ACTIVATION END
 
 StartLimitIntervalSec=500
@@ -45,11 +45,11 @@ After=systemd-modules-load.service
 # instead of basic.target in order to break dependency cycles.
 # Therefore it is commented out by default.
 
-Requires=esdm-server-priv.socket
-After=esdm-server-priv.socket
+#Requires=esdm-server-priv.socket
+#After=esdm-server-priv.socket
 
-Requires=esdm-server-unpriv.socket
-After=esdm-server-unpriv.socket
+#Requires=esdm-server-unpriv.socket
+#After=esdm-server-unpriv.socket
 
 [Service]
 Type=notify
@@ -87,7 +87,7 @@ KillMode=mixed
 
 [Install]
 # NO SOCKET ACTIVATION
-#WantedBy=basic.target
+WantedBy=basic.target
 # SOCKET ACTIVATION
-WantedBy=multi-user.target
+#WantedBy=multi-user.target
 Alias=esdm-server.service
