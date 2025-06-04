@@ -45,11 +45,13 @@ After=systemd-modules-load.service
 # instead of basic.target in order to break dependency cycles.
 # Therefore it is commented out by default.
 
+# SOCKET ACTIVATION BEGIN
 #Requires=esdm-server-priv.socket
 #After=esdm-server-priv.socket
 
 #Requires=esdm-server-unpriv.socket
 #After=esdm-server-unpriv.socket
+# SOCKET ACTIVATION END
 
 [Service]
 Type=notify
@@ -86,8 +88,10 @@ UMask=0077
 KillMode=mixed
 
 [Install]
-# NO SOCKET ACTIVATION
+# NO SOCKET ACTIVATION BEGIN
 WantedBy=basic.target
-# SOCKET ACTIVATION
+# NO SOCKET ACTIVATION END
+# SOCKET ACTIVATION BEGIN
 #WantedBy=multi-user.target
+# SOCKET ACTIVATION END
 Alias=esdm-server.service
