@@ -41,12 +41,13 @@ static void closep(int *fd)
 	*fd = -1;
 }
 
-bool systemd_support(void) {
-	#ifdef ESDM_SYSTEMD_SUPPORT
+bool systemd_support(void)
+{
+#ifdef ESDM_SYSTEMD_SUPPORT
 	return true;
-	#else
+#else
 	return false;
-	#endif
+#endif
 }
 
 int systemd_notify(const char *message)
