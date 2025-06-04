@@ -22,8 +22,15 @@
 
 #include "config.h"
 #include <unistd.h>
+#include <stdbool.h>
 
-#ifdef ESDM_SYSTEMD_SUPPORT
+/*
+ * systemd socket activation related code
+ */
+#define SYSTEMD_LISTEN_FDS_START 3
+
+bool systemd_support(void);
+
 /*
  * systemd notify related code
  *
@@ -41,20 +48,8 @@ int systemd_notify_mainpid(pid_t pid);
 int systemd_notify_access(char *mode);
 int systemd_notify_status(char *msg);
 
-/*
- * systemd socket activation related code
- */
-#define SYSTEMD_LISTEN_FDS_START 3
-
 int systemd_listen_pid(void);
 int systemd_listen_fds(void);
 int systemd_listen_fd_for_name(const char *name);
-#else
-/* can be used to simplify code, when systemd is not supported */
-inline int systemd_listen_fds(void)
-{
-	return 0;
-}
-#endif
 
-#endif
+#endif /* SYSTEMD_SUPPORT_H */

@@ -21,7 +21,6 @@
 #include "systemd_support.h"
 
 #include <errno.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -40,6 +39,14 @@ static void closep(int *fd)
 
 	close(*fd);
 	*fd = -1;
+}
+
+bool systemd_support(void) {
+	#ifdef ESDM_SYSTEMD_SUPPORT
+	return true;
+	#else
+	return false;
+	#endif
 }
 
 int systemd_notify(const char *message)

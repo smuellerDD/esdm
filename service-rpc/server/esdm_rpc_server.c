@@ -785,7 +785,10 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 				   ProtobufCService *service,
 				   struct esdm_rpcs *proto)
 {
-#ifdef ESDM_SYSTEMD_SUPPORT
+	if (!systemd_support()) {
+		goto out;
+	}
+
 	int fd = -1;
 	int type;
 	socklen_t length = sizeof(type);
@@ -820,8 +823,8 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 		proto->service = service;
 		return 0;
 	}
-#endif
 
+out:
 	esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
 		    "unable to find systemd provided socket %s\n", socket_name);
 	return -1;
@@ -955,14 +958,12 @@ static int esdm_rpcs_interfaces_init(const char *username)
 		    "Privileged server thread for %s available\n",
 		    ESDM_RPC_PRIV_SOCKET);
 
-#ifdef ESDM_SYSTEMD_SUPPORT
 	systemd_notify_status("ESDM ready, all sockets allocated");
 	systemd_notify_ready();
 	systemd_notify_status("Running");
 
 	/* drop notify privileges to main process only again */
 	systemd_notify_access("main");
-#endif
 
 	/* Server handing privileged interface in current thread */
 	CKINT(esdm_rpcs_workerloop(&priv_proto));
@@ -1095,10 +1096,8 @@ int esdm_rpc_server_init(const char *username)
 	 * allow all child processes to notify systemd of successfull launch.
 	 * drop this again early in child after sockets are ready.
 	 */
-#ifdef ESDM_SYSTEMD_SUPPORT
 	systemd_notify_status("Waiting for RPC process to notify readiness");
 	systemd_notify_access("all");
-#endif
 
 	pid = fork();
 	if (pid < 0) {
@@ -1123,7 +1122,6 @@ int esdm_rpc_server_init(const char *username)
 		/* Fork the server process */
 		esdm_rpcs_interfaces_init(username);
 	} else {
-#ifdef ESDM_SYSTEMD_SUPPORT
 		/* cleanup systemd sockets */
 		if (systemd_listen_fds() > 0) {
 			for (int fd = SYSTEMD_LISTEN_FDS_START;
@@ -1133,7 +1131,6 @@ int esdm_rpc_server_init(const char *username)
 				close(fd);
 			}
 		}
-#endif
 
 		/*
 		 * This is the cleanup process. It simply waits for the server

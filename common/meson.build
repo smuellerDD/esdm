@@ -4,6 +4,7 @@ common_src = files([
 	'buffer.c',
 	'esdm_logger.c',
 	'helper.c',
+	'systemd_support.c',
 	'threading_support.c',
 ])
 
@@ -13,10 +14,6 @@ endif
 
 if host_machine.system() == 'linux'
 	common_src += files('linux_support.c')
-endif
-
-if get_option('systemd').enabled()
-	common_src += files(['systemd_support.c'])
 endif
 
 conf_data = configuration_data()

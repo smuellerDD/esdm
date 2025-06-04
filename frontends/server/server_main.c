@@ -32,6 +32,7 @@
 #include "esdm_rpc_server.h"
 #include "esdm_logger.h"
 #include "ret_checkers.h"
+#include "systemd_support.h"
 
 static unsigned int verbosity = 0;
 static unsigned int foreground = 0;
@@ -317,7 +318,6 @@ static void daemonize(void)
 {
 	pid_t pid;
 
-#ifdef ESDM_SYSTEMD_SUPPORT
 	/* forbid daemonization with socket activation */
 	if (systemd_listen_fds() > 0) {
 		esdm_logger(
@@ -326,7 +326,6 @@ static void daemonize(void)
 			"Please run esdm-server in foreground mode.\n");
 		exit(1);
 	}
-#endif
 
 	/* already a daemon */
 	if (getppid() == 1)
@@ -393,10 +392,10 @@ int main(int argc, char *argv[])
 
 	CKINT(daemon_init());
 
-#ifdef ESDM_SYSTEMD_SUPPORT
-	systemd_notify_status("Waiting for subprocesses to terminate");
-	systemd_notify_stopping();
-#endif
+	if (systemd_support()) {
+		systemd_notify_status("Waiting for subprocesses to terminate");
+		systemd_notify_stopping();
+	}
 
 out:
 	daemon_release();
