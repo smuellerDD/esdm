@@ -392,10 +392,8 @@ int main(int argc, char *argv[])
 
 	CKINT(daemon_init());
 
-	if (systemd_support()) {
-		systemd_notify_status("Waiting for subprocesses to terminate");
-		systemd_notify_stopping();
-	}
+	systemd_notify_status("Waiting for subprocesses to terminate");
+	systemd_notify_stopping();
 
 out:
 	daemon_release();

@@ -24,12 +24,11 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+#ifdef ESDM_SYSTEMD_SUPPORT
 /*
  * systemd socket activation related code
  */
 #define SYSTEMD_LISTEN_FDS_START 3
-
-bool systemd_support(void);
 
 /*
  * systemd notify related code
@@ -51,5 +50,43 @@ int systemd_notify_status(char *msg);
 int systemd_listen_pid(void);
 int systemd_listen_fds(void);
 int systemd_listen_fd_for_name(const char *name);
+
+#else /* ESDM_SYSTEMD_SUPPORT */
+
+static inline int systemd_notify(const char *message)
+{
+	(void)message;
+	return 0;
+}
+
+static inline int systemd_notify_ready(void) { return 0; }
+static inline int systemd_notify_stopping(void) { return 0; }
+static inline int systemd_notify_mainpid(pid_t pid)
+{
+	(void)pid;
+	return 0;
+}
+
+static inline int systemd_notify_access(char *mode)
+{
+	(void)mode;
+	return 0;
+}
+
+static inline int systemd_notify_status(char *msg)
+{
+	(void)msg;
+	return 0;
+}
+
+static inline int systemd_listen_pid(void) { return 0; }
+static inline int systemd_listen_fds(void) { return 0; }
+static inline int systemd_listen_fd_for_name(const char *name)
+{
+	(void)name;
+	return 0;
+}
+
+#endif /* ESDM_SYSTEMD_SUPPORT */
 
 #endif /* SYSTEMD_SUPPORT_H */

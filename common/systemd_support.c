@@ -41,15 +41,6 @@ static void closep(int *fd)
 	*fd = -1;
 }
 
-bool systemd_support(void)
-{
-#ifdef ESDM_SYSTEMD_SUPPORT
-	return true;
-#else
-	return false;
-#endif
-}
-
 int systemd_notify(const char *message)
 {
 	union sockaddr_union {
@@ -106,12 +97,12 @@ int systemd_notify(const char *message)
 	return 1; /* Notified! */
 }
 
-int systemd_notify_ready()
+int systemd_notify_ready(void)
 {
 	return systemd_notify("READY=1");
 }
 
-int systemd_notify_stopping()
+int systemd_notify_stopping(void)
 {
 	return systemd_notify("STOPPING=1");
 }
@@ -140,7 +131,7 @@ int systemd_notify_status(char *msg)
 	return systemd_notify(buf);
 }
 
-int systemd_listen_pid()
+int systemd_listen_pid(void)
 {
 	const char *listen_pid = getenv("LISTEN_PID");
 
@@ -150,7 +141,7 @@ int systemd_listen_pid()
 	return atoi(listen_pid);
 }
 
-int systemd_listen_fds()
+int systemd_listen_fds(void)
 {
 	const char *listen_fds = getenv("LISTEN_FDS");
 

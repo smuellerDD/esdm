@@ -785,10 +785,7 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 				   ProtobufCService *service,
 				   struct esdm_rpcs *proto)
 {
-	if (!systemd_support()) {
-		goto out;
-	}
-
+#ifdef ESDM_SYSTEMD_SUPPORT
 	int fd = -1;
 	int type;
 	socklen_t length = sizeof(type);
@@ -825,10 +822,15 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 		return 0;
 	}
 
-out:
 	esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
 		    "unable to find systemd provided socket %s\n", socket_name);
 	return -1;
+#else
+	(void)socket_name;
+	(void)service;
+	(void)proto;
+	return 0;
+#endif
 }
 
 /* Terminating the RPC server. */
@@ -857,7 +859,7 @@ static int esdm_rpcs_unpriv_init(void *args)
 
 	/* Create server handler for privileged interface in main thread */
 	if (systemd_listen_fds() > 0) {
-		CKINT(esdm_rpcs_start_systemd("ESDM_RPC_UNPRIV_SOCKET",
+		CKINT(esdm_rpcs_start_systemd(ESDM_RPC_UNPRIV_SOCKET,
 					      unpriv_service, &unpriv_proto));
 	} else {
 		CKINT(esdm_rpcs_start(ESDM_RPC_UNPRIV_SOCKET, 0, unpriv_service,

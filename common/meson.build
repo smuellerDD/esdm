@@ -4,9 +4,14 @@ common_src = files([
 	'buffer.c',
 	'esdm_logger.c',
 	'helper.c',
-	'systemd_support.c',
 	'threading_support.c',
 ])
+
+if get_option('systemd').enabled()
+	common_src += files([
+		'systemd_support.c'
+	])
+endif
 
 if get_option('testmode').enabled()
 	common_src += files(['test_pertubation.c'])

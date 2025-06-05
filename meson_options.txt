@@ -346,7 +346,7 @@ option('num-aux-pools', type: 'integer', value: 1, min: 1, max: 1024,
 
 option('systemd', type: 'feature', value: 'enabled',
        description: '''Enable support for systemd notify and systemd socket activation
-       
+
        ESDM services will notify systemd about beeing ready and use provided FDs
        for their sockets (socket activation).
        ''')
