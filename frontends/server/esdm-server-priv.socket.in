@@ -1,0 +1,13 @@
+[Unit]
+Description=ESDM privileged RPC socket
+
+[Socket]
+ListenSequentialPacket=@SOCKET_PATH@
+SocketMode=0660
+SocketUser=root
+SocketGroup=root
+FileDescriptorName=ESDM_RPC_PRIV_SOCKET
+Service=esdm-server.service
+
+[Install]
+WantedBy=sockets.target

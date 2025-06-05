@@ -136,6 +136,21 @@ at a time the `/usr/local` is not yet mounted which leads to the situation that
 the `esdm-server` is not started during boot. Thus, the `esdm-server` should
 not be deployed on a BtrFS subvolumes.
 
+Systemd will complain, that esdm uses `/var/run` with the default settings.
+You can change this by supplying the following options to meson:
+
+```
+   -Desdm-server-rpc-path-unprivileged=/run
+   -Desdm-server-rpc-path-privileged=/run
+```
+In order to use systemd socket activation with esdm, compile esdm with `-Dsystemd=enabled` (default).
+In addition, uncomment the socket related lines in esdm-server.service(.in) and change
+esdm-server to start later, than in the sysinit target. Otherwise, systemd cannot use
+the socket activation stage and will produce dependency cycles:
+
+1) comment all lines between `NO SOCKET ACTIVATION BEGIN` and `NO SOCKET ACTIVATION END`
+2) uncomment all lines between `SOCKET ACTIVATION BEGIN` and `SOCKET ACTIVATION END`
+
 ## Additional Hardening Measures
 
 The ESDM already executes with different execution domains and without any
