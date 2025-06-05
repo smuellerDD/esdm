@@ -859,7 +859,7 @@ static int esdm_rpcs_unpriv_init(void *args)
 
 	/* Create server handler for privileged interface in main thread */
 	if (systemd_listen_fds() > 0) {
-		CKINT(esdm_rpcs_start_systemd(ESDM_RPC_UNPRIV_SOCKET,
+		CKINT(esdm_rpcs_start_systemd("ESDM_RPC_UNPRIV_SOCKET",
 					      unpriv_service, &unpriv_proto));
 	} else {
 		CKINT(esdm_rpcs_start(ESDM_RPC_UNPRIV_SOCKET, 0, unpriv_service,
