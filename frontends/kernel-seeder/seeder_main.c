@@ -45,7 +45,7 @@ static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
  */
 #define ESDM_SERVER_LINUX_ENTROPY_BYTES 32
 
-static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
+static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force_crng_reseed)
 {
 	struct stat statfs;
 	unsigned long esdm_rpcs_linux_ioctl = RNDADDENTROPY;
@@ -124,6 +124,25 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi)
 			    rpi->entropy_count);
 	}
 
+	if (force_crng_reseed) {
+		/* need to use ESDM cuse interface? */
+		if (esdm_rpcs_linux_ioctl == 43)
+			esdm_rpcs_linux_ioctl = 44;
+		else {
+			esdm_rpcs_linux_ioctl = RNDRESEEDCRNG;
+		}
+
+		errsv = ioctl(esdm_rpcs_linux_fd, esdm_rpcs_linux_ioctl);
+		if (errsv != 0) {
+			errsv = errno;
+			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
+					"Error during forced Linux kernel CRNG reseed: %s\n", strerror(errsv));
+		} else {
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_SEEDER,
+					"Linux kernel CRNG forcefully reseeded\n");
+		}
+	}
+
 	close(esdm_rpcs_linux_fd);
 
 	return -errsv;
@@ -147,15 +166,32 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
 	while (atomic_bool_read(&should_run)) {
+#ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
+		ret = esdm_rpcc_get_random_bytes_pr((uint8_t *)rpi->buf,
+						    (size_t)rpi->buf_size);
+#else
 		ret = esdm_rpcc_get_random_bytes_full((uint8_t *)rpi->buf,
 						      (size_t)rpi->buf_size);
+#endif
 		if (ret < 0) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
 				    "Failure in generating random bits: %zd\n",
 				    ret);
 		} else {
 			rpi->entropy_count = ESDM_LINUX_RESEED_ENTROPY_COUNT;
-			esdm_rpcs_linux_insert_entropy(rpi);
+#ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
+			/*
+			 * Immediately force CRNG reseed in NTG.1 mode
+			 *
+			 * While not strictly necessary, this enables you
+			 * to better reason, when your seeds take effect
+			 * and allows control via the reseeding interval in secs,
+			 * without using another small daemon.
+			 */
+			esdm_rpcs_linux_insert_entropy(rpi, true);
+#else
+			esdm_rpcs_linux_insert_entropy(rpi, false);
+#endif
 		}
 
 		memset_secure(rpi->buf, 0, (size_t)rpi->buf_size);

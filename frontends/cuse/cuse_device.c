@@ -796,6 +796,29 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 		}
 		break;
 
+	/* ESDM-specific IOCTL: force reseed of kernel CRNG directly */
+	case 44:
+		/*
+		* This operation requires privileges. Thus, raise the
+		* privilege level to the same level as the caller has.
+		*/
+		if (!esdm_cuse_client_privileged(req)) {
+			fuse_reply_err(req, EPERM);
+			return;
+		}
+		esdm_cuse_raise_privilege_transient(req);
+		if (backend_fd >= 0 &&
+			ioctl(backend_fd, RNDRESEEDCRNG) == -1)
+			ret = -errno;
+		else
+			ret = 0;
+		esdm_cuse_drop_privilege_transient();
+		if (ret)
+			fuse_reply_err(req, -ret);
+		else
+			fuse_reply_ioctl(req, 0, NULL, 0);
+		break;
+
 	default:
 		fuse_reply_err(req, EINVAL);
 	}
