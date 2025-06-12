@@ -147,8 +147,13 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
 	while (atomic_bool_read(&should_run)) {
+#ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
+		ret = esdm_rpcc_get_random_bytes_pr((uint8_t *)rpi->buf,
+						    (size_t)rpi->buf_size);
+#else
 		ret = esdm_rpcc_get_random_bytes_full((uint8_t *)rpi->buf,
 						      (size_t)rpi->buf_size);
+#endif
 		if (ret < 0) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
 				    "Failure in generating random bits: %zd\n",
