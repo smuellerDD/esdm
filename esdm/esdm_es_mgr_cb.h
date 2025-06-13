@@ -90,7 +90,7 @@ struct entropy_es {
 
 struct entropy_buf {
 	struct entropy_es entropy_es[esdm_ext_es_last];
-	time_t now;
+	struct timespec now;
 };
 
 /*

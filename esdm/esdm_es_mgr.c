@@ -20,6 +20,7 @@
  */
 
 #define _POSIX_C_SOURCE 200112L
+#include <assert.h>
 #include <errno.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
@@ -775,12 +776,14 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
 				      esdm_security_strength() :
 				      ESDM_MIN_SEED_ENTROPY_BITS;
+	int ret;
 
 	/* Guarantee that requested bits is a multiple of bytes */
 	BUILD_BUG_ON(ESDM_DRNG_SECURITY_STRENGTH_BITS % 8);
 
 	/* always reseed the DRNG with the current time stamp */
-	eb->now = time(NULL);
+	ret = clock_gettime(CLOCK_MONOTONIC, &eb->now);
+	assert(ret == 0);
 
 	/*
 	 * Require at least 128 bits of entropy for any reseed. If the ESDM is
