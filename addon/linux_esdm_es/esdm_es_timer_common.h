@@ -68,7 +68,7 @@ config ESDM_COLLECTION_SIZE
 	default 8192 if ESDM_COLLECTION_SIZE_8192
 
  */
-#define CONFIG_ESDM_COLLECTION_SIZE 1024
+#define CONFIG_ESDM_COLLECTION_SIZE 2048
 
 /******************************************************************************/
 
