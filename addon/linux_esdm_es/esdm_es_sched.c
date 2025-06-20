@@ -74,9 +74,9 @@ static struct crypto_rng *drbg_state = NULL;
 #define ESDM_SCHED_ENTROPY_BITS ESDM_UINT32_C(CONFIG_ESDM_SCHED_ENTROPY_RATE)
 
 /* Number of events required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
-static u32 esdm_sched_entropy_bits = ESDM_SCHED_ENTROPY_BITS;
+static u32 esdm_sched_entropy_bits = ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR;
 
-static u32 sched_entropy __read_mostly = ESDM_SCHED_ENTROPY_BITS;
+static u32 sched_entropy __read_mostly = ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR;
 #ifdef CONFIG_ESDM_RUNTIME_ES_CONFIG
 module_param(sched_entropy, uint, 0444);
 MODULE_PARM_DESC(
@@ -106,12 +106,14 @@ static void __init esdm_sched_check_compression_state(void)
 void __init esdm_sched_es_init(bool highres_timer)
 {
 	/* Set a minimum number of scheduler events that must be collected */
-	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS, sched_entropy);
+	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR, sched_entropy);
+
+	BUILD_BUG_ON(ESDM_ES_MIN_OVERSAMPLING_FACTOR > ESDM_ES_OVERSAMPLING_FACTOR);
 
 	if (highres_timer) {
 		esdm_sched_entropy_bits = sched_entropy;
 	} else {
-		u32 new_entropy = sched_entropy * ESDM_ES_OVERSAMPLING_FACTOR;
+		u32 new_entropy = sched_entropy / ESDM_ES_MIN_OVERSAMPLING_FACTOR * ESDM_ES_OVERSAMPLING_FACTOR;
 
 		esdm_sched_entropy_bits = (sched_entropy < new_entropy) ?
 						  new_entropy :
@@ -424,7 +426,7 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 
 static void esdm_sched_set_entropy_rate(u32 rate)
 {
-	esdm_sched_entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS, rate);
+	esdm_sched_entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR, rate);
 }
 
 struct esdm_es_cb esdm_es_sched = {
