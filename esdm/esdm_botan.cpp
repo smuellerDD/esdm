@@ -262,6 +262,7 @@ static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
 	return 0;
 }
 
+#ifdef ESDM_BOTAN_DRNG_HMAC
 static ssize_t esdm_botan_drbg_generate_w_additional_data(void *drng,
 							  uint8_t *outbuf,
 							  size_t outbuflen,
@@ -271,32 +272,44 @@ static ssize_t esdm_botan_drbg_generate_w_additional_data(void *drng,
 	struct esdm_botan_drng_state *state =
 		reinterpret_cast<esdm_botan_drng_state *>(drng);
 
-#ifdef ESDM_BOTAN_DRNG_CHACHA20
-	state->drbg->randomize(outbuf, outbuflen);
-#endif
 
-#ifdef ESDM_BOTAN_DRNG_HMAC
 	state->drbg->randomize_with_input(outbuf, outbuflen, adata, adatalen);
-#endif
 
 	return (ssize_t)outbuflen;
 }
+#endif
 
 static ssize_t esdm_botan_drbg_generate(void *drng, uint8_t *outbuf,
 					size_t outbuflen)
 {
+	/* calling randomize_with_input on chacha20 would
+	 * trigger generating a new key on every request,
+	 * skip this, as ChaCha20 should be the high speed
+	 * option */
+#ifdef ESDM_BOTAN_DRNG_CHACHA20
+	struct esdm_botan_drng_state *state =
+		reinterpret_cast<esdm_botan_drng_state *>(drng);
+
+	state->drbg->randomize(outbuf, outbuflen);
+
+	return (ssize_t)outbuflen;
+#endif
+
+#ifdef ESDM_BOTAN_DRNG_HMAC
 	struct timespec ts;
 	int ret;
 
 	ret = clock_gettime(CLOCK_MONOTONIC, &ts);
-	assert(ret == 0);
+	if (ret) {
+		return -ret;
+	}
 
 	/* always use additional data in order to perform additional mixing steps
-	 * inside HMAC-DRBG. The ChaCha20 implementation will ignore
-	 * the additional data */
+	 * inside HMAC-DRBG (recommended by BSI AIS 20/31 V3.0, Sec. 5.3.2 Par. 1079)*/
 	return esdm_botan_drbg_generate_w_additional_data(
 		drng, outbuf, outbuflen, reinterpret_cast<const uint8_t *>(&ts),
 		sizeof(ts));
+#endif
 }
 
 static void
