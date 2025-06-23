@@ -146,12 +146,23 @@ static const char* esdm_drbg_name(void)
 	return esdm_drbg_types[esdm_drbg_type].drbg_core;
 }
 
+static int esdm_drbg_is_fully_seeded(void* drbg)
+{
+	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
+
+	if (drbg && drbg_s->d_ops)
+		return drbg_s->seeded == DRBG_SEED_STATE_FULL;
+
+	return -EINVAL;
+}
+
 static const struct esdm_drbg_cb esdm_drbg_cb_int = {
 	.drbg_name = esdm_drbg_name,
 	.drbg_alloc = esdm_drbg_alloc,
 	.drbg_dealloc = esdm_drbg_dealloc,
 	.drbg_seed = esdm_drbg_seed_helper,
 	.drbg_generate = esdm_drbg_generate_helper,
+	.drbg_is_fully_seeded = esdm_drbg_is_fully_seeded,
 };
 const struct esdm_drbg_cb *esdm_drbg_cb = &esdm_drbg_cb_int;
 

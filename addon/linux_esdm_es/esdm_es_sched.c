@@ -281,8 +281,14 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
+	ret = esdm_drbg_cb->drbg_is_fully_seeded(esdm_sched_drbg_state);
+	if (!ret) {
+		pr_warn("drbg in scheduler-based noise source has not reached fully seeded state\n");
+		goto err;
+	}
+
 	ret = esdm_drbg_cb->drbg_generate(esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3);
-	if (ret) {
+	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in scheduler-based noise source\n");
 		goto err;
 	}
@@ -419,8 +425,8 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 		 " per-CPU scheduler event collection size: %u\n"
 		 " Standards compliance: %s\n"
 		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(),
 		 hash_cb->hash_name(),
+		 esdm_drbg_cb->drbg_name(),
 		 esdm_sched_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B " : "",

@@ -27,6 +27,7 @@ struct esdm_drbg_cb {
 	void (*drbg_dealloc)(void *drbg);
 	int (*drbg_seed)(void *drbg, const u8 *inbuf, u32 inbuflen);
 	int (*drbg_generate)(void *drbg, u8 *outbuf, u32 outbuflen);
+	int (*drbg_is_fully_seeded)(void *drbg);
 };
 
 /* can be called from module entry point */
