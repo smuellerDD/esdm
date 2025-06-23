@@ -66,7 +66,7 @@ config ESDM_RUNTIME_ES_CONFIG
 
 static void *esdm_irq_hash_state = NULL;
 static void *esdm_irq_drbg_state = NULL;
-
+static const char *esdm_irq_drbg_domain_separation = "ESDM_IRQ_DRBG";
 /*
  * Number of interrupts to be recorded to assume that DRNG security strength
  * bits of entropy are received.
@@ -275,7 +275,7 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
-	ret = esdm_drbg_cb->drbg_generate(esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3);
+	ret = esdm_drbg_cb->drbg_generate(esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3, (u8*)esdm_irq_drbg_domain_separation, strlen(esdm_irq_drbg_domain_separation));
 	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
 		goto err;
@@ -547,7 +547,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	}
 
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc();
+	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc((u8*)esdm_irq_drbg_domain_separation, strlen(esdm_irq_drbg_domain_separation));
 	if (!esdm_irq_drbg_state) {
 		esdm_irq_hash_state = NULL;
 		hash_cb->hash_dealloc(tmp_hash_state);

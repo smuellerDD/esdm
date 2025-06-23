@@ -64,6 +64,8 @@ config ESDM_RUNTIME_ES_CONFIG
 
 static void *esdm_sched_hash_state = NULL;
 static void *esdm_sched_drbg_state = NULL;
+static const char *esdm_sched_drbg_domain_separation = "ESDM_SCH_DRBG";
+
 
 /*
  * Number of scheduler-based context switches to be recorded to assume that
@@ -287,7 +289,7 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
-	ret = esdm_drbg_cb->drbg_generate(esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3);
+	ret = esdm_drbg_cb->drbg_generate(esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3, (u8*)esdm_sched_drbg_domain_separation, strlen(esdm_sched_drbg_domain_separation));
 	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in scheduler-based noise source\n");
 		goto err;
@@ -473,7 +475,7 @@ int __init esdm_es_sched_module_init(void)
 	}
 
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc();
+	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc((u8*)esdm_sched_drbg_domain_separation, strlen(esdm_sched_drbg_domain_separation));
 	if (!esdm_sched_drbg_state) {
 		esdm_sched_hash_state = NULL;
 		hash_cb->hash_dealloc(tmp_hash_state);

@@ -61,13 +61,13 @@ static const struct esdm_drbg esdm_drbg_types[] = {
 static int esdm_drbg_seed_helper(void* drbg, const u8* inbuf, u32 inbuflen)
 {
 	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
-	LIST_HEAD(seedlist);
 	struct drbg_string data;
+	LIST_HEAD(seedlist);
 	int ret;
 
 	drbg_string_fill(&data, inbuf, inbuflen);
 	list_add_tail(&data.list, &seedlist);
-	ret = drbg_s->d_ops->update(drbg, &seedlist, drbg_s->seeded);
+	ret = drbg_s->d_ops->update(drbg_s, &seedlist, drbg_s->seeded != DRBG_SEED_STATE_UNSEEDED);
 
 	if (ret >= 0)
 		drbg_s->seeded = DRBG_SEED_STATE_FULL;
@@ -75,17 +75,27 @@ static int esdm_drbg_seed_helper(void* drbg, const u8* inbuf, u32 inbuflen)
 	return ret;
 }
 
-static int esdm_drbg_generate_helper(void* drbg, u8* outbuf, u32 outbuflen)
+static int esdm_drbg_generate_helper(void* drbg, u8* outbuf, u32 outbuflen, u8* additional_data, u32 additional_data_len)
 {
 	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
+	struct drbg_string addtl;
+	LIST_HEAD(addtllist);
 
-	return drbg_s->d_ops->generate(drbg, outbuf, outbuflen, NULL);
+	if (additional_data != NULL && additional_data_len > 0) {
+		drbg_string_fill(&addtl, additional_data, additional_data_len);
+		list_add_tail(&addtl.list, &addtllist);
+		return drbg_s->d_ops->generate(drbg, outbuf, outbuflen, &addtllist);
+	} else {
+		return drbg_s->d_ops->generate(drbg, outbuf, outbuflen, NULL);
+	}
 }
 
-static void* esdm_drbg_alloc(void)
+static void* esdm_drbg_alloc(u8* personalization, u32 perslen)
 {
 	const u32 sec_strength = 32;
 	struct drbg_state* drbg_s;
+	struct drbg_string data;
+	LIST_HEAD(seedlist);
 	int coreref = -1;
 	bool pr = false;
 	int ret;
@@ -116,6 +126,14 @@ static void* esdm_drbg_alloc(void)
 		pr_warn("Security strength of DRBG (%u bits) higher than requested by ESDM (%u bits)\n",
 			drbg_sec_strength(drbg_s->core->flags) * 8,
 			sec_strength * 8);
+
+	drbg_string_fill(&data, personalization, perslen);
+	list_add_tail(&data.list, &seedlist);
+	ret = drbg_s->d_ops->update(drbg_s, &seedlist, 0);
+	if (ret) {
+		pr_warn("unable to add personalization string to DRBG instance\n");
+		goto dealloc;
+	}
 
 	pr_info("DRBG with %s core allocated\n", drbg_s->core->backend_cra_name);
 
