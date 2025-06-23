@@ -16,6 +16,7 @@
 #include "esdm_es_mgr_cb.h"
 #include "esdm_es_sched.h"
 #include "esdm_es_timer_common.h"
+#include "esdm_drbg_kcapi.h"
 #include "esdm_hash_kcapi.h"
 #include "esdm_health.h"
 #include "esdm_testing.h"
@@ -62,7 +63,7 @@ config ESDM_RUNTIME_ES_CONFIG
 /******************************************************************************/
 
 static void *esdm_sched_hash_state = NULL;
-static struct crypto_rng *drbg_state = NULL;
+static void *esdm_sched_drbg_state = NULL;
 
 /*
  * Number of scheduler-based context switches to be recorded to assume that
@@ -173,9 +174,8 @@ static void esdm_sched_reset(void)
 		atomic_set(per_cpu_ptr(&esdm_sched_array_events, cpu), 0);
 }
 
-static u32 esdm_sched_pool_hash_one(struct shash_desc *shash, struct esdm_hash_cb *hash_cb, int cpu)
+static u32 esdm_sched_pool_hash_one(struct shash_desc *shash, const struct esdm_hash_cb *hash_cb, int cpu)
 {
-	unsigned long flags;
 	u32 found_events;
 
 	/* Obtain entropy statement like for the entropy pool */
@@ -214,7 +214,6 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	SHASH_DESC_ON_STACK(shash, NULL);
 	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
 	u8 digest[ESDM_MAX_DIGESTSIZE];
-	unsigned long flags;
 	u32 found_events, collected_events = 0, collected_ent_bits,
 			  requested_events, returned_ent_bits;
 	int ret, cpu;
@@ -275,6 +274,7 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		"obtained %u bits by collecting %u bits of entropy from scheduler-based noise source\n",
 		returned_ent_bits, collected_ent_bits);
 
+	/* insert gathered entropy as additional input, HMAC-DRBG will insert this into his state before generating output! */
 	ret = esdm_drbg_cb->drbg_seed(esdm_sched_drbg_state, digest, hash_cb->hash_digestsize(hash));
 	if (ret) {
 		pr_warn("unable to seed drbg in scheduler-based noise source\n");
@@ -414,11 +414,14 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 
 	snprintf(buf, buflen,
 		 " Hash for operating entropy pool: %s\n"
+		 " DRBG for operating entropy pool: %s\n"
 		 " Available entropy: %u\n"
 		 " per-CPU scheduler event collection size: %u\n"
 		 " Standards compliance: %s\n"
 		 " High-resolution timer: %s\n",
-		 hash_cb->hash_name(), esdm_sched_avail_entropy(0),
+		 esdm_drbg_cb->drbg_name(),
+		 hash_cb->hash_name(),
+		 esdm_sched_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B " : "",
 		 esdm_highres_timer() ? "true" : "false");
@@ -444,8 +447,6 @@ struct esdm_es_cb esdm_es_sched = {
 int __init esdm_es_sched_module_init(void)
 {
 	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
- 	const char *personalization = "ESDM_SCHEDULER_DRBG";
-	unsigned long flags;
 	void *tmp_hash_state;
 	int ret;
 
@@ -466,17 +467,15 @@ int __init esdm_es_sched_module_init(void)
 	}
 
 	/* switch to XDRBG, if upstream in the kernel */
-	drbg_state = crypto_alloc_rng("drbg_nopr_hmac_sha512", 0, 0);
-	if (!drbg_state) {
+	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc();
+	if (!esdm_sched_drbg_state) {
 		esdm_sched_hash_state = NULL;
 		hash_cb->hash_dealloc(tmp_hash_state);
 		pr_warn("could not alloc DRBG for post-processing\n");
 		return EACCES;
 	}
 
-	crypto_rng_reset(drbg_state, personalization, strlen(personalization));
-
-	pr_info("ESDM Scheduler ES registered\n");
+	pr_info("ESDM Scheduler ES registered, Hash: %s, DRBG: %s\n", hash_cb->hash_name(), esdm_drbg_cb->drbg_name());
 
 	return ret;
 }
@@ -484,15 +483,14 @@ int __init esdm_es_sched_module_init(void)
 void esdm_es_sched_module_exit(void)
 {
 	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
-	unsigned long flags;
 
 	esdm_sched_unregister(esdm_sched_randomness);
 
 	hash_cb->hash_dealloc(esdm_sched_hash_state);
 	esdm_sched_hash_state = NULL;
 
-	crypto_free_rng(drbg_state);
-	drbg_state = NULL;
+	esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg_state);
+	esdm_sched_drbg_state = NULL;
 
 	pr_info("ESDM Scheduler ES unregistered\n");
 }

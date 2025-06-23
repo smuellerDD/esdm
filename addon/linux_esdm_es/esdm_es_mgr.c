@@ -20,6 +20,7 @@
 #include "esdm_es_mgr_irq.h"
 #include "esdm_es_mgr_sched.h"
 #include "esdm_es_timer_common.h"
+#include "esdm_drbg_kcapi.h"
 #include "esdm_testing.h"
 
 /* Only panic the kernel on permanent health failure if this variable is true */
@@ -190,7 +191,10 @@ static void __exit esdm_es_mgr_dev_fini(void)
 static int __init esdm_es_mgr_init(void)
 {
 	int ret = esdm_init_time_source();
+	if (ret)
+		goto out;
 
+	ret = esdm_drbg_selftest();
 	if (ret)
 		goto out;
 
