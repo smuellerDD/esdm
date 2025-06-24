@@ -83,7 +83,10 @@ static void esdm_kcapi_hash_dealloc(void *hash)
 {
 	struct esdm_hash_info *esdm_hash = (struct esdm_hash_info *)hash;
 
-	_esdm_kcapi_hash_free(esdm_hash);
+	if (hash) {
+		_esdm_kcapi_hash_free(esdm_hash);
+	}
+
 	pr_info("Hash deallocated\n");
 }
 
