@@ -379,7 +379,7 @@ static u32 esdm_delta(u32 prev, u32 next)
  * @return: 0 event occurrence not stuck (good time stamp)
  *	    != 0 event occurrence stuck (reject time stamp)
  */
-static int esdm_irq_stuck(enum esdm_internal_es es, u32 now_time)
+static int esdm_timestamp_stuck(enum esdm_internal_es es, u32 now_time)
 {
 	struct esdm_stuck_test *stuck = this_cpu_ptr(esdm_stuck_test_array);
 	u32 delta = esdm_delta(stuck[es].last_time, now_time);
@@ -428,7 +428,7 @@ enum esdm_health_res esdm_health_test(u32 now_time, enum esdm_internal_es es)
 
 	esdm_apt_insert(health, now_time, es);
 
-	stuck = esdm_irq_stuck(es, now_time);
+	stuck = esdm_timestamp_stuck(es, now_time);
 	esdm_rct(health, es, stuck);
 	if (stuck) {
 		/* SP800-90B disallows using a failing health test time stamp */
