@@ -8,7 +8,6 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <asm/ptrace.h>
-#include <crypto/hash.h>
 #include <crypto/drbg.h>
 #include <linux/esdm_sched.h>
 #include <linux/module.h>
@@ -65,7 +64,6 @@ config ESDM_RUNTIME_ES_CONFIG
 static void *esdm_sched_drbg_state = NULL;
 static const char esdm_sched_drbg_domain_separation[] = "ESDM_SCH_DRBG";
 
-
 /*
  * Number of scheduler-based context switches to be recorded to assume that
  * DRNG security strength bits of entropy are received.
@@ -96,7 +94,8 @@ static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data);
 static void __init esdm_sched_check_compression_state(void)
 {
 	/* One pool should hold sufficient entropy for disabled compression */
-	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES, esdm_sched_entropy_bits);
+	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
+					   esdm_sched_entropy_bits);
 	if (max_ent < esdm_security_strength()) {
 		pr_devel(
 			"Scheduler entropy source will never provide %u bits of entropy required for fully seeding the DRNG all by itself\n",
@@ -126,8 +125,7 @@ void __init esdm_sched_es_init(bool highres_timer)
 
 static u32 esdm_sched_avail_pool_size(void)
 {
-	u32 max_pool = ESDM_DATA_NUM_VALUES,
-	    max_size = 0;
+	u32 max_pool = ESDM_DATA_NUM_VALUES, max_size = 0;
 	int cpu;
 
 	for_each_online_cpu (cpu)
@@ -204,7 +202,9 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	}
 
 	/* Cap to maximum entropy that can ever be generated with given DRBG without reseeding */
-	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state), requested_bits);
+	esdm_cap_requested(
+		esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state),
+		requested_bits);
 	requested_events = esdm_entropy_to_data(
 		requested_bits + esdm_compress_osr(), esdm_sched_entropy_bits);
 
@@ -224,7 +224,10 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		found_events = min_t(u32, found_events, ESDM_DATA_NUM_VALUES);
 
 		seed_string = per_cpu_ptr(&esdm_sched_seed_data, cpu);
-		drbg_string_fill(seed_string, (u8*)per_cpu_ptr(&esdm_sched_array_events, cpu), ESDM_DATA_NUM_VALUES * sizeof(u32));
+		drbg_string_fill(seed_string,
+				 (u8 *)per_cpu_ptr(&esdm_sched_array_events,
+						   cpu),
+				 ESDM_DATA_NUM_VALUES * sizeof(u32));
 		list_add_tail(&seed_string->list, &seedlist);
 
 		collected_events += found_events;
@@ -257,9 +260,10 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
-	ret = esdm_drbg_cb->drbg_generate(esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3,
-					  (u8*)esdm_sched_drbg_domain_separation,
-					  sizeof(esdm_sched_drbg_domain_separation) - 1);
+	ret = esdm_drbg_cb->drbg_generate(
+		esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3,
+		(u8 *)esdm_sched_drbg_domain_separation,
+		sizeof(esdm_sched_drbg_domain_separation) - 1);
 	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in scheduler-based noise source\n");
 		goto err;
@@ -392,8 +396,7 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 		 " per-CPU scheduler event collection size: %u\n"
 		 " Standards compliance: %s\n"
 		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(),
-		 esdm_sched_avail_entropy(0),
+		 esdm_drbg_cb->drbg_name(), esdm_sched_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B " : "",
 		 esdm_highres_timer() ? "true" : "false");
@@ -419,13 +422,16 @@ struct esdm_es_cb esdm_es_sched = {
 int __init esdm_es_sched_module_init(void)
 {
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc((u8*)esdm_sched_drbg_domain_separation, sizeof(esdm_sched_drbg_domain_separation) - 1);
+	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc(
+		(u8 *)esdm_sched_drbg_domain_separation,
+		sizeof(esdm_sched_drbg_domain_separation) - 1);
 	if (!esdm_sched_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
 		return -EINVAL;
 	}
 
-	pr_info("ESDM Scheduler ES registered, DRBG: %s\n", esdm_drbg_cb->drbg_name());
+	pr_info("ESDM Scheduler ES registered, DRBG: %s\n",
+		esdm_drbg_cb->drbg_name());
 
 	return 0;
 }

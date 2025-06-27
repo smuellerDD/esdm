@@ -186,7 +186,8 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	}
 
 	/* Cap to maximum entropy that can ever be generated with given hash */
-	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state), requested_bits);
+	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state),
+			   requested_bits);
 	requested_irqs = esdm_entropy_to_data(
 		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
 
@@ -199,14 +200,16 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		struct drbg_string *seed_string;
 
 		/* Obtain entropy statement like for the entropy pool */
-		found_irqs =
-			atomic_xchg_relaxed(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
+		found_irqs = atomic_xchg_relaxed(
+			per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
 
 		/* cap to max array size */
 		found_irqs = min_t(u32, found_irqs, ESDM_DATA_NUM_VALUES);
 
 		seed_string = per_cpu_ptr(&esdm_irq_seed_data, cpu);
-		drbg_string_fill(seed_string, (u8*)per_cpu_ptr(&esdm_irq_array, cpu), ESDM_DATA_NUM_VALUES * sizeof(u32));
+		drbg_string_fill(seed_string,
+				 (u8 *)per_cpu_ptr(&esdm_irq_array, cpu),
+				 ESDM_DATA_NUM_VALUES * sizeof(u32));
 		list_add_tail(&seed_string->list, &seedlist);
 
 		collected_irqs += found_irqs;
@@ -237,9 +240,10 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
-	ret = esdm_drbg_cb->drbg_generate(esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3,
-					  (u8*)esdm_irq_drbg_domain_separation,
-					  sizeof(esdm_irq_drbg_domain_separation) - 1);
+	ret = esdm_drbg_cb->drbg_generate(
+		esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3,
+		(u8 *)esdm_irq_drbg_domain_separation,
+		sizeof(esdm_irq_drbg_domain_separation) - 1);
 	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
 		goto err;
@@ -434,12 +438,10 @@ static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 		 " per-CPU interrupt collection size: %u\n"
 		 " Standards compliance: %s\n"
 		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(),
-		 esdm_irq_avail_entropy(0),
+		 esdm_drbg_cb->drbg_name(), esdm_irq_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_irq) ? "SP800-90B " : "",
-		 esdm_highres_timer() ? "true" : "false"
-		);
+		 esdm_highres_timer() ? "true" : "false");
 }
 
 static void esdm_irq_set_entropy_rate(u32 rate)
@@ -488,7 +490,9 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	}
 
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc((u8*)esdm_irq_drbg_domain_separation, sizeof(esdm_irq_drbg_domain_separation) - 1);
+	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc(
+		(u8 *)esdm_irq_drbg_domain_separation,
+		sizeof(esdm_irq_drbg_domain_separation) - 1);
 	if (!esdm_irq_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto err;
@@ -500,7 +504,8 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 		goto err;
 	}
 
-	pr_info("ESDM IRQ ES registered, DRBG: %s\n", esdm_drbg_cb->drbg_name());
+	pr_info("ESDM IRQ ES registered, DRBG: %s\n",
+		esdm_drbg_cb->drbg_name());
 	return;
 
 err:

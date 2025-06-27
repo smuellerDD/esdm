@@ -24,10 +24,11 @@
  */
 struct esdm_drbg_cb {
 	const char *(*drbg_name)(void);
-	void *(*drbg_alloc)(u8* personalization, u32 perslen);
+	void *(*drbg_alloc)(u8 *personalization, u32 perslen);
 	void (*drbg_dealloc)(void *drbg);
 	int (*drbg_seed)(void *drbg, struct list_head *seedlist);
-	int (*drbg_generate)(void *drbg, u8 *outbuf, u32 outbuflen, u8 *additional_data, u32 additional_data_len);
+	int (*drbg_generate)(void *drbg, u8 *outbuf, u32 outbuflen,
+			     u8 *additional_data, u32 additional_data_len);
 	u32 (*drbg_sec_strength)(void *drbg);
 };
 

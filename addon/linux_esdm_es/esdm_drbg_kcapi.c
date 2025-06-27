@@ -18,7 +18,8 @@
 #include "esdm_drbg_kcapi.h"
 
 /*
- * Define a DRBG used to extract data from the entropy pool.
+ * Define a DRBG used to build cryptographic post-processing
+ * with memory (DRG.3) for the entropy sources
  *
  * The security strengths of the DRBGs are all 256 bits according to
  * SP800-57 section 5.6.1.
@@ -37,11 +38,13 @@ static unsigned int esdm_drbg_type = 2;
 
 /* The parameter must be r/o in sysfs as otherwise races appear. */
 module_param(esdm_drbg_type, uint, 0444);
-MODULE_PARM_DESC(esdm_drbg_type, "DRBG type used for ESDM (0->HMAC_DRBG, 1->Hash_DRBG, 2->CTR_DRBG)");
+MODULE_PARM_DESC(
+	esdm_drbg_type,
+	"DRBG type used for ESDM (0->HMAC_DRBG, 1->Hash_DRBG, 2->CTR_DRBG)");
 
 struct esdm_drbg {
-	const char* hash_name;
-	const char* drbg_core;
+	const char *hash_name;
+	const char *drbg_core;
 };
 
 static const struct esdm_drbg esdm_drbg_types[] = {
@@ -49,22 +52,21 @@ static const struct esdm_drbg esdm_drbg_types[] = {
 		/* HMAC_DRBG with SHA-512 */
 		.drbg_core = "drbg_nopr_hmac_sha512",
 	},
-	{
-		/* Hash_DRBG with SHA-512 using derivation function */
-		.drbg_core = "drbg_nopr_sha512"
-	},
+	{ /* Hash_DRBG with SHA-512 using derivation function */
+	  .drbg_core = "drbg_nopr_sha512" },
 	{
 		/* CTR_DRBG with AES-256 using derivation function */
 		.drbg_core = "drbg_nopr_ctr_aes256",
 	}
 };
 
-static int esdm_drbg_seed_helper(void* drbg, struct list_head *seedlist)
+static int esdm_drbg_seed_helper(void *drbg, struct list_head *seedlist)
 {
-	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
+	struct drbg_state *drbg_s = (struct drbg_state *)drbg;
 	int ret;
 
-	ret = drbg_s->d_ops->update(drbg_s, seedlist, drbg_s->seeded != DRBG_SEED_STATE_UNSEEDED);
+	ret = drbg_s->d_ops->update(drbg_s, seedlist,
+				    drbg_s->seeded != DRBG_SEED_STATE_UNSEEDED);
 
 	if (ret >= 0)
 		drbg_s->seeded = DRBG_SEED_STATE_FULL;
@@ -72,25 +74,28 @@ static int esdm_drbg_seed_helper(void* drbg, struct list_head *seedlist)
 	return ret;
 }
 
-static int esdm_drbg_generate_helper(void* drbg, u8* outbuf, u32 outbuflen, u8* additional_data, u32 additional_data_len)
+static int esdm_drbg_generate_helper(void *drbg, u8 *outbuf, u32 outbuflen,
+				     u8 *additional_data,
+				     u32 additional_data_len)
 {
-	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
+	struct drbg_state *drbg_s = (struct drbg_state *)drbg;
 	struct drbg_string addtl;
 	LIST_HEAD(addtllist);
 
 	if (additional_data != NULL && additional_data_len > 0) {
 		drbg_string_fill(&addtl, additional_data, additional_data_len);
 		list_add_tail(&addtl.list, &addtllist);
-		return drbg_s->d_ops->generate(drbg, outbuf, outbuflen, &addtllist);
+		return drbg_s->d_ops->generate(drbg, outbuf, outbuflen,
+					       &addtllist);
 	} else {
 		return drbg_s->d_ops->generate(drbg, outbuf, outbuflen, NULL);
 	}
 }
 
-static void* esdm_drbg_alloc(u8* personalization, u32 perslen)
+static void *esdm_drbg_alloc(u8 *personalization, u32 perslen)
 {
 	const u32 sec_strength = 32;
-	struct drbg_state* drbg_s;
+	struct drbg_state *drbg_s;
 	struct drbg_string data;
 	LIST_HEAD(seedlist);
 	int coreref = -1;
@@ -113,14 +118,16 @@ static void* esdm_drbg_alloc(u8* personalization, u32 perslen)
 		goto err;
 
 	if (sec_strength > drbg_sec_strength(drbg_s->core->flags)) {
-		pr_err("Security strength of DRBG (%u bits) lower than requested by ESDM (%u bits)\n",
+		pr_err("Security strength of DRBG (%u bits) lower "
+		       "than requested by ESDM (%u bits)\n",
 		       drbg_sec_strength(drbg_s->core->flags) * 8,
 		       sec_strength * 8);
 		goto dealloc;
 	}
 
 	if (sec_strength < drbg_sec_strength(drbg_s->core->flags))
-		pr_warn("Security strength of DRBG (%u bits) higher than requested by ESDM (%u bits)\n",
+		pr_warn("Security strength of DRBG (%u bits) higher "
+			"than requested by ESDM (%u bits)\n",
 			drbg_sec_strength(drbg_s->core->flags) * 8,
 			sec_strength * 8);
 
@@ -132,7 +139,8 @@ static void* esdm_drbg_alloc(u8* personalization, u32 perslen)
 		goto dealloc;
 	}
 
-	pr_info("DRBG with %s core allocated\n", drbg_s->core->backend_cra_name);
+	pr_info("DRBG with %s core allocated\n",
+		drbg_s->core->backend_cra_name);
 
 	return drbg_s;
 
@@ -145,9 +153,9 @@ err:
 	return ERR_PTR(-EINVAL);
 }
 
-static void esdm_drbg_dealloc(void* drbg)
+static void esdm_drbg_dealloc(void *drbg)
 {
-	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
+	struct drbg_state *drbg_s = (struct drbg_state *)drbg;
 
 	if (drbg && drbg_s->d_ops)
 		drbg_s->d_ops->crypto_fini(drbg_s);
@@ -156,14 +164,14 @@ static void esdm_drbg_dealloc(void* drbg)
 	pr_info("DRBG deallocated\n");
 }
 
-static const char* esdm_drbg_name(void)
+static const char *esdm_drbg_name(void)
 {
 	return esdm_drbg_types[esdm_drbg_type].drbg_core;
 }
 
 static u32 esdm_drbg_sec_strength(void *drbg)
 {
-	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
+	struct drbg_state *drbg_s = (struct drbg_state *)drbg;
 
 	if (!drbg_s)
 		return 0;
@@ -197,7 +205,7 @@ int esdm_drbg_selftest(void)
 		goto out;
 	}
 
-	if (crypto_rng_reset(drbg, (u8*)"ABC", 3)) {
+	if (crypto_rng_reset(drbg, (u8 *)"ABC", 3)) {
 		ret = -EINVAL;
 		pr_warn("DRBG reset failed\n");
 		goto out;
@@ -211,9 +219,10 @@ int esdm_drbg_selftest(void)
 	}
 
 	/* check minimal security strength */
-	if (esdm_drbg_cb->drbg_sec_strength(drbg_s) < esdm_security_strength()) {
+	if (esdm_drbg_cb->drbg_sec_strength(drbg_s) <
+	    esdm_security_strength()) {
 		ret = -EINVAL;
-		pr_warn("DRBG security strength insufficient for post-processing\n");
+		pr_warn("DRBG sec. strength insufficient for post-processing\n");
 		goto out;
 	}
 
