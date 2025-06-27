@@ -214,11 +214,8 @@ bool esdm_sp80090b_startup_complete_es(enum esdm_internal_es es)
 
 bool esdm_sp80090b_compliant(enum esdm_internal_es es)
 {
-	struct esdm_health *health = &esdm_health;
-	struct esdm_health_es_state *es_state = &health->es_state[es];
-
 	return esdm_sp80090b_health_enabled() &&
-	       es_state->sp80090b_startup_done;
+	       esdm_sp80090b_startup_complete_es(es);
 }
 
 /***************************************************************************

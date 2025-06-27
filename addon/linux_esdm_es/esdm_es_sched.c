@@ -91,18 +91,6 @@ static DEFINE_PER_CPU(u32, esdm_sched_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_sched_array_events) = ATOMIC_INIT(0);
 static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data);
 
-static void __init esdm_sched_check_compression_state(void)
-{
-	/* One pool should hold sufficient entropy for disabled compression */
-	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
-					   esdm_sched_entropy_bits);
-	if (max_ent < esdm_security_strength()) {
-		pr_devel(
-			"Scheduler entropy source will never provide %u bits of entropy required for fully seeding the DRNG all by itself\n",
-			esdm_security_strength());
-	}
-}
-
 void __init esdm_sched_es_init(bool highres_timer)
 {
 	/* Set a minimum number of scheduler events that must be collected */
@@ -120,7 +108,14 @@ void __init esdm_sched_es_init(bool highres_timer)
 			ESDM_ES_OVERSAMPLING_FACTOR);
 	}
 
-	esdm_sched_check_compression_state();
+	/* One pool should hold sufficient entropy for a single request from user-space */
+	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
+					   esdm_sched_entropy_bits);
+	if (max_ent < esdm_security_strength()) {
+		pr_devel(
+			"Scheduler entropy source will never provide %u bits of entropy required for fully seeding the DRNG all by itself\n",
+			esdm_security_strength());
+	}
 }
 
 static u32 esdm_sched_avail_pool_size(void)
@@ -188,7 +183,7 @@ static void esdm_sched_reset(void)
  * @requested_bits: Requested amount of entropy
  * @fully_seeded: indicator whether ESDM is fully seeded
  */
-static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
+static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 {
 	u32 found_events, collected_events = 0, collected_ent_bits,
 			  requested_events, returned_ent_bits;
@@ -201,7 +196,8 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
-	/* Cap to maximum entropy that can ever be generated with given DRBG without reseeding */
+	/* Cap to maximum entropy that can ever be generated with given DRBG
+	 * without reseeding */
 	esdm_cap_requested(
 		esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state),
 		requested_bits);
@@ -237,6 +233,9 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 				unused_events,
 				per_cpu_ptr(&esdm_sched_array_events, cpu));
 			collected_events = requested_events;
+			requested_events = 0;
+		} else {
+			requested_events -= collected_events;
 		}
 		pr_debug(
 			"%u scheduler-based events used from entropy array of CPU %d, %u scheduler-based events remain unused\n",
@@ -300,11 +299,6 @@ static void esdm_sched_array_add_u32(u32 data)
 	this_cpu_and(esdm_sched_array[pre_array], ~(0xffffffff & ~mask));
 	this_cpu_or(esdm_sched_array[pre_array], data & ~mask);
 
-	/*
-	 * Continuous compression is not allowed for scheduler noise source,
-	 * so do not call esdm_sched_array_to_hash here.
-	 */
-
 	/* LSB of data go into current unit */
 	this_cpu_write(esdm_sched_array[esdm_data_idx2array(ptr)], data & mask);
 }
@@ -324,11 +318,6 @@ static void esdm_sched_array_add_slot(u32 data)
 					  slot)));
 	/* Store data into slot */
 	this_cpu_or(esdm_sched_array[array], esdm_data_slot_val(data, slot));
-
-	/*
-	 * Continuous compression is not allowed for scheduler noise source,
-	 * so do not call esdm_sched_array_to_hash here.
-	 */
 }
 
 static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
@@ -395,10 +384,13 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 		 " Available entropy: %u\n"
 		 " per-CPU scheduler event collection size: %u\n"
 		 " Standards compliance: %s\n"
+		 " FIPS mode enabled: %i\n"
 		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(), esdm_sched_avail_entropy(0),
+		 esdm_drbg_cb->drbg_name(),
+		 esdm_sched_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
-		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B " : "",
+		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B" : "",
+		 fips_enabled,
 		 esdm_highres_timer() ? "true" : "false");
 }
 
@@ -409,7 +401,7 @@ static void esdm_sched_set_entropy_rate(u32 rate)
 
 struct esdm_es_cb esdm_es_sched = {
 	.name = "Scheduler",
-	.get_ent = esdm_sched_pool_hash,
+	.get_ent = esdm_sched_pool_extract,
 	.curr_entropy = esdm_sched_avail_entropy,
 	.max_entropy = esdm_sched_avail_pool_size,
 	.state = esdm_sched_es_state,

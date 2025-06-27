@@ -52,8 +52,10 @@ static const struct esdm_drbg esdm_drbg_types[] = {
 		/* HMAC_DRBG with SHA-512 */
 		.drbg_core = "drbg_nopr_hmac_sha512",
 	},
-	{ /* Hash_DRBG with SHA-512 using derivation function */
-	  .drbg_core = "drbg_nopr_sha512" },
+	{
+		/* Hash_DRBG with SHA-512 using derivation function */
+		.drbg_core = "drbg_nopr_sha512"
+	},
 	{
 		/* CTR_DRBG with AES-256 using derivation function */
 		.drbg_core = "drbg_nopr_ctr_aes256",

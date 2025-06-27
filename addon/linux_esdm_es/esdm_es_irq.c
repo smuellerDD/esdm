@@ -107,6 +107,15 @@ void __init esdm_irq_es_init(bool highres_timer)
 		pr_warn("operating without high-resolution timer and applying IRQ oversampling factor %u\n",
 			ESDM_ES_OVERSAMPLING_FACTOR);
 	}
+
+	/* One pool should hold sufficient entropy for a single request from user-space */
+	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
+					   esdm_irq_entropy_bits);
+	if (max_ent < esdm_security_strength()) {
+		pr_devel(
+			"interrupt entropy source will never provide %u bits of entropy required for fully seeding the DRNG all by itself\n",
+			esdm_security_strength());
+	}
 }
 
 /*
@@ -172,7 +181,7 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
  * @requested_bits: Requested amount of entropy
  * @fully_seeded: indicator whether ESDM is fully seeded
  */
-static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
+static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 {
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
 			returned_ent_bits;
@@ -192,8 +201,8 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
 
 	/*
-	 * Harvest entropy from each per-CPU hash state - even though we may
-	 * have collected sufficient entropy, we will hash all per-CPU pools.
+	 * Collect all per CPU events and insert them into the DRBG
+	 * state. Reduce event counts in relation to requested_irqs.
 	 */
 	for_each_online_cpu (cpu) {
 		u32 pcpu_unused_irqs = 0;
@@ -219,6 +228,9 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 				pcpu_unused_irqs,
 				per_cpu_ptr(&esdm_irq_array_irqs, cpu));
 			collected_irqs = requested_irqs;
+			requested_irqs = 0;
+		} else {
+			requested_irqs -= collected_irqs;
 		}
 		pr_debug(
 			"%u interrupts used from entropy pool of CPU %d, %u interrupts remain unused\n",
@@ -259,8 +271,8 @@ err:
 	goto out;
 }
 
-/* Compress data array into hash */
-static void esdm_irq_array_to_hash(u32 ptr)
+/* push array values to testing in batched mode if needed */
+static void esdm_irq_array_to_testing(u32 ptr)
 {
 	u32 *array = this_cpu_ptr(esdm_irq_array);
 
@@ -317,15 +329,15 @@ static void _esdm_irq_array_add_u32(u32 data)
 	this_cpu_and(esdm_irq_array[pre_array], ~(0xffffffff & ~mask));
 	this_cpu_or(esdm_irq_array[pre_array], data & ~mask);
 
-	/* Invoke compression as we just filled data array completely */
+	/* Insert into testing, as we filled the array completely */
 	if (unlikely(pre_ptr > ptr))
-		esdm_irq_array_to_hash(ESDM_DATA_WORD_MASK);
+		esdm_irq_array_to_testing(ESDM_DATA_WORD_MASK);
 
 	/* LSB of data go into current unit */
 	this_cpu_write(esdm_irq_array[esdm_data_idx2array(ptr)], data & mask);
 
 	if (likely(pre_ptr <= ptr))
-		esdm_irq_array_to_hash(ptr);
+		esdm_irq_array_to_testing(ptr);
 }
 
 /* Concatenate data of max ESDM_DATA_SLOTSIZE_MASK at the end of time array */
@@ -348,7 +360,7 @@ static void esdm_irq_array_add_slot(u32 data)
 	/* Store data into slot */
 	this_cpu_or(esdm_irq_array[array], esdm_data_slot_val(data, slot));
 
-	esdm_irq_array_to_hash(ptr);
+	esdm_irq_array_to_testing(ptr);
 }
 
 static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
@@ -437,10 +449,13 @@ static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 		 " Available entropy: %u\n"
 		 " per-CPU interrupt collection size: %u\n"
 		 " Standards compliance: %s\n"
+		 " FIPS mode enabled: %i\n"
 		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(), esdm_irq_avail_entropy(0),
+		 esdm_drbg_cb->drbg_name(),
+		 esdm_irq_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
-		 esdm_sp80090b_compliant(esdm_int_es_irq) ? "SP800-90B " : "",
+		 esdm_sp80090b_compliant(esdm_int_es_irq) ? "SP800-90B" : "",
+		 fips_enabled,
 		 esdm_highres_timer() ? "true" : "false");
 }
 
@@ -451,7 +466,7 @@ static void esdm_irq_set_entropy_rate(u32 rate)
 
 struct esdm_es_cb esdm_es_irq = {
 	.name = "IRQ",
-	.get_ent = esdm_irq_pool_hash,
+	.get_ent = esdm_irq_pool_extract,
 	.curr_entropy = esdm_irq_avail_entropy,
 	.max_entropy = esdm_irq_avail_pool_size,
 	.state = esdm_irq_es_state,
