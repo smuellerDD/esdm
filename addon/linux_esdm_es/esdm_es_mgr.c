@@ -204,45 +204,41 @@ static void __exit esdm_es_mgr_dev_fini(void)
 
 static int __init esdm_es_mgr_init(void)
 {
-	void *tmp_hash;
-
 	int ret = esdm_init_time_source();
-	if (ret)
-		goto out;
-
-	/* hash provides at least 512 bit outputs? */
-	tmp_hash = esdm_kcapi_hash_cb->hash_alloc();
-	if (!tmp_hash || IS_ERR(tmp_hash))
-		goto out;
-
-	if (esdm_kcapi_hash_cb->hash_digestsize(tmp_hash) < ESDM_HASH_DIGESTSIZE_BYTES) {
-		pr_warn("chosen hash algorithm provides too short outputs\n");
-		esdm_kcapi_hash_cb->hash_dealloc(tmp_hash);
-		tmp_hash = NULL;
+	if (ret) {
+		pr_warn("esdm_init_time_source() failed\n");
 		goto out;
 	}
-	esdm_kcapi_hash_cb->hash_dealloc(tmp_hash);
-	tmp_hash = NULL;
 
 	ret = esdm_drbg_selftest();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_drbg_selftest() failed\n");
 		goto out;
+	}
 
 	ret = esdm_es_mgr_irq_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_es_mgr_irq_init() failed\n");
 		goto out;
+	}
 
 	ret = esdm_es_mgr_sched_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_es_mgr_sched_init() failed\n");
 		goto out;
+	}
 
 	ret = esdm_test_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_test_init() failed\n");
 		goto out;
+	}
 
 	ret = esdm_es_mgr_dev_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_es_mgr_dev_init() failed\n");
 		goto out;
+	}
 
 	return 0;
 

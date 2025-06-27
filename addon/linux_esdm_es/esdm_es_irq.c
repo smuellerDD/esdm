@@ -9,7 +9,7 @@
 
 #include <asm/irq_regs.h>
 #include <asm/ptrace.h>
-#include <crypto/hash.h>
+#include <crypto/drbg.h>
 #include <linux/esdm_irq.h>
 #include <linux/module.h>
 #include <linux/random.h>
@@ -18,7 +18,6 @@
 #include "esdm_es_irq.h"
 #include "esdm_es_timer_common.h"
 #include "esdm_drbg_kcapi.h"
-#include "esdm_hash_kcapi.h"
 #include "esdm_health.h"
 #include "esdm_testing.h"
 
@@ -64,7 +63,6 @@ config ESDM_RUNTIME_ES_CONFIG
 
 /******************************************************************************/
 
-static void *esdm_irq_hash_state = NULL;
 static void *esdm_irq_drbg_state = NULL;
 static const char esdm_irq_drbg_domain_separation[] = "ESDM_IRQ_DRBG";
 /*
@@ -92,6 +90,7 @@ static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_irq_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 static DEFINE_PER_CPU(u32, esdm_irq_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_irq_array_irqs) = ATOMIC_INIT(0);
+static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data);
 
 void __init esdm_irq_es_init(bool highres_timer)
 {
@@ -127,10 +126,8 @@ static void esdm_irq_reset(void)
 
 static u32 esdm_irq_avail_pool_size(void)
 {
-	u32 max_size = 0, max_pool = esdm_get_digestsize();
+	u32 max_size = 0, max_pool = ESDM_DATA_NUM_VALUES;
 	int cpu;
-
-	max_pool = min_t(u32, max_pool, ESDM_DATA_NUM_VALUES);
 
 	for_each_online_cpu (cpu) {
 		max_size += max_pool;
@@ -158,26 +155,6 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 		esdm_data_to_entropy(irq, esdm_irq_entropy_bits));
 }
 
-static u32 esdm_irq_pool_hash_one(const struct esdm_hash_cb *hash_cb,
-				  struct shash_desc *shash, int cpu, u8 *digest,
-				  u32 *digestsize)
-{
-	u32 found_irqs;
-
-	/* Obtain entropy statement like for the entropy pool */
-	found_irqs =
-		atomic_xchg_relaxed(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
-
-	/* cap to max array size */
-	found_irqs = min_t(u32, found_irqs, ESDM_DATA_NUM_VALUES);
-
-	/* Store all not-yet compressed data in data array into hash, ... */
-	if (hash_cb->hash_update(shash, (u8 *)per_cpu_ptr(esdm_irq_array, cpu), ESDM_DATA_ARRAY_SIZE * sizeof(u32)))
-		found_irqs = 0;
-
-	return found_irqs;
-}
-
 /*
  * Hash all per-CPU pools and return the digest to be used as seed data for
  * seeding a DRNG. The caller must guarantee backtracking resistance.
@@ -197,13 +174,10 @@ static u32 esdm_irq_pool_hash_one(const struct esdm_hash_cb *hash_cb,
  */
 static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 {
-	SHASH_DESC_ON_STACK(shash, NULL);
-	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
-	u8 digest[ESDM_MAX_DIGESTSIZE];
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
 			returned_ent_bits;
+	LIST_HEAD(seedlist);
 	int ret, cpu;
-	void *hash;
 
 	/* Only deliver entropy when SP800-90B self test is completed */
 	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq)) {
@@ -211,17 +185,8 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
-	hash = esdm_irq_hash_state;
-	if (!hash)
-		goto out;
-
-	/* The hash state of filled with all per-CPU pool hashes. */
-	ret = hash_cb->hash_init(shash, hash);
-	if (ret)
-		goto err;
-
 	/* Cap to maximum entropy that can ever be generated with given hash */
-	esdm_cap_requested(hash_cb->hash_digestsize(hash) << 3, requested_bits);
+	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state), requested_bits);
 	requested_irqs = esdm_entropy_to_data(
 		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
 
@@ -230,10 +195,19 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	 * have collected sufficient entropy, we will hash all per-CPU pools.
 	 */
 	for_each_online_cpu (cpu) {
-		u32 digestsize, pcpu_unused_irqs = 0;
+		u32 pcpu_unused_irqs = 0;
+		struct drbg_string *seed_string;
 
-		found_irqs = esdm_irq_pool_hash_one(hash_cb, shash, cpu, digest,
-						    &digestsize);
+		/* Obtain entropy statement like for the entropy pool */
+		found_irqs =
+			atomic_xchg_relaxed(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
+
+		/* cap to max array size */
+		found_irqs = min_t(u32, found_irqs, ESDM_DATA_NUM_VALUES);
+
+		seed_string = per_cpu_ptr(&esdm_irq_seed_data, cpu);
+		drbg_string_fill(seed_string, (u8*)per_cpu_ptr(&esdm_irq_array, cpu), ESDM_DATA_NUM_VALUES * sizeof(u32));
+		list_add_tail(&seed_string->list, &seedlist);
 
 		collected_irqs += found_irqs;
 		if (collected_irqs > requested_irqs) {
@@ -248,10 +222,6 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 			found_irqs - pcpu_unused_irqs, cpu, pcpu_unused_irqs);
 	}
 
-	ret = hash_cb->hash_final(shash, digest);
-	if (ret)
-		goto err;
-
 	collected_ent_bits =
 		esdm_data_to_entropy(collected_irqs, esdm_irq_entropy_bits);
 	/* Apply oversampling: discount requested oversampling rate */
@@ -261,15 +231,9 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
 		returned_ent_bits, collected_ent_bits);
 
-	ret = esdm_drbg_cb->drbg_seed(esdm_irq_drbg_state, digest, hash_cb->hash_digestsize(hash));
+	ret = esdm_drbg_cb->drbg_seed(esdm_irq_drbg_state, &seedlist);
 	if (ret) {
 		pr_warn("unable to seed drbg in interrupt-based noise source\n");
-		goto err;
-	}
-
-	ret = esdm_drbg_cb->drbg_is_fully_seeded(esdm_irq_drbg_state);
-	if (!ret) {
-		pr_warn("drbg in interrupt-based noise source has not reached fully seeded state\n");
 		goto err;
 	}
 
@@ -284,8 +248,6 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 	eb->e_bits = returned_ent_bits;
 
 out:
-	hash_cb->hash_desc_zero(shash);
-	memzero_explicit(digest, sizeof(digest));
 	return;
 
 err:
@@ -465,17 +427,13 @@ static void esdm_add_interrupt_randomness(int irq)
 
 static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 {
-	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
-
 	/* Assume the esdm_drng_init lock is taken by caller */
 	snprintf(buf, buflen,
-		 " Hash for operating entropy pool: %s\n"
 		 " DRBG for operating entropy pool: %s\n"
 		 " Available entropy: %u\n"
 		 " per-CPU interrupt collection size: %u\n"
 		 " Standards compliance: %s\n"
 		 " High-resolution timer: %s\n",
-		 hash_cb->hash_name(),
 		 esdm_drbg_cb->drbg_name(),
 		 esdm_irq_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
@@ -512,8 +470,6 @@ static atomic_t esdm_es_irq_init_state = ATOMIC_INIT(esdm_es_init_unused);
 
 static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 {
-	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
-	void *tmp_hash_state;
 	int ret;
 
 	/*
@@ -531,34 +487,27 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 		return;
 	}
 
-	tmp_hash_state = hash_cb->hash_alloc();
-	if (IS_ERR(tmp_hash_state)) {
-		pr_warn("could not allocate new ESDM pool hash (%ld)\n",
-			PTR_ERR(tmp_hash_state));
-		goto err;
-	}
-
-	esdm_irq_hash_state = tmp_hash_state;
-	ret = esdm_irq_register(esdm_add_interrupt_randomness);
-	if (ret) {
-		esdm_irq_hash_state = NULL;
-		hash_cb->hash_dealloc(tmp_hash_state);
-		goto err;
-	}
-
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc((u8*)esdm_irq_drbg_domain_separation, strlen(esdm_irq_drbg_domain_separation));
+	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc((u8*)esdm_irq_drbg_domain_separation, sizeof(esdm_irq_drbg_domain_separation) - 1);
 	if (!esdm_irq_drbg_state) {
-		esdm_irq_hash_state = NULL;
-		hash_cb->hash_dealloc(tmp_hash_state);
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto err;
 	}
 
-	pr_info("ESDM IRQ ES registered, Hash: %s, DRBG: %s\n", hash_cb->hash_name(), esdm_drbg_cb->drbg_name());
+	ret = esdm_irq_register(esdm_add_interrupt_randomness);
+	if (ret) {
+		pr_warn("cannot register ESDM IRQ ES\n");
+		goto err;
+	}
+
+	pr_info("ESDM IRQ ES registered, DRBG: %s\n", esdm_drbg_cb->drbg_name());
 	return;
 
 err:
+	if (esdm_irq_drbg_state) {
+		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
+		esdm_irq_drbg_state = NULL;
+	}
 	atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);
 }
 
@@ -580,9 +529,6 @@ int __init esdm_es_irq_module_init(void)
 
 void esdm_es_irq_module_exit(void)
 {
-	const struct esdm_hash_cb *hash_cb = esdm_kcapi_hash_cb;
-	void *tmp_hash_state;
-
 	if (atomic_read(&esdm_es_irq_init_state) == esdm_es_init_unused)
 		return;
 
@@ -591,18 +537,12 @@ void esdm_es_irq_module_exit(void)
 	    esdm_es_init_registered)
 		return;
 
-
-	/* if we are not in the registering phase of the irq source (checked above),
-	 * we can safely assume to be the only caller here,
-	 * due to locking on the ioctl char devive */
-	tmp_hash_state = esdm_irq_hash_state;
-	esdm_irq_hash_state = NULL;
-	esdm_irq_unregister(esdm_add_interrupt_randomness);
-
-	hash_cb->hash_dealloc(tmp_hash_state);
-
-	esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
-	esdm_irq_drbg_state = NULL;
+	if (esdm_irq_drbg_state) {
+		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
+		esdm_irq_drbg_state = NULL;
+	} else {
+		pr_warn("ESDM IRQ ES DRBG state was never registered!\n");
+	}
 
 	pr_info("ESDM IRQ ES unregistered\n");
 	atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);

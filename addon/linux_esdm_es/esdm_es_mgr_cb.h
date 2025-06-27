@@ -11,7 +11,6 @@
 #include <linux/slab.h>
 
 #include "esdm_definitions.h"
-#include "esdm_hash_kcapi.h"
 
 enum esdm_internal_es {
 	esdm_int_es_irq, /* Interrupt entropy source */

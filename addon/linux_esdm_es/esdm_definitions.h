@@ -11,8 +11,6 @@
 #include <linux/fips.h>
 #include <linux/slab.h>
 
-#include "esdm_hash_kcapi.h"
-
 /*************************** General ESDM parameter ***************************/
 
 /*
@@ -76,13 +74,6 @@
 #define ESDM_INIT_ENTROPY_BITS 32
 
 /*
- * If the switching support is configured, we must provide support up to
- * the largest digest size. Without switching support, we know it is only
- * the built-in digest size.
- */
-#define ESDM_MAX_DIGESTSIZE ESDM_HASH_DIGESTSIZE_BYTES
-
-/*
  * Oversampling factor of timer-based events to obtain
  * ESDM_DRNG_SECURITY_STRENGTH_BYTES. This factor is used when a
  * high-resolution time stamp is not available. In this case, jiffies and
@@ -137,12 +128,6 @@ static inline u32 atomic_read_u32(atomic_t *v)
 	return (u32)atomic_read(v);
 }
 
-/* Obtain the digest size provided by the used hash in bits */
-static inline u32 esdm_get_digestsize(void)
-{
-	return ESDM_HASH_DIGESTSIZE_BITS;
-}
-
 static inline u32 esdm_security_strength(void)
 {
 	/*
@@ -153,7 +138,7 @@ static inline u32 esdm_security_strength(void)
 	 * size. On the other hand the entropy cannot be larger than the
 	 * security strength of the used DRBG.
 	 */
-	return min_t(u32, ESDM_FULL_SEED_ENTROPY_BITS, esdm_get_digestsize());
+	return ESDM_DRNG_SECURITY_STRENGTH_BITS;
 }
 
 static inline bool esdm_sp80090c_compliant(void)

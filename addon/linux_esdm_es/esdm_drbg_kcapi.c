@@ -8,6 +8,7 @@
  * Copyright (C) 2022-2025, Stephan Mueller <smueller@chronox.de>
  */
 
+#include "esdm_definitions.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <crypto/drbg.h>
@@ -58,16 +59,12 @@ static const struct esdm_drbg esdm_drbg_types[] = {
 	}
 };
 
-static int esdm_drbg_seed_helper(void* drbg, const u8* inbuf, u32 inbuflen)
+static int esdm_drbg_seed_helper(void* drbg, struct list_head *seedlist)
 {
 	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
-	struct drbg_string data;
-	LIST_HEAD(seedlist);
 	int ret;
 
-	drbg_string_fill(&data, inbuf, inbuflen);
-	list_add_tail(&data.list, &seedlist);
-	ret = drbg_s->d_ops->update(drbg_s, &seedlist, drbg_s->seeded != DRBG_SEED_STATE_UNSEEDED);
+	ret = drbg_s->d_ops->update(drbg_s, seedlist, drbg_s->seeded != DRBG_SEED_STATE_UNSEEDED);
 
 	if (ret >= 0)
 		drbg_s->seeded = DRBG_SEED_STATE_FULL;
@@ -164,14 +161,14 @@ static const char* esdm_drbg_name(void)
 	return esdm_drbg_types[esdm_drbg_type].drbg_core;
 }
 
-static int esdm_drbg_is_fully_seeded(void* drbg)
+static u32 esdm_drbg_sec_strength(void *drbg)
 {
 	struct drbg_state* drbg_s = (struct drbg_state*)drbg;
 
-	if (drbg && drbg_s->d_ops)
-		return drbg_s->seeded == DRBG_SEED_STATE_FULL;
+	if (!drbg_s)
+		return 0;
 
-	return -EINVAL;
+	return drbg_sec_strength(drbg_s->core->flags) * 8;
 }
 
 static const struct esdm_drbg_cb esdm_drbg_cb_int = {
@@ -180,13 +177,15 @@ static const struct esdm_drbg_cb esdm_drbg_cb_int = {
 	.drbg_dealloc = esdm_drbg_dealloc,
 	.drbg_seed = esdm_drbg_seed_helper,
 	.drbg_generate = esdm_drbg_generate_helper,
-	.drbg_is_fully_seeded = esdm_drbg_is_fully_seeded,
+	.drbg_sec_strength = esdm_drbg_sec_strength,
 };
 const struct esdm_drbg_cb *esdm_drbg_cb = &esdm_drbg_cb_int;
 
 int esdm_drbg_selftest(void)
 {
 	struct crypto_rng *drbg;
+	struct drbg_state *drbg_s;
+	int ret = 0;
 
 	/* Allocate the DRBG once to trigger the kernel crypto API self test */
 	drbg = crypto_alloc_rng(esdm_drbg_types[esdm_drbg_type].drbg_core, 0,
@@ -194,9 +193,35 @@ int esdm_drbg_selftest(void)
 	if (IS_ERR(drbg)) {
 		pr_err("could not allocate DRBG and trigger self-test: %ld\n",
 		       PTR_ERR(drbg));
-		return PTR_ERR(drbg);
+		ret = PTR_ERR(drbg);
+		goto out;
 	}
-	crypto_free_rng(drbg);
 
-	return 0;
+	if (crypto_rng_reset(drbg, (u8*)"ABC", 3)) {
+		ret = -EINVAL;
+		pr_warn("DRBG reset failed\n");
+		goto out;
+	}
+
+	drbg_s = crypto_rng_ctx(drbg);
+	if (!drbg_s) {
+		ret = -EINVAL;
+		pr_warn("DRBG not accesible in self-test\n");
+		goto out;
+	}
+
+	/* check minimal security strength */
+	if (esdm_drbg_cb->drbg_sec_strength(drbg_s) < esdm_security_strength()) {
+		ret = -EINVAL;
+		pr_warn("DRBG security strength insufficient for post-processing\n");
+		goto out;
+	}
+
+out:
+	if (drbg) {
+		crypto_free_rng(drbg);
+		drbg = NULL;
+	}
+
+	return ret;
 }
