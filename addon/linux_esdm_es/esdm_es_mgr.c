@@ -20,6 +20,7 @@
 #include "esdm_es_mgr_irq.h"
 #include "esdm_es_mgr_sched.h"
 #include "esdm_es_timer_common.h"
+#include "esdm_drbg_kcapi.h"
 #include "esdm_testing.h"
 
 /* Only panic the kernel on permanent health failure if this variable is true */
@@ -127,13 +128,18 @@ static int __init esdm_es_mgr_dev_init(void)
 	struct device *device;
 	int ret;
 
+	/* make creation of all devices atomic */
+	mutex_lock(&esdm_cdev_lock);
+
 	esdm_es_class = class_create(
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
 		THIS_MODULE,
 #endif
 		KBUILD_MODNAME);
-	if (IS_ERR(esdm_es_class))
+	if (IS_ERR(esdm_es_class)) {
+		mutex_unlock(&esdm_cdev_lock);
 		return PTR_ERR(esdm_es_class);
+	}
 
 	if (esdm_major) {
 		dev = MKDEV(esdm_major, 0);
@@ -145,17 +151,26 @@ static int __init esdm_es_mgr_dev_init(void)
 		esdm_major = MAJOR(dev);
 	}
 
-	if (ret < 0)
+	if (ret < 0) {
+		pr_warn("ESDM cdev class allocation failed\n");
 		goto err;
+	}
 
 	cdev_init(&esdm_cdev, &esdm_cdev_fops);
-	cdev_add(&esdm_cdev, dev, ESDM_MAX_MINORS);
+	ret = cdev_add(&esdm_cdev, dev, ESDM_MAX_MINORS);
+	if (ret < 0) {
+		pr_warn("ESDM cdev creation failed\n");
+		goto err_cdev;
+	}
 
 	device = device_create(esdm_es_class, NULL, dev, NULL, KBUILD_MODNAME);
 	if (IS_ERR(device)) {
+		pr_warn("ESDM cdev /sys allocation failed\n");
 		ret = PTR_ERR(device);
 		goto err_cdev;
 	}
+
+	mutex_unlock(&esdm_cdev_lock);
 
 	pr_info("ESDM user space interface available (major number %u)\n",
 		esdm_major);
@@ -167,6 +182,7 @@ err_cdev:
 	unregister_chrdev_region(MKDEV(esdm_major, 0), ESDM_MAX_MINORS);
 err:
 	class_destroy(esdm_es_class);
+	mutex_unlock(&esdm_cdev_lock);
 	return ret;
 }
 
@@ -177,7 +193,6 @@ static void __exit esdm_es_mgr_dev_fini(void)
 	device_destroy(esdm_es_class, MKDEV(esdm_major, 0));
 
 	cdev_del(&esdm_cdev);
-	/* cdev_put(&esdm_cdev); */
 
 	unregister_chrdev_region(MKDEV(esdm_major, 0), ESDM_MAX_MINORS);
 	class_destroy(esdm_es_class);
@@ -190,25 +205,40 @@ static void __exit esdm_es_mgr_dev_fini(void)
 static int __init esdm_es_mgr_init(void)
 {
 	int ret = esdm_init_time_source();
-
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_init_time_source() failed\n");
 		goto out;
+	}
+
+	ret = esdm_drbg_selftest();
+	if (ret) {
+		pr_warn("esdm_drbg_selftest() failed\n");
+		goto out;
+	}
 
 	ret = esdm_es_mgr_irq_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_es_mgr_irq_init() failed\n");
 		goto out;
+	}
 
 	ret = esdm_es_mgr_sched_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_es_mgr_sched_init() failed\n");
 		goto out;
+	}
 
 	ret = esdm_test_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_test_init() failed\n");
 		goto out;
+	}
 
 	ret = esdm_es_mgr_dev_init();
-	if (ret)
+	if (ret) {
+		pr_warn("esdm_es_mgr_dev_init() failed\n");
 		goto out;
+	}
 
 	return 0;
 

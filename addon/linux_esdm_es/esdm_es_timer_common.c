@@ -133,8 +133,12 @@ int __init esdm_init_time_source(void)
 		esdm_highres_timer_val = false;
 	}
 
+#ifdef ESDM_ES_IRQ
 	esdm_irq_es_init(esdm_highres_timer_val);
+#endif /* ESDM_ES_IRQ */
+#ifdef ESDM_ES_SCHED
 	esdm_sched_es_init(esdm_highres_timer_val);
+#endif /* ESDM_ES_SCHED */
 
 	/* Ensure that changes to global variables are visible */
 	mb();

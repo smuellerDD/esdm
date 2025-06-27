@@ -1,7 +1,7 @@
 From 23b30f24e9a9f4f7957fac2274ea511167ab7917 Mon Sep 17 00:00:00 2001
 From: Stephan Mueller <smueller@chronox.de>
 Date: Fri, 9 Jun 2023 22:15:30 +0200
-Subject: [PATCH 2/2] ESDM: interrupt entropy source hooks
+Subject: [PATCH 2/3] ESDM: interrupt entropy source hooks
 
 The interrupt entropy source requires a hook into the
 add_interrupt_randomness function. To allow the entropy source

@@ -31,8 +31,6 @@ choice
 	  or the amount of entropy the ESDM can process.
 
 	config ESDM_COLLECTION_SIZE_32
-	depends on ESDM_CONTINUOUS_COMPRESSION_ENABLED
-	depends on !ESDM_SWITCHABLE_CONTINUOUS_COMPRESSION
 	depends on !ESDM_OVERSAMPLE_ENTROPY_SOURCES
 		bool "32 interrupt events"
 
@@ -68,7 +66,7 @@ config ESDM_COLLECTION_SIZE
 	default 8192 if ESDM_COLLECTION_SIZE_8192
 
  */
-#define CONFIG_ESDM_COLLECTION_SIZE 1024
+#define CONFIG_ESDM_COLLECTION_SIZE 2048
 
 /******************************************************************************/
 
