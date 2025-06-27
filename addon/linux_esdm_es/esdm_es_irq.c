@@ -45,7 +45,7 @@ config ESDM_IRQ_ENTROPY_RATE
 	  interrupt entropy source will still deliver data but without
 	  being credited with entropy.
 */
-#define CONFIG_ESDM_IRQ_ENTROPY_RATE 256
+#define CONFIG_ESDM_IRQ_ENTROPY_RATE 768
 
 /*
 config ESDM_RUNTIME_ES_CONFIG
@@ -66,7 +66,7 @@ config ESDM_RUNTIME_ES_CONFIG
 
 static void *esdm_irq_hash_state = NULL;
 static void *esdm_irq_drbg_state = NULL;
-static const char *esdm_irq_drbg_domain_separation = "ESDM_IRQ_DRBG";
+static const char esdm_irq_drbg_domain_separation[] = "ESDM_IRQ_DRBG";
 /*
  * Number of interrupts to be recorded to assume that DRNG security strength
  * bits of entropy are received.
@@ -77,9 +77,9 @@ static const char *esdm_irq_drbg_domain_separation = "ESDM_IRQ_DRBG";
 #define ESDM_IRQ_ENTROPY_BITS ESDM_UINT32_C(CONFIG_ESDM_IRQ_ENTROPY_RATE)
 
 /* Number of interrupts required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
-static u32 esdm_irq_entropy_bits = ESDM_IRQ_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR;
+static u32 esdm_irq_entropy_bits = ESDM_IRQ_ENTROPY_BITS;
 
-static u32 irq_entropy __read_mostly = ESDM_IRQ_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR;
+static u32 irq_entropy __read_mostly = ESDM_IRQ_ENTROPY_BITS;
 #ifdef CONFIG_ESDM_RUNTIME_ES_CONFIG
 module_param(irq_entropy, uint, 0444);
 MODULE_PARM_DESC(
@@ -96,14 +96,12 @@ static DEFINE_PER_CPU(atomic_t, esdm_irq_array_irqs) = ATOMIC_INIT(0);
 void __init esdm_irq_es_init(bool highres_timer)
 {
 	/* Set a minimum number of interrupts that must be collected */
-	irq_entropy = max_t(u32, ESDM_IRQ_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR, irq_entropy);
-
-	BUILD_BUG_ON(ESDM_ES_MIN_OVERSAMPLING_FACTOR > ESDM_ES_OVERSAMPLING_FACTOR);
+	irq_entropy = max_t(u32, ESDM_IRQ_ENTROPY_BITS, irq_entropy);
 
 	if (highres_timer) {
 		esdm_irq_entropy_bits = irq_entropy;
 	} else {
-		u32 new_entropy = irq_entropy / ESDM_ES_MIN_OVERSAMPLING_FACTOR * ESDM_ES_OVERSAMPLING_FACTOR;
+		u32 new_entropy = irq_entropy * ESDM_ES_OVERSAMPLING_FACTOR;
 
 		esdm_irq_entropy_bits =
 			(irq_entropy < new_entropy) ? new_entropy : irq_entropy;
@@ -275,13 +273,15 @@ static void esdm_irq_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
-	ret = esdm_drbg_cb->drbg_generate(esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3, (u8*)esdm_irq_drbg_domain_separation, strlen(esdm_irq_drbg_domain_separation));
+	ret = esdm_drbg_cb->drbg_generate(esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3,
+					  (u8*)esdm_irq_drbg_domain_separation,
+					  sizeof(esdm_irq_drbg_domain_separation) - 1);
 	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
 		goto err;
 	}
 	/* clear fractions of a byte */
-	eb->e_bits = returned_ent_bits & (u32)~0x7;
+	eb->e_bits = returned_ent_bits;
 
 out:
 	hash_cb->hash_desc_zero(shash);

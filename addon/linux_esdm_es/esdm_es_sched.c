@@ -43,7 +43,7 @@ int "Scheduler Entropy Source Entropy Rate"
 	  scheduler entropy source will still deliver data but without
 	  being credited with entropy.
  */
-#define CONFIG_ESDM_SCHED_ENTROPY_RATE 256
+#define CONFIG_ESDM_SCHED_ENTROPY_RATE 768
 
 /*
 config ESDM_RUNTIME_ES_CONFIG
@@ -64,7 +64,7 @@ config ESDM_RUNTIME_ES_CONFIG
 
 static void *esdm_sched_hash_state = NULL;
 static void *esdm_sched_drbg_state = NULL;
-static const char *esdm_sched_drbg_domain_separation = "ESDM_SCH_DRBG";
+static const char esdm_sched_drbg_domain_separation[] = "ESDM_SCH_DRBG";
 
 
 /*
@@ -77,9 +77,9 @@ static const char *esdm_sched_drbg_domain_separation = "ESDM_SCH_DRBG";
 #define ESDM_SCHED_ENTROPY_BITS ESDM_UINT32_C(CONFIG_ESDM_SCHED_ENTROPY_RATE)
 
 /* Number of events required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
-static u32 esdm_sched_entropy_bits = ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR;
+static u32 esdm_sched_entropy_bits = ESDM_SCHED_ENTROPY_BITS;
 
-static u32 sched_entropy __read_mostly = ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR;
+static u32 sched_entropy __read_mostly = ESDM_SCHED_ENTROPY_BITS;
 #ifdef CONFIG_ESDM_RUNTIME_ES_CONFIG
 module_param(sched_entropy, uint, 0444);
 MODULE_PARM_DESC(
@@ -109,14 +109,12 @@ static void __init esdm_sched_check_compression_state(void)
 void __init esdm_sched_es_init(bool highres_timer)
 {
 	/* Set a minimum number of scheduler events that must be collected */
-	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR, sched_entropy);
-
-	BUILD_BUG_ON(ESDM_ES_MIN_OVERSAMPLING_FACTOR > ESDM_ES_OVERSAMPLING_FACTOR);
+	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS, sched_entropy);
 
 	if (highres_timer) {
 		esdm_sched_entropy_bits = sched_entropy;
 	} else {
-		u32 new_entropy = sched_entropy / ESDM_ES_MIN_OVERSAMPLING_FACTOR * ESDM_ES_OVERSAMPLING_FACTOR;
+		u32 new_entropy = sched_entropy * ESDM_ES_OVERSAMPLING_FACTOR;
 
 		esdm_sched_entropy_bits = (sched_entropy < new_entropy) ?
 						  new_entropy :
@@ -276,8 +274,10 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		"obtained %u bits by collecting %u bits of entropy from scheduler-based noise source\n",
 		returned_ent_bits, collected_ent_bits);
 
-	/* insert gathered entropy as additional input, HMAC-DRBG will insert this into his state before generating output! */
-	ret = esdm_drbg_cb->drbg_seed(esdm_sched_drbg_state, digest, hash_cb->hash_digestsize(hash));
+	/* insert gathered entropy as additional input, HMAC-DRBG will insert this
+	 * into his state before generating output! */
+	ret = esdm_drbg_cb->drbg_seed(esdm_sched_drbg_state, digest,
+				      hash_cb->hash_digestsize(hash));
 	if (ret) {
 		pr_warn("unable to seed drbg in scheduler-based noise source\n");
 		goto err;
@@ -289,14 +289,16 @@ static void esdm_sched_pool_hash(struct entropy_buf *eb, u32 requested_bits)
 		goto err;
 	}
 
-	ret = esdm_drbg_cb->drbg_generate(esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3, (u8*)esdm_sched_drbg_domain_separation, strlen(esdm_sched_drbg_domain_separation));
+	ret = esdm_drbg_cb->drbg_generate(esdm_sched_drbg_state, eb->e, returned_ent_bits >> 3,
+					  (u8*)esdm_sched_drbg_domain_separation,
+					  sizeof(esdm_sched_drbg_domain_separation) - 1);
 	if (ret != returned_ent_bits >> 3) {
 		pr_warn("unable to generate drbg output in scheduler-based noise source\n");
 		goto err;
 	}
 
 	/* clear fractions of a byte */
-	eb->e_bits = returned_ent_bits & (u32)~0x7;
+	eb->e_bits = returned_ent_bits;
 
 out:
 	hash_cb->hash_desc_zero(shash);
@@ -437,7 +439,7 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 
 static void esdm_sched_set_entropy_rate(u32 rate)
 {
-	esdm_sched_entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS * ESDM_ES_MIN_OVERSAMPLING_FACTOR, rate);
+	esdm_sched_entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS, rate);
 }
 
 struct esdm_es_cb esdm_es_sched = {

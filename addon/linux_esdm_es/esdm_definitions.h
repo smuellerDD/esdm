@@ -95,12 +95,6 @@
  */
 #define ESDM_ES_OVERSAMPLING_FACTOR 10
 
-/*
- * Always enforce a minimal OSR, as even some high resolution
- * timers a not sufficient to generate 1 bit of entropy per event.
- */
-#define ESDM_ES_MIN_OVERSAMPLING_FACTOR 3
-
 /* Alignmask that is intended to be identical to CRYPTO_MINALIGN */
 #define ESDM_KCAPI_ALIGN ARCH_KMALLOC_MINALIGN
 
