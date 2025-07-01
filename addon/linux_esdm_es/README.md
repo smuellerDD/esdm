@@ -15,7 +15,7 @@ entropy source is always credited with zero bits of entropy, because both
 entropy sources show a dependency because a scheduling event may also cause
 an interrupt event at the same time.
 
-This entropy source maintains a per-CPU entropy pool using SHA-512 which
+This entropy source maintains a per-CPU entropy pool of raw timestamps which
 is constantly updated with the raw entropy data. All raw entropy data is
 always maintained in the entropy pool for the lifetime of this entropy source.
 This implies that the entropy pools are operated with backtracking resistance.
@@ -35,10 +35,12 @@ couple of cycles.
 
 ## Installation
 
-To use the entropy source, the kernel patches
-`0001-ESDM-scheduler-entropy-source-hooks*.patch` as well as
-`0002-ESDM-interrupt-entropy-source-hooks.patch` must be applied and the Linux
-kernel compiled. This patch adds a small framework that allows a kernel
+To use the entropy source, the following kernel patches must be applied
+- `0001-ESDM-scheduler-entropy-source-hooks*.patch`
+- `0002-ESDM-interrupt-entropy-source-hooks*.patch`
+- `0003-ESDM-crypto-DRBG-externalize-DRBG-functions-for-ESDM*.patch`
+and the Linux kernel compiled.
+This patch adds a small framework that allows a kernel
 module to be inserted into the kernel at runtime that will provide the
 entropy source implementation.
 
