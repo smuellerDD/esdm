@@ -558,7 +558,15 @@ void esdm_es_irq_module_exit(void)
 	    esdm_es_init_registered)
 		return;
 
+	pr_warn("Unloading the ESDM IRQ ES works only on a best effort basis for "
+		"development purposes!\n");
+
+	/* we cannot really guarantee, that this is enough on SMP systems without
+	 * adding global locks, which are hindering performance 99% of the time.
+	 * -> ONLY UNLOAD FOR DEBUGGING and DEVELOPMENT PURPOSES <- */
+	local_bh_disable();
 	esdm_irq_unregister(esdm_add_interrupt_randomness);
+	local_bh_enable();
 
 	if (esdm_irq_drbg_state) {
 		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
@@ -568,5 +576,6 @@ void esdm_es_irq_module_exit(void)
 	}
 
 	pr_info("ESDM IRQ ES unregistered\n");
+
 	atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);
 }

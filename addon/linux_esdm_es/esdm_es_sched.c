@@ -441,7 +441,15 @@ int __init esdm_es_sched_module_init(void)
 
 void esdm_es_sched_module_exit(void)
 {
+	pr_warn("Unloading the ESDM Scheduler ES works only on a best effort basis for "
+		"development purposes!\n");
+
+	/* we cannot really guarantee, that this is enough on SMP systems without
+	 * adding global locks, which are hindering performance 99% of the time.
+	 * -> ONLY UNLOAD FOR DEBUGGING and DEVELOPMENT PURPOSES <- */
+	preempt_disable();
 	esdm_sched_unregister(esdm_sched_randomness);
+	preempt_enable();
 
 	if (esdm_sched_drbg_state) {
 		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg_state);
