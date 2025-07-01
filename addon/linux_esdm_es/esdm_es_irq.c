@@ -260,7 +260,6 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
 		goto err;
 	}
-	/* clear fractions of a byte */
 	eb->e_bits = returned_ent_bits;
 
 out:
@@ -449,7 +448,9 @@ static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 		 " Available entropy: %u\n"
 		 " per-CPU interrupt collection size: %u\n"
 		 " Standards compliance: %s\n"
+#ifdef CONFIG_CRYPTO_FIPS
 		 " FIPS mode enabled: %i\n"
+#endif /* CONFIG_CRYPTO_FIPS */
 		 " High-resolution timer: %s\n",
 		 esdm_drbg_cb->drbg_name(),
 		 esdm_irq_avail_entropy(0),

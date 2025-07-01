@@ -267,8 +267,6 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		pr_warn("unable to generate drbg output in scheduler-based noise source\n");
 		goto err;
 	}
-
-	/* clear fractions of a byte */
 	eb->e_bits = returned_ent_bits;
 
 out:
@@ -384,7 +382,9 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 		 " Available entropy: %u\n"
 		 " per-CPU scheduler event collection size: %u\n"
 		 " Standards compliance: %s\n"
+#ifdef CONFIG_CRYPTO_FIPS
 		 " FIPS mode enabled: %i\n"
+#endif /* CONFIG_CRYPTO_FIPS */
 		 " High-resolution timer: %s\n",
 		 esdm_drbg_cb->drbg_name(),
 		 esdm_sched_avail_entropy(0),
@@ -413,12 +413,23 @@ struct esdm_es_cb esdm_es_sched = {
 
 int __init esdm_es_sched_module_init(void)
 {
+	int ret;
+
 	/* switch to XDRBG, if upstream in the kernel */
 	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc(
 		(u8 *)esdm_sched_drbg_domain_separation,
 		sizeof(esdm_sched_drbg_domain_separation) - 1);
 	if (!esdm_sched_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
+		return -EINVAL;
+	}
+
+	/* register scheduler hook */
+	ret = esdm_sched_register(esdm_sched_randomness);
+	if (ret) {
+		pr_warn("Unable to register ESDM scheduler ES\n");
+		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg_state);
+		esdm_sched_drbg_state = NULL;
 		return -EINVAL;
 	}
 

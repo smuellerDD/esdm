@@ -75,7 +75,7 @@ static struct esdm_health esdm_health = {
 	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_irq])
 #endif
 #ifdef ESDM_ES_SCHED
-		ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
+	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
 #endif
 };
 
