@@ -1,7 +1,7 @@
-From 1d27aba25922819c090b3bc50aaa211bef7402b9 Mon Sep 17 00:00:00 2001
+From 9222338fab9ce63f154f5ecd2ead28736c8f9d07 Mon Sep 17 00:00:00 2001
 From: Stephan Mueller <smueller@chronox.de>
-Date: Mon, 25 Apr 2022 22:29:26 +0200
-Subject: [PATCH] ESDM: scheduler entropy source hooks
+Date: Fri, 9 Jun 2023 22:13:29 +0200
+Subject: [PATCH 1/3] ESDM: scheduler entropy source hooks
 
 The scheduler entropy source requires a hook into the scheduler which
 fires every time a scheduling event happens. To allow the entropy source
@@ -12,26 +12,30 @@ noop.
 
 Signed-off-by: Stephan Mueller <smueller@chronox.de>
 ---
- drivers/misc/Makefile |  1 +
- drivers/misc/esdm.c   | 40 ++++++++++++++++++++++++++++++++++++++++
- include/linux/esdm.h  | 20 ++++++++++++++++++++
- kernel/sched/core.c   |  3 +++
- 4 files changed, 64 insertions(+)
- create mode 100644 drivers/misc/esdm.c
- create mode 100644 include/linux/esdm.h
+ drivers/misc/Makefile      |  2 ++
+ drivers/misc/esdm_sched.c  | 40 ++++++++++++++++++++++++++++++++++++++
+ include/linux/esdm_sched.h | 20 +++++++++++++++++++
+ kernel/sched/core.c        |  3 +++
+ 4 files changed, 65 insertions(+)
+ create mode 100644 drivers/misc/esdm_sched.c
+ create mode 100644 include/linux/esdm_sched.h
 
 diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
-index 70e800e9127f..d95a3cc42fe9 100644
+index 56de43943cd5..7272f3c80719 100644
 --- a/drivers/misc/Makefile
 +++ b/drivers/misc/Makefile
-@@ -60,3 +60,4 @@ obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
- obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
- obj-$(CONFIG_HI6421V600_IRQ)	+= hi6421v600-irq.o
- obj-$(CONFIG_OPEN_DICE)		+= open-dice.o
+@@ -3,6 +3,8 @@
+ # Makefile for misc devices that really don't fit anywhere else.
+ #
+ 
 +obj-y				+= esdm_sched.o
++
+ obj-$(CONFIG_IBM_ASM)		+= ibmasm/
+ obj-$(CONFIG_IBMVMC)		+= ibmvmc.o
+ obj-$(CONFIG_AD525X_DPOT)	+= ad525x_dpot.o
 diff --git a/drivers/misc/esdm_sched.c b/drivers/misc/esdm_sched.c
 new file mode 100644
-index 000000000000..66b6121124b7
+index 000000000000..d42f4997b8ca
 --- /dev/null
 +++ b/drivers/misc/esdm_sched.c
 @@ -0,0 +1,40 @@
@@ -77,7 +81,7 @@ index 000000000000..66b6121124b7
 +EXPORT_SYMBOL(esdm_sched_unregister);
 diff --git a/include/linux/esdm_sched.h b/include/linux/esdm_sched.h
 new file mode 100644
-index 000000000000..4b0569cacde9
+index 000000000000..f5935eca193a
 --- /dev/null
 +++ b/include/linux/esdm_sched.h
 @@ -0,0 +1,20 @@
@@ -102,7 +106,7 @@ index 000000000000..4b0569cacde9
 +
 +#endif /* _ESDM_SCHED_H */
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
-index 51efaabac3e4..777a32f6af6c 100644
+index a68d1276bab0..1e1f82fe254d 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
 @@ -6,6 +6,7 @@
@@ -113,7 +117,7 @@ index 51efaabac3e4..777a32f6af6c 100644
  #include <linux/highmem.h>
  #include <linux/hrtimer_api.h>
  #include <linux/ktime_api.h>
-@@ -3583,6 +3584,8 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
+@@ -3668,6 +3669,8 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
  {
  	struct rq *rq;
  
@@ -123,5 +127,5 @@ index 51efaabac3e4..777a32f6af6c 100644
  		return;
  
 -- 
-2.34.1
+2.39.2
 

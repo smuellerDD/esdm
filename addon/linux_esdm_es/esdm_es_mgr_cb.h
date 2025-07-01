@@ -11,7 +11,6 @@
 #include <linux/slab.h>
 
 #include "esdm_definitions.h"
-#include "esdm_hash_kcapi.h"
 
 enum esdm_internal_es {
 	esdm_int_es_irq, /* Interrupt entropy source */
@@ -49,15 +48,15 @@ struct esdm_es_cb {
 	void (*set_entropy_rate)(u32 rate);
 };
 
-/* Cap to maximum entropy that can ever be generated with given hash */
-#define esdm_cap_requested(__digestsize_bits, __requested_bits)                                           \
-	do {                                                                                              \
-		if (__digestsize_bits < __requested_bits) {                                               \
-			pr_debug(                                                                         \
-				"Cannot satisfy requested entropy %u due to insufficient hash size %u\n", \
-				__requested_bits, __digestsize_bits);                                     \
-			__requested_bits = __digestsize_bits;                                             \
-		}                                                                                         \
+/* Cap to maximum entropy that can ever be generated with given DRBG */
+#define esdm_cap_requested(__drbg_sec_strength_bits, __requested_bits)                                                 \
+	do {                                                                                                           \
+		if (__drbg_sec_strength_bits < __requested_bits) {                                                     \
+			pr_debug(                                                                                      \
+				"Cannot satisfy requested entropy %u due to insufficient DRBG security strength %u\n", \
+				__requested_bits, __drbg_sec_strength_bits);                                           \
+			__requested_bits = __drbg_sec_strength_bits;                                                   \
+		}                                                                                                      \
 	} while (0)
 
 #endif /* _ESDM_ES_MGR_CB_H */

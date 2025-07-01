@@ -17,7 +17,7 @@
 
 static u32 esdm_requested_sched_bits = ESDM_DRNG_INIT_SEED_SIZE_BITS;
 
-/* Available entropy in the entire ESDM considering all entropy sources */
+/* Available entropy in the scheduler ES considering all per-CPU pools */
 static u32 esdm_avail_entropy_sched(u32 requested_bits)
 {
 	return esdm_es_sched.curr_entropy(requested_bits);
