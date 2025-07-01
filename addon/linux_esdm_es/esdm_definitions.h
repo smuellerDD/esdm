@@ -72,12 +72,9 @@ static inline u32 atomic_read_u32(atomic_t *v)
 static inline u32 esdm_security_strength(void)
 {
 	/*
-	 * We use a hash to read the entropy in the entropy pool. According to
-	 * SP800-90B table 1, the entropy can be at most the digest size.
-	 * Considering this together with the last sentence in section 3.1.5.1.2
-	 * the security strength of a (approved) hash is equal to its output
-	 * size. On the other hand the entropy cannot be larger than the
-	 * security strength of the used DRBG.
+	 * We use a DRBG to read the entropy in the entropy pool.
+	 * This limits the output entropy to the security strength
+	 * of the DRBG.
 	 */
 	return ESDM_DRNG_SECURITY_STRENGTH_BITS;
 }

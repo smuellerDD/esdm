@@ -108,7 +108,8 @@ void __init esdm_sched_es_init(bool highres_timer)
 			ESDM_ES_OVERSAMPLING_FACTOR);
 	}
 
-	/* One pool should hold sufficient entropy for a single request from user-space */
+	/* One pool should hold sufficient entropy for a single request from
+	 * user-space */
 	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
 					   esdm_sched_entropy_bits);
 	if (max_ent < esdm_security_strength()) {
@@ -166,10 +167,13 @@ static void esdm_sched_reset(void)
 }
 
 /*
- * Hash all per-CPU arrays and return the digest to be used as seed data for
- * seeding a DRNG. The caller must guarantee backtracking resistance.
+ * Collect all per-CPU pools, process with internal DRBG and return the output
+ * to be used as seed data for seeding a DRNG.
+ * The caller must not guarantee backtracking resistance, as the internal
+ * cryptographic post-processing with a DRBG is always used.
  * The function will only copy as much data as entropy is available into the
- * caller-provided output buffer.
+ * caller-provided output buffer (further restricted by the internal DRBG's
+ * security strength).
  *
  * This function handles the translation from the number of received scheduler
  * events into an entropy statement. The conversion depends on
@@ -205,8 +209,9 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		requested_bits + esdm_compress_osr(), esdm_sched_entropy_bits);
 
 	/*
-	 * Harvest entropy from each per-CPU hash state - even though we may
-	 * have collected sufficient entropy, we will hash all per-CPU pools.
+	 * Harvest entropy from each per-CPU event state - even though we may
+	 * have collected sufficient entropy, we will insert all per-CPU pools
+	 * into the DRBG's state.
 	 */
 	for_each_online_cpu (cpu) {
 		struct drbg_string *seed_string;

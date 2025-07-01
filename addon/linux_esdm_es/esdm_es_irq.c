@@ -165,10 +165,13 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 }
 
 /*
- * Hash all per-CPU pools and return the digest to be used as seed data for
- * seeding a DRNG. The caller must guarantee backtracking resistance.
+ * Collect all per-CPU pools, process with internal DRBG and return the output
+ * to be used as seed data for seeding a DRNG.
+ * The caller must not guarantee backtracking resistance, as the internal
+ * cryptographic post-processing with a DRBG is always used.
  * The function will only copy as much data as entropy is available into the
- * caller-provided output buffer.
+ * caller-provided output buffer (further restricted by the internal DRBG's
+ * security strength).
  *
  * This function handles the translation from the number of received interrupts
  * into an entropy statement. The conversion depends on ESDM_IRQ_ENTROPY_BITS
@@ -194,7 +197,7 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
-	/* Cap to maximum entropy that can ever be generated with given hash */
+	/* Cap to maximum entropy that can ever be generated with given DRBG */
 	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state),
 			   requested_bits);
 	requested_irqs = esdm_entropy_to_data(

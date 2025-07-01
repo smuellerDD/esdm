@@ -207,16 +207,18 @@ int esdm_drbg_selftest(void)
 		goto out;
 	}
 
+	/* trigger initialization */
 	if (crypto_rng_reset(drbg, (u8 *)"ABC", 3)) {
 		ret = -EINVAL;
 		pr_warn("DRBG reset failed\n");
 		goto out;
 	}
 
+	/* convert to underlying drbg struct */
 	drbg_s = crypto_rng_ctx(drbg);
 	if (!drbg_s) {
 		ret = -EINVAL;
-		pr_warn("DRBG not accesible in self-test\n");
+		pr_warn("DRBG not accessible in self-test\n");
 		goto out;
 	}
 
