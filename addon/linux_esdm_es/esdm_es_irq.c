@@ -558,14 +558,14 @@ void esdm_es_irq_module_exit(void)
 	    esdm_es_init_registered)
 		return;
 
+	esdm_irq_unregister(esdm_add_interrupt_randomness);
+
 	if (esdm_irq_drbg_state) {
 		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
 		esdm_irq_drbg_state = NULL;
 	} else {
 		pr_warn("ESDM IRQ ES DRBG state was never registered!\n");
 	}
-
-	esdm_irq_unregister(esdm_add_interrupt_randomness);
 
 	pr_info("ESDM IRQ ES unregistered\n");
 	atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);
