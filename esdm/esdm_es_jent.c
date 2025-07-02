@@ -291,6 +291,7 @@ static void esdm_jent_finalize(void)
 
 static int esdm_jent_initialize(void)
 {
+	unsigned int flags = 0;
 	int ret;
 
 	/* Allow the init function to be called multiple times */
@@ -303,7 +304,17 @@ static int esdm_jent_initialize(void)
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
 	CKINT(esdm_jent_async_init());
 
-	esdm_jent_state = jent_entropy_collector_alloc(0, 0);
+	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled()) {
+		flags |= JENT_FORCE_FIPS;
+	}
+
+	if (esdm_ntg1_2024_compliant()) {
+		flags |= JENT_FORCE_FIPS;
+		/* TODO: adapt, when jitterentropy became NTG.1 compliant */
+		/* flags |= JENT_NTG1 */
+	}
+
+	esdm_jent_state = jent_entropy_collector_alloc(0, flags);
 	CKNULL(esdm_jent_state, -EFAULT);
 
 	atomic_set(&esdm_jent_initialized, 1);
