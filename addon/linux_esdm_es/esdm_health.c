@@ -98,16 +98,12 @@ static bool esdm_sp80090b_health_enabled(void)
 /***************************************************************************
  * SP800-90B Compliance
  *
- * If the Linux-RNG is booted into FIPS mode, the following interfaces
+ * If the esdm-es module is booted into FIPS mode, the following interfaces
  * provide an SP800-90B compliant noise source:
  *
- * * /dev/random
- * * getrandom(2)
- * * get_random_bytes_full
+ * - Scheduler ES
+ * - IRQ ES
  *
- * All other interfaces, including /dev/urandom or get_random_bytes without
- * the add_random_ready_callback cannot claim to use an SP800-90B compliant
- * noise source.
  ***************************************************************************/
 
 /*
