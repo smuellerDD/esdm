@@ -2,7 +2,7 @@
 /*
  * ESDM testing interfaces to obtain raw entropy
  *
- * Copyright (C) 2022 - 2024, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -11,6 +11,7 @@
 #include <linux/bug.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
+#include <linux/security.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
@@ -72,6 +73,18 @@ static void esdm_testing_init(struct esdm_testing *data, u32 boot)
 	 */
 	if (boot)
 		return;
+
+	/*
+	 * should the testing interface be present by accident in a production build
+	 * with lockdown mode enabled later on (not in early boot), do not store values!
+	 *
+	 * This is only defense in depth, as lockdown would probably already deny
+	 * access without this based on the access rights.
+	 */
+	if (security_locked_down(LOCKDOWN_DEBUGFS)) {
+		pr_warn("Skipping data collection due to enabled lockdown mode\n");
+		return;
+	}
 
 	esdm_testing_reset(data);
 	atomic_set(&data->esdm_testing_enabled, 1);
@@ -785,6 +798,18 @@ static struct dentry *esdm_raw_debugfs_root = NULL;
 
 int __init esdm_test_init(void)
 {
+	/*
+	 * should the testing interface be present by accident in a production build
+	 * with lockdown mode enabled early, do not create debugfs access!
+	 *
+	 * This is only defense in depth, as lockdown would probably already deny
+	 * access without this based on the access rights.
+	 */
+	if (security_locked_down(LOCKDOWN_DEBUGFS)) {
+		pr_info("ESDM is skipping debugfs creation due to lockdown mode: %s\n", KBUILD_MODNAME);
+		return 0;
+	}
+
 	esdm_raw_debugfs_root = debugfs_create_dir(KBUILD_MODNAME, NULL);
 	if (!esdm_raw_debugfs_root) {
 		pr_warn("ESDM testing debugfs creation failed: %s\n",
@@ -857,5 +882,10 @@ int __init esdm_test_init(void)
 
 void __exit esdm_test_exit(void)
 {
-	debugfs_remove_recursive(esdm_raw_debugfs_root);
+	if (esdm_raw_debugfs_root) {
+		debugfs_remove_recursive(esdm_raw_debugfs_root);
+		esdm_raw_debugfs_root = NULL;
+	} else {
+		pr_warn("ESDM debugfs root was never created, possibly due to lockdown mode: %s!\n", KBUILD_MODNAME);
+	}
 }
