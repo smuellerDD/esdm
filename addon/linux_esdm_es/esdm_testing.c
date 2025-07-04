@@ -11,6 +11,7 @@
 #include <linux/bug.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
+#include <linux/security.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
@@ -72,6 +73,11 @@ static void esdm_testing_init(struct esdm_testing *data, u32 boot)
 	 */
 	if (boot)
 		return;
+
+	if (security_locked_down(LOCKDOWN_DEBUGFS)) {
+		pr_warn("Skipping data collection due to enabled lockdown mode\n");
+		return;
+	}
 
 	esdm_testing_reset(data);
 	atomic_set(&data->esdm_testing_enabled, 1);
@@ -785,6 +791,11 @@ static struct dentry *esdm_raw_debugfs_root = NULL;
 
 int __init esdm_test_init(void)
 {
+	if (security_locked_down(LOCKDOWN_DEBUGFS)) {
+		pr_info("ESDM is skipping debugfs creation due to lockdown mode: %s\n", KBUILD_MODNAME);
+		return 0;
+	}
+
 	esdm_raw_debugfs_root = debugfs_create_dir(KBUILD_MODNAME, NULL);
 	if (!esdm_raw_debugfs_root) {
 		pr_warn("ESDM testing debugfs creation failed: %s\n",
