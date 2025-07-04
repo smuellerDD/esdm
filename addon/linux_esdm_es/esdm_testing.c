@@ -74,6 +74,13 @@ static void esdm_testing_init(struct esdm_testing *data, u32 boot)
 	if (boot)
 		return;
 
+	/*
+	 * should the testing interface be present by accident in a production build
+	 * with lockdown mode enabled later on (not in early boot), do not store values!
+	 *
+	 * This is only defense in depth, as lockdown would probably already deny
+	 * access without this based on the access rights.
+	 */
 	if (security_locked_down(LOCKDOWN_DEBUGFS)) {
 		pr_warn("Skipping data collection due to enabled lockdown mode\n");
 		return;
@@ -791,6 +798,13 @@ static struct dentry *esdm_raw_debugfs_root = NULL;
 
 int __init esdm_test_init(void)
 {
+	/*
+	 * should the testing interface be present by accident in a production build
+	 * with lockdown mode enabled early, do not create debugfs access!
+	 *
+	 * This is only defense in depth, as lockdown would probably already deny
+	 * access without this based on the access rights.
+	 */
 	if (security_locked_down(LOCKDOWN_DEBUGFS)) {
 		pr_info("ESDM is skipping debugfs creation due to lockdown mode: %s\n", KBUILD_MODNAME);
 		return 0;
@@ -868,5 +882,10 @@ int __init esdm_test_init(void)
 
 void __exit esdm_test_exit(void)
 {
-	debugfs_remove_recursive(esdm_raw_debugfs_root);
+	if (esdm_raw_debugfs_root) {
+		debugfs_remove_recursive(esdm_raw_debugfs_root);
+		esdm_raw_debugfs_root = NULL;
+	} else {
+		pr_warn("ESDM debugfs root was never created, possibly due to lockdown mode: %s!\n", KBUILD_MODNAME);
+	}
 }
