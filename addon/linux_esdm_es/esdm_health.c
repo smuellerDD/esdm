@@ -10,8 +10,10 @@
 #include <linux/fips.h>
 #include <linux/module.h>
 
+#include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_mgr_cb.h"
+#include "esdm_es_sched.h"
 #include "esdm_health.h"
 
 /* Stuck Test */
@@ -24,6 +26,8 @@ struct esdm_stuck_test {
 /* Repetition Count Test */
 struct esdm_rct {
 	atomic_t rct_count; /* Number of stuck values */
+	u16 cutoff;
+	u16 cutoff_permanent;
 };
 
 /* Adaptive Proportion Test */
@@ -37,6 +41,8 @@ struct esdm_apt {
 	atomic_t apt_base; /* APT base reference */
 
 	atomic_t apt_trigger;
+	u16 cutoff;
+	u16 cutoff_permanent;
 	bool apt_base_set; /* Is APT base set? */
 };
 
@@ -62,6 +68,14 @@ struct esdm_health_es_state {
 	x.sp80090b_startup_blocks = ATOMIC_INIT(ESDM_SP80090B_STARTUP_BLOCKS), \
 	x.sp80090b_startup_done = false,
 
+#define ESDM_HEALTH_OSR(curr)                                                  \
+	((curr + ESDM_DRNG_SECURITY_STRENGTH_BITS - 1) /                       \
+	 ESDM_DRNG_SECURITY_STRENGTH_BITS)
+#define ESDM_HEALTH_IRQ_RCT_CUTOFF(cutoff)                                     \
+	(ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) * cutoff)
+#define ESDM_HEALTH_SCHED_RCT_CUTOFF(cutoff)                                   \
+	(ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) * cutoff)
+
 /* The health test code must operate lock-less */
 struct esdm_health {
 	bool health_test_enabled;
@@ -73,9 +87,140 @@ static struct esdm_health esdm_health = {
 
 #ifdef ESDM_ES_IRQ
 	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_irq])
+	.es_state[esdm_int_es_irq].rct.cutoff =
+		ESDM_HEALTH_IRQ_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF),
+	.es_state[esdm_int_es_irq].rct.cutoff_permanent =
+		ESDM_HEALTH_IRQ_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF_PERMANENT),
+#if (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 1)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_1,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_1,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 2)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_2,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_2,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 3)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_3,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_3,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 4)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_4,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_4,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 5)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_5,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_5,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 6)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_6,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_6,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 7)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_7,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_7,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 8)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_8,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_8,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 9)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_9,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_9,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 10)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_10,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_10,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 11)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_11,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_11,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 12)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_12,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_12,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 13)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_13,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_13,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 14)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_14,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_14,
+#else
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_15,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_15,
+#endif
+
 #endif
 #ifdef ESDM_ES_SCHED
 	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
+	.es_state[esdm_int_es_irq].rct.cutoff =
+		ESDM_HEALTH_SCHED_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF),
+	.es_state[esdm_int_es_irq].rct.cutoff_permanent =
+		ESDM_HEALTH_SCHED_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF_PERMANENT),
+#if (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 1)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_1,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_1,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 2)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_2,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_2,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 3)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_3,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_3,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 4)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_4,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_4,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 5)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_5,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_5,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 6)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_6,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_6,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 7)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_7,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_7,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 8)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_8,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_8,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 9)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_9,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_9,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 10)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_10,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_10,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 11)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_11,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_11,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 12)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_12,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_12,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 13)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_13,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_13,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 14)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_14,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_14,
+#else
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_15,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_15,
+#endif
 #endif
 };
 
@@ -269,9 +414,9 @@ static void esdm_apt_insert(struct esdm_health *health, unsigned int now_time,
 	if (now_time == (unsigned int)atomic_read(&apt->apt_base)) {
 		u32 apt_val = (u32)atomic_inc_return_relaxed(&apt->apt_count);
 
-		if (apt_val >= CONFIG_ESDM_APT_CUTOFF_PERMANENT)
+		if (apt_val >= apt->cutoff_permanent)
 			esdm_sp80090b_permanent_failure(health, es);
-		else if (apt_val >= CONFIG_ESDM_APT_CUTOFF)
+		else if (apt_val >= apt->cutoff)
 			esdm_sp80090b_failure(health, es);
 	}
 
@@ -334,9 +479,9 @@ static void esdm_rct(struct esdm_health *health, enum esdm_internal_es es,
 		 * Hence we need to subtract one from the cutoff value as
 		 * calculated following SP800-90B.
 		 */
-		if (rct_count >= CONFIG_ESDM_RCT_CUTOFF_PERMANENT)
+		if (rct_count > rct->cutoff_permanent)
 			esdm_sp80090b_permanent_failure(health, es);
-		else if (rct_count >= CONFIG_ESDM_RCT_CUTOFF)
+		else if (rct_count > rct->cutoff)
 			esdm_sp80090b_failure(health, es);
 	} else {
 		esdm_rct_reset(rct);

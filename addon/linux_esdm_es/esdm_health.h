@@ -47,30 +47,83 @@ config ESDM_RCT_CUTOFF
 	default 31 if !ESDM_RCT_BROKEN
 	default 1 if ESDM_RCT_BROKEN
 
-# Default taken from SP800-90B sec 4.4.1 - significance level 2^-80
+# Default taken from SP800-90B sec 4.4.1 - significance level 2^-60
 config ESDM_RCT_CUTOFF_PERMANENT
 	int
 	default 81 if !ESDM_RCT_BROKEN
 	default 2 if ESDM_RCT_BROKEN
-
-# Default taken from SP800-90B sec 4.4.2 - significance level 2^-30
-config ESDM_APT_CUTOFF
-	int
-	default 325 if !ESDM_APT_BROKEN
-	default 32 if ESDM_APT_BROKEN
-
-# Default taken from SP800-90B sec 4.4.2 - significance level 2^-80
-config ESDM_APT_CUTOFF_PERMANENT
-	int
-	default 371 if !ESDM_APT_BROKEN
-	default 33 if ESDM_APT_BROKEN
  */
 
-#define CONFIG_ESDM_RCT_CUTOFF 31
-#define CONFIG_ESDM_RCT_CUTOFF_PERMANENT 81
+#define CONFIG_ESDM_RCT_CUTOFF 30
+#define CONFIG_ESDM_RCT_CUTOFF_PERMANENT 60
 
 #define CONFIG_ESDM_APT_CUTOFF 325
 #define CONFIG_ESDM_APT_CUTOFF_PERMANENT 371
+
+
+/*
+ * See the SP 800-90B comment #10b for the corrected cutoff for the SP 800-90B
+ * APT.
+ * http://www.untruth.org/~josh/sp80090b/UL%20SP800-90B-final%20comments%20v1.9%2020191212.pdf
+ * In in the syntax of R, this is C = 2 + qbinom(1 − 2^(−30), 511, 2^(-1/osr)).
+ * (The original formula wasn't correct because the first symbol must
+ * necessarily have been observed, so there is no chance of observing 0 of these
+ * symbols.)
+ *
+ * For the alpha < 2^-53, R cannot be used as it uses a float data type without
+ * arbitrary precision. A SageMath script is used to calculate those cutoff
+ * values.
+ *
+ * For any value above 14, this yields the maximal allowable value of 512
+ * (by FIPS 140-2 IG 7.19 Resolution # 16, we cannot choose a cutoff value that
+ * renders the test unable to fail).
+ *
+ * The definitions are for an significance level of 2^-30 and 2^-60
+ */
+#define CONFIG_ESDM_APT_CUTOFF_1 325
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_1 355
+
+#define CONFIG_ESDM_APT_CUTOFF_2 422
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_2 447
+
+#define CONFIG_ESDM_APT_CUTOFF_3 459
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_3 479
+
+#define CONFIG_ESDM_APT_CUTOFF_4 477
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_4 494
+
+#define CONFIG_ESDM_APT_CUTOFF_5 488
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_5 502
+
+#define CONFIG_ESDM_APT_CUTOFF_6 494
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_6 507
+
+#define CONFIG_ESDM_APT_CUTOFF_7 499
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_7 510
+
+#define CONFIG_ESDM_APT_CUTOFF_8 502
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_8 512
+
+#define CONFIG_ESDM_APT_CUTOFF_9 505
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_9 512
+
+#define CONFIG_ESDM_APT_CUTOFF_10 507
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_10 512
+
+#define CONFIG_ESDM_APT_CUTOFF_11 508
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_11 512
+
+#define CONFIG_ESDM_APT_CUTOFF_12 509
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_12 512
+
+#define CONFIG_ESDM_APT_CUTOFF_13 510
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_13 512
+
+#define CONFIG_ESDM_APT_CUTOFF_14 511
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_14 512
+
+#define CONFIG_ESDM_APT_CUTOFF_15 512
+#define CONFIG_ESDM_APT_CUTOFF_PERMANENT_15 512
 
 /******************************************************************************/
 
