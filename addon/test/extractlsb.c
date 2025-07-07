@@ -71,7 +71,7 @@ static int hextolong(char *p_strmask, uint64_t *p_mask)
 			mask |= (uint64_t)(*p_strmask - '0');
 		else if ((*p_strmask >= 'A') && (*p_strmask <= 'F'))
 			mask |= (uint64_t)(*p_strmask - 'A' + 10);
-		else if ((*p_strmask >= '0') && (*p_strmask <= '9'))
+		else if ((*p_strmask >= 'a') && (*p_strmask <= 'f'))
 			mask |= (uint64_t)(*p_strmask - 'a' + 10);
 		else
 			return -1;
