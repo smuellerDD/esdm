@@ -33,8 +33,6 @@ endif
 # If this interface is enabled, interface files in /sys/kernel/debug/esdm_es
 # are created.
 #
-# When enabling this code base, select the proper interfaces in esdm_testing.h.
-#
 ifeq ($(BUILD_TESTING), 1)
 CFLAGS_esdm_es_mgr.o	+= -DESDM_TESTING
 CFLAGS_esdm_testing.o	= -DESDM_TESTING
