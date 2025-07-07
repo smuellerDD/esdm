@@ -44,21 +44,21 @@ config ESDM_APT_BROKEN
 # Default taken from SP800-90B sec 4.4.1 - significance level 2^-30
 config ESDM_RCT_CUTOFF
 	int
-	default 31 if !ESDM_RCT_BROKEN
+	default (31-1) if !ESDM_RCT_BROKEN
 	default 1 if ESDM_RCT_BROKEN
 
 # Default taken from SP800-90B sec 4.4.1 - significance level 2^-60
 config ESDM_RCT_CUTOFF_PERMANENT
 	int
-	default 81 if !ESDM_RCT_BROKEN
+	default (61-1) if !ESDM_RCT_BROKEN
 	default 2 if ESDM_RCT_BROKEN
  */
 
-#define CONFIG_ESDM_RCT_CUTOFF 30
-#define CONFIG_ESDM_RCT_CUTOFF_PERMANENT 60
-
-#define CONFIG_ESDM_APT_CUTOFF 325
-#define CONFIG_ESDM_APT_CUTOFF_PERMANENT 371
+/* subtract one in both cases, as we count repetitions of a value
+ * and SP800-90B uses the length of a series of identical events
+ * including the first one (which we count additional repetitions for)*/
+#define CONFIG_ESDM_RCT_CUTOFF (31-1)
+#define CONFIG_ESDM_RCT_CUTOFF_PERMANENT (61-1)
 
 
 /*

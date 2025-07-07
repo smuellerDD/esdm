@@ -479,9 +479,9 @@ static void esdm_rct(struct esdm_health *health, enum esdm_internal_es es,
 		 * Hence we need to subtract one from the cutoff value as
 		 * calculated following SP800-90B.
 		 */
-		if (rct_count > rct->cutoff_permanent)
+		if (rct_count >= rct->cutoff_permanent)
 			esdm_sp80090b_permanent_failure(health, es);
-		else if (rct_count > rct->cutoff)
+		else if (rct_count >= rct->cutoff)
 			esdm_sp80090b_failure(health, es);
 	} else {
 		esdm_rct_reset(rct);
