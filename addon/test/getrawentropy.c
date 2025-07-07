@@ -106,19 +106,6 @@ int main(int argc, char *argv[])
 		if (c == -1)
 			break;
 		switch (c) {
-		case 0:
-			switch (opt_index) {
-			case 0:
-				opts.samples = strtoul(optarg, NULL, 10);
-				if (opts.samples == ULONG_MAX)
-					return -EINVAL;
-				break;
-			case 1:
-				opts.debugfs_file = optarg;
-				break;
-			}
-			break;
-
 		case 's':
 			opts.samples = strtoul(optarg, NULL, 10);
 			if (opts.samples == ULONG_MAX)
@@ -131,6 +118,9 @@ int main(int argc, char *argv[])
 			return -EINVAL;
 		}
 	}
+
+	fprintf(stderr, "Try to collect %lu samples\n", opts.samples);
+	fprintf(stderr, "Use debugfs file %s\n", opts.debugfs_file);
 
 	return getrawentropy(&opts);
 }
