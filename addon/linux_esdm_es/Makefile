@@ -36,9 +36,21 @@ endif
 # When enabling this code base, select the proper interfaces in esdm_testing.h.
 #
 ifeq ($(BUILD_TESTING), 1)
-CFLAGS_esdm_es_mgr.o		+= -DESDM_TESTING
-CFLAGS_esdm_testing.o		= -DESDM_TESTING
-esdm_es-y			+= esdm_testing.o
+CFLAGS_esdm_es_mgr.o	+= -DESDM_TESTING
+CFLAGS_esdm_testing.o	= -DESDM_TESTING
+esdm_es-y		+= esdm_testing.o
+ccflags-y		+= -DCONFIG_ESDM_RAW_HIRES_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_JIFFIES_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_IRQ_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_RETIP_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_REGS_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_ARRAY
+ccflags-y		+= -DCONFIG_ESDM_IRQ_PERF
+ccflags-y		+= -DCONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_SCHED_PID_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY
+ccflags-y		+= -DCONFIG_ESDM_SCHED_PERF
 endif
 
 
