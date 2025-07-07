@@ -558,6 +558,8 @@ foot print of the entire code base as much as possible. This goes to the expense
 of the performance.
 ''')
 
+option('validation-helpers', type: 'feature', value: 'disabled',
+       description: 'Enabled build of entropy validation helpers for esdm_es.')
 
 ################################################################################
 # Enable Test configuration

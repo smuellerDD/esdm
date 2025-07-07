@@ -213,6 +213,10 @@ if get_option('esdm-tool').enabled()
 	subdirs += [ 'frontends/tool' ]
 endif
 
+if get_option('validation-helpers').enabled()
+	subdirs += [ 'addon/test' ]
+endif
+
 foreach n : subdirs
 	subdir(n)
 endforeach
