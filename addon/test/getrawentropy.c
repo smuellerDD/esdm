@@ -87,6 +87,8 @@ static int getrawentropy(struct opts *opts)
 		}
 
 		requested -= (uint32_t)ret;
+
+		fprintf(stderr, "Fetched %zd events, still %lu to do\n", ret / sizeof(uint32_t), requested  / sizeof(uint32_t));
 	}
 
 	ret = 0;
