@@ -156,9 +156,9 @@ static struct esdm_health esdm_health = {
 #endif
 #ifdef ESDM_ES_SCHED
 	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
-	.es_state[esdm_int_es_irq].rct.cutoff =
+	.es_state[esdm_int_es_sched].rct.cutoff =
 		ESDM_HEALTH_SCHED_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF),
-	.es_state[esdm_int_es_irq].rct.cutoff_permanent =
+	.es_state[esdm_int_es_sched].rct.cutoff_permanent =
 		ESDM_HEALTH_SCHED_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF_PERMANENT),
 #if (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 1)
 	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_1,
