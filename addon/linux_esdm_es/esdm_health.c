@@ -18,9 +18,9 @@
 
 /* Stuck Test */
 struct esdm_stuck_test {
-	u32 last_time; /* Stuck test: time of previous IRQ */
-	u32 last_delta; /* Stuck test: delta of previous IRQ */
-	u32 last_delta2; /* Stuck test: 2. time derivation of prev IRQ */
+	u32 last_time; /* Stuck test: time of previous event */
+	u32 last_delta; /* Stuck test: delta of previous event */
+	u32 last_delta2; /* Stuck test: 2. time derivation of previous event */
 };
 
 /* Repetition Count Test */
@@ -69,8 +69,7 @@ struct esdm_health_es_state {
 	x.sp80090b_startup_done = false,
 
 #define ESDM_HEALTH_OSR(curr)                                                  \
-	((curr + ESDM_DRNG_SECURITY_STRENGTH_BITS - 1) /                       \
-	 ESDM_DRNG_SECURITY_STRENGTH_BITS)
+	((curr) / ESDM_DRNG_SECURITY_STRENGTH_BITS)
 #define ESDM_HEALTH_IRQ_RCT_CUTOFF(cutoff)                                     \
 	(ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) * cutoff)
 #define ESDM_HEALTH_SCHED_RCT_CUTOFF(cutoff)                                   \

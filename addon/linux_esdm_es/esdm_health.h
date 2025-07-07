@@ -44,21 +44,27 @@ config ESDM_APT_BROKEN
 # Default taken from SP800-90B sec 4.4.1 - significance level 2^-30
 config ESDM_RCT_CUTOFF
 	int
-	default 31 if !ESDM_RCT_BROKEN
+	default 30 if !ESDM_RCT_BROKEN
 	default 1 if ESDM_RCT_BROKEN
 
 # Default taken from SP800-90B sec 4.4.1 - significance level 2^-60
 config ESDM_RCT_CUTOFF_PERMANENT
 	int
-	default 81 if !ESDM_RCT_BROKEN
+	default 60 if !ESDM_RCT_BROKEN
 	default 2 if ESDM_RCT_BROKEN
  */
 
+/*
+ * The RCT applies the aforementioned significance level. Based on the formula
+ * in SP800-90B section 4.4.1, when exceeding the threshold, a health alarm is
+ * triggered. When applying an oversampling rate, this value is multiplied
+ * by the used oversampling rate at compile time. As the OSR is an integer,
+ * rounding errors occur when the actual OSR contains fractions. At compile
+ * time, the OSR will always be rounded down to the nearest integer value
+ * to be conservative.
+ */
 #define CONFIG_ESDM_RCT_CUTOFF 30
 #define CONFIG_ESDM_RCT_CUTOFF_PERMANENT 60
-
-#define CONFIG_ESDM_APT_CUTOFF 325
-#define CONFIG_ESDM_APT_CUTOFF_PERMANENT 371
 
 
 /*
