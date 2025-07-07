@@ -18,9 +18,9 @@
 
 /* Stuck Test */
 struct esdm_stuck_test {
-	u32 last_time; /* Stuck test: time of previous IRQ */
-	u32 last_delta; /* Stuck test: delta of previous IRQ */
-	u32 last_delta2; /* Stuck test: 2. time derivation of prev IRQ */
+	u32 last_time; /* Stuck test: time of previous event */
+	u32 last_delta; /* Stuck test: delta of previous event */
+	u32 last_delta2; /* Stuck test: 2. time derivation of previous event */
 };
 
 /* Repetition Count Test */
