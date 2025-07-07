@@ -219,19 +219,7 @@ config ESDM_SCHED_PERF
 	  the first 1000 entropy events since boot can be sampled.
 */
 
-#define CONFIG_ESDM_RAW_HIRES_ENTROPY
-#define CONFIG_ESDM_RAW_JIFFIES_ENTROPY
-#define CONFIG_ESDM_RAW_IRQ_ENTROPY
-#define CONFIG_ESDM_RAW_RETIP_ENTROPY
-#define CONFIG_ESDM_RAW_REGS_ENTROPY
-#define CONFIG_ESDM_RAW_ARRAY
-#define CONFIG_ESDM_IRQ_PERF
-
-#define CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
-#define CONFIG_ESDM_RAW_SCHED_PID_ENTROPY
-#define CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY
-#define CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY
-#define CONFIG_ESDM_SCHED_PERF
+/* definitions are located in Makefile now! */
 
 /******************************************************************************/
 
