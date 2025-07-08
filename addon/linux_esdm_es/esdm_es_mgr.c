@@ -11,7 +11,10 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
+#include <linux/reboot.h>
 #include <linux/version.h>
 
 #include "esdm_es_ioctl.h"
@@ -202,6 +205,40 @@ static void __exit esdm_es_mgr_dev_fini(void)
 	pr_info("ESDM user space interface unavailable\n");
 }
 
+static int esdm_es_mgr_reboot_notifier(struct notifier_block *nb,
+				       unsigned long action, void *data)
+{
+	pr_warn("Reset ESDM ES' because of reboot/halt\n");
+
+	esdm_es_mgr_irq_reset();
+	esdm_es_mgr_sched_reset();
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block esdm_es_mgr_notifier_reboot = {
+	.notifier_call = esdm_es_mgr_reboot_notifier,
+	.priority = 0,
+};
+
+#if IS_ENABLED(CONFIG_VMGENID)
+static int esdm_es_mgr_vmgenid_notifier(struct notifier_block *nb,
+					unsigned long action, void *data)
+{
+	pr_warn("Reset ESDM ES' because of vmgenid change!\n");
+
+	esdm_es_mgr_irq_reset();
+	esdm_es_mgr_sched_reset();
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block esdm_es_mgr_notifier_vmgenid = {
+	.notifier_call = esdm_es_mgr_vmgenid_notifier,
+	.priority = 0,
+};
+#endif
+
 static int __init esdm_es_mgr_init(void)
 {
 	int ret = esdm_init_time_source();
@@ -240,6 +277,10 @@ static int __init esdm_es_mgr_init(void)
 		goto out;
 	}
 
+	register_reboot_notifier(&esdm_es_mgr_notifier_reboot);
+#if IS_ENABLED(CONFIG_VMGENID)
+	register_random_vmfork_notifier(&esdm_es_mgr_notifier_vmgenid);
+#endif
 	return 0;
 
 out:
@@ -250,6 +291,11 @@ out:
 
 static void __exit esdm_es_mgr_exit(void)
 {
+	unregister_reboot_notifier(&esdm_es_mgr_notifier_reboot);
+#if IS_ENABLED(CONFIG_VMGENID)
+	unregister_random_vmfork_notifier(&esdm_es_mgr_notifier_vmgenid);
+#endif
+
 	esdm_es_mgr_dev_fini();
 	esdm_test_exit();
 	esdm_es_mgr_sched_exit();
