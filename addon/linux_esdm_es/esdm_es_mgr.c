@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
+#include <linux/suspend.h>
 #include <linux/reboot.h>
 #include <linux/version.h>
 
@@ -221,7 +222,7 @@ static struct notifier_block esdm_es_mgr_notifier_reboot = {
 	.priority = 0,
 };
 
-#if IS_ENABLED(CONFIG_VMGENID)
+#ifdef CONFIG_VMGENID
 static int esdm_es_mgr_vmgenid_notifier(struct notifier_block *nb,
 					unsigned long action, void *data)
 {
@@ -238,6 +239,22 @@ static struct notifier_block esdm_es_mgr_notifier_vmgenid = {
 	.priority = 0,
 };
 #endif
+
+static int esdm_es_mgr_power_notifier(struct notifier_block *nb,
+					unsigned long action, void *data)
+{
+	pr_warn("Reset ESDM ES' because of power management change!\n");
+
+	esdm_es_mgr_irq_reset();
+	esdm_es_mgr_sched_reset();
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block esdm_es_mgr_notifier_power = {
+	.notifier_call = esdm_es_mgr_power_notifier,
+	.priority = 0,
+};
 
 static int __init esdm_es_mgr_init(void)
 {
@@ -278,9 +295,10 @@ static int __init esdm_es_mgr_init(void)
 	}
 
 	register_reboot_notifier(&esdm_es_mgr_notifier_reboot);
-#if IS_ENABLED(CONFIG_VMGENID)
+#ifdef CONFIG_VMGENID
 	register_random_vmfork_notifier(&esdm_es_mgr_notifier_vmgenid);
 #endif
+	register_pm_notifier(&esdm_es_mgr_notifier_power);
 	return 0;
 
 out:
@@ -292,9 +310,10 @@ out:
 static void __exit esdm_es_mgr_exit(void)
 {
 	unregister_reboot_notifier(&esdm_es_mgr_notifier_reboot);
-#if IS_ENABLED(CONFIG_VMGENID)
+#ifdef CONFIG_VMGENID
 	unregister_random_vmfork_notifier(&esdm_es_mgr_notifier_vmgenid);
 #endif
+	unregister_pm_notifier(&esdm_es_mgr_notifier_power);
 
 	esdm_es_mgr_dev_fini();
 	esdm_test_exit();
