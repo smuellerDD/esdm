@@ -77,8 +77,8 @@ void __init esdm_irq_es_init(bool highres_timer)
 }
 
 /*
- * Reset all per-CPU pools - reset entropy estimator but leave the pool data
- * that may or may not have entropy unchanged.
+ * Reset all per-CPU pools - reset entropy estimator and pool data
+ * also called on halt/shutdown and vmfork
  */
 static void esdm_irq_reset(void)
 {
@@ -87,8 +87,14 @@ static void esdm_irq_reset(void)
 	/* Trigger GCD calculation anew. */
 	esdm_gcd_set(0);
 
-	for_each_online_cpu (cpu)
+	for_each_online_cpu (cpu) {
 		atomic_set(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
+		memzero_explicit(per_cpu_ptr(&esdm_irq_array, cpu),
+				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+	}
+
+	/* keep DRBG state, as it will not output anything, until a reseed
+	 * as the counters were set to zero */
 }
 
 static u32 esdm_irq_avail_pool_size(void)
@@ -541,4 +547,6 @@ void esdm_es_irq_module_exit(void)
 	pr_info("ESDM IRQ ES unregistered\n");
 
 	atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);
+
+	esdm_irq_reset();
 }

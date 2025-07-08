@@ -111,8 +111,8 @@ static u32 esdm_sched_avail_entropy(u32 __unused)
 }
 
 /*
- * Reset all per-CPU pools - reset entropy estimator but leave the pool data
- * that may or may not have entropy unchanged.
+ * Reset all per-CPU pools - reset entropy estimator and pool data
+ * also called on halt/shutdown and vmfork
  */
 static void esdm_sched_reset(void)
 {
@@ -121,8 +121,14 @@ static void esdm_sched_reset(void)
 	/* Trigger GCD calculation anew. */
 	esdm_gcd_set(0);
 
-	for_each_online_cpu (cpu)
+	for_each_online_cpu (cpu) {
 		atomic_set(per_cpu_ptr(&esdm_sched_array_events, cpu), 0);
+		memzero_explicit(per_cpu_ptr(&esdm_sched_array, cpu),
+				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+	}
+
+	/* keep DRBG state, as it will not output anything, until a reseed
+	 * as the counters were set to zero */
 }
 
 /*
@@ -423,6 +429,8 @@ void esdm_es_sched_module_exit(void)
 	} else {
 		pr_warn("ESDM Scheduler ES DRBG state was never registered!\n");
 	}
+
+	esdm_sched_reset();
 
 	pr_info("ESDM Scheduler ES unregistered\n");
 }
