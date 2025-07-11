@@ -165,6 +165,12 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
+	/* Only deliver, when at least security strength bits are available */
+	if (esdm_sched_avail_entropy(0) < esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state)) {
+		eb->e_bits = 0;
+		return;
+	}
+
 	/* Cap to maximum entropy that can ever be generated with given DRBG
 	 * without reseeding */
 	esdm_cap_requested(
