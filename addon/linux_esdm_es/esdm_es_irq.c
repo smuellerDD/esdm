@@ -112,7 +112,9 @@ static u32 esdm_irq_avail_pool_size(void)
 /* Return entropy of unused IRQs present in all per-CPU pools. */
 static u32 esdm_irq_avail_entropy(u32 __unused)
 {
+	u32 block_factor = 1;
 	u32 irq = 0;
+	u32 ent = 0;
 	int cpu;
 
 	/* Only deliver entropy when SP800-90B self test is completed */
@@ -120,46 +122,36 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 		return 0;
 
 	for_each_online_cpu (cpu) {
-		irq += atomic_read_u32(per_cpu_ptr(&esdm_irq_array_irqs, cpu));
+		irq += min_t(u32, ESDM_DATA_NUM_VALUES,
+			     atomic_read_u32(per_cpu_ptr(&esdm_irq_array_irqs, cpu)));
 	}
 
 	/* Consider oversampling rate */
-	return esdm_reduce_by_osr(
+	ent = esdm_reduce_by_osr(
 		esdm_data_to_entropy(irq, esdm_irq_entropy_bits));
+
+	if (fips_enabled) {
+		block_factor++;
+	}
+
+	/* as we only return full blocks, cap entropy if too small */
+	if (ent < block_factor * esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state)) {
+		return 0;
+	} else {
+		return ent;
+	}
 }
 
-/*
- * Collect all per-CPU pools, process with internal DRBG and return the output
- * to be used as seed data for seeding a DRNG.
- * The caller must not guarantee backtracking resistance, as the internal
- * cryptographic post-processing with a DRBG is always used.
- * The function will only copy as much data as entropy is available into the
- * caller-provided output buffer (further restricted by the internal DRBG's
- * security strength).
- *
- * This function handles the translation from the number of received interrupts
- * into an entropy statement. The conversion depends on ESDM_IRQ_ENTROPY_BITS
- * which defines how many interrupts must be received to obtain 256 bits of
- * entropy. With this value, the function esdm_data_to_entropy converts a given
- * data size (received interrupts, requested amount of data, etc.) into an
- * entropy statement. esdm_entropy_to_data does the reverse.
- *
- * @eb: entropy buffer to store entropy
- * @requested_bits: Requested amount of entropy
- * @fully_seeded: indicator whether ESDM is fully seeded
- */
-static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
-{
+/* process events and return one DRBG output block */
+static bool esdm_irq_pool_extract_block(uint8_t *block, u32 requested_bits, u32 *returned_bits) {
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
 			returned_ent_bits;
 	LIST_HEAD(seedlist);
 	int ret, cpu;
+	bool ok = false;
 
-	/* Only deliver entropy when SP800-90B self test is completed */
-	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq)) {
-		eb->e_bits = 0;
-		return;
-	}
+	/* init returned bits with 0, increase, if generate successful */
+	*returned_bits = 0;
 
 	/* Cap to maximum entropy that can ever be generated with given DRBG */
 	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state),
@@ -194,7 +186,6 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 			atomic_add_return_relaxed(
 				pcpu_unused_irqs,
 				per_cpu_ptr(&esdm_irq_array_irqs, cpu));
-			collected_irqs = requested_irqs;
 			requested_irqs = 0;
 		} else {
 			requested_irqs -= collected_irqs;
@@ -213,28 +204,90 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
 		returned_ent_bits, collected_ent_bits);
 
+	if (esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state) > returned_ent_bits) {
+		pr_warn("returned bits too small in interrupt-based noise source: %u\n", returned_ent_bits);
+		goto out;
+	}
+
 	ret = esdm_drbg_cb->drbg_seed(esdm_irq_drbg_state, &seedlist);
 	if (ret) {
 		pr_warn("unable to seed drbg in interrupt-based noise source\n");
-		goto err;
+		goto out;
 	}
 
 	ret = esdm_drbg_cb->drbg_generate(
-		esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3,
+		esdm_irq_drbg_state, block, requested_bits >> 3,
 		(u8 *)esdm_irq_drbg_domain_separation,
 		sizeof(esdm_irq_drbg_domain_separation) - 1);
-	if (ret != returned_ent_bits >> 3) {
+	if (ret != requested_bits >> 3) {
 		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
-		goto err;
+	} else {
+		*returned_bits = requested_bits;
+		ok = true;
 	}
-	eb->e_bits = returned_ent_bits;
+
+out:
+	return ok;
+}
+
+/*
+ * Collect all per-CPU pools, process with internal DRBG and return the output
+ * to be used as seed data for seeding a DRNG.
+ * The caller must not guarantee backtracking resistance, as the internal
+ * cryptographic post-processing with a DRBG is always used.
+ * The function will only copy as much data as entropy is available into the
+ * caller-provided output buffer (further restricted by the internal DRBG's
+ * security strength).
+ *
+ * This function handles the translation from the number of received interrupts
+ * into an entropy statement. The conversion depends on ESDM_IRQ_ENTROPY_BITS
+ * which defines how many interrupts must be received to obtain 256 bits of
+ * entropy. With this value, the function esdm_data_to_entropy converts a given
+ * data size (received interrupts, requested amount of data, etc.) into an
+ * entropy statement. esdm_entropy_to_data does the reverse.
+ *
+ * With DRBG-based cryptographic post-processing only full blocks can be read.
+ * This is done in esdm_irq_pool_extract_block.
+ *
+ * @eb: entropy buffer to store entropy
+ * @requested_bits: Requested amount of entropy
+ * @fully_seeded: indicator whether ESDM is fully seeded
+ */
+static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
+{
+	const u32 esdm_security_strength = esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
+	u32 done;
+
+	/* only set entropy, when generate was successful */
+	eb->e_bits = 0;
+
+	/* Only deliver entropy when SP800-90B self test is completed */
+	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq)) {
+		return;
+	}
+
+	/* round up to full blocks */
+	requested_bits = DIV_ROUND_UP(requested_bits, esdm_security_strength) * esdm_security_strength;
+
+	/* Only deliver, when at least all requested blocks are available */
+	if (esdm_irq_avail_entropy(0) < requested_bits) {
+		return;
+	}
+
+	done = 0;
+	while (done < requested_bits) {
+		u32 bits_returned;
+		bool ok = esdm_irq_pool_extract_block(eb->e + (done >> 3), esdm_security_strength, &bits_returned);
+		if (!ok || bits_returned != esdm_security_strength) {
+			pr_warn("Less than security strength returned: %u!\n", bits_returned);
+			goto out;
+		}
+		done += esdm_security_strength;
+	}
+	eb->e_bits = requested_bits;
 
 out:
 	return;
-
-err:
-	eb->e_bits = 0;
-	goto out;
 }
 
 /* push array values to testing in batched mode if needed */
