@@ -145,7 +145,8 @@ static void esdm_sched_reset(void)
 }
 
 /* process events and return one DRBG output block */
-static bool esdm_sched_pool_extract_block(uint8_t *block, u32 requested_bits, u32 *returned_bits) {
+static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
+					  u32 requested_bits, u32 *returned_bits) {
 	u32 found_events, collected_events = 0, collected_ent_bits,
 			  requested_events, returned_ent_bits;
 	LIST_HEAD(seedlist);
@@ -224,13 +225,13 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, u32 requested_bits, u3
 	}
 
 	ret = esdm_drbg_cb->drbg_generate(
-		esdm_sched_drbg_state, block, requested_bits >> 3,
+		esdm_sched_drbg_state, block, partial_len,
 		(u8 *)esdm_sched_drbg_domain_separation,
 		sizeof(esdm_sched_drbg_domain_separation) - 1);
-	if (ret != requested_bits >> 3) {
+	if (ret != partial_len) {
 		pr_warn("unable to generate drbg output in scheduler-based noise source: %i\n", ret);
 	} else {
-		*returned_bits = requested_bits;
+		*returned_bits = min(requested_bits, 8 * partial_len);
 		ok = true;
 	}
 
@@ -275,9 +276,6 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
-	/* round up to full blocks */
-	requested_bits = DIV_ROUND_UP(requested_bits, esdm_security_strength) * esdm_security_strength;
-
 	/* Only deliver, when at least all requested blocks are available */
 	if (esdm_sched_avail_entropy(0) < requested_bits) {
 		return;
@@ -286,9 +284,9 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 	done = 0;
 	while (done < requested_bits) {
 		u32 bits_returned;
-		bool ok = esdm_sched_pool_extract_block(eb->e + (done >> 3), esdm_security_strength, &bits_returned);
-		if (!ok || bits_returned != esdm_security_strength) {
-			pr_warn("Less than security strength returned: %u!\n", bits_returned);
+		bool ok = esdm_sched_pool_extract_block(eb->e + (done >> 3), min(esdm_security_strength, requested_bits - done), esdm_security_strength, &bits_returned);
+		if (!ok) {
+			pr_warn("DRBG block extract failed, bits returned: %u!\n", bits_returned);
 			goto out;
 		}
 		done += esdm_security_strength;
