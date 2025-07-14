@@ -144,7 +144,9 @@ static void esdm_sched_reset(void)
 	 * as the counters were set to zero */
 }
 
-/* process events and return one DRBG output block */
+/* process events and return one DRBG output block
+ *
+ * Length is capped with DRBG's security strength */
 static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 					  u32 requested_bits, u32 *returned_bits) {
 	u32 found_events, collected_events = 0, collected_ent_bits,

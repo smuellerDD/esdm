@@ -142,7 +142,9 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 	}
 }
 
-/* process events and return one DRBG output block */
+/* process events and return one DRBG output block
+ *
+ * Length is capped with DRBG's security strength */
 static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 					u32 requested_bits, u32 *returned_bits) {
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
