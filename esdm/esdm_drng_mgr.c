@@ -155,6 +155,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	atomic_set(&drng->request_bits_since_fully_seeded, 0);
 	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
 	drng->fully_seeded = false;
+	drng->was_fully_seeded_once = false;
 	/* Do not set force, as this flag is used for the emergency reseeding */
 	drng->force_reseed = false;
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG, "reset DRNG\n");
@@ -408,10 +409,12 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 
 		if (!drng->fully_seeded) {
 			drng->fully_seeded = fully_seeded;
-			if (drng->fully_seeded)
+			if (drng->fully_seeded) {
+				drng->was_fully_seeded_once = true;
 				esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 					    "%s DRNG fully seeded\n",
 					    drng_type);
+			}
 		}
 	}
 }
@@ -430,6 +433,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	uint32_t collected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
 	bool forced = drng->force_reseed;
+	unsigned int es_delivered_threshold = 1;
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -439,6 +443,9 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	 * valgrind.
 	 */
 	memset(&seedbuf, 0, sizeof(seedbuf));
+
+	if (esdm_ntg1_2024_compliant() && !drng->was_fully_seeded_once)
+		es_delivered_threshold = 2;
 
 	do {
 		/* Count the number of ES which delivered entropy */
@@ -466,7 +473,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 
 		/* Inject seed data into DRNG */
 		esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-				 esdm_fully_seeded(drng->fully_seeded,
+				 esdm_fully_seeded(drng->was_fully_seeded_once,
+						   drng->fully_seeded,
 						   collected_entropy,
 						   &collected_seedbuf),
 				 "regular");
@@ -480,7 +488,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		if (init_ops)
 			esdm_init_ops(&collected_seedbuf);
 
-		/*
+	/*
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for
@@ -494,7 +502,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	 * producing data while this is ongoing.
 	 */
 	} while (forced && !drng->fully_seeded &&
-		 num_es_delivered >= (esdm_ntg1_2024_compliant() ? 2 : 1));
+		 num_es_delivered >= es_delivered_threshold);
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 
@@ -623,7 +631,7 @@ void esdm_drng_seed_work(void)
  * @brief Check if DRNG has to be temporarily disabled because of failed seedings
  *
  * @param [in] drng DRNG instance
- * 
+ *
  * @return
  * * true request or bit limit reached
  * * false no disable condition triggered

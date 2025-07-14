@@ -433,7 +433,7 @@ static uint32_t esdm_avail_entropy_thresh(void)
 	return ent_thresh;
 }
 
-bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
+bool esdm_fully_seeded(bool was_fully_seeded_once, bool fully_seeded, uint32_t collected_entropy,
 		       struct entropy_buf *eb)
 {
 	/*
@@ -441,7 +441,7 @@ bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 	 * - Two entropy sources with each delivering 240 bits initially
 	 * - After the initial seeding step one entropy source is sufficient
 	 */
-	if (!fully_seeded && esdm_ntg1_2024_compliant()) {
+	if (!was_fully_seeded_once && esdm_ntg1_2024_compliant()) {
 		uint32_t i, result = 0,
 			    ent_thresh = esdm_avail_entropy_thresh();
 
@@ -600,7 +600,7 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (state->esdm_fully_seeded) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
-	} else if (esdm_fully_seeded(state->all_online_nodes_seeded, seed_bits,
+	} else if (esdm_fully_seeded(false, state->all_online_nodes_seeded, seed_bits,
 				     eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
