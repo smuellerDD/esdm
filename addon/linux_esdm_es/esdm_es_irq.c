@@ -44,11 +44,18 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated IRQ entropy events */
+static u32 esdm_irq_mix_array[ESDM_DATA_ARRAY_SIZE] = { };
 static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_irq_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 static DEFINE_PER_CPU(u32, esdm_irq_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_irq_array_irqs) = ATOMIC_INIT(0);
 static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data);
+
+/*
+ * Lock to allow other CPUs to mix the pool - as this is only done during
+ * reseed which is infrequent, this lock is hardly contended.
+ */
+static DEFINE_PER_CPU(spinlock_t, esdm_irq_lock);
 
 void __init esdm_irq_es_init(bool highres_timer)
 {
@@ -93,6 +100,8 @@ static void esdm_irq_reset(void)
 				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
 	}
 
+	memzero_explicit(esdm_irq_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+
 	/* keep DRBG state, as it will not output anything, until a reseed
 	 * as the counters were set to zero */
 }
@@ -132,14 +141,44 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 
 	if (fips_enabled) {
 		block_factor++;
+		/* Consider oversampling rate of next block */
+		ent = esdm_reduce_by_osr(
+			esdm_data_to_entropy(
+				esdm_entropy_to_data(ent, esdm_irq_entropy_bits),
+				esdm_irq_entropy_bits
+			)
+		);
 	}
 
-	/* as we only return full blocks, cap entropy if too small */
-	if (ent < block_factor * esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state)) {
-		return 0;
-	} else {
-		return ent;
+	return ent / block_factor;
+}
+
+static bool esdm_irq_mix_pool_bytes(void) {
+	unsigned long flags;
+	u32 *irq_array;
+	int ret, cpu, i;
+
+	for_each_online_cpu (cpu) {
+		spinlock_t *lock = per_cpu_ptr(&esdm_irq_lock, cpu);
+
+		ret = esdm_drbg_cb->drbg_generate(
+			esdm_irq_drbg_state,
+			(u8*)esdm_irq_mix_array,
+			ESDM_DATA_ARRAY_SIZE * sizeof(u32),
+			(u8 *)esdm_irq_drbg_domain_separation,
+			sizeof(esdm_irq_drbg_domain_separation) - 1);
+		if (ret != ESDM_DATA_ARRAY_SIZE * sizeof(u32))
+			return false;
+
+		spin_lock_irqsave(lock, flags);
+		irq_array = (u32 *)per_cpu_ptr(&esdm_irq_array, cpu);
+		for (i = 0; i < ESDM_DATA_ARRAY_SIZE; ++i) {
+			irq_array[i] ^= esdm_irq_mix_array[i];
+		}
+		spin_unlock_irqrestore(lock, flags);
 	}
+
+	return true;
 }
 
 /* process events and return one DRBG output block
@@ -149,9 +188,10 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 					u32 requested_bits, u32 *returned_bits) {
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
 			returned_ent_bits;
+	bool collected_enough = false;
 	LIST_HEAD(seedlist);
-	int ret, cpu;
 	bool ok = false;
+	int ret, cpu;
 
 	/* init returned bits with 0, increase, if generate successful */
 	*returned_bits = 0;
@@ -184,14 +224,16 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 		list_add_tail(&seed_string->list, &seedlist);
 
 		collected_irqs += found_irqs;
-		if (collected_irqs > requested_irqs) {
+		if (collected_enough) {
+			atomic_add_return_relaxed(
+				found_irqs,
+				per_cpu_ptr(&esdm_irq_array_irqs, cpu));
+		} else if (collected_irqs > requested_irqs) {
 			pcpu_unused_irqs = collected_irqs - requested_irqs;
 			atomic_add_return_relaxed(
 				pcpu_unused_irqs,
 				per_cpu_ptr(&esdm_irq_array_irqs, cpu));
-			requested_irqs = 0;
-		} else {
-			requested_irqs -= collected_irqs;
+			collected_enough = true;
 		}
 		pr_debug(
 			"%u interrupts used from entropy pool of CPU %d, %u interrupts remain unused\n",
@@ -229,6 +271,9 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 		ok = true;
 	}
 
+	/* mix events by XORing with DRBG output in order to never read
+	 * the same event data twice */
+	esdm_irq_mix_pool_bytes();
 out:
 	return ok;
 }
@@ -279,7 +324,7 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		u32 bits_returned;
 		bool ok = esdm_irq_pool_extract_block(
 			eb->e + (done >> 3),
-			min(esdm_security_strength, requested_bits - done),
+			min(esdm_security_strength, requested_bits - done) >> 3,
 			esdm_security_strength, &bits_returned
 		);
 		if (!ok) {
@@ -427,6 +472,10 @@ static void esdm_time_process(void)
 /* Hot code path - Callback for interrupt handler */
 static void esdm_add_interrupt_randomness(int irq)
 {
+	unsigned long flags;
+	spinlock_t *lock = get_cpu_ptr(&esdm_irq_lock);
+
+	spin_lock_irqsave(lock, flags);
 	if (esdm_highres_timer()) {
 		esdm_time_process();
 	} else {
@@ -462,6 +511,8 @@ static void esdm_add_interrupt_randomness(int irq)
 		tmp ^= ip >> 32;
 		_esdm_irq_array_add_u32(tmp);
 	}
+	spin_unlock_irqrestore(lock, flags);
+	put_cpu_ptr(&esdm_irq_lock);
 }
 
 static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
@@ -514,7 +565,7 @@ static atomic_t esdm_es_irq_init_state = ATOMIC_INIT(esdm_es_init_unused);
 
 static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 {
-	int ret;
+	int ret, cpu;
 
 	/*
 	 * We wait until the Linux-RNG is fully initialized and received
@@ -538,6 +589,11 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	if (!esdm_irq_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto err;
+	}
+
+	for_each_possible_cpu(cpu) {
+		spinlock_t *lock = per_cpu_ptr(&esdm_irq_lock, cpu);
+		spin_lock_init(lock);
 	}
 
 	ret = esdm_irq_register(esdm_add_interrupt_randomness);

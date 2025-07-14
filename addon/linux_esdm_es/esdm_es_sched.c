@@ -44,11 +44,19 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated entropy events */
+static u32 esdm_sched_mix_array[ESDM_DATA_ARRAY_SIZE] = { };
 static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_sched_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 static DEFINE_PER_CPU(u32, esdm_sched_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_sched_array_events) = ATOMIC_INIT(0);
 static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data);
+
+
+/*
+ * Lock to allow other CPUs to mix the pool - as this is only done during
+ * reseed which is infrequent, this lock is hardly contended.
+ */
+static DEFINE_PER_CPU(spinlock_t, esdm_sched_lock);
 
 void __init esdm_sched_es_init(bool highres_timer)
 {
@@ -113,14 +121,16 @@ static u32 esdm_sched_avail_entropy(u32 __unused)
 
 	if (fips_enabled) {
 		block_factor++;
+		/* Consider oversampling rate of next block */
+		ent = esdm_reduce_by_osr(
+			esdm_data_to_entropy(
+				esdm_entropy_to_data(ent, esdm_sched_entropy_bits),
+				esdm_sched_entropy_bits
+			)
+		);
 	}
 
-	/* as we only return full blocks, cap entropy if too small */
-	if (ent < block_factor * esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state)) {
-		return 0;
-	} else {
-		return ent;
-	}
+	return ent / block_factor;
 }
 
 /*
@@ -140,8 +150,39 @@ static void esdm_sched_reset(void)
 				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
 	}
 
+	memzero_explicit(esdm_sched_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+
 	/* keep DRBG state, as it will not output anything, until a reseed
 	 * as the counters were set to zero */
+}
+
+static bool esdm_sched_mix_pool_bytes(void) {
+	unsigned long flags;
+	u32 *sched_array;
+	int ret, cpu, i;
+
+	for_each_online_cpu (cpu) {
+		spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
+
+		ret = esdm_drbg_cb->drbg_generate(
+			esdm_sched_drbg_state,
+			(u8 *)esdm_sched_mix_array,
+			ESDM_DATA_ARRAY_SIZE * sizeof(u32),
+			(u8 *)esdm_sched_drbg_domain_separation,
+			sizeof(esdm_sched_drbg_domain_separation) - 1);
+		if (ret != ESDM_DATA_ARRAY_SIZE * sizeof(u32))
+			return false;
+
+		sched_array = (u32 *)per_cpu_ptr(&esdm_sched_array, cpu);
+
+		spin_lock_irqsave(lock, flags);
+		for (i = 0; i < ESDM_DATA_ARRAY_SIZE; ++i) {
+			sched_array[i] ^= esdm_sched_mix_array[i];
+		}
+		spin_unlock_irqrestore(lock, flags);
+	}
+
+	return true;
 }
 
 /* process events and return one DRBG output block
@@ -151,9 +192,10 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 					  u32 requested_bits, u32 *returned_bits) {
 	u32 found_events, collected_events = 0, collected_ent_bits,
 			  requested_events, returned_ent_bits;
+	bool collected_enough = false;
 	LIST_HEAD(seedlist);
-	int ret, cpu;
 	bool ok = false;
+	int ret, cpu;
 
 	/* init returned bits with 0, increase, if generate successful */
 	*returned_bits = 0;
@@ -190,14 +232,15 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 		list_add_tail(&seed_string->list, &seedlist);
 
 		collected_events += found_events;
-		if (collected_events > requested_events) {
+		if (collected_enough) {
+			atomic_add_return_relaxed(
+				found_events,
+				per_cpu_ptr(&esdm_sched_array_events, cpu));
+		} else if (collected_events > requested_events) {
 			unused_events = collected_events - requested_events;
 			atomic_add_return_relaxed(
 				unused_events,
 				per_cpu_ptr(&esdm_sched_array_events, cpu));
-			requested_events = 0;
-		} else {
-			requested_events -= collected_events;
 		}
 		pr_debug(
 			"%u scheduler-based events used from entropy array of CPU %d, %u scheduler-based events remain unused\n",
@@ -236,6 +279,10 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 		*returned_bits = min(requested_bits, 8 * partial_len);
 		ok = true;
 	}
+
+	/* mix events by XORing with DRBG output in order to never read
+	 * the same event data twice */
+	esdm_sched_mix_pool_bytes();
 
 out:
 	return ok;
@@ -286,7 +333,7 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 	done = 0;
 	while (done < requested_bits) {
 		u32 bits_returned;
-		bool ok = esdm_sched_pool_extract_block(eb->e + (done >> 3), min(esdm_security_strength, requested_bits - done), esdm_security_strength, &bits_returned);
+		bool ok = esdm_sched_pool_extract_block(eb->e + (done >> 3), min(esdm_security_strength, requested_bits - done) >> 3, esdm_security_strength, &bits_returned);
 		if (!ok) {
 			pr_warn("DRBG block extract failed, bits returned: %u!\n", bits_returned);
 			goto out;
@@ -378,6 +425,11 @@ static void esdm_sched_time_process(void)
 
 static void esdm_sched_randomness(const struct task_struct *p, int cpu)
 {
+	unsigned long flags;
+	spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
+
+	spin_lock_irqsave(lock, flags);
+
 	if (esdm_highres_timer()) {
 		esdm_sched_time_process();
 	} else {
@@ -395,6 +447,8 @@ static void esdm_sched_randomness(const struct task_struct *p, int cpu)
 		esdm_sched_time_process();
 		esdm_sched_array_add_u32(tmp);
 	}
+
+	spin_unlock_irqrestore(lock, flags);
 }
 
 static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
@@ -438,6 +492,7 @@ struct esdm_es_cb esdm_es_sched = {
 int __init esdm_es_sched_module_init(void)
 {
 	int ret;
+	int cpu;
 
 	/* switch to XDRBG, if upstream in the kernel */
 	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc(
@@ -446,6 +501,11 @@ int __init esdm_es_sched_module_init(void)
 	if (!esdm_sched_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
 		return -EINVAL;
+	}
+
+	for_each_possible_cpu(cpu) {
+		spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
+		spin_lock_init(lock);
 	}
 
 	/* register scheduler hook */
