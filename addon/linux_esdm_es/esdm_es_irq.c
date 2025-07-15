@@ -178,6 +178,8 @@ static bool esdm_irq_mix_pool_bytes(void) {
 		spin_unlock_irqrestore(lock, flags);
 	}
 
+	memzero_explicit(esdm_irq_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+
 	return true;
 }
 
@@ -185,9 +187,9 @@ static bool esdm_irq_mix_pool_bytes(void) {
  *
  * Length is capped with DRBG's security strength */
 static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
-					u32 requested_bits, u32 *returned_bits) {
+					u32 *returned_bits) {
 	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
-			returned_ent_bits;
+			returned_ent_bits, requested_bits;
 	bool collected_enough = false;
 	LIST_HEAD(seedlist);
 	bool ok = false;
@@ -196,9 +198,14 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 	/* init returned bits with 0, increase, if generate successful */
 	*returned_bits = 0;
 
-	/* Cap to maximum entropy that can ever be generated with given DRBG */
-	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state),
-			   requested_bits);
+	if ((partial_len >> 3) > esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state)) {
+		pr_warn("more bits than DRBG security strength requested\n");
+		goto out;
+	}
+
+	/* Always request DRBG security strength for each block, generate less
+	 * bytes with DRBG, if advised by partial_len */
+	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
 	requested_irqs = esdm_entropy_to_data(
 		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
 
@@ -273,7 +280,12 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 
 	/* mix events by XORing with DRBG output in order to never read
 	 * the same event data twice */
-	esdm_irq_mix_pool_bytes();
+	if (!esdm_irq_mix_pool_bytes()) {
+		pr_warn("mix pool bytes failed!\n");
+		ok = false;
+		*returned_bits = 0;
+	}
+
 out:
 	return ok;
 }
@@ -325,10 +337,11 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		bool ok = esdm_irq_pool_extract_block(
 			eb->e + (done >> 3),
 			min(esdm_security_strength, requested_bits - done) >> 3,
-			esdm_security_strength, &bits_returned
+			&bits_returned
 		);
 		if (!ok) {
 			pr_warn("DRBG block extract failed, bits returned: %u!\n", bits_returned);
+			memzero_explicit(eb->e, sizeof(eb->e));
 			goto out;
 		}
 		done += esdm_security_strength;
@@ -473,6 +486,7 @@ static void esdm_time_process(void)
 static void esdm_add_interrupt_randomness(int irq)
 {
 	unsigned long flags;
+	/* get_cpu_ptr also disables preemption! */
 	spinlock_t *lock = get_cpu_ptr(&esdm_irq_lock);
 
 	spin_lock_irqsave(lock, flags);
@@ -512,6 +526,8 @@ static void esdm_add_interrupt_randomness(int irq)
 		_esdm_irq_array_add_u32(tmp);
 	}
 	spin_unlock_irqrestore(lock, flags);
+
+	/* put_cpu_ptr enables preemption again! */
 	put_cpu_ptr(&esdm_irq_lock);
 }
 

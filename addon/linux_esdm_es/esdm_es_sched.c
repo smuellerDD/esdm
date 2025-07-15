@@ -182,6 +182,8 @@ static bool esdm_sched_mix_pool_bytes(void) {
 		spin_unlock_irqrestore(lock, flags);
 	}
 
+	memzero_explicit(esdm_sched_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+
 	return true;
 }
 
@@ -189,9 +191,9 @@ static bool esdm_sched_mix_pool_bytes(void) {
  *
  * Length is capped with DRBG's security strength */
 static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
-					  u32 requested_bits, u32 *returned_bits) {
+					  u32 *returned_bits) {
 	u32 found_events, collected_events = 0, collected_ent_bits,
-			  requested_events, returned_ent_bits;
+			  requested_events, returned_ent_bits, requested_bits;
 	bool collected_enough = false;
 	LIST_HEAD(seedlist);
 	bool ok = false;
@@ -200,11 +202,14 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 	/* init returned bits with 0, increase, if generate successful */
 	*returned_bits = 0;
 
-	/* Cap to maximum entropy that can ever be generated with given DRBG
-	 * without reseeding */
-	esdm_cap_requested(
-		esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state),
-		requested_bits);
+	if ((partial_len >> 3) > esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state)) {
+		pr_warn("more bits than DRBG security strength requested\n");
+		goto out;
+	}
+
+	/* Always request DRBG security strength for each block, generate less
+	 * bytes with DRBG, if advised by partial_len */
+	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state);
 	requested_events = esdm_entropy_to_data(
 		requested_bits + esdm_compress_osr(), esdm_sched_entropy_bits);
 
@@ -282,7 +287,11 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 
 	/* mix events by XORing with DRBG output in order to never read
 	 * the same event data twice */
-	esdm_sched_mix_pool_bytes();
+	if (!esdm_sched_mix_pool_bytes()) {
+		pr_warn("mix pool bytes failed!\n");
+		ok = false;
+		*returned_bits = 0;
+	}
 
 out:
 	return ok;
@@ -333,9 +342,14 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 	done = 0;
 	while (done < requested_bits) {
 		u32 bits_returned;
-		bool ok = esdm_sched_pool_extract_block(eb->e + (done >> 3), min(esdm_security_strength, requested_bits - done) >> 3, esdm_security_strength, &bits_returned);
+		bool ok = esdm_sched_pool_extract_block(
+			eb->e + (done >> 3),
+			min(esdm_security_strength, requested_bits - done) >> 3,
+			&bits_returned
+		);
 		if (!ok) {
 			pr_warn("DRBG block extract failed, bits returned: %u!\n", bits_returned);
+			memzero_explicit(eb->e, sizeof(eb->e));
 			goto out;
 		}
 		done += esdm_security_strength;
