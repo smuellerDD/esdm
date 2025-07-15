@@ -8,13 +8,15 @@ common_src = files([
 ])
 
 if get_option('systemd').enabled()
-	common_src += files([
-		'systemd_support.c'
-	])
+	common_src += files(['systemd_support.c'])
 endif
 
 if get_option('testmode').enabled()
 	common_src += files(['test_pertubation.c'])
+endif
+
+if get_option('fips140')
+	common_src += files(['fips_integrity.c'])
 endif
 
 if host_machine.system() == 'linux'

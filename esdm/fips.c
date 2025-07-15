@@ -25,6 +25,7 @@
 #include "constructor.h"
 #include "esdm_config.h"
 #include "fips.h"
+#include "fips_integrity.h"
 #include "lc_hmac.h"
 #include "lc_sha256.h"
 #include "esdm_logger.h"
@@ -73,8 +74,9 @@ static void fips_post(void)
 {
 	int ret;
 
-	if (!esdm_config_fips_enabled())
+	if (!esdm_config_fips_enabled()) {
 		return;
+	}
 
 	ret = fips_post_hmac_sha256();
 	if (ret)

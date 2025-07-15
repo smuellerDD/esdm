@@ -35,8 +35,7 @@
 #endif
 
 #include "binhexbin.h"
-#include "esdm_config.h"
-#include "fips.h"
+#include "fips_integrity.h"
 #include "lc_hmac.h"
 #include "lc_sha256.h"
 
@@ -165,7 +164,6 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 	int ret = 0, checked_any = 0;
 	uint32_t size = 0;
 	uint8_t *memblock = NULL;
-	int create_checkfile = 0;
 
 	/*
 	 * A file can have up to 4096 characters, so a complete line has at most
@@ -180,14 +178,19 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 			FIPS_INTEGRITY_LOGGER_PREFIX
 			"Cannot open file %s, creating it\n",
 			checkfile);
-		create_checkfile = 1;
 
-		file = fopen(checkfile, "w");
-		if (!file) {
-			ret = -errno;
+		if (fips_create_checkfile(checkfile, targetfile)) {
 			fprintf(stderr,
 				FIPS_INTEGRITY_LOGGER_PREFIX
 				"Cannot create file %s\n",
+				checkfile);
+			goto out;
+		}
+		file = fopen(checkfile, "r");
+		if (!file) {
+			fprintf(stderr,
+				FIPS_INTEGRITY_LOGGER_PREFIX
+				"Cannot open file %s\n",
 				checkfile);
 			goto out;
 		}
@@ -196,38 +199,6 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 	ret = mmap_file(targetfile, &memblock, &size);
 	if (ret)
 		goto out;
-
-	if (create_checkfile) {
-		char *hexhash = NULL;
-		size_t hexhashlen = 0;
-		uint8_t calculated[LC_SHA_MAX_SIZE_DIGEST];
-		size_t written;
-
-		lc_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
-			     sizeof(fipscheck_hmackey) - 1);
-		lc_hmac_update(hmac_ctx, memblock, size);
-		lc_hmac_final(hmac_ctx, calculated);
-
-		ret = bin2hex_alloc(calculated, lc_hmac_macsize(hmac_ctx),
-				    &hexhash, &hexhashlen);
-		lc_hmac_zero(hmac_ctx);
-		if (ret)
-			goto out;
-
-		written = fwrite(hexhash, 1, hexhashlen, file);
-		free(hexhash);
-		fwrite("\n", 1, 1, file);
-
-		if (written != hexhashlen) {
-			fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
-				"Failed to write hash to HMAC control file\n");
-			ret = -EFAULT;
-			goto out;
-		}
-
-		ret = 0;
-		goto out;
-	}
 
 	while (fgets(buf, sizeof(buf), file)) {
 		char *hexhash = NULL; // parsed hex value of hash
@@ -277,7 +248,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 			goto out;
 		}
 
-		if (memcmp(calculated, binhash, sizeof(calculated))) {
+		if (memcmp(calculated, binhash, binhashlen)) {
 			fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
 				"Message mismatch - integrity violation\n");
 			free(binhash);
@@ -303,6 +274,84 @@ out:
 	return ret;
 }
 
+static
+FILE *fopen_if_not_exists(const char *filename, const char *mode) {
+    if (mode[0] != 'w' && mode[0] != 'a') {
+        errno = EINVAL;  // only creation modes make sense
+        return NULL;
+    }
+
+    int flags = O_CREAT | O_EXCL | O_WRONLY;
+    int fd = open(filename, flags, 0644);
+    if (fd == -1) {
+        // file exists or other error
+        return NULL;
+    }
+
+    // Now convert to FILE*
+    FILE *fp = fdopen(fd, mode);
+    if (!fp) {
+        close(fd);
+        return NULL;
+    }
+
+    return fp;
+}
+
+int fips_create_checkfile(const char *checkfile, const char *targetfile)
+{
+	LC_HMAC_CTX_ON_STACK(hmac_ctx, lc_sha256);
+	uint8_t *memblock = NULL;
+	size_t hexhashlen = 0;
+	char *hexhash = NULL;
+	FILE *file = NULL;
+	int ret = 0;
+	uint32_t size = 0;
+	uint8_t calculated[LC_SHA_MAX_SIZE_DIGEST];
+	size_t written;
+
+	file = strcmp(checkfile, "-") ? fopen_if_not_exists(checkfile, "w") : stdin;
+	if (!file) {
+		ret = -EEXIST;
+		goto out;
+	}
+
+	ret = mmap_file(targetfile, &memblock, &size);
+	if (ret)
+		goto out;
+
+	lc_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
+		     sizeof(fipscheck_hmackey) - 1);
+	lc_hmac_update(hmac_ctx, memblock, size);
+	lc_hmac_final(hmac_ctx, calculated);
+
+	ret = bin2hex_alloc(calculated, lc_hmac_macsize(hmac_ctx),
+			    &hexhash, &hexhashlen);
+	lc_hmac_zero(hmac_ctx);
+	if (ret)
+		goto out;
+
+	written = fwrite(hexhash, 1, hexhashlen, file);
+	free(hexhash);
+	fwrite("\n", 1, 1, file);
+
+	if (written != hexhashlen) {
+		fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
+			"Failed to write hash to HMAC control file\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+out:
+	lc_hmac_zero(hmac_ctx);
+	if (file)
+		fclose(file);
+	if (memblock)
+		munmap(memblock, size);
+
+	return ret;
+}
+
 int fips_post_integrity(const char *pathname)
 {
 	char *checkfile = NULL;
@@ -311,11 +360,6 @@ int fips_post_integrity(const char *pathname)
 	char selfname[BUFSIZE];
 	const char *selfname_p;
 	ssize_t selfnamesize = 0;
-
-	if (esdm_config_fips_enabled()) {
-		ret = 0;
-		goto out;
-	}
 
 	if (pathname) {
 		selfname_p = pathname;
