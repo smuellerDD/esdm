@@ -153,6 +153,15 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 	return ent / block_factor;
 }
 
+/*
+ * Update entropy pools after each extraction to provide backtracking resistance
+ *
+ * for each entropy pool P:
+ *	1) generate DRBG output stream S with the same length
+ *	2) P' := P XOR S
+ * zeroize(S)
+ *
+ */
 static bool esdm_irq_mix_pool_bytes(void) {
 	unsigned long flags;
 	u32 *irq_array;

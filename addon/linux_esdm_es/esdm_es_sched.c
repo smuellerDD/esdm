@@ -156,6 +156,15 @@ static void esdm_sched_reset(void)
 	 * as the counters were set to zero */
 }
 
+/*
+ * Update entropy pools after each extraction to provide backtracking resistance
+ *
+ * for each entropy pool P:
+ *	1) generate DRBG output stream S with the same length
+ *	2) P' := P XOR S
+ * zeroize(S)
+ *
+ */
 static bool esdm_sched_mix_pool_bytes(void) {
 	unsigned long flags;
 	u32 *sched_array;
