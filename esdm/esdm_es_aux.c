@@ -86,8 +86,8 @@ static uint32_t esdm_aux_avail_entropy_pool(struct esdm_pool *pool)
 		min_uint32(esdm_get_digestsize(),
 			   atomic_read_u32(&pool->aux_entropy_bits));
 
-	/* Consider oversampling rate due to aux pool conditioning */
-	return esdm_reduce_by_osr(avail_bits);
+	/* Do not consider oversampling rate, as caller will already do */
+	return avail_bits;
 }
 
 static uint32_t esdm_aux_avail_entropy(uint32_t __unused u)
@@ -492,14 +492,16 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 		&esdm_pools[pool_with_max_entropy_capacity], inbuf, inbuflen,
 		entropy_bits));
 
-	/*
-	 * As the DRNG is newly seeded, maybe the need entropy flag can be
-	 * unset?
-	 */
-	esdm_shm_status_set_need_entropy();
+	if (esdm_aux_avail_entropy(0) >= esdm_security_strength() + esdm_compress_osr()) {
+		/*
+		* As the DRNG is newly seeded, maybe the need entropy flag can be
+		* unset?
+		*/
+		esdm_shm_status_set_need_entropy();
 
-	/* notify others about newly added entropy */
-	esdm_es_add_entropy();
+		/* notify others about newly added entropy */
+		esdm_es_add_entropy();
+	}
 
 out:
 	return ret;
