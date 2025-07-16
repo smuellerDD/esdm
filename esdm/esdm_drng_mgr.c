@@ -185,7 +185,7 @@ static void esdm_drng_dealloc_common(struct esdm_drng *drng)
 {
 	const struct esdm_drng_cb *drng_cb;
 
-	if (!drng)
+	if (!drng || !drng->drng)
 		return;
 
 	/* This only works with a robust mutex */

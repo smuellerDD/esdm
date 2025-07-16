@@ -1089,12 +1089,6 @@ int esdm_rpc_server_init(const char *username)
 	/* Enter PID name space */
 	CKINT(linux_isolate_namespace_prefork());
 
-	/* Initialize test pertubation support */
-	CKINT(esdm_test_shm_status_init());
-
-	/* One thread group */
-	CKINT(thread_init(1));
-
 	/*
 	 * allow all child processes to notify systemd of successfull launch.
 	 * drop this again early in child after sockets are ready.
@@ -1102,13 +1096,24 @@ int esdm_rpc_server_init(const char *username)
 	systemd_notify_status("Waiting for RPC process to notify readiness");
 	systemd_notify_access("all");
 
+	esdm_logger(LOGGER_WARN, LOGGER_C_SERVER, "Forking RPC Server\n");
+
 	pid = fork();
 	if (pid < 0) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
 			    "Cannot fork interface process\n");
 		exit(1);
 	} else if (pid == 0) {
 		pthread_setname_np(pthread_self(), "ESDM master");
+
+		/* Initialize test pertubation support */
+		CKINT(esdm_test_shm_status_init());
+
+		/* Main ESDM Init DRNG state, ES', ... */
+		CKINT(esdm_init());
+
+		/* One thread group */
+		CKINT(thread_init(1));
 
 		/* Create thread for entropy source monitor */
 		if (thread_start(esdm_rpc_server_es_monitor, NULL,
