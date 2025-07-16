@@ -27,6 +27,7 @@
 #include "helper.h"
 #include "esdm_logger.h"
 #include "memset_secure.h"
+#include "math_helper.h"
 #include "threading_support.h"
 #include "unpriv_access.pb-c.h"
 
@@ -42,8 +43,7 @@ void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		response.ret = -(int32_t)sizeof(rndval);
 		closure(&response, closure_data);
 	} else {
-		/* TODO: make 280 dependent on output size */
-		memset(rndval, 0, 280);
+		memset(rndval, 0, min_size(sizeof(rndval), request->len));
 		response.ret =
 			esdm_get_seed(rndval, request->len,
 				      request->flags | ESDM_GET_SEED_NONBLOCK);

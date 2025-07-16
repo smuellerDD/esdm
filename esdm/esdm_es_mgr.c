@@ -427,8 +427,13 @@ static uint32_t esdm_avail_entropy_thresh(void)
 	 * Apply oversampling during initialization according to SP800-90C as
 	 * we request a larger buffer from the ES.
 	 */
-	if (esdm_sp80090c_compliant() && !esdm_state.all_online_nodes_seeded)
-		ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
+	if (esdm_sp80090c_compliant()) {
+		if (!esdm_state.all_online_nodes_seeded) {
+			ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
+		} else {
+			ent_thresh += ESDM_OVERSAMPLE_ES_BITS;
+		}
+	}
 
 	return ent_thresh;
 }
@@ -774,7 +779,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 {
 	struct esdm_state *state = &esdm_state;
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
-				      esdm_security_strength() :
+				      (esdm_security_strength() + ESDM_OVERSAMPLE_ES_BITS) :
 				      ESDM_MIN_SEED_ENTROPY_BITS;
 	int ret;
 

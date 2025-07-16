@@ -459,7 +459,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		}
 
 		esdm_fill_seed_buffer(
-			&seedbuf, esdm_get_seed_entropy_osr(drng->fully_seeded),
+			&seedbuf, esdm_get_seed_entropy_osr(drng->was_fully_seeded_once),
 			forced && !drng->fully_seeded);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);

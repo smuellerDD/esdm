@@ -117,12 +117,6 @@ static void esdm_set_digestsize_pool(struct esdm_pool *pool,
 	atomic_set(&pool->digestsize, (int)digestsize);
 
 	/*
-	 * Update the write wakeup threshold which must not be larger
-	 * than the digest size of the current conditioning hash.
-	 */
-	digestsize = esdm_reduce_by_osr(digestsize << 3);
-
-	/*
 	 * In case the new digest is larger than the old one, cap the available
 	 * entropy to the old message digest used to process the existing data.
 	 */
@@ -132,7 +126,7 @@ static void esdm_set_digestsize_pool(struct esdm_pool *pool,
 
 static void esdm_set_wakeup_bits(void)
 {
-	uint32_t digestsize = esdm_reduce_by_osr(esdm_get_digestsize());
+	uint32_t digestsize = esdm_get_digestsize();
 
 	esdm_write_wakeup_bits = ESDM_NUM_AUX_POOLS * digestsize;
 }
@@ -523,8 +517,7 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	const struct esdm_hash_cb *hash_cb;
 	uint32_t collected_ent_bits, returned_ent_bits,
-		unused_bits = 0, digestsize, digestsize_bits,
-		requested_bits_osr;
+		unused_bits = 0, digestsize, digestsize_bits;
 	uint8_t aux_output[ESDM_MAX_DIGESTSIZE];
 
 	if (!pool->initialized)
@@ -541,7 +534,6 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 
 	/* Ensure that no more than the size of aux_pool can be requested */
 	requested_bits = min_uint32(requested_bits, (ESDM_MAX_DIGESTSIZE << 3));
-	requested_bits_osr = requested_bits + esdm_compress_osr();
 
 	/* Cap entropy with entropy counter from aux pool and the used digest */
 	collected_ent_bits =
@@ -549,22 +541,21 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 			   (uint32_t)atomic_xchg(&pool->aux_entropy_bits, 0));
 
 	/* We collected too much entropy and put the overflow back */
-	if (collected_ent_bits > requested_bits_osr) {
+	if (collected_ent_bits > requested_bits) {
 		/* Amount of bits we collected too much */
-		unused_bits = collected_ent_bits - requested_bits_osr;
+		unused_bits = collected_ent_bits - requested_bits;
 		/* Put entropy back */
 		atomic_add(&pool->aux_entropy_bits, (int)unused_bits);
 		/* Fix collected entropy */
-		collected_ent_bits = requested_bits_osr;
+		collected_ent_bits = requested_bits;
 	}
 
-	/* Apply oversampling: discount requested oversampling rate */
-	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
+	returned_ent_bits = collected_ent_bits;
 
 	esdm_logger(
 		LOGGER_DEBUG, LOGGER_C_ES,
-		"obtained %u bits by collecting %u bits of entropy from aux pool, %u bits of entropy remaining\n",
-		returned_ent_bits, collected_ent_bits, unused_bits);
+		"obtained %u bits of entropy from aux pool, %u bits of entropy remaining\n",
+		returned_ent_bits, unused_bits);
 
 	/* Get the digest for the aux pool to be returned to the caller ... */
 	if (hash_cb->hash_final(shash, aux_output) ||
@@ -627,7 +618,7 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 		 * We found the pool that can already provide all our entropy
 		 * needs (including the discount for the OSR), take it.
 		 */
-		if (requested_bits + esdm_compress_osr() <= max_entropy) {
+		if (requested_bits <= max_entropy) {
 			locked_pool = true;
 			break;
 		}

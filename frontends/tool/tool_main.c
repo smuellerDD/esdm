@@ -128,10 +128,13 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--reseed-delay-ms\t\tDO NOT USE IN PRODUCTION: Set delay before each reseed to ESDM from OS. Can be used to emulate effects of smartcards or TPMs.\n");
 #endif
+
+#ifdef ESDM_FIPS140
 	fprintf(stderr,
 		"\t--fips-checkfile PATH\t\tCreates FIPS HMAC check file in path\n");
 	fprintf(stderr,
 		"\t--fips-targetfile PATH\t\tReads FIPS target file in PATH to create HMAC\n");
+#endif
 }
 
 static void handle_status()
@@ -1143,6 +1146,7 @@ int main(int argc, char **argv)
 	if (help) {
 		handle_usage();
 		return_val = EXIT_FAILURE;
+#ifdef ESDM_FIPS140
 	} else if (fips_target_file && fips_check_file) {
 		if (fips_create_checkfile(fips_check_file, fips_target_file)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
@@ -1150,6 +1154,15 @@ int main(int argc, char **argv)
 				fips_check_file, fips_target_file);
 			return_val = EXIT_FAILURE;
 		}
+#else
+	} else if (fips_target_file && fips_check_file) {
+		(void) fips_check_file;
+		(void) fips_target_file;
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "failed to create FIPS check file \"%s\" for \"%s\". FIPS disabled.\n",
+			    fips_check_file, fips_target_file);
+		return_val = EXIT_FAILURE;
+#endif
 	} else if (status) {
 		handle_status();
 	} else if (is_fully_seeded) {

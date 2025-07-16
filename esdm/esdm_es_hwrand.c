@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -101,11 +102,20 @@ static uint32_t esdm_hwrand_poolsize(void)
 static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			    bool __unused unsused)
 {
+	uint32_t done = 0;
+	uint8_t buffer[32];
+
 	if (esdm_hwrand_fd < 0)
 		goto err;
 
-	if (esdm_safe_read(esdm_hwrand_fd, eb_es->e, requested_bits >> 3))
-		goto err;
+	/* if this is backed by a TPM 2.0, only 32 byte need to be returned in one call */
+	do {
+		uint32_t chunk_size = min_uint32(256, requested_bits - done);
+		if (esdm_safe_read(esdm_hwrand_fd, buffer, 32))
+			goto err;
+		done += chunk_size;
+		memcpy(eb_es->e + (done >> 3), buffer, (chunk_size >> 3));
+	} while (done < requested_bits);
 
 	eb_es->e_bits = esdm_hwrand_entropylevel(requested_bits);
 	esdm_logger(

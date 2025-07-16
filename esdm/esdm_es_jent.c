@@ -127,7 +127,7 @@ err:
 
 static int esdm_jent_async_monitor(void)
 {
-	unsigned int i, requested_bits = esdm_get_seed_entropy_osr(true);
+	unsigned int i, requested_bits = esdm_get_seed_entropy_osr(false);
 
 	if (!esdm_config_es_jent_async_enabled())
 		return 0;
@@ -218,7 +218,7 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
 	if (esdm_config_es_jent_async_enabled() &&
-	    (requested_bits == esdm_get_seed_entropy_osr(true))) {
+	    (requested_bits <= esdm_get_seed_entropy_osr(false))) {
 		esdm_jent_async_get(eb_es, requested_bits, unused);
 	} else {
 		mutex_w_lock(&esdm_jent_lock);

@@ -1122,6 +1122,8 @@ int esdm_rpc_server_init(const char *username)
 				  (atomic_read(&esdm_rpc_init_state) ==
 				   esdm_rpcs_state_priv_init_complete));
 
+		esdm_logger(LOGGER_WARN, LOGGER_C_RPC, "RPC server started\n");
+
 		/* Fork the server process */
 		esdm_rpcs_interfaces_init(username);
 	} else {

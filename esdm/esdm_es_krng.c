@@ -40,7 +40,7 @@
 
 /*
  * Shall we use select() to wait for an initialization of the kernel RNG or
- * shall we use getrandom(GRNG_NOBLOCK) and adjust the entropy rate
+ * shall we use getrandom(GRND_NONBLOCK) and adjust the entropy rate
  * accordingly?
  */
 #undef ESDM_KRNG_ES_SELECT
