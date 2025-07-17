@@ -1129,7 +1129,7 @@ int esdm_rpc_server_init(const char *username)
 
 		esdm_logger(LOGGER_WARN, LOGGER_C_RPC, "RPC server started\n");
 
-		/* Fork the server process */
+		/* start the RPC server threads */
 		esdm_rpcs_interfaces_init(username);
 	} else {
 		/* cleanup systemd sockets */
