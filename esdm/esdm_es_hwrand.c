@@ -103,15 +103,17 @@ static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			    bool __unused unsused)
 {
 	uint32_t done = 0;
-	uint8_t buffer[32];
+	const size_t tpm2_guaranteed_read_len = 32;
+	uint8_t buffer[tpm2_guaranteed_read_len] = { };
 
 	if (esdm_hwrand_fd < 0)
 		goto err;
 
 	/* if this is backed by a TPM 2.0, only 32 byte need to be returned in one call */
 	do {
-		uint32_t chunk_size = min_uint32(256, requested_bits - done);
-		if (esdm_safe_read(esdm_hwrand_fd, buffer, 32))
+		uint32_t chunk_size = min_uint32(tpm2_guaranteed_read_len * 8,
+						 requested_bits - done);
+		if (esdm_safe_read(esdm_hwrand_fd, buffer, tpm2_guaranteed_read_len))
 			goto err;
 		done += chunk_size;
 		memcpy(eb_es->e + (done >> 3), buffer, (chunk_size >> 3));
@@ -123,9 +125,11 @@ static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		"obtained %u bits of entropy from /dev/hwrng RNG entropy source\n",
 		eb_es->e_bits);
 
+	memset_secure(buffer, 0, tpm2_guaranteed_read_len);
 	return;
 
 err:
+	memset_secure(buffer, 0, tpm2_guaranteed_read_len);
 	eb_es->e_bits = 0;
 }
 
