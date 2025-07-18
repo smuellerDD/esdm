@@ -44,7 +44,6 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated entropy events */
-static u32 esdm_sched_mix_array[ESDM_DATA_ARRAY_SIZE] = { };
 static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_sched_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 static DEFINE_PER_CPU(u32, esdm_sched_array_ptr) = 0;
@@ -150,50 +149,8 @@ static void esdm_sched_reset(void)
 				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
 	}
 
-	memzero_explicit(esdm_sched_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
-
 	/* keep DRBG state, as it will not output anything, until a reseed
 	 * as the counters were set to zero */
-}
-
-/*
- * Update entropy pools after each extraction to provide backtracking resistance
- *
- * for each entropy pool P:
- *	1) generate DRBG output stream S with the same length
- *	2) P' := P XOR S
- * zeroize(S)
- *
- */
-static bool esdm_sched_mix_pool_bytes(void) {
-	unsigned long flags;
-	u32 *sched_array;
-	int ret, cpu, i;
-
-	for_each_online_cpu (cpu) {
-		spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
-
-		ret = esdm_drbg_cb->drbg_generate(
-			esdm_sched_drbg_state,
-			(u8 *)esdm_sched_mix_array,
-			ESDM_DATA_ARRAY_SIZE * sizeof(u32),
-			(u8 *)esdm_sched_drbg_domain_separation,
-			sizeof(esdm_sched_drbg_domain_separation) - 1);
-		if (ret != ESDM_DATA_ARRAY_SIZE * sizeof(u32))
-			return false;
-
-		sched_array = (u32 *)per_cpu_ptr(&esdm_sched_array, cpu);
-
-		spin_lock_irqsave(lock, flags);
-		for (i = 0; i < ESDM_DATA_ARRAY_SIZE; ++i) {
-			sched_array[i] ^= esdm_sched_mix_array[i];
-		}
-		spin_unlock_irqrestore(lock, flags);
-	}
-
-	memzero_explicit(esdm_sched_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
-
-	return true;
 }
 
 /* process events and return one DRBG output block
@@ -449,9 +406,6 @@ static void esdm_sched_time_process(void)
 static void esdm_sched_randomness(const struct task_struct *p, int cpu)
 {
 	unsigned long flags;
-	spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
-
-	spin_lock_irqsave(lock, flags);
 
 	if (esdm_highres_timer()) {
 		esdm_sched_time_process();
@@ -470,8 +424,6 @@ static void esdm_sched_randomness(const struct task_struct *p, int cpu)
 		esdm_sched_time_process();
 		esdm_sched_array_add_u32(tmp);
 	}
-
-	spin_unlock_irqrestore(lock, flags);
 }
 
 static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
@@ -524,11 +476,6 @@ int __init esdm_es_sched_module_init(void)
 	if (!esdm_sched_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
 		return -EINVAL;
-	}
-
-	for_each_possible_cpu(cpu) {
-		spinlock_t *lock = per_cpu_ptr(&esdm_sched_lock, cpu);
-		spin_lock_init(lock);
 	}
 
 	/* register scheduler hook */

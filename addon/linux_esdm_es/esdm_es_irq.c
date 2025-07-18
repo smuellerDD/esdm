@@ -44,18 +44,11 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated IRQ entropy events */
-static u32 esdm_irq_mix_array[ESDM_DATA_ARRAY_SIZE] = { };
 static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_irq_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 static DEFINE_PER_CPU(u32, esdm_irq_array_ptr) = 0;
 static DEFINE_PER_CPU(atomic_t, esdm_irq_array_irqs) = ATOMIC_INIT(0);
 static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data);
-
-/*
- * Lock to allow other CPUs to mix the pool - as this is only done during
- * reseed which is infrequent, this lock is hardly contended.
- */
-static DEFINE_PER_CPU(spinlock_t, esdm_irq_lock);
 
 void __init esdm_irq_es_init(bool highres_timer)
 {
@@ -99,8 +92,6 @@ static void esdm_irq_reset(void)
 		memzero_explicit(per_cpu_ptr(&esdm_irq_array, cpu),
 				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
 	}
-
-	memzero_explicit(esdm_irq_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
 
 	/* keep DRBG state, as it will not output anything, until a reseed
 	 * as the counters were set to zero */
@@ -151,45 +142,6 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 	}
 
 	return ent / block_factor;
-}
-
-/*
- * Update entropy pools after each extraction to provide backtracking resistance
- *
- * for each entropy pool P:
- *	1) generate DRBG output stream S with the same length
- *	2) P' := P XOR S
- * zeroize(S)
- *
- */
-static bool esdm_irq_mix_pool_bytes(void) {
-	unsigned long flags;
-	u32 *irq_array;
-	int ret, cpu, i;
-
-	for_each_online_cpu (cpu) {
-		spinlock_t *lock = per_cpu_ptr(&esdm_irq_lock, cpu);
-
-		ret = esdm_drbg_cb->drbg_generate(
-			esdm_irq_drbg_state,
-			(u8*)esdm_irq_mix_array,
-			ESDM_DATA_ARRAY_SIZE * sizeof(u32),
-			(u8 *)esdm_irq_drbg_domain_separation,
-			sizeof(esdm_irq_drbg_domain_separation) - 1);
-		if (ret != ESDM_DATA_ARRAY_SIZE * sizeof(u32))
-			return false;
-
-		spin_lock_irqsave(lock, flags);
-		irq_array = (u32 *)per_cpu_ptr(&esdm_irq_array, cpu);
-		for (i = 0; i < ESDM_DATA_ARRAY_SIZE; ++i) {
-			irq_array[i] ^= esdm_irq_mix_array[i];
-		}
-		spin_unlock_irqrestore(lock, flags);
-	}
-
-	memzero_explicit(esdm_irq_mix_array, ESDM_DATA_ARRAY_SIZE * sizeof(u32));
-
-	return true;
 }
 
 /* process events and return one DRBG output block
@@ -285,14 +237,6 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 	} else {
 		*returned_bits = min(requested_bits, 8 * partial_len);
 		ok = true;
-	}
-
-	/* mix events by XORing with DRBG output in order to never read
-	 * the same event data twice */
-	if (!esdm_irq_mix_pool_bytes()) {
-		pr_warn("mix pool bytes failed!\n");
-		ok = false;
-		*returned_bits = 0;
 	}
 
 out:
@@ -495,10 +439,7 @@ static void esdm_time_process(void)
 static void esdm_add_interrupt_randomness(int irq)
 {
 	unsigned long flags;
-	/* get_cpu_ptr also disables preemption! */
-	spinlock_t *lock = get_cpu_ptr(&esdm_irq_lock);
 
-	spin_lock_irqsave(lock, flags);
 	if (esdm_highres_timer()) {
 		esdm_time_process();
 	} else {
@@ -535,9 +476,6 @@ static void esdm_add_interrupt_randomness(int irq)
 		_esdm_irq_array_add_u32(tmp);
 	}
 	spin_unlock_irqrestore(lock, flags);
-
-	/* put_cpu_ptr enables preemption again! */
-	put_cpu_ptr(&esdm_irq_lock);
 }
 
 static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
@@ -614,11 +552,6 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	if (!esdm_irq_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto err;
-	}
-
-	for_each_possible_cpu(cpu) {
-		spinlock_t *lock = per_cpu_ptr(&esdm_irq_lock, cpu);
-		spin_lock_init(lock);
 	}
 
 	ret = esdm_irq_register(esdm_add_interrupt_randomness);
