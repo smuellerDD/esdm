@@ -217,7 +217,7 @@ static int esdm_irq_seed_monitor(void)
 	if (!esdm_config_es_irq_entropy_rate())
 		return 0;
 
-	if (ent >= esdm_config_es_irq_entropy_rate() + esdm_compress_osr()) {
+	if (ent >= esdm_config_es_irq_entropy_rate() + esdm_compress_osr(true)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Full entropy of interrupt ES detected\n");
 		esdm_es_add_entropy();

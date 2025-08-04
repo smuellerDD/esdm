@@ -43,7 +43,7 @@
 /*
  * This is the auxiliary pool
  *
- * The aux pool array is aligned to 8 bytes to comfort any used 
+ * The aux pool array is aligned to 8 bytes to comfort any used
  * cipher implementations of the hash functions used to read the pool: for some
  * accelerated implementations, we need an alignment to avoid a realignment
  * which involves memcpy(). The alignment to 8 bytes should satisfy all crypto
@@ -486,7 +486,7 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 		&esdm_pools[pool_with_max_entropy_capacity], inbuf, inbuflen,
 		entropy_bits));
 
-	if (esdm_aux_avail_entropy(0) >= esdm_security_strength() + esdm_compress_osr()) {
+	if (esdm_aux_avail_entropy(0) >= esdm_security_strength() + esdm_compress_osr(false)) {
 		/*
 		* As the DRNG is newly seeded, maybe the need entropy flag can be
 		* unset?

@@ -36,7 +36,8 @@ void esdm_pool_unlock(void);
 void esdm_pool_all_nodes_seeded(bool set);
 bool esdm_pool_all_nodes_seeded_get(void);
 
-bool esdm_fully_seeded(bool was_fully_seeded_once,
+bool esdm_fully_seeded(bool drng_is_pr,
+		       bool initiated,
 		       bool fully_seeded,
 		       uint32_t collected_entropy,
 		       struct entropy_buf *eb);

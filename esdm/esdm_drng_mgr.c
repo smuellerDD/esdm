@@ -155,7 +155,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	atomic_set(&drng->request_bits_since_fully_seeded, 0);
 	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
 	drng->fully_seeded = false;
-	drng->was_fully_seeded_once = false;
+	drng->initiated = false;
 	/* Do not set force, as this flag is used for the emergency reseeding */
 	drng->force_reseed = false;
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG, "reset DRNG\n");
@@ -410,7 +410,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		if (!drng->fully_seeded) {
 			drng->fully_seeded = fully_seeded;
 			if (drng->fully_seeded) {
-				drng->was_fully_seeded_once = true;
+				drng->initiated = true;
 				esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 					    "%s DRNG fully seeded\n",
 					    drng_type);
@@ -434,6 +434,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	unsigned int i, num_es_delivered = 0;
 	bool forced = drng->force_reseed;
 	unsigned int es_delivered_threshold = 1;
+	bool full_strength = drng == &esdm_drng_pr && !drng->initiated || !drng->fully_seeded;
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -444,7 +445,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	 */
 	memset(&seedbuf, 0, sizeof(seedbuf));
 
-	if (esdm_ntg1_2024_compliant() && !drng->was_fully_seeded_once)
+	if (esdm_ntg1_2024_compliant() && !drng->initiated)
 		es_delivered_threshold = 2;
 
 	do {
@@ -459,8 +460,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		}
 
 		esdm_fill_seed_buffer(
-			&seedbuf, esdm_get_seed_entropy_osr(drng->was_fully_seeded_once),
-			forced && !drng->fully_seeded);
+			&seedbuf, esdm_get_seed_entropy_osr(!full_strength),
+			forced && full_strength);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
@@ -473,7 +474,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 
 		/* Inject seed data into DRNG */
 		esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-				 esdm_fully_seeded(drng->was_fully_seeded_once,
+				 esdm_fully_seeded(drng == &esdm_drng_pr,
+						   drng->initiated,
 						   drng->fully_seeded,
 						   collected_entropy,
 						   &collected_seedbuf),

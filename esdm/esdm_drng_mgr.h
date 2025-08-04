@@ -56,7 +56,7 @@ struct esdm_drng {
 
 	struct timespec last_seeded; /* Last time it was seeded */
 	bool fully_seeded; /* Is DRNG fully seeded? */
-	bool was_fully_seeded_once; /* Has DRNG been fully seeded at least once? */
+	bool initiated; /* Was DRNG initiated once? */
 	bool force_reseed; /* Force a reseed */
 
 	mutex_t hash_lock; /* Lock hash_cb replacement */
@@ -70,7 +70,7 @@ struct esdm_drng {
 	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
 	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
 	.last_seeded = { 0 }, .fully_seeded = false,                           \
-	.was_fully_seeded_once = false, .force_reseed = true,                  \
+	.initiated = false, .force_reseed = true,                              \
 	.hash_lock = MUTEX_UNLOCKED
 
 struct esdm_drng *esdm_drng_init_instance(void);
@@ -91,14 +91,18 @@ void esdm_drng_seed_work(void);
 void esdm_force_fully_seeded(void);
 void esdm_force_fully_seeded_all_drbgs(void);
 
-static inline uint32_t esdm_compress_osr(void)
+static inline uint32_t esdm_compress_osr(bool initiate)
 {
-	return esdm_sp80090c_compliant() ? ESDM_OVERSAMPLE_ES_BITS : 0;
+	if (!esdm_sp80090c_compliant()) {
+		return 0;
+	}
+
+	return initiate ? ESDM_INIT_ENTROPY_BITS : ESDM_OVERSAMPLE_ES_BITS;
 }
 
-static inline uint32_t esdm_reduce_by_osr(uint32_t entropy_bits)
+static inline uint32_t esdm_reduce_by_osr(bool initiate, uint32_t entropy_bits)
 {
-	uint32_t osr_bits = esdm_compress_osr();
+	uint32_t osr_bits = esdm_compress_osr(initiate);
 
 	return (entropy_bits >= osr_bits) ? (entropy_bits - osr_bits) : 0;
 }

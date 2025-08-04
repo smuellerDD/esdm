@@ -47,12 +47,8 @@ static inline uint32_t esdm_get_seed_entropy_osr(bool fully_seeded)
 	uint32_t requested_bits = esdm_security_strength();
 
 	/* Apply oversampling during initialization according to SP800-90C */
-	if (esdm_sp80090c_compliant()) {
-		if (!fully_seeded) {
-			requested_bits += ESDM_SEED_BUFFER_INIT_ADD_BITS;
-		} else {
-			requested_bits += ESDM_OVERSAMPLE_ES_BITS;
-		}
+	if (esdm_sp80090c_compliant() && !fully_seeded) {
+		requested_bits += ESDM_SEED_BUFFER_INIT_ADD_BITS;
 	}
 
 	return requested_bits;
