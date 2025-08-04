@@ -437,7 +437,7 @@ static uint32_t esdm_avail_entropy_thresh(void)
 bool esdm_fully_seeded(bool is_pr_drng, bool initiated, bool fully_seeded, uint32_t collected_entropy,
 		       struct entropy_buf *eb)
 {
-	bool do_full_init = (is_pr_drng && !initiated) || !fully_seeded;
+	bool do_full_init = (is_pr_drng && !initiated) || (!is_pr_drng && !fully_seeded);
 
 	/*
 	 * AIS20/31 NTG.1:

@@ -434,7 +434,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	unsigned int i, num_es_delivered = 0;
 	bool forced = drng->force_reseed;
 	unsigned int es_delivered_threshold = 1;
-	bool full_strength = drng == &esdm_drng_pr && !drng->initiated || !drng->fully_seeded;
+	bool do_full_init = (drng == &esdm_drng_pr && !drng->initiated) ||
+			    (drng != &esdm_drng_pr && !drng->fully_seeded);
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -445,7 +446,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 	 */
 	memset(&seedbuf, 0, sizeof(seedbuf));
 
-	if (esdm_ntg1_2024_compliant() && !drng->initiated)
+	if (esdm_ntg1_2024_compliant() && do_full_init)
 		es_delivered_threshold = 2;
 
 	do {
@@ -460,8 +461,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		}
 
 		esdm_fill_seed_buffer(
-			&seedbuf, esdm_get_seed_entropy_osr(!full_strength),
-			forced && full_strength);
+			&seedbuf, esdm_get_seed_entropy_osr(!do_full_init),
+			forced && do_full_init);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
