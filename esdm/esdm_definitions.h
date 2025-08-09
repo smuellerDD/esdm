@@ -101,19 +101,6 @@
  */
 #define ESDM_MAX_DIGESTSIZE SHA512_DIGEST_SIZE
 
-/*
- * Oversampling factor of timer-based events to obtain
- * ESDM_DRNG_SECURITY_STRENGTH_BYTES. This factor is used when a
- * high-resolution time stamp is not available. In this case, jiffies and
- * register contents are used to fill the entropy pool. These noise sources
- * are much less entropic than the high-resolution timer. The entropy content
- * is the entropy content assumed with ESDM_[IRQ|SCHED]_ENTROPY_BITS divided by
- * ESDM_ES_OVERSAMPLING_FACTOR.
- *
- * This value is allowed to be changed.
- */
-#define ESDM_ES_OVERSAMPLING_FACTOR 10
-
 /* Alignmask that is intended to be identical to CRYPTO_MINALIGN */
 #define ESDM_KCAPI_ALIGN 8
 

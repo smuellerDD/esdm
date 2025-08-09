@@ -1,7 +1,7 @@
 KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
 
 BUILD_ES_SCHED?=1
-BUILD_ES_IRQ?=1
+BUILD_ES_IRQ?=0
 BUILD_TESTING?=0
 
 obj-m				+= esdm_es.o

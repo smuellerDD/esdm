@@ -84,69 +84,12 @@ void esdm_gcd_add_value(u32 time);
 bool esdm_highres_timer(void);
 
 /*
- * To limit the impact on the interrupt handling, the ESDM concatenates
- * entropic LSB parts of the time stamps in a per-CPU array and only
- * injects them into the entropy pool when the array is full.
- */
-
-/* Store multiple integers in one u32 */
-#define ESDM_DATA_SLOTSIZE_BITS (8)
-#define ESDM_DATA_SLOTSIZE_MASK ((1 << ESDM_DATA_SLOTSIZE_BITS) - 1)
-#define ESDM_DATA_ARRAY_MEMBER_BITS (4 << 3) /* ((sizeof(u32)) << 3) */
-#define ESDM_DATA_SLOTS_PER_UINT                                               \
-	(ESDM_DATA_ARRAY_MEMBER_BITS / ESDM_DATA_SLOTSIZE_BITS)
-
-/*
  * Number of time values to store in the array - in small environments
  * only one atomic_t variable per CPU is used.
  */
 #define ESDM_DATA_NUM_VALUES (CONFIG_ESDM_COLLECTION_SIZE)
 /* Mask of LSB of time stamp to store */
-#define ESDM_DATA_WORD_MASK (ESDM_DATA_NUM_VALUES - 1)
-
-#define ESDM_DATA_SLOTS_MASK (ESDM_DATA_SLOTS_PER_UINT - 1)
-#define ESDM_DATA_ARRAY_SIZE (ESDM_DATA_NUM_VALUES / ESDM_DATA_SLOTS_PER_UINT)
-
-/* Starting bit index of slot */
-static inline unsigned int esdm_data_slot2bitindex(unsigned int slot)
-{
-	return (ESDM_DATA_SLOTSIZE_BITS * slot);
-}
-
-/* Convert index into the array index */
-static inline unsigned int esdm_data_idx2array(unsigned int idx)
-{
-	return idx / ESDM_DATA_SLOTS_PER_UINT;
-}
-
-/* Convert index into the slot of a given array index */
-static inline unsigned int esdm_data_idx2slot(unsigned int idx)
-{
-	return idx & ESDM_DATA_SLOTS_MASK;
-}
-
-/* Convert value into slot value */
-static inline unsigned int esdm_data_slot_val(unsigned int val,
-					      unsigned int slot)
-{
-	return val << esdm_data_slot2bitindex(slot);
-}
-
-/*
- * Return the pointers for the previous and current units to inject a u32 into.
- * Also return the mask which the u32 word is to be processed.
- */
-static inline void esdm_data_split_u32(u32 *ptr, u32 *pre_ptr, u32 *mask)
-{
-	/* ptr to previous unit */
-	*pre_ptr = (*ptr - ESDM_DATA_SLOTS_PER_UINT) & ESDM_DATA_WORD_MASK;
-	*ptr &= ESDM_DATA_WORD_MASK;
-
-	/* mask to split data into the two parts for the two units */
-	*mask = ((1 << (*pre_ptr & (ESDM_DATA_SLOTS_PER_UINT - 1)) *
-			       ESDM_DATA_SLOTSIZE_BITS)) -
-		1;
-}
+#define ESDM_DATA_WORD_MASK (0xFF)
 
 int __init esdm_init_time_source(void);
 
