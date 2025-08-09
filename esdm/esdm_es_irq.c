@@ -139,6 +139,13 @@ static int esdm_irq_initialize(void)
 	}
 
 	ret = ioctl(fd, ESDM_IRQ_ENT_BUF_SIZE, &status);
+	if (ret == -ENOIOCTLCMD) {
+		esdm_logger(
+			esdm_config_es_irq_retry() ? LOGGER_VERBOSE :
+						     LOGGER_WARN,
+			LOGGER_C_ES,
+			"Disabling interrupt-based entropy source which is not present in kernel\n") return 0;
+	}
 	if (ret < 0) {
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_ES,

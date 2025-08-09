@@ -44,13 +44,15 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated entropy events */
-static DEFINE_PER_CPU(u32[ESDM_DATA_NUM_VALUES], esdm_sched_array)
+static DEFINE_PER_CPU(u16[ESDM_DATA_NUM_VALUES], esdm_sched_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 /* ring buffer read ptr */
-static DEFINE_PER_CPU(atomic_t, esdm_sched_array_rp) = ATOMIC_INIT(0);
+static DEFINE_PER_CPU(u32, esdm_sched_array_rp) = 0;
 /* ring buffer write ptr */
-static DEFINE_PER_CPU(atomic_t, esdm_sched_array_wp) = ATOMIC_INIT(0);
-static DEFINE_PER_CPU(struct drbg_string[2], esdm_sched_seed_data);
+static DEFINE_PER_CPU(u32, esdm_sched_array_wp) = 0;
+/* two seed buffers, in case wp < rp, one if wp > rp */
+static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data_0);
+static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data_1);
 
 void __init esdm_sched_es_init(bool highres_timer)
 {
@@ -84,11 +86,9 @@ static u32 esdm_sched_avail_pool_size(void)
 /* Return entropy of unused scheduler events present in all per-CPU pools. */
 static u32 esdm_sched_avail_entropy(u32 __unused)
 {
-	u32 block_factor = 1;
 	u32 events = 0;
-	u32 ent = 0;
-	u32 write_ptr;
-	u32 read_ptr;
+	u32 *write_ptr;
+	u32 *read_ptr;
 	int cpu;
 
 	/* Only deliver entropy when SP800-90B self test is completed */
@@ -96,30 +96,24 @@ static u32 esdm_sched_avail_entropy(u32 __unused)
 		return 0;
 
 	for_each_online_cpu (cpu) {
-		write_ptr = atomic_read_u32(per_cpu_ptr(&esdm_sched_array_wp, cpu));
-		read_ptr = atomic_read_u32(per_cpu_ptr(&esdm_sched_array_rp, cpu));
+		write_ptr = per_cpu_ptr(&esdm_sched_array_wp, cpu);
+		read_ptr = per_cpu_ptr(&esdm_sched_array_rp, cpu);
 
-		events += (write_ptr > read_ptr)
-			? write_ptr - read_ptr
-			: ESDM_DATA_NUM_VALUES - read_ptr + write_ptr;
+		events += (*write_ptr > *read_ptr)
+			? *write_ptr - *read_ptr
+			: ESDM_DATA_NUM_VALUES - *read_ptr + *write_ptr - 1;
 	}
 
-	/* Consider oversampling rate */
-	ent = esdm_reduce_by_osr(
-		esdm_data_to_entropy(events, esdm_sched_entropy_bits));
-
-	if (fips_enabled) {
-		block_factor++;
-		/* Consider oversampling rate of next block */
-		ent = esdm_reduce_by_osr(
-			esdm_data_to_entropy(
-				esdm_entropy_to_data(ent, esdm_sched_entropy_bits),
-				esdm_sched_entropy_bits
-			)
-		);
+	if (esdm_sp80090c_compliant()) {
+		/* reading >= 256 bit will use two DRBG extractions
+		 * with ESDM_OVERSAMPLE_ES_BITS additionally used in each */
+		return esdm_reduce_by_osr(
+			esdm_reduce_by_osr(
+				esdm_data_to_entropy(events,
+					esdm_sched_entropy_bits)));
+	} else {
+		return esdm_data_to_entropy(events, esdm_sched_entropy_bits);
 	}
-
-	return ent / block_factor;
 }
 
 /*
@@ -134,10 +128,10 @@ static void esdm_sched_reset(void)
 	esdm_gcd_set(0);
 
 	for_each_online_cpu (cpu) {
-		atomic_set(per_cpu_ptr(&esdm_sched_array_rp, cpu), 0);
-		atomic_set(per_cpu_ptr(&esdm_sched_array_wp, cpu), 0);
+		*per_cpu_ptr(&esdm_sched_array_rp, cpu) = 0;
+		*per_cpu_ptr(&esdm_sched_array_wp, cpu) = 0;
 		memzero_explicit(per_cpu_ptr(&esdm_sched_array, cpu),
-				 ESDM_DATA_NUM_VALUES * sizeof(u32));
+				 ESDM_DATA_NUM_VALUES * sizeof(u16));
 	}
 
 	/* keep DRBG state, as it will not output anything, until a reseed
@@ -175,17 +169,18 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 	 * into the DRBG's state.
 	 */
 	for_each_online_cpu (cpu) {
-		struct drbg_string **seed_string;
+		struct drbg_string *seed_string_0;
+		struct drbg_string *seed_string_1;
 		u32 used_events = 0;
-		u32 write_ptr;
-		u32 read_ptr;
+		u32 *write_ptr;
+		u32 *read_ptr;
 
-		write_ptr = atomic_read_u32(per_cpu_ptr(&esdm_sched_array_wp, cpu));
-		read_ptr = atomic_read_u32(per_cpu_ptr(&esdm_sched_array_rp, cpu));
+		write_ptr = per_cpu_ptr(&esdm_sched_array_wp, cpu);
+		read_ptr = per_cpu_ptr(&esdm_sched_array_rp, cpu);
 
-		found_events = (write_ptr > read_ptr)
-			? write_ptr - read_ptr
-			: ESDM_DATA_NUM_VALUES - read_ptr + write_ptr - 1;
+		found_events = (*write_ptr > *read_ptr)
+			? *write_ptr - *read_ptr
+			: ESDM_DATA_NUM_VALUES - *read_ptr + *write_ptr - 1;
 
 		/* Cap to maximum amount of data we can hold in array */
 		found_events = min_t(u32, found_events, ESDM_DATA_NUM_VALUES);
@@ -195,30 +190,32 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 
 		used_events = min_t(u32, requested_events - collected_events, found_events);
 		collected_events += used_events;
-		seed_string = (struct drbg_string **)per_cpu_ptr(&esdm_sched_seed_data, cpu);
+		seed_string_0 = per_cpu_ptr(&esdm_sched_seed_data_0, cpu);
+		seed_string_1 = per_cpu_ptr(&esdm_sched_seed_data_1, cpu);
 
-		if (write_ptr > read_ptr) {
-			drbg_string_fill(seed_string[0],
-			(u8 *)per_cpu_ptr(&esdm_sched_array,
-					cpu) + read_ptr,
-			used_events * sizeof(u32));
-			list_add_tail(&seed_string[0]->list, &seedlist);
- 		} else {
-			u32 used_at_end = (ESDM_DATA_NUM_VALUES - read_ptr + 1);
+		/* can use a consecutive block as seed chunk */
+		if (*write_ptr > *read_ptr) {
+			drbg_string_fill(seed_string_0,
+			(u8 *)(per_cpu_ptr(&esdm_sched_array,
+					cpu) + *read_ptr),
+			used_events * sizeof(u16));
+			list_add_tail(&seed_string_0->list, &seedlist);
+ 		} else { /* need to skip parts in the 'middle' of the event array */
+			u32 used_at_end = (ESDM_DATA_NUM_VALUES - *read_ptr + 1);
 
-			drbg_string_fill(seed_string[0],
-			(u8 *)per_cpu_ptr(&esdm_sched_array,
-					cpu) + read_ptr,
-			used_at_end * sizeof(u32));
-			list_add_tail(&seed_string[0]->list, &seedlist);
-			drbg_string_fill(seed_string[1],
+			drbg_string_fill(seed_string_0,
+			(u8 *)(per_cpu_ptr(&esdm_sched_array,
+					cpu) + *read_ptr),
+			used_at_end * sizeof(u16));
+			list_add_tail(&seed_string_0->list, &seedlist);
+			drbg_string_fill(seed_string_1,
 			(u8 *)per_cpu_ptr(&esdm_sched_array,
 					cpu),
-			(used_events - used_at_end) * sizeof(u32));
-			list_add_tail(&seed_string[1]->list, &seedlist);
+			(used_events - used_at_end) * sizeof(u16));
+			list_add_tail(&seed_string_1->list, &seedlist);
 		}
 
-		atomic_set(per_cpu_ptr(&esdm_sched_array_rp, cpu), (read_ptr + used_events) & ESDM_DATA_NUM_VALUES);
+		*read_ptr = (*read_ptr + used_events) & ESDM_DATA_NUM_VALUES_MASK;
 
 		pr_debug(
 			"%u scheduler-based events used from entropy array of CPU %d, %u scheduler-based events remain unused\n",
@@ -329,18 +326,18 @@ out:
  * Concatenate full 32 bit word at the end of time array even when current
  * ptr is not aligned to sizeof(data).
  */
-static void esdm_sched_array_add_u32(u32 data)
+static void esdm_sched_array_add(u32 data)
 {
-	u32 write_ptr = atomic_read_u32(this_cpu_ptr(&esdm_sched_array_wp));
-	u32 read_ptr = atomic_read_u32(this_cpu_ptr(&esdm_sched_array_rp));
+	u32 *write_ptr = this_cpu_ptr(&esdm_sched_array_wp);
+	u32 *read_ptr = this_cpu_ptr(&esdm_sched_array_rp);
 
 	// full?
-	if ((write_ptr + 1) % ESDM_DATA_NUM_VALUES == read_ptr) {
+	if ((*write_ptr + 1) & ESDM_DATA_NUM_VALUES_MASK == *read_ptr) {
 		return;
 	}
 
-	this_cpu_write(esdm_sched_array[write_ptr], data & ESDM_DATA_WORD_MASK);
-	atomic_inc_return(this_cpu_ptr(&esdm_sched_array_wp));
+	this_cpu_write(esdm_sched_array[*write_ptr], data & ESDM_DATA_WORD_MASK);
+	*write_ptr = (*write_ptr + 1) & ESDM_DATA_NUM_VALUES_MASK;
 }
 
 static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
@@ -365,13 +362,13 @@ static void esdm_sched_time_process(void)
 
 	if (unlikely(!esdm_gcd_tested())) {
 		/* When GCD is unknown, we process the full time stamp */
-		esdm_time_process_common(now_time, esdm_sched_array_add_u32);
+		esdm_time_process_common(now_time, esdm_sched_array_add);
 		esdm_gcd_add_value(now_time);
 	} else {
 		/* GCD is known and applied */
 		esdm_time_process_common((now_time / esdm_gcd_get()) &
 						 ESDM_DATA_WORD_MASK,
-					 esdm_sched_array_add_u32);
+					 esdm_sched_array_add);
 	}
 
 	esdm_sched_perf_time(now_time);

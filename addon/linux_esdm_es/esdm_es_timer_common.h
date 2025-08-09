@@ -88,8 +88,9 @@ bool esdm_highres_timer(void);
  * only one atomic_t variable per CPU is used.
  */
 #define ESDM_DATA_NUM_VALUES (CONFIG_ESDM_COLLECTION_SIZE)
+#define ESDM_DATA_NUM_VALUES_MASK (ESDM_DATA_NUM_VALUES - 1)
 /* Mask of LSB of time stamp to store */
-#define ESDM_DATA_WORD_MASK (0xFF)
+#define ESDM_DATA_WORD_MASK (0xFFFF)
 
 int __init esdm_init_time_source(void);
 

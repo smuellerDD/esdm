@@ -104,6 +104,11 @@
 /* Alignmask that is intended to be identical to CRYPTO_MINALIGN */
 #define ESDM_KCAPI_ALIGN 8
 
+/* used by esdm_es, when source disabled or wrong ioctl */
+#ifndef ENOIOCTLCMD
+#define ENOIOCTLCMD 515
+#endif
+
 /*
  * This definition must provide a buffer that is equal to SHASH_DESC_ON_STACK
  * as it will be casted into a struct hash_ctx.

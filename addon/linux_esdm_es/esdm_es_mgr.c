@@ -93,6 +93,7 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	mutex_lock(&esdm_cdev_lock);
 
 	switch (cmd) {
+#ifdef ESDM_ES_IRQ
 	case ESDM_IRQ_AVAIL_ENTROPY:
 	case ESDM_IRQ_ENT_BUF_SIZE:
 	case ESDM_IRQ_ENT_BUF:
@@ -100,6 +101,8 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	case ESDM_IRQ_STATUS:
 		ret = esdm_es_mgr_irq_ioctl(cmd, arg);
 		break;
+#endif /* ESDM_ES_IRQ */
+#ifdef ESDM_ES_SCHED
 	case ESDM_SCHED_AVAIL_ENTROPY:
 	case ESDM_SCHED_ENT_BUF_SIZE:
 	case ESDM_SCHED_ENT_BUF:
@@ -107,6 +110,7 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	case ESDM_SCHED_STATUS:
 		ret = esdm_es_mgr_sched_ioctl(cmd, arg);
 		break;
+#endif /* ESDM_ES_SCHED */
 	default:
 		ret = -ENOIOCTLCMD;
 		break;
