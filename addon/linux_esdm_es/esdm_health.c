@@ -68,8 +68,7 @@ struct esdm_health_es_state {
 	x.sp80090b_startup_blocks = ATOMIC_INIT(ESDM_SP80090B_STARTUP_BLOCKS), \
 	x.sp80090b_startup_done = false,
 
-#define ESDM_HEALTH_OSR(curr)                                                  \
-	((curr) / ESDM_DRNG_SECURITY_STRENGTH_BITS)
+#define ESDM_HEALTH_OSR(curr) ((curr) / ESDM_DRNG_SECURITY_STRENGTH_BITS)
 #define ESDM_HEALTH_IRQ_RCT_CUTOFF(cutoff)                                     \
 	(ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) * cutoff)
 #define ESDM_HEALTH_SCHED_RCT_CUTOFF(cutoff)                                   \

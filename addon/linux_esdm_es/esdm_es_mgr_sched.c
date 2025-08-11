@@ -68,7 +68,8 @@ int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg)
 		data &= ESDM_ES_MGR_REQ_BITS_MASK;
 		if (data > 0) {
 			if (data != ESDM_DRNG_INIT_SEED_SIZE_BITS &&
-			    data != (ESDM_DRNG_SECURITY_STRENGTH_BITS + ESDM_OVERSAMPLE_ES_BITS) &&
+			    data != (ESDM_DRNG_SECURITY_STRENGTH_BITS +
+				     ESDM_OVERSAMPLE_ES_BITS) &&
 			    data != ESDM_DRNG_SECURITY_STRENGTH_BITS)
 				return -EINVAL;
 			esdm_requested_sched_bits = data;

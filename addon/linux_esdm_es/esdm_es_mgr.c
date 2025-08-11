@@ -245,7 +245,7 @@ static struct notifier_block esdm_es_mgr_notifier_vmgenid = {
 #endif
 
 static int esdm_es_mgr_power_notifier(struct notifier_block *nb,
-					unsigned long action, void *data)
+				      unsigned long action, void *data)
 {
 	pr_warn("Reset ESDM ES' because of power management change!\n");
 
