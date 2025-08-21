@@ -30,7 +30,7 @@ int "Scheduler Entropy Source Entropy Rate"
 	  scheduler entropy source will still deliver data but without
 	  being credited with entropy.
  */
-#define CONFIG_ESDM_SCHED_ENTROPY_RATE 768
+#define CONFIG_ESDM_SCHED_ENTROPY_RATE 256
 
 /*
 config ESDM_RUNTIME_ES_CONFIG

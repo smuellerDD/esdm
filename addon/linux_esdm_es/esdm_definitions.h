@@ -29,19 +29,6 @@
 	(ESDM_DRNG_SECURITY_STRENGTH_BITS + ESDM_SEED_BUFFER_INIT_ADD_BITS)
 #define ESDM_DRNG_INIT_SEED_SIZE_BYTES (ESDM_DRNG_INIT_SEED_SIZE_BITS >> 3)
 
-/*
- * Oversampling factor of timer-based events to obtain
- * ESDM_DRNG_SECURITY_STRENGTH_BYTES. This factor is used when a
- * high-resolution time stamp is not available. In this case, jiffies and
- * register contents are used to fill the entropy pool. These noise sources
- * are much less entropic than the high-resolution timer. The entropy content
- * is the entropy content assumed with ESDM_[IRQ|SCHED]_ENTROPY_BITS divided by
- * ESDM_ES_OVERSAMPLING_FACTOR.
- *
- * This value is allowed to be changed.
- */
-#define ESDM_ES_OVERSAMPLING_FACTOR 10
-
 /* Alignmask that is intended to be identical to CRYPTO_MINALIGN */
 #define ESDM_KCAPI_ALIGN ARCH_KMALLOC_MINALIGN
 
@@ -95,6 +82,15 @@ static inline u32 esdm_reduce_by_osr(u32 entropy_bits)
 	u32 osr_bits = esdm_compress_osr();
 
 	return (entropy_bits >= osr_bits) ? (entropy_bits - osr_bits) : 0;
+}
+
+/*
+ * round requested bits to full blocks of DRBG output with bits per block typically
+ * set to the DRBG's security strength
+ */
+static inline u32 esdm_full_blocks(u32 requested_bits, u32 bits_per_block)
+{
+	return (requested_bits + bits_per_block - 1) / bits_per_block;
 }
 
 #endif /* _ESDM_DEFINITIONS_H */

@@ -44,27 +44,22 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated IRQ entropy events */
-static DEFINE_PER_CPU(u32[ESDM_DATA_ARRAY_SIZE], esdm_irq_array)
+static DEFINE_PER_CPU(u32[ESDM_DATA_NUM_VALUES], esdm_irq_array)
 	__aligned(ESDM_KCAPI_ALIGN);
-static DEFINE_PER_CPU(u32, esdm_irq_array_ptr) = 0;
-static DEFINE_PER_CPU(atomic_t, esdm_irq_array_irqs) = ATOMIC_INIT(0);
-static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data);
+/* ring buffer read ptr */
+static DEFINE_PER_CPU(u32, esdm_irq_array_rp) = 0;
+/* ring buffer write ptr */
+static DEFINE_PER_CPU(u32, esdm_irq_array_wp) = 0;
+/* two seed buffers, in case wp < rp, one if wp > rp */
+static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data_0);
+static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data_1);
 
 void __init esdm_irq_es_init(bool highres_timer)
 {
 	/* Set a minimum number of interrupts that must be collected */
 	irq_entropy = max_t(u32, ESDM_IRQ_ENTROPY_BITS, irq_entropy);
 
-	if (highres_timer) {
-		esdm_irq_entropy_bits = irq_entropy;
-	} else {
-		u32 new_entropy = irq_entropy * ESDM_ES_OVERSAMPLING_FACTOR;
-
-		esdm_irq_entropy_bits =
-			(irq_entropy < new_entropy) ? new_entropy : irq_entropy;
-		pr_warn("operating without high-resolution timer and applying IRQ oversampling factor %u\n",
-			ESDM_ES_OVERSAMPLING_FACTOR);
-	}
+	esdm_irq_entropy_bits = irq_entropy;
 
 	/* One pool should hold sufficient entropy for a single request from user-space */
 	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
@@ -88,9 +83,10 @@ static void esdm_irq_reset(void)
 	esdm_gcd_set(0);
 
 	for_each_online_cpu (cpu) {
-		atomic_set(per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
+		smp_store_release(per_cpu_ptr(&esdm_irq_array_rp, cpu), 0);
+		smp_store_release(per_cpu_ptr(&esdm_irq_array_wp, cpu), 0);
 		memzero_explicit(per_cpu_ptr(&esdm_irq_array, cpu),
-				 ESDM_DATA_ARRAY_SIZE * sizeof(u32));
+				 ESDM_DATA_NUM_VALUES * sizeof(u32));
 	}
 
 	/* keep DRBG state, as it will not output anything, until a reseed
@@ -99,12 +95,11 @@ static void esdm_irq_reset(void)
 
 static u32 esdm_irq_avail_pool_size(void)
 {
-	u32 max_size = 0, max_pool = ESDM_DATA_NUM_VALUES;
+	u32 max_pool = ESDM_DATA_NUM_VALUES, max_size = 0;
 	int cpu;
 
-	for_each_online_cpu (cpu) {
+	for_each_online_cpu (cpu)
 		max_size += max_pool;
-	}
 
 	return max_size;
 }
@@ -112,7 +107,8 @@ static u32 esdm_irq_avail_pool_size(void)
 /* Return entropy of unused IRQs present in all per-CPU pools. */
 static u32 esdm_irq_avail_entropy(u32 __unused)
 {
-	u32 irq = 0;
+	u32 events = 0;
+	u32 r_pos, w_pos;
 	int cpu;
 
 	/* Only deliver entropy when SP800-90B self test is completed */
@@ -120,12 +116,147 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 		return 0;
 
 	for_each_online_cpu (cpu) {
-		irq += atomic_read_u32(per_cpu_ptr(&esdm_irq_array_irqs, cpu));
+		r_pos = READ_ONCE(*per_cpu_ptr(&esdm_irq_array_rp, cpu));
+		w_pos = READ_ONCE(*per_cpu_ptr(&esdm_irq_array_wp, cpu));
+
+		events += (w_pos >= r_pos) ?
+				  w_pos - r_pos :
+				  ESDM_DATA_NUM_VALUES - r_pos + w_pos;
 	}
 
-	/* Consider oversampling rate */
-	return esdm_reduce_by_osr(
-		esdm_data_to_entropy(irq, esdm_irq_entropy_bits));
+	if (esdm_sp80090c_compliant()) {
+		return esdm_reduce_by_osr(esdm_data_to_entropy(events, esdm_irq_entropy_bits));
+	} else {
+		return esdm_data_to_entropy(events, esdm_irq_entropy_bits);
+	}
+}
+
+/* process events and return one DRBG output block
+ *
+ * Length is capped with DRBG's security strength */
+static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
+					u32 *returned_bits)
+{
+	u32 found_events, collected_events = 0, collected_ent_bits,
+			  requested_events, returned_ent_bits, requested_bits;
+	LIST_HEAD(seedlist);
+	bool ok = false;
+	int ret, cpu;
+
+	/* init returned bits with 0, increase, if generate successful */
+	*returned_bits = 0;
+
+	if ((partial_len >> 3) >
+	    esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state)) {
+		pr_warn("more bits than DRBG security strength requested\n");
+		goto out;
+	}
+
+	/* Always request DRBG security strength for each block, generate less
+	 * bytes with DRBG, if advised by partial_len */
+	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
+	requested_events = esdm_entropy_to_data(
+		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
+
+	for_each_online_cpu (cpu) {
+		struct drbg_string *seed_string_0;
+		struct drbg_string *seed_string_1;
+		u32 used_events = 0;
+		u32 r_pos, w_pos;
+
+		if (collected_events >= requested_events)
+			break;
+
+		w_pos = READ_ONCE(*per_cpu_ptr(&esdm_irq_array_wp, cpu));
+		r_pos = smp_load_acquire(per_cpu_ptr(&esdm_irq_array_rp, cpu));
+
+		found_events = (w_pos >= r_pos) ?
+				       w_pos - r_pos :
+				       ESDM_DATA_NUM_VALUES - r_pos + w_pos;
+
+		/* Cap to maximum amount of data we can hold in array */
+		found_events = min_t(u32, found_events, ESDM_DATA_NUM_VALUES);
+
+		if (!found_events)
+			continue;
+
+		used_events = min_t(u32, requested_events - collected_events,
+				    found_events);
+		collected_events += used_events;
+		seed_string_0 = per_cpu_ptr(&esdm_irq_seed_data_0, cpu);
+		seed_string_1 = per_cpu_ptr(&esdm_irq_seed_data_1, cpu);
+
+		/* can use a consecutive block as seed chunk */
+		if (w_pos > r_pos) {
+			drbg_string_fill(
+				seed_string_0,
+				(u8 *)(per_cpu_ptr(&esdm_irq_array, cpu) +
+				       r_pos),
+				used_events * sizeof(u32));
+			list_add_tail(&seed_string_0->list, &seedlist);
+		} else { /* need to skip parts in the 'middle' of the event array */
+			u32 used_at_end = ESDM_DATA_NUM_VALUES - r_pos;
+
+			drbg_string_fill(
+				seed_string_0,
+				(u8 *)(per_cpu_ptr(&esdm_irq_array, cpu) +
+				       r_pos),
+				used_at_end * sizeof(u32));
+			list_add_tail(&seed_string_0->list, &seedlist);
+
+			if (used_at_end < used_events) {
+				drbg_string_fill(
+					seed_string_1,
+					(u8 *)per_cpu_ptr(&esdm_irq_array, cpu),
+					(used_events - used_at_end) * sizeof(u32));
+				list_add_tail(&seed_string_1->list, &seedlist);
+			}
+		}
+
+		smp_store_release(per_cpu_ptr(&esdm_irq_array_rp, cpu),
+				  (r_pos + used_events) &
+					  ESDM_DATA_NUM_VALUES_MASK);
+
+		pr_debug(
+			"%u interrupt-based events used from entropy array of CPU %d, %u interrupt-based events remain unused\n",
+			used_events, cpu, found_events - used_events);
+	}
+
+	collected_ent_bits =
+		esdm_data_to_entropy(collected_events, esdm_irq_entropy_bits);
+	/* Apply oversampling: discount requested oversampling rate */
+	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
+
+	pr_debug(
+		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
+		returned_ent_bits, collected_ent_bits);
+
+	if (esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state) >
+	    returned_ent_bits) {
+		pr_warn("returned bits too small in interrupt-based noise source: %u\n",
+			returned_ent_bits);
+		goto out;
+	}
+
+	ret = esdm_drbg_cb->drbg_seed(esdm_irq_drbg_state, &seedlist);
+	if (ret) {
+		pr_warn("unable to seed drbg in interrupt-based noise source\n");
+		goto out;
+	}
+
+	ret = esdm_drbg_cb->drbg_generate(
+		esdm_irq_drbg_state, block, partial_len,
+		(u8 *)esdm_irq_drbg_domain_separation,
+		sizeof(esdm_irq_drbg_domain_separation) - 1);
+	if (ret != partial_len) {
+		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
+	} else {
+		*returned_bits = min(requested_bits, 8 * partial_len);
+		ok = true;
+	}
+
+out:
+	return ok;
 }
 
 /*
@@ -144,189 +275,68 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
  * data size (received interrupts, requested amount of data, etc.) into an
  * entropy statement. esdm_entropy_to_data does the reverse.
  *
+ * With DRBG-based cryptographic post-processing only full blocks can be read.
+ * This is done in esdm_irq_pool_extract_block.
+ *
  * @eb: entropy buffer to store entropy
  * @requested_bits: Requested amount of entropy
  * @fully_seeded: indicator whether ESDM is fully seeded
  */
 static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 {
-	u32 found_irqs, collected_irqs = 0, collected_ent_bits, requested_irqs,
-			returned_ent_bits;
-	LIST_HEAD(seedlist);
-	int ret, cpu;
+	const u32 esdm_security_strength =
+		esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
+	const u32 full_blocks = esdm_full_blocks(requested_bits, esdm_security_strength);
+	u32 done;
+
+	/* only set entropy, when generate was successful */
+	eb->e_bits = 0;
 
 	/* Only deliver entropy when SP800-90B self test is completed */
 	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq)) {
-		eb->e_bits = 0;
 		return;
 	}
 
-	/* Cap to maximum entropy that can ever be generated with given DRBG */
-	esdm_cap_requested(esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state),
-			   requested_bits);
-	requested_irqs = esdm_entropy_to_data(
-		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
+	/* Only deliver, when at least all requested blocks are available, one compress osr for the
+	 * default case (no initialize with additional 128 Bit) is already counted in esdm_irq_avail_entropy() */
+	if (esdm_irq_avail_entropy(0) < full_blocks * esdm_security_strength + (full_blocks - 1) * esdm_compress_osr()) {
+		return;
+	}
 
-	/*
-	 * Collect all per CPU events and insert them into the DRBG
-	 * state. Reduce event counts in relation to requested_irqs.
-	 */
-	for_each_online_cpu (cpu) {
-		u32 pcpu_unused_irqs = 0;
-		struct drbg_string *seed_string;
-
-		/* Obtain entropy statement like for the entropy pool */
-		found_irqs = atomic_xchg_relaxed(
-			per_cpu_ptr(&esdm_irq_array_irqs, cpu), 0);
-
-		/* cap to max array size */
-		found_irqs = min_t(u32, found_irqs, ESDM_DATA_NUM_VALUES);
-
-		seed_string = per_cpu_ptr(&esdm_irq_seed_data, cpu);
-		drbg_string_fill(seed_string,
-				 (u8 *)per_cpu_ptr(&esdm_irq_array, cpu),
-				 ESDM_DATA_NUM_VALUES * sizeof(u32));
-		list_add_tail(&seed_string->list, &seedlist);
-
-		collected_irqs += found_irqs;
-		if (collected_irqs > requested_irqs) {
-			pcpu_unused_irqs = collected_irqs - requested_irqs;
-			atomic_add_return_relaxed(
-				pcpu_unused_irqs,
-				per_cpu_ptr(&esdm_irq_array_irqs, cpu));
-			collected_irqs = requested_irqs;
-			requested_irqs = 0;
-		} else {
-			requested_irqs -= collected_irqs;
+	done = 0;
+	while (done < requested_bits) {
+		u32 bits_returned;
+		bool ok = esdm_irq_pool_extract_block(
+			eb->e + (done >> 3),
+			min(esdm_security_strength, requested_bits - done) >> 3,
+			&bits_returned);
+		if (!ok) {
+			pr_warn("DRBG block extract failed, bits returned: %u!\n",
+				bits_returned);
+			memzero_explicit(eb->e, sizeof(eb->e));
+			goto out;
 		}
-		pr_debug(
-			"%u interrupts used from entropy pool of CPU %d, %u interrupts remain unused\n",
-			found_irqs - pcpu_unused_irqs, cpu, pcpu_unused_irqs);
+		done += esdm_security_strength;
 	}
-
-	collected_ent_bits =
-		esdm_data_to_entropy(collected_irqs, esdm_irq_entropy_bits);
-	/* Apply oversampling: discount requested oversampling rate */
-	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
-
-	pr_debug(
-		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
-		returned_ent_bits, collected_ent_bits);
-
-	ret = esdm_drbg_cb->drbg_seed(esdm_irq_drbg_state, &seedlist);
-	if (ret) {
-		pr_warn("unable to seed drbg in interrupt-based noise source\n");
-		goto err;
-	}
-
-	ret = esdm_drbg_cb->drbg_generate(
-		esdm_irq_drbg_state, eb->e, returned_ent_bits >> 3,
-		(u8 *)esdm_irq_drbg_domain_separation,
-		sizeof(esdm_irq_drbg_domain_separation) - 1);
-	if (ret != returned_ent_bits >> 3) {
-		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
-		goto err;
-	}
-	eb->e_bits = returned_ent_bits;
+	eb->e_bits = requested_bits;
 
 out:
 	return;
-
-err:
-	eb->e_bits = 0;
-	goto out;
 }
 
-/* push array values to testing in batched mode if needed */
-static void esdm_irq_array_to_testing(u32 ptr)
+static void esdm_irq_array_add(u32 data)
 {
-	u32 *array = this_cpu_ptr(esdm_irq_array);
+	u32 w_pos = smp_load_acquire(this_cpu_ptr(&esdm_irq_array_wp));
+	u32 r_pos = READ_ONCE(*this_cpu_ptr(&esdm_irq_array_rp));
 
-	if (ptr < ESDM_DATA_WORD_MASK)
+	// full?
+	if (((w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK) == r_pos) {
 		return;
-
-	if (esdm_raw_array_entropy_store(*array)) {
-		u32 i;
-
-		/*
-		 * If we fed even a part of the array to external analysis, we
-		 * mark that the entire array and the per-CPU pool to have no
-		 * entropy. This is due to the non-IID property of the data as
-		 * we do not fully know whether the existing dependencies
-		 * diminish the entropy beyond to what we expect it has.
-		 */
-		atomic_set(this_cpu_ptr(&esdm_irq_array_irqs), 0);
-
-		for (i = 1; i < ESDM_DATA_ARRAY_SIZE; i++)
-			esdm_raw_array_entropy_store(*(array + i));
 	}
-}
 
-/*
- * Concatenate full 32 bit word at the end of time array even when current
- * ptr is not aligned to sizeof(data).
- */
-static void _esdm_irq_array_add_u32(u32 data)
-{
-	/* Increment pointer by number of slots taken for input value */
-	u32 pre_ptr, mask,
-		ptr = this_cpu_add_return(esdm_irq_array_ptr,
-					  ESDM_DATA_SLOTS_PER_UINT);
-	unsigned int pre_array;
-
-	/*
-	 * This function injects a unit into the array - guarantee that
-	 * array unit size is equal to data type of input data.
-	 */
-	BUILD_BUG_ON(ESDM_DATA_ARRAY_MEMBER_BITS != (sizeof(data) << 3));
-
-	/*
-	 * The following logic requires at least two units holding
-	 * the data as otherwise the pointer would immediately wrap when
-	 * injection an u32 word.
-	 */
-	BUILD_BUG_ON(ESDM_DATA_NUM_VALUES <= ESDM_DATA_SLOTS_PER_UINT);
-
-	esdm_data_split_u32(&ptr, &pre_ptr, &mask);
-
-	/* MSB of data go into previous unit */
-	pre_array = esdm_data_idx2array(pre_ptr);
-	/* zeroization of slot to ensure the following OR adds the data */
-	this_cpu_and(esdm_irq_array[pre_array], ~(0xffffffff & ~mask));
-	this_cpu_or(esdm_irq_array[pre_array], data & ~mask);
-
-	/* Insert into testing, as we filled the array completely */
-	if (unlikely(pre_ptr > ptr))
-		esdm_irq_array_to_testing(ESDM_DATA_WORD_MASK);
-
-	/* LSB of data go into current unit */
-	this_cpu_write(esdm_irq_array[esdm_data_idx2array(ptr)], data & mask);
-
-	if (likely(pre_ptr <= ptr))
-		esdm_irq_array_to_testing(ptr);
-}
-
-/* Concatenate data of max ESDM_DATA_SLOTSIZE_MASK at the end of time array */
-static void esdm_irq_array_add_slot(u32 data)
-{
-	/* Get slot */
-	u32 ptr = this_cpu_inc_return(esdm_irq_array_ptr) & ESDM_DATA_WORD_MASK;
-	unsigned int array = esdm_data_idx2array(ptr);
-	unsigned int slot = esdm_data_idx2slot(ptr);
-
-	BUILD_BUG_ON(ESDM_DATA_ARRAY_MEMBER_BITS % ESDM_DATA_SLOTSIZE_BITS);
-	/* Ensure consistency of values */
-	BUILD_BUG_ON(ESDM_DATA_ARRAY_MEMBER_BITS != sizeof(esdm_irq_array[0])
-							    << 3);
-
-	/* zeroization of slot to ensure the following OR adds the data */
-	this_cpu_and(esdm_irq_array[array],
-		     ~(esdm_data_slot_val(0xffffffff & ESDM_DATA_SLOTSIZE_MASK,
-					  slot)));
-	/* Store data into slot */
-	this_cpu_or(esdm_irq_array[array], esdm_data_slot_val(data, slot));
-
-	esdm_irq_array_to_testing(ptr);
+	this_cpu_write(esdm_irq_array[w_pos], data & ESDM_DATA_WORD_MASK);
+	smp_store_release(this_cpu_ptr(&esdm_irq_array_wp),
+			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
 }
 
 static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
@@ -341,9 +351,7 @@ static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
 		return;
 
 	if (health_test == esdm_health_pass)
-		atomic_inc_return(this_cpu_ptr(&esdm_irq_array_irqs));
-
-	add_time(time);
+		add_time(time);
 }
 
 /*
@@ -355,13 +363,13 @@ static void esdm_time_process(void)
 
 	if (unlikely(!esdm_gcd_tested())) {
 		/* When GCD is unknown, we process the full time stamp */
-		esdm_time_process_common(now_time, _esdm_irq_array_add_u32);
+		esdm_time_process_common(now_time, esdm_irq_array_add);
 		esdm_gcd_add_value(now_time);
 	} else {
 		/* GCD is known and applied */
 		esdm_time_process_common((now_time / esdm_gcd_get()) &
-						 ESDM_DATA_SLOTSIZE_MASK,
-					 esdm_irq_array_add_slot);
+						 ESDM_DATA_WORD_MASK,
+					 esdm_irq_array_add);
 	}
 
 	esdm_perf_time(now_time);
@@ -370,41 +378,7 @@ static void esdm_time_process(void)
 /* Hot code path - Callback for interrupt handler */
 static void esdm_add_interrupt_randomness(int irq)
 {
-	if (esdm_highres_timer()) {
-		esdm_time_process();
-	} else {
-		struct pt_regs *regs = get_irq_regs();
-		static atomic_t reg_idx = ATOMIC_INIT(0);
-		u64 ip;
-		u32 tmp;
-
-		if (regs) {
-			u32 *ptr = (u32 *)regs;
-			int reg_ptr = atomic_add_return_relaxed(1, &reg_idx);
-			size_t n = (sizeof(struct pt_regs) / sizeof(u32));
-
-			ip = instruction_pointer(regs);
-			tmp = *(ptr + (reg_ptr % n));
-			tmp = esdm_raw_regs_entropy_store(tmp) ? 0 : tmp;
-			_esdm_irq_array_add_u32(tmp);
-		} else {
-			ip = _RET_IP_;
-		}
-
-		esdm_time_process();
-
-		/*
-		 * The XOR operation combining the different values is not
-		 * considered to destroy entropy since the entirety of all
-		 * processed values delivers the entropy (and not each
-		 * value separately of the other values).
-		 */
-		tmp = esdm_raw_jiffies_entropy_store(jiffies) ? 0 : jiffies;
-		tmp ^= esdm_raw_irq_entropy_store(irq) ? 0 : irq;
-		tmp ^= esdm_raw_retip_entropy_store(ip) ? 0 : ip;
-		tmp ^= ip >> 32;
-		_esdm_irq_array_add_u32(tmp);
-	}
+	esdm_time_process();
 }
 
 static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
@@ -419,8 +393,7 @@ static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 		 " FIPS mode enabled: %i\n"
 #endif /* CONFIG_CRYPTO_FIPS */
 		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(),
-		 esdm_irq_avail_entropy(0),
+		 esdm_drbg_cb->drbg_name(), esdm_irq_avail_entropy(0),
 		 ESDM_DATA_NUM_VALUES,
 		 esdm_sp80090b_compliant(esdm_int_es_irq) ? "SP800-90B" : "",
 #ifdef CONFIG_CRYPTO_FIPS
@@ -505,6 +478,11 @@ static DECLARE_WORK(esdm_es_irq_set_callback, esdm_es_irq_set_callbackfn);
 
 int __init esdm_es_irq_module_init(void)
 {
+	if (!esdm_highres_timer()) {
+		pr_warn("Not registering IRQ hook (missing highres timer)!\n");
+		return -EINVAL;
+	}
+
 	if (atomic_cmpxchg(&esdm_es_irq_init_state, esdm_es_init_unused,
 			   esdm_es_init_registering) != esdm_es_init_unused)
 		return -EAGAIN;

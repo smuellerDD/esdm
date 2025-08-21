@@ -120,8 +120,8 @@ bool esdm_highres_timer(void)
 
 int __init esdm_init_time_source(void)
 {
-	if ((random_get_entropy() & ESDM_DATA_SLOTSIZE_MASK) ||
-	    (random_get_entropy() & ESDM_DATA_SLOTSIZE_MASK)) {
+	if ((random_get_entropy() & ESDM_DATA_WORD_MASK) ||
+	    (random_get_entropy() & ESDM_DATA_WORD_MASK)) {
 		/*
 		 * As the highres timer is identified here, previous interrupts
 		 * obtained during boot time are treated like a lowres-timer

@@ -139,10 +139,20 @@ static int esdm_irq_initialize(void)
 	}
 
 	ret = ioctl(fd, ESDM_IRQ_ENT_BUF_SIZE, &status);
+	if (ret < 0 && errno == ENOTTY) {
+		esdm_logger(
+			esdm_config_es_irq_retry() ? LOGGER_VERBOSE :
+						     LOGGER_WARN,
+			LOGGER_C_ES,
+			"Disabling interrupt-based entropy source which is not present in kernel\n");
+		esdm_irq_finalize();
+		return 0;
+	}
 	if (ret < 0) {
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_ES,
-			"Failure to obtain interrupt entropy source status from kernel\n");
+			"Failure to obtain interrupt entropy source status from kernel, errno: %i, error: %s\n",
+			errno, strerror(errno));
 		close(fd);
 		return -EAGAIN;
 	}

@@ -70,7 +70,7 @@ static int esdm_drbg_seed_helper(void *drbg, struct list_head *seedlist)
 	ret = drbg_s->d_ops->update(drbg_s, seedlist,
 				    drbg_s->seeded != DRBG_SEED_STATE_UNSEEDED);
 
-	if (ret >= 0)
+	if (ret == 0)
 		drbg_s->seeded = DRBG_SEED_STATE_FULL;
 
 	return ret;
