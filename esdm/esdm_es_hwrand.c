@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -98,14 +99,30 @@ static uint32_t esdm_hwrand_poolsize(void)
 	return esdm_hwrand_entropylevel(esdm_security_strength());
 }
 
+/*
+ * in many cases this function will access a TPM 2.0 on contemporary
+ * systems, fetch in chunks of 256 bit, which a TPM 2.0 must always
+ * return. This should not harm other backends.
+ */
 static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			    bool __unused unsused)
 {
+	static const size_t tpm2_guaranteed_read_len = 32;
+	uint8_t buffer[tpm2_guaranteed_read_len];
+	uint32_t done_bits = 0;
+
 	if (esdm_hwrand_fd < 0)
 		goto err;
 
-	if (esdm_safe_read(esdm_hwrand_fd, eb_es->e, requested_bits >> 3))
-		goto err;
+	/* if this is backed by a TPM 2.0, only 32 byte need to be returned in one call */
+	do {
+		uint32_t chunk_size_bits = min_uint32(tpm2_guaranteed_read_len * 8,
+						      requested_bits - done_bits);
+		if (esdm_safe_read(esdm_hwrand_fd, buffer, tpm2_guaranteed_read_len))
+			goto err;
+		done_bits += chunk_size_bits;
+		memcpy(eb_es->e + (done_bits >> 3), buffer, (chunk_size_bits >> 3));
+	} while (done_bits < requested_bits);
 
 	eb_es->e_bits = esdm_hwrand_entropylevel(requested_bits);
 	esdm_logger(
@@ -113,9 +130,11 @@ static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		"obtained %u bits of entropy from /dev/hwrng RNG entropy source\n",
 		eb_es->e_bits);
 
+	memset_secure(buffer, 0, tpm2_guaranteed_read_len);
 	return;
 
 err:
+	memset_secure(buffer, 0, tpm2_guaranteed_read_len);
 	eb_es->e_bits = 0;
 }
 
