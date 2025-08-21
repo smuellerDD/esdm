@@ -309,9 +309,12 @@ static int esdm_jent_initialize(void)
 	}
 
 	if (esdm_ntg1_2024_compliant()) {
+#if JENT_VERSION >= 3070000
+		flags |= JENT_NTG1;
+#endif
+		/* should also be set by JENT_NTG1, just set as
+		 * part of defensive programming */
 		flags |= JENT_FORCE_FIPS;
-		/* TODO: adapt, when jitterentropy became NTG.1 compliant */
-		/* flags |= JENT_NTG1 */
 	}
 
 	esdm_jent_state = jent_entropy_collector_alloc(0, flags);
@@ -335,11 +338,22 @@ out:
 
 static void esdm_jent_es_state(char *buf, size_t buflen)
 {
+#if JENT_VERSION >= 3070000
+	const bool jent_secure_memory = jent_secure_memory_supported();
+#else
+	const bool jent_secure_memory = false;
+#endif
+
 	snprintf(buf, buflen,
 		 " Available entropy: %u\n"
 		 " Library version: %u\n"
+		 " Standards compliance: %s%s\n"
 		 " Entropy Rate per 256 data bits: %u\n",
 		 esdm_jent_poolsize(), jent_version(),
+		 (esdm_sp80090c_compliant() ||
+		  esdm_config_fips_enabled() ||
+		  esdm_ntg1_2024_compliant()) ? "SP800-90B " : "",
+		 (esdm_ntg1_2024_compliant() && jent_version() >= 3070000 && jent_secure_memory) ? "NTG.1(2024)" : "",
 		 esdm_jent_entropylevel(256));
 }
 

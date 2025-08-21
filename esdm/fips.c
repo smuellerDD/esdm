@@ -25,6 +25,7 @@
 #include "constructor.h"
 #include "esdm_config.h"
 #include "fips.h"
+#include "fips_integrity.h"
 #include "lc_hmac.h"
 #include "lc_sha256.h"
 #include "esdm_logger.h"
