@@ -214,7 +214,6 @@ static int daemon_init(void)
 	int ret;
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER, "Starting ESDM server\n");
-	CKINT(esdm_init());
 	CKINT(esdm_rpc_server_init(username));
 
 out:
