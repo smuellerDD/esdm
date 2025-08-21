@@ -47,7 +47,7 @@ if get_option('node').enabled()
 endif
 
 if get_option('fips140')
-	esdm_src += files([ 'fips.c', 'fips_integrity.c' ])
+	esdm_src += files([ 'fips.c' ])
 endif
 
 if get_option('crypto_backend') == 'builtin'
@@ -80,8 +80,8 @@ else
 endif
 
 esdm_common_static_lib = static_library('esdm_common_static',
-	[ common_src ],
-	include_directories: include_dirs_client,
+	[ common_src, crypto_src ],
+	include_directories: include_dirs_server,
 	dependencies: [ dependencies_client ],
 	)
 

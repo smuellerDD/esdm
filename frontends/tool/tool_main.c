@@ -21,6 +21,7 @@
 #include "config.h"
 #include "esdm_logger.h"
 #include "math_helper.h"
+#include "fips_integrity.h"
 
 #include <errno.h>
 #include <esdm_rpc_client.h>
@@ -126,6 +127,13 @@ static void handle_usage(void)
 		"\t--reseed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Automatic reseeding via getentropy/getrandom. (needs root)\n");
 	fprintf(stderr,
 		"\t--reseed-delay-ms\t\tDO NOT USE IN PRODUCTION: Set delay before each reseed to ESDM from OS. Can be used to emulate effects of smartcards or TPMs.\n");
+#endif
+
+#ifdef ESDM_FIPS140
+	fprintf(stderr,
+		"\t--fips-checkfile PATH\t\tCreates FIPS HMAC check file in path\n");
+	fprintf(stderr,
+		"\t--fips-targetfile PATH\t\tReads FIPS target file in PATH to create HMAC\n");
 #endif
 }
 
@@ -770,6 +778,8 @@ int main(int argc, char **argv)
 	uint32_t stress_request_size = 4;
 	bool stress_cpu_usage = false;
 	bool stress_fork = false;
+	char *fips_target_file = NULL;
+	char *fips_check_file = NULL;
 	int i;
 
 	/*
@@ -812,9 +822,11 @@ int main(int argc, char **argv)
 			{ "stress-request-size", 1, 0, 0 },
 			{ "stress-cpu-usage", 0, 0, 0 },
 			{ "stress-fork", 0, 0, 0 },
+			{ "fips-targetfile", 1, 0, 0 },
+			{ "fips-checkfile", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvV", opts,
+		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:", opts,
 				&opt_index);
 		if (-1 == c)
 			break;
@@ -1019,6 +1031,14 @@ int main(int argc, char **argv)
 				/* stress-fork */
 				stress_fork = true;
 				break;
+			case 34:
+				/* fips target file */
+				fips_target_file = optarg;
+				break;
+			case 35:
+				/* fips check file */
+				fips_check_file = optarg;
+				break;
 			}
 			break;
 		case 's':
@@ -1089,6 +1109,14 @@ int main(int argc, char **argv)
 			if (verbosity > 0)
 				verbosity--;
 			break;
+		case 'F':
+			/* fips target file */
+			fips_target_file = optarg;
+			break;
+		case 'C':
+			/* fips check file */
+			fips_check_file = optarg;
+			break;
 		}
 	}
 
@@ -1118,6 +1146,23 @@ int main(int argc, char **argv)
 	if (help) {
 		handle_usage();
 		return_val = EXIT_FAILURE;
+#ifdef ESDM_FIPS140
+	} else if (fips_target_file && fips_check_file) {
+		if (fips_create_checkfile(fips_check_file, fips_target_file)) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				"failed to create FIPS check file \"%s\" for \"%s\". Already existing?\n",
+				fips_check_file, fips_target_file);
+			return_val = EXIT_FAILURE;
+		}
+#else
+	} else if (fips_target_file && fips_check_file) {
+		(void) fips_check_file;
+		(void) fips_target_file;
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "failed to create FIPS check file \"%s\" for \"%s\". FIPS disabled.\n",
+			    fips_check_file, fips_target_file);
+		return_val = EXIT_FAILURE;
+#endif
 	} else if (status) {
 		handle_status();
 	} else if (is_fully_seeded) {
