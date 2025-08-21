@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
 {
 	uint64_t buf[512 / sizeof(uint64_t)];
 	uint8_t buf2;
-	uint64_t size;
+	uint64_t size = 0;
 	int ret;
 	ssize_t rc;
 
@@ -60,8 +60,7 @@ int main(int argc, char *argv[])
 		printf("esdm_get_seed indicates that the buffer is too small\n");
 	}
 
-	rc = esdm_rpcc_get_seed((uint8_t *)&size, sizeof(size),
-				ESDM_GET_SEED_NONBLOCK);
+	rc = esdm_rpcc_get_seed((uint8_t *)&size, sizeof(size), ESDM_GET_SEED_NONBLOCK);
 	if (rc != -EMSGSIZE) {
 		printf("esdm_get_seed does not indicate that the buffer is too small\n");
 		ret = 1;
@@ -78,9 +77,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf),
-				ESDM_GET_SEED_NONBLOCK |
-					ESDM_GET_SEED_FULLY_SEEDED);
+	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf), ESDM_GET_SEED_FULLY_SEEDED);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
@@ -115,8 +112,7 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf),
-				ESDM_GET_SEED_NONBLOCK);
+	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf), 0);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
