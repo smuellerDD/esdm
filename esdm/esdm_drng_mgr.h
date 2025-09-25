@@ -57,6 +57,7 @@ struct esdm_drng {
 	struct timespec last_seeded; /* Last time it was seeded */
 	bool fully_seeded; /* Is DRNG fully seeded? */
 	bool force_reseed; /* Force a reseed */
+	bool initiated; /* Was DRNG initiated once? (used for pr drng) */
 
 	mutex_t hash_lock; /* Lock hash_cb replacement */
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
@@ -69,6 +70,7 @@ struct esdm_drng {
 	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
 	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
 	.last_seeded = { 0 }, .fully_seeded = false, .force_reseed = true,     \
+	.initiated = false,                                                    \
 	.hash_lock = MUTEX_UNLOCKED
 
 struct esdm_drng *esdm_drng_init_instance(void);
