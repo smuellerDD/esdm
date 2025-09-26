@@ -293,7 +293,7 @@ getrandom(2) with GRND_RANDOM.
 ''')
 
 # Option for: THREADING_MAX_THREADS
-option('threading_max_threads', type: 'integer', min: 1, value: 128,
+option('threading_max_threads', type: 'integer', min: 1, value: 1024,
        description:'''Maximum number of concurrent threads supported.
 
 This value can be set to any arbitrary number. Depending on the number
