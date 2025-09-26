@@ -433,7 +433,7 @@ static uint32_t esdm_avail_entropy_thresh(void)
 	return ent_thresh;
 }
 
-bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
+bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 		       struct entropy_buf *eb)
 {
 	/*
@@ -441,7 +441,7 @@ bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 	 * - Two entropy sources with each delivering 240 bits initially
 	 * - After the initial seeding step one entropy source is sufficient
 	 */
-	if (!fully_seeded && esdm_ntg1_2024_compliant()) {
+	if (do_full_init && esdm_ntg1_2024_compliant()) {
 		uint32_t i, result = 0,
 			    ent_thresh = esdm_avail_entropy_thresh();
 
@@ -454,7 +454,7 @@ bool esdm_fully_seeded(bool fully_seeded, uint32_t collected_entropy,
 		return (result >= 2);
 	}
 
-	return (collected_entropy >= esdm_get_seed_entropy_osr(fully_seeded));
+	return (collected_entropy >= esdm_get_seed_entropy_osr(do_full_init));
 }
 
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
@@ -561,7 +561,7 @@ static uint32_t esdm_init_entropy_level(bool fully_seeded)
 		       /* Approximation so that two ES should deliver 240 bits each */
 		       (2 * ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
 		       /* Apply SP800-90C oversampling if applicable */
-		       esdm_get_seed_entropy_osr(fully_seeded);
+		       esdm_get_seed_entropy_osr(!fully_seeded);
 }
 
 /**
@@ -600,7 +600,7 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (state->esdm_fully_seeded) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
-	} else if (esdm_fully_seeded(state->all_online_nodes_seeded, seed_bits,
+	} else if (esdm_fully_seeded(!state->all_online_nodes_seeded, seed_bits,
 				     eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();

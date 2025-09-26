@@ -461,7 +461,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		}
 
 		esdm_fill_seed_buffer(
-			&seedbuf, esdm_get_seed_entropy_osr(!do_full_init),
+			&seedbuf, esdm_get_seed_entropy_osr(do_full_init),
 			forced && do_full_init);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
@@ -475,7 +475,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 
 		/* Inject seed data into DRNG */
 		esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-				 esdm_fully_seeded(!do_full_init,
+				 esdm_fully_seeded(do_full_init,
 						   collected_entropy,
 						   &collected_seedbuf),
 				 "regular");
@@ -1104,8 +1104,8 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	for (;;) {
 		esdm_fill_seed_buffer(
 			eb,
-			esdm_get_seed_entropy_osr(flags &
-						  ESDM_GET_SEED_FULLY_SEEDED),
+			esdm_get_seed_entropy_osr(!(flags &
+						  ESDM_GET_SEED_FULLY_SEEDED)),
 			false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
