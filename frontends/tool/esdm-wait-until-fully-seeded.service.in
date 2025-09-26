@@ -1,0 +1,13 @@
+[Unit]
+Description=Service to wait for ESDM server being initially fully seeded
+
+Wants=esdm-server.service
+After=esdm-server.service
+
+[Service]
+Type=oneshot
+ExecStart=@PATH@/esdm-tool --wait-until-seeded -1 --use-syslog
+
+[Install]
+WantedBy=basic.target
+Alias=esdm-wait-until-fully-seeded.service

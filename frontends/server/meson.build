@@ -16,6 +16,28 @@ esdm_server = executable(
 
 server_conf_data = configuration_data()
 server_conf_data.set('PATH', get_option('prefix') + '/' + get_option('bindir'))
+if get_option('systemd').enabled()
+	server_conf_data.set('UNIT_SNIPPET', '''
+	# SOCKET ACTIVATION BEGIN
+	Requires=esdm-server-priv.socket
+	After=esdm-server-priv.socket
+
+	Requires=esdm-server-unpriv.socket
+	After=esdm-server-unpriv.socket
+	# SOCKET ACTIVATION END
+	'''
+	)
+else
+	server_conf_data.set('UNIT_SNIPPET', '''
+	# NO SOCKET ACTIVATION BEGIN
+	DefaultDependencies=no
+	After=local-fs.target
+	Before=shutdown.target
+	Conflicts=shutdown.target
+	# NO SOCKET ACTIVATION END
+	'''
+	)
+endif
 esdm_server_service = configure_file(
 	input : 'esdm-server.service.in',
 	output : 'esdm-server.service',
