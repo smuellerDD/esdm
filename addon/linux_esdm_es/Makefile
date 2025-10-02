@@ -46,6 +46,7 @@ esdm_es-y			+= esdm_testing.o
 ccflags-y			+= -DCONFIG_ESDM_RAW_HIRES_ENTROPY
 ccflags-y			+= -DCONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
 ccflags-y			+= -DCONFIG_ESDM_SCHED_PERF
+ccflags-y			+= -DCONFIG_ESDM_IRQ_PERF
 endif
 
 
