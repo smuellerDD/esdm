@@ -24,9 +24,6 @@
 #include "esdm_testing.h"
 
 #if defined(CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY) ||                            \
-	defined(CONFIG_ESDM_RAW_SCHED_PID_ENTROPY) ||                          \
-	defined(CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY) ||                   \
-	defined(CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY) ||                        \
 	defined(CONFIG_ESDM_SCHED_PERF)
 #define ESDM_TESTING_USE_BUSYLOOP
 #endif
@@ -315,6 +312,50 @@ static const struct file_operations esdm_raw_hires_fops = {
 
 #endif /* CONFIG_ESDM_RAW_HIRES_ENTROPY */
 
+/******************** Interrupt Performance Data Handling *********************/
+
+#ifdef CONFIG_ESDM_IRQ_PERF
+
+static u32 boot_irq_perf = 0;
+module_param(boot_irq_perf, uint, 0644);
+MODULE_PARM_DESC(
+	boot_irq_perf,
+	"Enable gathering interrupt-based entropy source performance data");
+
+static struct esdm_testing esdm_irq_perf = {
+	.rb_reader = 0,
+	.rb_writer = ATOMIC_INIT(0),
+	.lock = __SPIN_LOCK_UNLOCKED(esdm_irq_perf.lock),
+	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_irq_perf.read_wait)
+};
+
+bool esdm_irq_perf_time(u32 start)
+{
+	return esdm_testing_store(&esdm_irq_perf,
+				  random_get_entropy() - start,
+				  &boot_irq_perf);
+}
+
+static int esdm_irq_perf_reader(u8 *outbuf, u32 outbuflen)
+{
+	return esdm_testing_reader(&esdm_irq_perf, &boot_irq_perf, outbuf,
+				   outbuflen);
+}
+
+static ssize_t esdm_irq_perf_read(struct file *file, char __user *to,
+				    size_t count, loff_t *ppos)
+{
+	return esdm_testing_extract_user(file, to, count, ppos,
+					 esdm_irq_perf_reader);
+}
+
+static const struct file_operations esdm_irq_perf_fops = {
+	.owner = THIS_MODULE,
+	.read = esdm_irq_perf_read,
+};
+
+#endif /* CONFIG_ESDM_IRQ_PERF */
+
 /****** Raw High-Resolution Scheduler-based Timer Entropy Data Handling *******/
 
 #ifdef CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
@@ -360,7 +401,7 @@ static const struct file_operations esdm_raw_sched_hires_fops = {
 
 #endif /* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
 
-/******************** Interrupt Performance Data Handling *********************/
+/******************** Scheduler Performance Data Handling *********************/
 
 #ifdef CONFIG_ESDM_SCHED_PERF
 
@@ -404,51 +445,6 @@ static const struct file_operations esdm_sched_perf_fops = {
 
 #endif /* CONFIG_ESDM_SCHED_PERF */
 
-/*********** Raw Scheduler task_struct->start_time Data Handling **************/
-
-#ifdef CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY
-
-static u32 boot_raw_sched_starttime_test = 0;
-module_param(boot_raw_sched_starttime_test, uint, 0644);
-MODULE_PARM_DESC(
-	boot_raw_sched_starttime_test,
-	"Enable gathering boot time entropy of the first task start times collected by the scheduler entropy source");
-
-static struct esdm_testing esdm_raw_sched_starttime = {
-	.rb_reader = 0,
-	.rb_writer = ATOMIC_INIT(0),
-	.lock = __SPIN_LOCK_UNLOCKED(esdm_raw_sched_starttime.lock),
-	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(
-		esdm_raw_sched_starttime.read_wait)
-};
-
-bool esdm_raw_sched_starttime_entropy_store(u32 value)
-{
-	return esdm_testing_store(&esdm_raw_sched_starttime, value,
-				  &boot_raw_sched_starttime_test);
-}
-
-static int esdm_raw_sched_starttime_entropy_reader(u8 *outbuf, u32 outbuflen)
-{
-	return esdm_testing_reader(&esdm_raw_sched_starttime,
-				   &boot_raw_sched_starttime_test, outbuf,
-				   outbuflen);
-}
-
-static ssize_t esdm_raw_sched_starttime_read(struct file *file, char __user *to,
-					     size_t count, loff_t *ppos)
-{
-	return esdm_testing_extract_user(
-		file, to, count, ppos, esdm_raw_sched_starttime_entropy_reader);
-}
-
-static const struct file_operations esdm_raw_sched_starttime_fops = {
-	.owner = THIS_MODULE,
-	.read = esdm_raw_sched_starttime_read,
-};
-
-#endif /* CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY */
-
 /**************************************************************************
  * Debugfs interface
  **************************************************************************/
@@ -484,53 +480,18 @@ int __init esdm_test_init(void)
 				   esdm_raw_debugfs_root, NULL,
 				   &esdm_raw_hires_fops);
 #endif
-#ifdef CONFIG_ESDM_RAW_JIFFIES_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_jiffies", 0400,
-				   esdm_raw_debugfs_root, NULL,
-				   &esdm_raw_jiffies_fops);
-#endif
-#ifdef CONFIG_ESDM_RAW_IRQ_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_irq", 0400, esdm_raw_debugfs_root,
-				   NULL, &esdm_raw_irq_fops);
-#endif
-#ifdef CONFIG_ESDM_RAW_RETIP_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_retip", 0400,
-				   esdm_raw_debugfs_root, NULL,
-				   &esdm_raw_retip_fops);
-#endif
-#ifdef CONFIG_ESDM_RAW_REGS_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_regs", 0400, esdm_raw_debugfs_root,
-				   NULL, &esdm_raw_regs_fops);
-#endif
-#ifdef CONFIG_ESDM_RAW_ARRAY
-	debugfs_create_file_unsafe("esdm_raw_array", 0400,
-				   esdm_raw_debugfs_root, NULL,
-				   &esdm_raw_array_fops);
-#endif
+
 #ifdef CONFIG_ESDM_IRQ_PERF
 	debugfs_create_file_unsafe("esdm_irq_perf", 0400, esdm_raw_debugfs_root,
 				   NULL, &esdm_irq_perf_fops);
 #endif
+
 #ifdef CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
 	debugfs_create_file_unsafe("esdm_raw_sched_hires", 0400,
 				   esdm_raw_debugfs_root, NULL,
 				   &esdm_raw_sched_hires_fops);
 #endif
-#ifdef CONFIG_ESDM_RAW_SCHED_PID_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_sched_pid", 0400,
-				   esdm_raw_debugfs_root, NULL,
-				   &esdm_raw_sched_pid_fops);
-#endif
-#ifdef CONFIG_ESDM_RAW_SCHED_START_TIME_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_sched_starttime", 0400,
-				   esdm_raw_debugfs_root, NULL,
-				   &esdm_raw_sched_starttime_fops);
-#endif
-#ifdef CONFIG_ESDM_RAW_SCHED_NVCSW_ENTROPY
-	debugfs_create_file_unsafe("esdm_raw_sched_nvcsw", 0400,
-				   esdm_raw_debugfs_root, NULL,
-				   &esdm_raw_sched_nvcsw_fops);
-#endif
+
 #ifdef CONFIG_ESDM_SCHED_PERF
 	debugfs_create_file_unsafe("esdm_sched_perf", 0400,
 				   esdm_raw_debugfs_root, NULL,

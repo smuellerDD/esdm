@@ -372,7 +372,7 @@ static void esdm_time_process(void)
 					 esdm_irq_array_add);
 	}
 
-	esdm_perf_time(now_time);
+	esdm_irq_perf_time(now_time);
 }
 
 /* Hot code path - Callback for interrupt handler */
