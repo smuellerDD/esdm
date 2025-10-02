@@ -31,7 +31,7 @@ config ESDM_IRQ_ENTROPY_RATE
 	  interrupt entropy source will still deliver data but without
 	  being credited with entropy.
 */
-#define CONFIG_ESDM_IRQ_ENTROPY_RATE 256
+#define CONFIG_ESDM_IRQ_ENTROPY_RATE (256 * ESDM_ES_OSR)
 
 /*
 config ESDM_RUNTIME_ES_CONFIG

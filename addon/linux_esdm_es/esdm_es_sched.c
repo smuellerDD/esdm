@@ -30,7 +30,7 @@ static const char esdm_sched_drbg_domain_separation[] = "ESDM_SCH_DRBG";
  *	 may imply the DRNG can never be fully seeded in case other noise
  *	 sources are unavailable.
  */
-#define ESDM_SCHED_ENTROPY_BITS ESDM_UINT32_C(CONFIG_ESDM_SCHED_ENTROPY_RATE)
+#define ESDM_SCHED_ENTROPY_BITS CONFIG_ESDM_SCHED_ENTROPY_RATE
 
 /* Number of events required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
 static u32 esdm_sched_entropy_bits = ESDM_SCHED_ENTROPY_BITS;
@@ -56,6 +56,13 @@ static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data_1);
 
 void __init esdm_sched_es_init(bool highres_timer)
 {
+	/* 25 is arbitrary, but will never the less be far to
+	 * large for the current event array size */
+	BUG_ON(ESDM_ES_OSR <= 0 || ESDM_ES_OSR > 25);
+
+	/* reseeding possible with current array size? */
+	BUG_ON(ESDM_ES_OSR * (256 + 64) * 2 <= ESDM_DATA_NUM_VALUES);
+
 	/* Set a minimum number of scheduler events that must be collected */
 	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS, sched_entropy);
 

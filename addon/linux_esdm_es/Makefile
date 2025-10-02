@@ -8,6 +8,13 @@ BUILD_ES_SCHED?=0
 BUILD_ES_IRQ?=1
 BUILD_TESTING?=0
 
+#
+# config switch for OSR
+#
+ESDM_ES_OSR?=3
+
+ccflags-y += -DESDM_ES_OSR=$(ESDM_ES_OSR)
+
 obj-m				+= esdm_es.o
 esdm_es-y			= esdm_es_mgr.o esdm_es_timer_common.o 	\
 				  esdm_drbg_kcapi.o esdm_health.o
