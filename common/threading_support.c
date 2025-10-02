@@ -325,8 +325,9 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			   uint32_t thread_group, int *ret_ancestor)
 {
 	pthread_t self = pthread_self();
-	unsigned int i, upper;
+	unsigned int lower, upper;
 	unsigned int special_slot = thread_get_special_slot(thread_group);
+	unsigned int rand_offset, num_elements, j, k;
 
 	if (threads_groups < thread_group && !special_slot) {
 		esdm_logger(
@@ -338,26 +339,31 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 
 	/* Get the range of slots of the thread_group */
 	if (special_slot) {
-		i = special_slot;
+		lower = special_slot;
 		upper = special_slot + 1;
 	} else {
-		i = thread_group * threads_per_threadgroup;
+		lower = thread_group * threads_per_threadgroup;
 		upper = (thread_group + 1) * threads_per_threadgroup;
 	}
 
-	for (; i < upper; i++) {
+	num_elements = upper - lower;
+	/* searching with random offset increases thread utilization under high load */
+	rand_offset = (unsigned int)rand() % num_elements;
+	for (k = 0; k < num_elements; ++k) {
 		if (atomic_bool_read(&threads_in_cancel))
 			return -ESHUTDOWN;
 
-		if (mutex_w_trylock(&threads[i].inuse)) {
+		j = lower + (k + rand_offset) % num_elements;
+
+		if (mutex_w_trylock(&threads[j].inuse)) {
 			/*
 			 * The thread is currently executing a body of code -
 			 * kick the worker.
 			 */
-			if (threads[i].start_routine ||
-			    atomic_bool_read(&threads[i].shutdown)) {
-				mutex_w_unlock(&threads[i].inuse);
-				pthread_cond_broadcast(&threads[i].worker_cv);
+			if (threads[j].start_routine ||
+			    atomic_bool_read(&threads[j].shutdown)) {
+				mutex_w_unlock(&threads[j].inuse);
+				pthread_cond_broadcast(&threads[j].worker_cv);
 				continue;
 			}
 
@@ -365,10 +371,10 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			 * Thread is not being picked up by thread_block of the
 			 * mother thread - kick the worker.
 			 */
-			if (threads[i].scheduled &&
-			    !pthread_equal(threads[i].parent, self)) {
-				mutex_w_unlock(&threads[i].inuse);
-				pthread_cond_broadcast(&threads[i].worker_cv);
+			if (threads[j].scheduled &&
+			    !pthread_equal(threads[j].parent, self)) {
+				mutex_w_unlock(&threads[j].inuse);
+				pthread_cond_broadcast(&threads[j].worker_cv);
 				continue;
 			}
 
@@ -376,8 +382,8 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			 * Create thread as we have a clean slot and all
 			 * existing threads are busy.
 			 */
-			if (!thread_dirty(i)) {
-				int ret = thread_create(&threads[i], i);
+			if (!thread_dirty(j)) {
+				int ret = thread_create(&threads[j], j);
 
 				if (ret)
 					return ret;
@@ -385,12 +391,12 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 				esdm_logger(
 					LOGGER_VERBOSE, LOGGER_C_THREADING,
 					"Thread %u for thread group %u allocated\n",
-					i, thread_group);
+					j, thread_group);
 			}
 
 			/* Catch the return code of the ancestor thread */
 			if (ret_ancestor)
-				*ret_ancestor = threads[i].ret_ancestor;
+				*ret_ancestor = threads[j].ret_ancestor;
 
 			/*
 			 * Use the thread from the thread pool and schedule
@@ -398,13 +404,13 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			 */
 			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
 				    "Thread %u for thread group %u assigned\n",
-				    i, thread_group);
-			threads[i].data = tdata;
-			threads[i].start_routine = start_routine;
-			threads[i].parent = pthread_self();
-			threads[i].scheduled = true;
-			pthread_cond_broadcast(&threads[i].worker_cv);
-			mutex_w_unlock(&threads[i].inuse);
+				    j, thread_group);
+			threads[j].data = tdata;
+			threads[j].start_routine = start_routine;
+			threads[j].parent = pthread_self();
+			threads[j].scheduled = true;
+			pthread_cond_broadcast(&threads[j].worker_cv);
+			mutex_w_unlock(&threads[j].inuse);
 			pthread_cond_broadcast(&thread_wait_cv);
 
 			return 0;

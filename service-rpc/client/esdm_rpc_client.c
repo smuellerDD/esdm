@@ -865,7 +865,7 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 	}
 
 	if (!found_unused_conn) {
-		rpc_conn_p = rpc_conn_array + node;
+		rpc_conn_p = rpc_conn_array + node % num_conn;
 
 		/*
 		* Wait until the previous call completed - each connection handle is
