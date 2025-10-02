@@ -162,8 +162,13 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 	/* Always request DRBG security strength for each block, generate less
 	 * bytes with DRBG, if advised by partial_len */
 	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
-	requested_events = esdm_entropy_to_data(
+	if (!esdm_drbg_cb->drbg_is_initialized(esdm_irq_drbg_state)) {
+		requested_events = esdm_entropy_to_data(
+		requested_bits + esdm_init_osr(), esdm_irq_entropy_bits);
+	} else {
+		requested_events = esdm_entropy_to_data(
 		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
+	}
 
 	for_each_online_cpu (cpu) {
 		struct drbg_string *seed_string_0;
@@ -232,7 +237,11 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 	collected_ent_bits =
 		esdm_data_to_entropy(collected_events, esdm_irq_entropy_bits);
 	/* Apply oversampling: discount requested oversampling rate */
-	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
+	if (!esdm_drbg_cb->drbg_is_initialized(esdm_irq_drbg_state)) {
+		returned_ent_bits = esdm_reduce_by_init_osr(collected_ent_bits);
+	} else {
+		returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
+	}
 
 	pr_debug(
 		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
@@ -304,9 +313,12 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
-	/* Only deliver, when at least all requested blocks are available, one compress osr for the
-	 * default case (no initialize with additional 128 Bit) is already counted in esdm_irq_avail_entropy() */
-	if (esdm_irq_avail_entropy(0) < full_blocks * esdm_security_strength + (full_blocks - 1) * esdm_compress_osr()) {
+	/*
+	 * Only deliver, when at least all requested blocks are available, one compress osr for the
+	 * default case (no initialize with additional 64 Bit) is already counted in esdm_irq_avail_entropy()
+	 * add additional 64 bit in order to match 128 extra bit on full init
+	 */
+	if (esdm_irq_avail_entropy(0) < full_blocks * esdm_security_strength + full_blocks * esdm_compress_osr()) {
 		return;
 	}
 
@@ -499,8 +511,6 @@ static DECLARE_WORK(esdm_es_irq_set_callback, esdm_es_irq_set_callbackfn);
 
 int __init esdm_es_irq_module_init(void)
 {
-	int cpu;
-
 	if (!esdm_highres_timer()) {
 		pr_warn("Not registering IRQ hook (missing highres timer)!\n");
 		return -EINVAL;
