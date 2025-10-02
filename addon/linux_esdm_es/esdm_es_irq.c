@@ -334,7 +334,7 @@ static void esdm_irq_array_add(u32 data)
 		return;
 	}
 
-	this_cpu_write(esdm_irq_array[w_pos], data & ESDM_DATA_WORD_MASK);
+	this_cpu_write(esdm_irq_array[w_pos], data);
 	smp_store_release(this_cpu_ptr(&esdm_irq_array_wp),
 			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
 }
@@ -367,8 +367,7 @@ static void esdm_time_process(void)
 		esdm_gcd_add_value(now_time);
 	} else {
 		/* GCD is known and applied */
-		esdm_time_process_common((now_time / esdm_gcd_get()) &
-						 ESDM_DATA_WORD_MASK,
+		esdm_time_process_common(now_time / esdm_gcd_get(),
 					 esdm_irq_array_add);
 	}
 
