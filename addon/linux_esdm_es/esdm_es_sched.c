@@ -44,8 +44,7 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated entropy events */
-static DEFINE_PER_CPU(u32[ESDM_DATA_NUM_VALUES], esdm_sched_array)
-	__aligned(ESDM_KCAPI_ALIGN);
+static DEFINE_PER_CPU(u32*, esdm_sched_array);
 /* ring buffer read ptr */
 static DEFINE_PER_CPU(u32, esdm_sched_array_rp) = 0;
 /* ring buffer write ptr */
@@ -61,7 +60,7 @@ void __init esdm_sched_es_init(bool highres_timer)
 	BUG_ON(ESDM_ES_OSR <= 0 || ESDM_ES_OSR > 25);
 
 	/* reseeding possible with current array size? */
-	BUG_ON(ESDM_ES_OSR * (256 + 64) * 2 <= ESDM_DATA_NUM_VALUES);
+	BUG_ON(ESDM_ES_OSR * (256 + 64) * 2 > ESDM_DATA_NUM_VALUES);
 
 	/* Set a minimum number of scheduler events that must be collected */
 	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS, sched_entropy);
@@ -134,7 +133,7 @@ static void esdm_sched_reset(void)
 	for_each_online_cpu (cpu) {
 		smp_store_release(per_cpu_ptr(&esdm_sched_array_rp, cpu), 0);
 		smp_store_release(per_cpu_ptr(&esdm_sched_array_wp, cpu), 0);
-		memzero_explicit(per_cpu_ptr(&esdm_sched_array, cpu),
+		memzero_explicit(*per_cpu_ptr(&esdm_sched_array, cpu),
 				 ESDM_DATA_NUM_VALUES * sizeof(u32));
 	}
 
@@ -202,7 +201,7 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 		if (w_pos > r_pos) {
 			drbg_string_fill(
 				seed_string_0,
-				(u8 *)(per_cpu_ptr(&esdm_sched_array, cpu) +
+				(u8 *)(*per_cpu_ptr(&esdm_sched_array, cpu) +
 				       r_pos),
 				used_events * sizeof(u32));
 			list_add_tail(&seed_string_0->list, &seedlist);
@@ -211,7 +210,7 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 
 			drbg_string_fill(
 				seed_string_0,
-				(u8 *)(per_cpu_ptr(&esdm_sched_array, cpu) +
+				(u8 *)(*per_cpu_ptr(&esdm_sched_array, cpu) +
 				       r_pos),
 				used_at_end * sizeof(u32));
 			list_add_tail(&seed_string_0->list, &seedlist);
@@ -219,7 +218,7 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 			if (used_at_end < used_events) {
 				drbg_string_fill(
 					seed_string_1,
-					(u8 *)per_cpu_ptr(&esdm_sched_array, cpu),
+					(u8 *)*per_cpu_ptr(&esdm_sched_array, cpu),
 					(used_events - used_at_end) * sizeof(u32));
 				list_add_tail(&seed_string_1->list, &seedlist);
 			}
@@ -346,6 +345,7 @@ out:
  */
 static void esdm_sched_array_add(u32 data)
 {
+	u32 *sched_array = READ_ONCE(*this_cpu_ptr(&esdm_sched_array));
 	u32 w_pos = smp_load_acquire(this_cpu_ptr(&esdm_sched_array_wp));
 	u32 r_pos = READ_ONCE(*this_cpu_ptr(&esdm_sched_array_rp));
 
@@ -354,7 +354,7 @@ static void esdm_sched_array_add(u32 data)
 		return;
 	}
 
-	this_cpu_write(esdm_sched_array[w_pos], data);
+	sched_array[w_pos] = data;
 	smp_store_release(this_cpu_ptr(&esdm_sched_array_wp),
 			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
 }
@@ -437,10 +437,18 @@ struct esdm_es_cb esdm_es_sched = {
 int __init esdm_es_sched_module_init(void)
 {
 	int ret;
+	int cpu;
 
 	if (!esdm_highres_timer()) {
 		pr_warn("Not registering sched. hook (missing highres timer)!\n");
 		return -EINVAL;
+	}
+
+	for_each_possible_cpu (cpu) {
+		u32** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
+		*sched_array_cpu = kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u32), GFP_KERNEL);
+		if (!(*sched_array_cpu))
+			goto free_mem;
 	}
 
 	/* switch to XDRBG, if upstream in the kernel */
@@ -465,10 +473,19 @@ int __init esdm_es_sched_module_init(void)
 		esdm_drbg_cb->drbg_name());
 
 	return 0;
+
+free_mem:
+	for_each_possible_cpu (cpu) {
+		u32** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
+		kfree(*sched_array_cpu);
+	}
+	return -ENOMEM;
 }
 
 void esdm_es_sched_module_exit(void)
 {
+	int cpu;
+
 	pr_warn("Unloading the ESDM Scheduler ES works only on a best effort basis for "
 		"development purposes!\n");
 
@@ -487,6 +504,11 @@ void esdm_es_sched_module_exit(void)
 	}
 
 	esdm_sched_reset();
+
+	for_each_possible_cpu (cpu) {
+		u32** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
+		kfree(*sched_array_cpu);
+	}
 
 	pr_info("ESDM Scheduler ES unregistered\n");
 }

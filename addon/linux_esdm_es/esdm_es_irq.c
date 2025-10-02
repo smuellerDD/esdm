@@ -44,7 +44,7 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated IRQ entropy events */
-static DEFINE_PER_CPU(u32[ESDM_DATA_NUM_VALUES], esdm_irq_array)
+static DEFINE_PER_CPU(u32 *, esdm_irq_array)
 	__aligned(ESDM_KCAPI_ALIGN);
 /* ring buffer read ptr */
 static DEFINE_PER_CPU(u32, esdm_irq_array_rp) = 0;
@@ -61,7 +61,7 @@ void __init esdm_irq_es_init(bool highres_timer)
 	BUG_ON(ESDM_ES_OSR <= 0 || ESDM_ES_OSR > 25);
 
 	/* reseeding possible with current array size? */
-	BUG_ON(ESDM_ES_OSR * (256 + 64) * 2 <= ESDM_DATA_NUM_VALUES);
+	BUG_ON(ESDM_ES_OSR * (256 + 64) * 2 > ESDM_DATA_NUM_VALUES);
 
 	/* Set a minimum number of interrupts that must be collected */
 	irq_entropy = max_t(u32, ESDM_IRQ_ENTROPY_BITS, irq_entropy);
@@ -92,7 +92,7 @@ static void esdm_irq_reset(void)
 	for_each_online_cpu (cpu) {
 		smp_store_release(per_cpu_ptr(&esdm_irq_array_rp, cpu), 0);
 		smp_store_release(per_cpu_ptr(&esdm_irq_array_wp, cpu), 0);
-		memzero_explicit(per_cpu_ptr(&esdm_irq_array, cpu),
+		memzero_explicit(*per_cpu_ptr(&esdm_irq_array, cpu),
 				 ESDM_DATA_NUM_VALUES * sizeof(u32));
 	}
 
@@ -197,7 +197,7 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 		if (w_pos > r_pos) {
 			drbg_string_fill(
 				seed_string_0,
-				(u8 *)(per_cpu_ptr(&esdm_irq_array, cpu) +
+				(u8 *)(*per_cpu_ptr(&esdm_irq_array, cpu) +
 				       r_pos),
 				used_events * sizeof(u32));
 			list_add_tail(&seed_string_0->list, &seedlist);
@@ -206,7 +206,7 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 
 			drbg_string_fill(
 				seed_string_0,
-				(u8 *)(per_cpu_ptr(&esdm_irq_array, cpu) +
+				(u8 *)(*per_cpu_ptr(&esdm_irq_array, cpu) +
 				       r_pos),
 				used_at_end * sizeof(u32));
 			list_add_tail(&seed_string_0->list, &seedlist);
@@ -214,7 +214,7 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 			if (used_at_end < used_events) {
 				drbg_string_fill(
 					seed_string_1,
-					(u8 *)per_cpu_ptr(&esdm_irq_array, cpu),
+					(u8 *)*per_cpu_ptr(&esdm_irq_array, cpu),
 					(used_events - used_at_end) * sizeof(u32));
 				list_add_tail(&seed_string_1->list, &seedlist);
 			}
@@ -333,6 +333,7 @@ out:
 
 static void esdm_irq_array_add(u32 data)
 {
+	u32 *irq_array = READ_ONCE(*this_cpu_ptr(&esdm_irq_array));
 	u32 w_pos = smp_load_acquire(this_cpu_ptr(&esdm_irq_array_wp));
 	u32 r_pos = READ_ONCE(*this_cpu_ptr(&esdm_irq_array_rp));
 
@@ -341,7 +342,7 @@ static void esdm_irq_array_add(u32 data)
 		return;
 	}
 
-	this_cpu_write(esdm_irq_array[w_pos], data);
+	esdm_irq_array[w_pos] = data;
 	smp_store_release(this_cpu_ptr(&esdm_irq_array_wp),
 			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
 }
@@ -437,6 +438,7 @@ static atomic_t esdm_es_irq_init_state = ATOMIC_INIT(esdm_es_init_unused);
 static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 {
 	int ret;
+	int cpu;
 
 	/*
 	 * We wait until the Linux-RNG is fully initialized and received
@@ -462,6 +464,13 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 		goto err;
 	}
 
+	for_each_possible_cpu (cpu) {
+		u32** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
+		*irq_array_cpu = kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u32), GFP_KERNEL);
+		if (!(*irq_array_cpu))
+			goto free_arrays;
+	}
+
 	ret = esdm_irq_register(esdm_add_interrupt_randomness);
 	if (ret) {
 		pr_warn("cannot register ESDM IRQ ES\n");
@@ -471,6 +480,12 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	pr_info("ESDM IRQ ES registered, DRBG: %s\n",
 		esdm_drbg_cb->drbg_name());
 	return;
+
+free_arrays:
+	for_each_possible_cpu (cpu) {
+		u32** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
+		kfree(*irq_array_cpu);
+	}
 
 err:
 	if (esdm_irq_drbg_state) {
@@ -484,6 +499,8 @@ static DECLARE_WORK(esdm_es_irq_set_callback, esdm_es_irq_set_callbackfn);
 
 int __init esdm_es_irq_module_init(void)
 {
+	int cpu;
+
 	if (!esdm_highres_timer()) {
 		pr_warn("Not registering IRQ hook (missing highres timer)!\n");
 		return -EINVAL;
@@ -503,6 +520,8 @@ int __init esdm_es_irq_module_init(void)
 
 void esdm_es_irq_module_exit(void)
 {
+	int cpu;
+
 	if (atomic_read(&esdm_es_irq_init_state) == esdm_es_init_unused)
 		return;
 
@@ -526,6 +545,11 @@ void esdm_es_irq_module_exit(void)
 		esdm_irq_drbg_state = NULL;
 	} else {
 		pr_warn("ESDM IRQ ES DRBG state was never registered!\n");
+	}
+
+	for_each_possible_cpu (cpu) {
+		u32** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
+		kfree(*irq_array_cpu);
 	}
 
 	pr_info("ESDM IRQ ES unregistered\n");
