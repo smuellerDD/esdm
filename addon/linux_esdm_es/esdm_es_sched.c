@@ -165,8 +165,15 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 	/* Always request DRBG security strength for each block, generate less
 	 * bytes with DRBG, if advised by partial_len */
 	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state);
-	requested_events = esdm_entropy_to_data(
-		requested_bits + esdm_compress_osr(), esdm_sched_entropy_bits);
+	if (!esdm_drbg_cb->drbg_is_initialized(esdm_sched_drbg_state)) {
+		requested_events = esdm_entropy_to_data(
+			requested_bits + esdm_init_osr(),
+			esdm_sched_entropy_bits);
+	} else {
+		requested_events = esdm_entropy_to_data(
+			requested_bits + esdm_compress_osr(),
+			esdm_sched_entropy_bits);
+	}
 
 	for_each_online_cpu (cpu) {
 		struct drbg_string *seed_string_0;
@@ -236,7 +243,11 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 	collected_ent_bits =
 		esdm_data_to_entropy(collected_events, esdm_sched_entropy_bits);
 	/* Apply oversampling: discount requested oversampling rate */
-	returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
+	if (!esdm_drbg_cb->drbg_is_initialized(esdm_sched_drbg_state)) {
+		returned_ent_bits = esdm_reduce_by_init_osr(collected_ent_bits);
+	} else {
+		returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
+	}
 
 	pr_debug(
 		"obtained %u bits by collecting %u bits of entropy from scheduler-based noise source\n",
@@ -312,9 +323,12 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 		return;
 	}
 
-	/* Only deliver, when at least all requested blocks are available, one compress osr for the
-	 * default case (no initialize with additional 128 Bit) is already counted in esdm_sched_avail_entropy() */
-	if (esdm_sched_avail_entropy(0) < full_blocks * esdm_security_strength + (full_blocks - 1) * esdm_compress_osr()) {
+	/*
+	 * Only deliver, when at least all requested blocks are available, one compress osr for the
+	 * default case (no initialize with additional 64 Bit) is already counted in esdm_sched_avail_entropy()
+	 * add additional 64 bit in order to match 128 extra bit on full init
+	 */
+	if (esdm_sched_avail_entropy(0) < full_blocks * esdm_security_strength + full_blocks * esdm_compress_osr()) {
 		return;
 	}
 

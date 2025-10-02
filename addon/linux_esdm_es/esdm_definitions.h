@@ -77,9 +77,21 @@ static inline u32 esdm_compress_osr(void)
 	return esdm_sp80090c_compliant() ? ESDM_OVERSAMPLE_ES_BITS : 0;
 }
 
+static inline u32 esdm_init_osr(void)
+{
+	return esdm_sp80090c_compliant() ? ESDM_SEED_BUFFER_INIT_ADD_BITS : 0;
+}
+
 static inline u32 esdm_reduce_by_osr(u32 entropy_bits)
 {
 	u32 osr_bits = esdm_compress_osr();
+
+	return (entropy_bits >= osr_bits) ? (entropy_bits - osr_bits) : 0;
+}
+
+static inline u32 esdm_reduce_by_init_osr(u32 entropy_bits)
+{
+	u32 osr_bits = esdm_init_osr();
 
 	return (entropy_bits >= osr_bits) ? (entropy_bits - osr_bits) : 0;
 }
