@@ -19,13 +19,13 @@
  * DAMAGE.
  */
 
-#define _DEFAULT_SOURCE
+#define _GNU_SOURCE
 #include <errno.h>
 #include <limits.h>
 #include <sys/random.h>
-#include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <poll.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -44,6 +44,8 @@
  * accordingly?
  */
 #undef ESDM_KRNG_ES_SELECT
+
+static uint32_t esdm_krng_properties_entropylevel(uint32_t entropylevel);
 
 #ifdef ESDM_KRNG_ES_SELECT
 static uint32_t krng_entropy = 0;
@@ -74,8 +76,8 @@ static int esdm_krng_adjust_entropy(void)
  */
 static int esdm_krng_init(void)
 {
-	struct timeval timeout;
-	fd_set fds;
+	struct timespec timeout;
+	struct pollfd pfd;
 	int ret = 0, fd = -1;
 
 	/* Re-invocation of init function is safe */
@@ -92,20 +94,20 @@ static int esdm_krng_init(void)
 
 	/* Select shall return after 100ms to check for cancel flag. */
 	timeout.tv_sec = 0;
-	timeout.tv_usec = 100 * 1000;
+	timeout.tv_nsec = 100 * 1000 * 1000;
 
-	FD_ZERO(&fds);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "Polling %s\n", DEVRANDOM);
 
 	/* only /dev/random implements polling */
 	do {
-		FD_ZERO(&fds);
-		FD_SET(fd, &fds);
-		ret = select((fd + 1), &fds, NULL, NULL, &timeout);
+		pfd.fd = fd;
+		pfd.events = POLLIN;
+		pfd.revents = 0;
+		ret = ppoll(&pfd, 1, &timeout, NULL);
 
 		if (ret == -1 && errno != EINTR) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_ES,
-				    "Select returned with error %s\n",
+				    "Poll returned with error %s\n",
 				    strerror(errno));
 			break;
 		}

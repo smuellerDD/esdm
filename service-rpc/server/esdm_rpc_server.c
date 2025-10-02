@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <protobuf-c/protobuf-c.h>
 #include <semaphore.h>
 #include <signal.h>
@@ -28,7 +29,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/shm.h>
-#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -610,18 +610,18 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		 */
 #ifndef ESDM_WORKERLOOP_TERM_ON_SIGNAL
 		for (;;) {
-			struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
-			fd_set fds;
-			int sret;
+			struct timespec timeout = { .tv_sec = 1, .tv_nsec = 0 };
+			struct pollfd pfd = {
+				.fd = proto->server_listening_fd,
+				.events = POLL_IN,
+				.revents = 0
+			};
+			int pret;
 
-			FD_ZERO(&fds);
-			FD_SET(proto->server_listening_fd, &fds);
-
-			sret = select(proto->server_listening_fd + 1, &fds,
-				      NULL, NULL, &timeout);
+			pret = ppoll(&pfd, 1,&timeout, NULL);
 
 			/* error */
-			if (sret == -1 && errno != EINTR) {
+			if (pret == -1 && errno != EINTR) {
 				esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 					    "Select returned with error %s\n",
 					    strerror(errno));
@@ -629,7 +629,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			}
 
 			/* activity */
-			if (sret > 0)
+			if (pret > 0)
 				break;
 
 			/* timeout - yet server shall exit */
@@ -765,7 +765,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		return -errsv;
 	}
 
-	if (listen(fd, 255) < 0) {
+	if (listen(fd, 5 * THREADING_MAX_THREADS) < 0) {
 		errsv = -errno;
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "RPC Server: cannot listen on socket: %s\n",
