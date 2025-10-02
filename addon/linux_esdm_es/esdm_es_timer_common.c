@@ -120,6 +120,10 @@ bool esdm_highres_timer(void)
 
 int __init esdm_init_time_source(void)
 {
+	static const u32 ESDM_DATA_WORD_MASK = 0xFFFFFFFF;
+
+	/* only 32 bit of the timestamp are stored later,
+	 * check if they sufficiently change */
 	if ((random_get_entropy() & ESDM_DATA_WORD_MASK) ||
 	    (random_get_entropy() & ESDM_DATA_WORD_MASK)) {
 		/*
