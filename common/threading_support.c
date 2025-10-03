@@ -35,6 +35,7 @@
 #include "mutex_w.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
+#include "xoshiro_prng.h"
 #include "visibility.h"
 
 #ifdef CONFIG_ESDM_USE_PTHREAD
@@ -108,6 +109,9 @@ static pthread_mutex_t thread_schedule_lock = PTHREAD_MUTEX_INITIALIZER;
 /* Waiting helper for the thread_wait function */
 static pthread_cond_t thread_wait_cv;
 static pthread_mutex_t thread_wait_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* PRNG handle for access randomization */
+static struct xoshiro_state prng_state;
 
 static inline unsigned int thread_get_special_slot(unsigned int thread_group)
 {
@@ -194,6 +198,8 @@ int thread_init(uint32_t groups)
 
 	threads_groups = groups;
 	threads_per_threadgroup = THREADING_MAX_THREADS / threads_groups;
+
+	xoshiro_init(&prng_state);
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
 		    "Initialized threading support for %u threads\n",
@@ -348,7 +354,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 
 	num_elements = upper - lower;
 	/* searching with random offset increases thread utilization under high load */
-	rand_offset = (unsigned int)rand() % num_elements;
+	rand_offset = (unsigned int)xoshiro_generate(&prng_state) % num_elements;
 	for (k = 0; k < num_elements; ++k) {
 		if (atomic_bool_read(&threads_in_cancel))
 			return -ESHUTDOWN;
