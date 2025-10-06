@@ -15,3 +15,11 @@ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 USE OF THIS SOFTWARE, EVEN IF NOT ADVISED OF THE POSSIBILITY OF SUCH
 DAMAGE.
 
+================================================================================
+
+The xoshiro256++ PRNG is derived from the code written in 2019 by David Blackman
+and Sebastiano Vigna. The following license applies:
+
+To the extent possible under law, the author has dedicated all copyright
+and related and neighboring rights to this software to the public domain
+worldwide.
