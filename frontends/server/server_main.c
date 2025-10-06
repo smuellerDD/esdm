@@ -36,7 +36,7 @@
 
 static unsigned int verbosity = 0;
 static unsigned int foreground = 0;
-/* "/var/run/esdm-rpc-server.pid" */
+/* "/run/esdm-rpc-server.pid" */
 static char *pidfile = NULL;
 static int pidfile_fd = -1;
 static const char *username = NULL;
