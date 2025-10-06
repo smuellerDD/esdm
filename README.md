@@ -131,8 +131,15 @@ services.esdm.enable = true;
 Please consult the current NixOS module for more finegrained settings.
 At the time of writing this, it was located in:
 
-```
+```nix
 nixpkgs/nixos/modules/services/security/esdm.nix
+```
+
+If you'd like to use the ESDM kernel seeder, /dev/(u)random and proc handler
+enable:
+
+```nix
+services.esdm.enableLinuxCompatServices = true;
 ```
 
 ### Using ESDM from Rust
@@ -293,6 +300,10 @@ The ESDM consists of the following components:
 
 * `esdm-tool`: This tool can be used to test ESDM and interact with it without
   building an own tool with the rpc_client library or using the CUSE devices.
+  With the help of esdm-tool `esdm-wait-unti-fully-seeded.service` is implemented.
+  Add this service as a dependency of your early system start if you'd like to
+  guarantee, that all services started in succession can expect ESDM to return
+  fast.
 
 IMPORTANT NOTE: The RPC interfaces between the components are present to ensure
 there is a proper security domain separation. The RPC protocol is not considered

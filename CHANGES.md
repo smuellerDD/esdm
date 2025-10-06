@@ -15,6 +15,30 @@ Changes 1.2.1-prerelease
 
 * NTG.1 updates to comply with AIS 20/31 v3.0
 
+* Linux kernel ES: Add cryptographic post-processing with state for esdm_es (SP800-90A DRBG).
+  Only use high resolution time code path from now on. All known current CPUs
+  support this and allow for storage of fixed with timestamps. Timestamps
+  are now stored per CPU and directly take part in a combined seed of multiple
+  per-CPU buffers via a scather gather list. Clear state when suspending or
+  rebooting.
+
+* Don't expose testing interface of esdm_es when in lockdown mode.
+
+* Add NIST test vectors for Botan HMAC-DRBG(SHA-512).
+
+* Fix: RDRAND feature detection.
+
+* Fix: performance with many worker threads on many core systems.
+
+* Added improved systemd support (notify, socket activation). Switch default
+  path to /run in order to prevent systemd deprecation notices. Small refactoring
+  of systemd service generation to unify socket and non-socket activation paths.
+
+* Fix: FIPS 140 init works now, added checksum generation to esdm-tool for better
+  scripting.
+
+* Add explicit OSR to esdm_es. Expose different ES' via Makefile options.
+
 Changes 1.2.0
 * fix: to prevent a DoS against the RPC channel, limit the slow operations of esdm_get_random_bytes_pr and esdm_get_seed to allow only one call in flight. If another call comes in while one process is ongoing, return -EAGAIN to free the RPC channel.
 
