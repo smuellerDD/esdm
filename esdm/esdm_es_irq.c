@@ -27,9 +27,8 @@
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_mgr.h"
 #include "esdm_es_irq.h"
-#include "esdm_es_sched.h"
+#include "esdm_es_mgr.h"
 #include "helper.h"
 #include "esdm_logger.h"
 #include "memset_secure.h"
