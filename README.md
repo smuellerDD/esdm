@@ -94,9 +94,8 @@ is enabled during compile time:
   [libfuse Github website](https://github.com/libfuse/libfuse/).
 
 * Botan >= 3.0: If the Botan backend for cryptographic operations shall be used
-  and is enabled as a compile time option, or if the Botan ESDM seed source
-  shall be compiled when the compile time option is enabled get Botan either
-  from your distribution or from the
+  and is enabled as a compile time option get Botan either from your distribution
+  or from the
   [botan Github website](https://github.com/randombit/botan).
 
 * OpenSSL >= 3.0: If the OpenSSL backend for cryptographic operations shall be
@@ -281,10 +280,6 @@ The ESDM consists of the following components:
 * `openssl-provider`: A random provider for OpenSSL 3.0 and greater is included.
   Load `libesdm-rng-provider.so` if all random numbers should originate in ESDM
   or `esdm-seed-src-provider.so` if ESDM should only be used as a source of seeds.
-
-* `botan-rng`: A small sample class for usage with Botan starting with version 3.0
-  is provided. Use it either by linking to `libesdm-botan-rng.so` or include it to your
-  code-base.
 
 * `esdm-server-signal-helper`: This small tool is used to support proper
   quiescing of the ESDM server when the system suspends or sleeps. When invoking
