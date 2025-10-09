@@ -354,7 +354,7 @@ static void esdm_irq_array_add(u32 data)
 		return;
 	}
 
-	esdm_irq_array[w_pos] = data;
+	irq_array[w_pos] = data;
 	smp_store_release(this_cpu_ptr(&esdm_irq_array_wp),
 			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
 }
