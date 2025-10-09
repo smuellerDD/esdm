@@ -271,8 +271,10 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 
 static void esdm_logger_destructor(void)
 {
-	if (esdm_logger_stream && esdm_logger_stream != stderr)
+	if (esdm_logger_stream && esdm_logger_stream != stderr) {
 		fclose(esdm_logger_stream);
+		esdm_logger_stream = NULL;
+	}
 
 	if (use_syslog)
 		closelog();
