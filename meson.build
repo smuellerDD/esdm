@@ -22,7 +22,8 @@ project('esdm', 'c',
 		'b_asneeded=true',
 		# set a fixed C std in order to not be compiler dependent here
 		'c_std=gnu17',
-		# set the C++ std for the botan frontend here, C++ only gets used if botan-rng is enabled
+		# set the C++ std for the botan frontend here, C++ only gets used
+		# if the botan crypto backend is enabled
 		'cpp_std=c++20',
 	])
 
@@ -56,7 +57,7 @@ endif
 if cc.has_argument('-ffat-lto-objects')
 	add_global_arguments([ '-ffat-lto-objects' ],
 			     language: 'c')
-	if get_option('crypto_backend') == 'botan' or get_option('botan-rng').enabled()
+	if get_option('crypto_backend') == 'botan'
 		add_global_arguments([ '-ffat-lto-objects' ],
 				language: 'cpp')
 	endif
@@ -132,10 +133,6 @@ if get_option('esdm-server').disabled() and get_option('linux-getrandom').enable
 	error('Linux getrandom support requires the ESDM server')
 endif
 
-if get_option('esdm-server').disabled() and get_option('botan-rng').enabled()
-	error('Botan RNG support requires the ESDM server')
-endif
-
 if get_option('esdm-server').disabled() and get_option('openssl-rand-provider').enabled()
 	error('OpenSSL RAND provider support requires the ESDM server')
 endif
@@ -179,18 +176,13 @@ if get_option('crypto_backend') == 'leancrypto'
 	leancrypto_dep = dependency('leancrypto', version: '>= 1.0', required: true)
 endif
 
-if get_option('crypto_backend') == 'botan' or get_option('botan-rng').enabled()
+if get_option('crypto_backend') == 'botan'
 	add_languages('cpp', required: true)
 	botan_dep = dependency('botan-3', version: '>= 3.0', required: true)
 endif
 
 if get_option('crypto_backend') == 'openssl' or get_option('openssl-rand-provider').enabled()
 	openssl_dep = dependency('openssl', version : '>=3.0', required: true)
-endif
-
-if get_option('botan-rng').enabled()
-	subdirs += [ 'frontends/botan-rng' ]
-	include_dirs_botan_rng = [ include_directories('frontends/botan-rng') ]
 endif
 
 if get_option('openssl-rand-provider').enabled()
@@ -236,11 +228,6 @@ testdirs = [
 	#'tests/misc',
 	'tests/rpc_client',
 	]
-if get_option('botan-rng').enabled()
-	testdirs += [
-		'tests/botan-rng',
-	]
-endif
 if get_option('openssl-rand-provider').enabled()
 testdirs += [
 	'tests/openssl-rand-provider',
