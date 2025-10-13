@@ -1,6 +1,6 @@
 /* SP800-90A DRBG generic interface functions
  *
- * Copyright Stephan Mueller <smueller@chronox.de>, 2022 - 2024
+ * Copyright Stephan Mueller <smueller@chronox.de>, 2022 - 2025
  *
  * License: see LICENSE file in root directory
  *

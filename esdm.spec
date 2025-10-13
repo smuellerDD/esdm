@@ -1,7 +1,7 @@
 #
 # spec file for package esdm
 #
-# Copyright (c) 2024 Stephan Mueller <smueller@chronox.de
+# Copyright (c) 2024 - 2025 Stephan Mueller <smueller@chronox.de
 #
 
 Name:           esdm
