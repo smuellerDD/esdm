@@ -1,4 +1,4 @@
-Changes 1.2.1-prerelease
+Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 
 * Add helper tool to externalize the C API to command line (thanks to Markus Theil)
