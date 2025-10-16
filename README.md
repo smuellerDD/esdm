@@ -141,6 +141,11 @@ enable:
 services.esdm.enableLinuxCompatServices = true;
 ```
 
+### Building an RPM
+
+The ESDM code distribution contains an RPM SPEC file which can be used to
+generate RPMs from it. This SPEC file is tested using the [OpenSUSE Build Service](https://build.opensuse.org/project/show/home:smuellerDD).
+
 ### Using ESDM from Rust
 
 A small helper crate for ESDM usage together with Rust's rand crate can
