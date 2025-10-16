@@ -22,15 +22,31 @@
 
 #if defined(__powerpc__)
 
+#include <sys/auxv.h>
+
 #include "bool.h"
 
 #define ESDM_CPU_ES_IMPLEMENTED
 
 #define PPC_DARN_ERR 0xFFFFFFFFFFFFFFFFul
+static inline int darn_available(void)
+{
+	unsigned long c = getauxval(AT_HWCAP2);
+
+	return !!(c & PPC_FEATURE2_DARN);
+}
+
 static inline bool cpu_es_get(unsigned long *buf)
 {
 	unsigned long val;
 	unsigned int i;
+	static int darn_avail = -1;
+
+	if (darn_avail == -1) {
+		darn_avail = darn_available();
+	}
+	if (!darn_avail)
+		return false;
 
 	/*
 	 * Using DARN with
