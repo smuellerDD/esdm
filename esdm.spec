@@ -37,6 +37,7 @@ Summary:        Entropy Source and DRNG Manager
 Requires:       libjitterentropy
 Requires:       libleancrypto1
 Requires:       libprotobuf
+Requires:       systemd
 
 %description %{name}
 The Entropy Source and DRNG Manager (ESDM) manages a set of deterministic
@@ -82,6 +83,7 @@ used for development.
 %package -n %{name}-cuse
 Summary:        Entropy Source and DRNG Manager CUSE device files
 Requires:       fuse3
+Requires:       systemd
 Requires:       %{name} = %{version}
 
 %description -n %{name}-cuse
@@ -124,66 +126,78 @@ This subpackage holds the OpenSSL 3 RAND provider
 %meson_install
 
 %pre -n %{name}
-%systemd_add_pre %{name}-server.service
-%systemd_add_pre %{name}-server-suspend.service
-%systemd_add_pre %{name}-server-resume.service
+%service_add_pre %{name}-server.service
+%service_add_pre %{name}-server-suspend.service
+%service_add_pre %{name}-server-resume.service
+%service_add_pre %{name}-kernel-seeder.service
+%service_add_pre %{name}-wait-until-fully-seeded.service
 
 %pre -n %{name}-cuse
-%systemd_add_pre %{name}-linux-compat.target
+%service_add_pre %{name}-linux-compat.target
 
 %post -n %{name}
 /sbin/ldconfig
-%systemd_add_post %{name}-server.service
-%systemd_add_post %{name}-server-suspend.service
-%systemd_add_post %{name}-server-resume.service
+%service_add_post %{name}-server.service
+%service_add_post %{name}-server-suspend.service
+%service_add_post %{name}-server-resume.service
+%service_add_post %{name}-kernel-seeder.service
+%service_add_post %{name}-wait-until-fully-seeded.service
 
-  if [ $1 -eq 1 ]; then
-    /usr/bin/systemctl daemon-reload
-    /usr/bin/systemctl start %{name}-server
-    /usr/bin/systemctl enable %{name}-server
-    /usr/bin/systemctl enable %{name}-server-suspend
-    /usr/bin/systemctl enable %{name}-server-resume
-  fi
-  if [ $1 -eq 2 ]; then
-    /usr/bin/systemctl daemon-reload
-    /usr/bin/systemctl start %{name}-server
-    /usr/bin/systemctl enable %{name}-server
-    /usr/bin/systemctl enable %{name}-server-suspend
-    /usr/bin/systemctl enable %{name}-server-resume
-  fi
+#   if [ $1 -eq 1 ]; then
+#     %{_bindir}/systemctl daemon-reload
+#     %{_bindir}/systemctl start %{name}-server
+#     %{_bindir}/systemctl enable %{name}-serversys
+#     %{_bindir}/systemctl enable %{name}-server-suspend
+#     %{_bindir}/systemctl enable %{name}-server-resume
+#     %{_bindir}/systemctl enable %{name}-kernel-seeder
+#     %{_bindir}/systemctl enable %{name}-wait-until-fully-seeded
+#   fi
+#   if [ $1 -eq 2 ]; then
+#     %{_bindir}/systemctl daemon-reload
+#     %{_bindir}/systemctl start %{name}-server
+#     %{_bindir}/systemctl enable %{name}-server
+#     %{_bindir}/systemctl enable %{name}-server-suspend
+#     %{_bindir}/systemctl enable %{name}-server-resume
+#     %{_bindir}/systemctl enable %{name}-kernel-seeder
+#     %{_bindir}/systemctl enable %{name}-wait-until-fully-seeded
+#   fi
 
 %post -n %{name}-cuse
-%systemd_add_post %{name}-linux-compat.target
+%service_add_post %{name}-linux-compat.target
 
-  if [ $1 -eq 1 ]; then
-    /usr/bin/systemctl daemon-reload
-    /usr/bin/systemctl start %{name}-linux-compat.target
-    /usr/bin/systemctl enable %{name}-linux-compat.target
-  fi
-  if [ $1 -eq 2 ]; then
-    /usr/bin/systemctl daemon-reload
-    /usr/bin/systemctl start %{name}-linux-compat.target
-    /usr/bin/systemctl enable %{name}-linux-compat.target
-  fi
+#   if [ $1 -eq 1 ]; then
+#     %{_bindir}/systemctl daemon-reload
+#     %{_bindir}/systemctl start %{name}-linux-compat.target
+#     %{_bindir}/systemctl enable %{name}-linux-compat.target
+#   fi
+#   if [ $1 -eq 2 ]; then
+#     %{_bindir}/systemctl daemon-reload
+#     %{_bindir}/systemctl start %{name}-linux-compat.target
+#     %{_bindir}/systemctl enable %{name}-linux-compat.target
+#   fi
 
 %post -n %{name}-openssl -p /sbin/ldconfig
 
 %preun -n %{name}
-%systemd_del_preun %{name}-server.service
-%systemd_del_preun %{name}-server-suspend.service
-%systemd_del_preun %{name}-server-resume.service
+%service_del_preun %{name}-server.service
+%service_del_preun %{name}-server-suspend.service
+%service_del_preun %{name}-server-resume.service
+%service_del_preun %{name}-kernel-seeder.service
+%service_del_preun %{name}-wait-until-fully-seeded.service
 
 %preun -n %{name}-cuse
-%systemd_del_preun %{name}-linux-compat.target
+%service_del_preun %{name}-linux-compat.target
 
 %postun -n %{name}
 /sbin/ldconfig
-%systemd_del_postun %{name}-server.service
-%systemd_del_postun %{name}-server-suspend.service
-%systemd_del_postun %{name}-server-resume.service
+%service_del_postun %{name}-server.service
+%service_del_postun %{name}-server-suspend.service
+%service_del_postun %{name}-server-resume.service
+%service_del_postun %{name}-kernel-seeder.service
+%service_del_postun %{name}-wait-until-fully-seeded.service
 
 %postun -n %{name}-cuse
-%systemd_del_postun %{name}-linux-compat.target
+%service_del_postun %{name}-linux-compat.target
 
 %postun -n %{name}-openssl -p /sbin/ldconfig
 
@@ -197,7 +211,11 @@ This subpackage holds the OpenSSL 3 RAND provider
 %{_libdir}/pkgconfig/%{name}_*.pc
 %{_libdir}/pkgconfig/%{name}-*.pc
 %{_bindir}/esdm-server*
+%{_bindir}/esdm-kernel-seeder
+%{_bindir}/esdm-tool
 %{_unitdir}/esdm-server*
+%{_unitdir}/esdm-kernel-seeder*
+%{_unitdir}/esdm-wait-until-fully-seeded*
 
 %files -n %{name}-cuse
 %{_bindir}/esdm-cuse*

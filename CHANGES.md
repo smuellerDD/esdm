@@ -1,3 +1,8 @@
+Changes 1.2.2-prerelease
+* RPM SPEC file fixes for openSUSE
+
+* add PPC DARN instruction availability check
+
 Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 
