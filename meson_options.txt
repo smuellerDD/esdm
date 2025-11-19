@@ -344,6 +344,15 @@ option('num-aux-pools', type: 'integer', value: 1, min: 1, max: 1024,
        on seed bursts.
        ''')
 
+option('aux-has-full-entropy', type: 'feature', value: 'disabled',
+       description: '''The auxiliary entropy source will apply oversampling,
+       if SP800-90C mode is enabled, because it has to assume by default,
+       that its interrupts did not have full entropy (small error term allowed).
+
+       Disable it with this option, if e.g. only output from an approved smartcard
+       is inserted into the pool and you know it has full entropy.
+       ''')
+
 option('systemd', type: 'feature', value: 'enabled',
        description: '''Enable support for systemd notify and systemd socket activation
 

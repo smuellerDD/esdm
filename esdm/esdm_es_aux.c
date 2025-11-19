@@ -43,7 +43,7 @@
 /*
  * This is the auxiliary pool
  *
- * The aux pool array is aligned to 8 bytes to comfort any used 
+ * The aux pool array is aligned to 8 bytes to comfort any used
  * cipher implementations of the hash functions used to read the pool: for some
  * accelerated implementations, we need an alignment to avoid a realignment
  * which involves memcpy(). The alignment to 8 bytes should satisfy all crypto
@@ -132,7 +132,11 @@ static void esdm_set_digestsize_pool(struct esdm_pool *pool,
 
 static void esdm_set_wakeup_bits(void)
 {
+#ifdef ESDM_AUX_INPUT_HAS_FULL_ENTROPY
+	uint32_t digestsize = esdm_get_digestsize();
+#else
 	uint32_t digestsize = esdm_reduce_by_osr(esdm_get_digestsize());
+#endif
 
 	esdm_write_wakeup_bits = ESDM_NUM_AUX_POOLS * digestsize;
 }
@@ -539,7 +543,11 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 
 	/* Ensure that no more than the size of aux_pool can be requested */
 	requested_bits = min_uint32(requested_bits, (ESDM_MAX_DIGESTSIZE << 3));
+#ifdef ESDM_AUX_INPUT_HAS_FULL_ENTROPY
+	requested_bits_osr = requested_bits;
+#else
 	requested_bits_osr = requested_bits + esdm_compress_osr();
+#endif
 
 	/* Cap entropy with entropy counter from aux pool and the used digest */
 	collected_ent_bits =
@@ -625,7 +633,11 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 		 * We found the pool that can already provide all our entropy
 		 * needs (including the discount for the OSR), take it.
 		 */
+#ifdef ESDM_AUX_INPUT_HAS_FULL_ENTROPY
+		if (requested_bits <= max_entropy) {
+#else
 		if (requested_bits + esdm_compress_osr() <= max_entropy) {
+#endif
 			locked_pool = true;
 			break;
 		}
