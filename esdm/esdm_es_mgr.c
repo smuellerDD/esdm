@@ -23,6 +23,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
@@ -44,6 +45,7 @@
 #include "esdm_shm_status.h"
 #include "helper.h"
 #include "esdm_logger.h"
+#include "linux_support.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "queue.h"
@@ -679,6 +681,8 @@ int esdm_es_mgr_initialize(void)
 			data[(ESDM_MAX_DIGESTSIZE / sizeof(unsigned long))];
 	} seed __aligned(ESDM_KCAPI_ALIGN);
 	struct timespec timeval;
+	char *pers_string = NULL;
+	size_t pers_length = 0;
 	unsigned int i;
 	int ret = 0;
 
@@ -710,6 +714,20 @@ int esdm_es_mgr_initialize(void)
 
 	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
 	memset_secure(&seed, 0, sizeof(seed));
+
+	/* insert machine specific personalization string, if available */
+	if (linux_personalization_string(&pers_string, &pers_length)) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "Insert personalization string \"%s\" into all aux pools\n", pers_string);
+		esdm_pool_insert_aux((uint8_t *)pers_string, pers_length, 0);
+		memset_secure(pers_string, 0, pers_length);
+		free(pers_string);
+		pers_string = NULL;
+		pers_length = 0;
+	} else {
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
+			    "Unable to fetch personalization string for insertion into all aux pools\n");
+	}
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		    "Force fully seeding of all DRBGs\n");
