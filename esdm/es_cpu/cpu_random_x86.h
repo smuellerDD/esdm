@@ -149,11 +149,21 @@ static inline unsigned int cpu_es_multiplier(void)
 	/* Invoke check twice in case the first time the gather loop failed */
 	if (!cpu_es_x86_rdseed(&v) && !cpu_es_x86_rdseed(&v)) {
 		/*
-		 * Intel SPEC: pulling more than 511 128 Bit blocks from RDRAND ensures
+		 * Intel DRNG Software IG:
+		 * pulling more than 511 128 Bit blocks from RDRAND ensures
 		 * one reseed making it logically equivalent to RDSEED. So pull at least
 		 * 1023 64 Bit sub-blocks.
+		 *
+		 * AMD uses AES CTR-DRBG with 256 bit keys for RDRAND
+		 * Intel is not explicit in this document, so we have to assume
+		 * AES CTR-DRBG with 128 bit keys for RDRAND. So double the
+		 * amount of rounds for at least 2 128 bit seeds on every hardware.
+		 *
+		 * See:
+		 * https://www.intel.com/content/www/us/en/content-details/864722/intel-digital-random-number-generator-software-implementation-guide.html
+		 * https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/white-papers/amd-random-number-generator.pdf
 		 */
-		return 1024;
+		return 2 * 1024;
 	}
 
 	return 1;
