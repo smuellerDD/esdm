@@ -20,7 +20,6 @@
 #ifndef LINUX_SUPPORT_H
 #define LINUX_SUPPORT_H
 
-#include "bool.h"
 #include "config.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -33,7 +32,7 @@ extern "C" {
 #ifdef ESDM_LINUX
 int linux_isolate_namespace(void);
 int linux_isolate_namespace_prefork(void);
-bool linux_personalization_string(char **ptr, size_t *length);
+int linux_personalization_string(char **ptr, size_t *length);
 #else
 static inline int linux_isolate_namespace(void)
 {
@@ -43,7 +42,7 @@ static inline int linux_isolate_namespace_prefork(void)
 {
 	return 0;
 }
-static inline bool linux_personalization_string(char **ptr, size_t *length)
+static inline int linux_personalization_string(char **ptr, size_t *length)
 {
 	static const char *personalization = "ESDM";
 
@@ -52,8 +51,10 @@ static inline bool linux_personalization_string(char **ptr, size_t *length)
 
 	*length = strlen(personalization);
 	*ptr = strndup(personalization, *length);
+	if (!*ptr)
+		return -errno;
 
-	return true;
+	return 0;
 }
 #endif
 

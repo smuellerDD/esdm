@@ -89,11 +89,11 @@ int linux_isolate_namespace(void)
 	return 0;
 }
 
-bool linux_personalization_string(char **ptr, size_t *length)
+int linux_personalization_string(char **ptr, size_t *length)
 {
 	FILE *f = fopen("/sys/class/dmi/id/product_uuid", "r");
 	char buf[128] = {0};
-	bool success = false;
+	int ret;
 
 	assert(*ptr == NULL);
 	assert(*length == 0);
@@ -102,7 +102,9 @@ bool linux_personalization_string(char **ptr, size_t *length)
 		int errsv = errno;
 
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-			    "Unable to open product_uuid file: %s\n", strerror(errsv));
+			    "Unable to open product_uuid file: %s\n",
+			    strerror(errsv));
+		ret = -errsv;
 		goto out;
 	}
 
@@ -110,21 +112,34 @@ bool linux_personalization_string(char **ptr, size_t *length)
 		int errsv = errno;
 
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-			    "Unable to read product_uuid file: %s\n", strerror(errsv));
+			    "Unable to read product_uuid file: %s\n",
+			    strerror(errsv));
+		ret = -errsv;
 		goto out_close;
 	}
 
 	/* Remove trailing newline */
 	for (char *p = buf; *p; p++) {
-		if (*p == '\n') *p = '\0';
+		if (*p == '\n')
+			*p = '\0';
 	}
 
-	success = true;
 	*length = strnlen(buf, 128 - 1);
 	*ptr = strndup(buf, *length);
+	if (!*ptr) {
+		int errsv = errno;
+
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Unable to duplicate string: %s\n",
+			    strerror(errsv));
+		ret = -errsv;
+		goto out_close;
+	}
+
+	ret = 0;
 
 out_close:
 	fclose(f);
 out:
-	return success;
+	return ret;
 }

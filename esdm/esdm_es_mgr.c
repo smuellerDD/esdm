@@ -712,22 +712,15 @@ int esdm_es_mgr_initialize(void)
 		}
 	}
 
-	esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0);
-	memset_secure(&seed, 0, sizeof(seed));
+	CKINT(esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0));
 
 	/* insert machine specific personalization string, if available */
-	if (linux_personalization_string(&pers_string, &pers_length)) {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-			    "Insert personalization string \"%s\" into all aux pools\n", pers_string);
-		esdm_pool_insert_aux((uint8_t *)pers_string, pers_length, 0);
-		memset_secure(pers_string, 0, pers_length);
-		free(pers_string);
-		pers_string = NULL;
-		pers_length = 0;
-	} else {
-		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
-			    "Unable to fetch personalization string for insertion into all aux pools\n");
-	}
+	CKINT_LOG(linux_personalization_string(&pers_string, &pers_length),
+		  "Unable to fetch personalization string for insertion into all aux pools\n");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+		    "Insert personalization string \"%s\" into all aux pools\n",
+		    pers_string);
+	CKINT(esdm_pool_insert_aux((uint8_t *)pers_string, pers_length, 0));
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		    "Force fully seeding of all DRBGs\n");
@@ -735,6 +728,11 @@ int esdm_es_mgr_initialize(void)
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES, "All DRBGs fully seeded\n");
 
 out:
+	memset_secure(&seed, 0, sizeof(seed));
+	if (pers_string) {
+		memset_secure(pers_string, 0, pers_length);
+		free(pers_string);
+	}
 	return ret;
 }
 
