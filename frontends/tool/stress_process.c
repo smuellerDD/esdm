@@ -45,10 +45,12 @@ static void process_fn(double timeout_sec, long id, int sock_fd,
 	exit(EXIT_SUCCESS);
 }
 
-static void handle_sigint()
+static void handle_sigint(int signal)
 {
 	long cores = sysconf(_SC_NPROCESSORS_ONLN);
 	long i;
+
+	(void)signal;
 
 	if (atomic_bool_cmpxchg(&should_terminate, false, true)) {
 		for (i = 0; i < cores; ++i) {

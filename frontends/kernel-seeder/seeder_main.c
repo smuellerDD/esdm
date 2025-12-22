@@ -36,6 +36,7 @@
 #include "config.h"
 #include "atomic_bool.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "memset_secure.h"
 
 static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
@@ -156,7 +157,8 @@ static void usage(void)
 static int handle_reseeding(int64_t seeding_interval_secs)
 {
 	uint8_t rpi_buf[sizeof(struct rand_pool_info) +
-			ESDM_SERVER_LINUX_ENTROPY_BYTES];
+			ESDM_SERVER_LINUX_ENTROPY_BYTES]
+			__aligned(sizeof(uint32_t));
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
 
 	/* Wake up every 2 minutes by default */
@@ -292,7 +294,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	esdm_logger_set_verbosity(verbosity);
+	esdm_logger_set_verbosity((enum esdm_logger_verbosity)verbosity);
 
 	if (help) {
 		usage();

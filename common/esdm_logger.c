@@ -233,7 +233,7 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
 		if (use_syslog) {
-			log_syslog(esdm_logger_verbosity_level,
+			log_syslog((int)esdm_logger_verbosity_level,
 				   "(%s) {%s} [%s:%s:%u] %s", thread_name, c,
 				   file, func, line, msg);
 		} else {
@@ -253,8 +253,8 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	case LOGGER_MAX_LEVEL:
 	default:
 		if (use_syslog) {
-			log_syslog(esdm_logger_verbosity_level, "(%s) {%s} %s",
-				   thread_name, c, msg);
+			log_syslog((int)esdm_logger_verbosity_level,
+				   "(%s) {%s} %s", thread_name, c, msg);
 		} else {
 			fprintf_color(esdm_logger_stream,
 				      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s: ",

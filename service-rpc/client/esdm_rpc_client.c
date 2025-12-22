@@ -978,7 +978,7 @@ static pid_t owner_pid_unprivileged = -1;
 static pid_t owner_pid_privileged = -1;
 
 /* does nothing, if no connections were allocated and nums are 0 */
-static void cleanup_after_fork_unprivileged()
+static void cleanup_after_fork_unprivileged(void)
 {
 	uint32_t i;
 
@@ -989,7 +989,7 @@ static void cleanup_after_fork_unprivileged()
 }
 
 /* does nothing, if no connections were allocated and nums are 0 */
-static void cleanup_after_fork_privileged()
+static void cleanup_after_fork_privileged(void)
 {
 	uint32_t i;
 

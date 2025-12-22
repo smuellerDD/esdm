@@ -137,7 +137,7 @@ static void handle_usage(void)
 #endif
 }
 
-static void handle_status()
+static void handle_status(void)
 {
 	char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
 	memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
@@ -152,7 +152,7 @@ static void handle_status()
 	}
 }
 
-static int handle_is_fully_seeded()
+static int handle_is_fully_seeded(void)
 {
 	int ret = 0;
 	bool fully_seeded = false;
@@ -233,7 +233,7 @@ static int handle_get_random(size_t num_rand_bytes, enum RANDOM_MODE mode,
 	return EXIT_SUCCESS;
 }
 
-static int handle_entropy_count()
+static int handle_entropy_count(void)
 {
 	int ret = 0;
 	unsigned int ent_cnt = 0;
@@ -251,7 +251,7 @@ static int handle_entropy_count()
 	return EXIT_SUCCESS;
 }
 
-static int handle_entropy_level()
+static int handle_entropy_level(void)
 {
 	int ret = 0;
 	unsigned int ent_lvl = 0;
@@ -454,7 +454,7 @@ static int handle_reseed_crng(void)
 	return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-static int handle_is_running()
+static int handle_is_running(void)
 {
 	int i;
 	const char *files_to_check[] = { ESDM_RPC_UNPRIV_SOCKET,
@@ -569,7 +569,7 @@ static int handle_endless_stress(bool continue_on_failure)
 	return EXIT_SUCCESS;
 }
 
-static int handle_stress_fork()
+static int handle_stress_fork(void)
 {
 	const int max_fork_depth = 5;
 	int fork_depth = 0;
@@ -603,7 +603,7 @@ static int handle_stress_fork()
 }
 
 #ifdef ESDM_HAS_AUX_CLIENT
-static int handle_seed_via_os()
+static int handle_seed_via_os(void)
 {
 	uint8_t seed_buffer[512 / 8];
 	int ret_val = EXIT_SUCCESS;
