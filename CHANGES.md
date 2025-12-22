@@ -3,6 +3,8 @@ Changes 1.2.2-prerelease
 
 * add PPC DARN instruction availability check
 
+* fix crasher in CUSE poller thread
+
 Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 

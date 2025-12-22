@@ -67,13 +67,8 @@ static int esdm_cuse_shm_status_avail(void)
 	int ret = (esdm_cuse_shm_status &&
 		   esdm_cuse_shm_status->version == ESDM_SHM_STATUS_VERSION);
 
-	if (ret && !initialized) {
+	if (ret && !initialized)
 		initialized = 1;
-		esdm_logger_status(
-			LOGGER_C_CUSE,
-			"CUSE client started detected ESDM server with properties:\n%s\n",
-			esdm_cuse_shm_status->info);
-	}
 
 	return ret;
 }
@@ -264,6 +259,7 @@ static void esdm_cuse_term(void)
 static void esdm_cuse_sig_handler(int sig)
 {
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Received signal %d\n", sig);
+
 	esdm_cuse_term();
 
 	signal(SIGABRT, SIG_DFL);
@@ -973,7 +969,6 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 			esdm_cuse_polls[i].poll_events = 0;
 		}
 		mutex_w_unlock(&esdm_cuse_ph_lock);
-
 		esdm_cuse_shm_status_down();
 	}
 

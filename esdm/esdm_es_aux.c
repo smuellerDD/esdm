@@ -520,8 +520,8 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 	}
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-		    "Aux Pool %zu selected to insert data\n",
-		    pool_with_max_entropy_capacity);
+		    "Aux Pool %zu selected to insert %zu bytes of data with %u bits of entropy\n",
+		    pool_with_max_entropy_capacity, inbuflen, entropy_bits);
 
 	/* Insert the buffer with the entropy into the selected entropy pool. */
 	CKINT(esdm_pool_insert_aux_unlocked(
@@ -713,7 +713,7 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 
 static uint32_t esdm_aux_max_entropy(void)
 {
-	return esdm_get_digestsize() * ESDM_NUM_AUX_POOLS;
+	return esdm_reduce_by_osr(esdm_get_digestsize()) * ESDM_NUM_AUX_POOLS;
 }
 
 static void esdm_aux_es_state(char *buf, size_t buflen)
@@ -727,7 +727,7 @@ static void esdm_aux_es_state(char *buf, size_t buflen)
 		 " Maximum entropy: %u\n"
 		 " Pools: %u\n"
 		 " Write wakeup threshold: %u\n"
-		 " Digestsize: %u",
+		 " Digestsize: %u\n",
 		 esdm_drng_init->hash_cb->hash_name(),
 		 esdm_aux_avail_entropy(0), esdm_aux_max_entropy(),
 		 ESDM_NUM_AUX_POOLS, esdm_write_wakeup_bits,
