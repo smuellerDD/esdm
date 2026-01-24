@@ -5,6 +5,8 @@ Changes 1.2.2-prerelease
 
 * fix crasher in CUSE poller thread
 
+* fix compilation with systemd=disabled
+
 Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 

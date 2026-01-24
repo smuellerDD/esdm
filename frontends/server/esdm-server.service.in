@@ -36,7 +36,7 @@ Wants=systemd-modules-load.service
 After=systemd-modules-load.service
 
 [Service]
-Type=notify
+@SERVICE_TYPE@
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/hwrng r
 DeviceAllow=/dev/random r

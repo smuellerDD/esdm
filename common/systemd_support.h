@@ -24,12 +24,12 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-#ifdef ESDM_SYSTEMD_SUPPORT
 /*
  * systemd socket activation related code
  */
 #define SYSTEMD_LISTEN_FDS_START 3
 
+#ifdef ESDM_SYSTEMD_SUPPORT
 /*
  * systemd notify related code
  *

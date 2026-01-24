@@ -27,6 +27,8 @@ if get_option('systemd').enabled()
 	# SOCKET ACTIVATION END
 	'''
 	)
+
+	server_conf_data.set('SERVICE_TYPE', 'Type=notify')
 else
 	server_conf_data.set('UNIT_SNIPPET', '''
 	# NO SOCKET ACTIVATION BEGIN
@@ -37,6 +39,8 @@ else
 	# NO SOCKET ACTIVATION END
 	'''
 	)
+
+	server_conf_data.set('SERVICE_TYPE', '')
 endif
 esdm_server_service = configure_file(
 	input : 'esdm-server.service.in',
