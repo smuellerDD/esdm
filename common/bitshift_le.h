@@ -30,6 +30,11 @@ extern "C" {
  * Conversion of Little-Endian representations in byte streams - the data
  * representation in the integer values is the host representation.
  */
+static inline uint16_t ptr_to_le16(const uint8_t *p)
+{
+	return (uint16_t)p[0] | (uint16_t)p[1] << 8;
+}
+
 static inline uint32_t ptr_to_le32(const uint8_t *p)
 {
 	return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 |
@@ -39,6 +44,12 @@ static inline uint32_t ptr_to_le32(const uint8_t *p)
 static inline uint64_t ptr_to_le64(const uint8_t *p)
 {
 	return (uint64_t)ptr_to_le32(p) | (uint64_t)ptr_to_le32(p + 4) << 32;
+}
+
+static inline void le16_to_ptr(uint8_t *p, const uint16_t value)
+{
+	p[0] = (uint8_t)(value);
+	p[1] = (uint8_t)(value >> 8);
 }
 
 static inline void le32_to_ptr(uint8_t *p, const uint32_t value)

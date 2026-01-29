@@ -40,6 +40,11 @@ static inline uint32_t ptr_to_32(const uint8_t *p)
 	return ptr_to_be32(p);
 }
 
+static inline uint32_t ptr_to_16(const uint8_t *p)
+{
+	return ptr_to_be16(p);
+}
+
 #elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 
 static inline uint64_t ptr_to_64(const uint8_t *p)
@@ -50,6 +55,11 @@ static inline uint64_t ptr_to_64(const uint8_t *p)
 static inline uint32_t ptr_to_32(const uint8_t *p)
 {
 	return ptr_to_le32(p);
+}
+
+static inline uint32_t ptr_to_16(const uint8_t *p)
+{
+	return ptr_to_le16(p);
 }
 
 #else

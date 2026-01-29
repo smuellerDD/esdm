@@ -121,6 +121,10 @@ conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
 conf_data.set('ESDM_HWRAND_ENTROPY_RATE',
 	      get_option('es_hwrand_entropy_rate'))
 
+conf_data.set('ESDM_ES_TPM2', get_option('es_tpm2').enabled())
+conf_data.set('ESDM_TPM2_ENTROPY_RATE',
+	      get_option('es_tpm2_entropy_rate'))
+
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))

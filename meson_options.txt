@@ -225,6 +225,19 @@ When configuring this value to 0, the CPU entropy source will provide
 ''')
 
 ################################################################################
+# TPM 2.0 Entropy Source configuration options
+################################################################################
+
+option('es_tpm2', type: 'feature', value: 'enabled',
+       description: '''Enable support for TPM 2.0 entropy source.
+''')
+
+# Option for: ESDM_TPM2_ENTROPY_RATE
+option('es_tpm2_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+       description:'''TPM 2.0 entropy source entropy rate.
+''')
+
+################################################################################
 # Linux-kernel jitterentropy Entropy Source
 ################################################################################
 
