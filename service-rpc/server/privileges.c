@@ -30,15 +30,28 @@
 #include "privileges.h"
 #include "visibility.h"
 
-int drop_privileges_permanent(const char *user)
+int drop_privileges_permanent(const char *user, const char *group)
 {
+	const struct group *grp;
 	const struct passwd *pwd;
+
 	uid_t uid;
 	gid_t gid;
 	int ret = 0;
 
 	if (!user)
 		return -EINVAL;
+
+	if (group != NULL) {
+		grp = getgrnam(group);
+		if (!grp) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "Group %s unknown\n",
+				    group);
+			return -ENOENT;
+		}
+	} else {
+		grp = NULL;
+	}
 
 	ret = linux_isolate_namespace();
 	if (ret)
@@ -54,13 +67,23 @@ int drop_privileges_permanent(const char *user)
 	uid = pwd->pw_uid;
 	gid = pwd->pw_gid;
 
-	/* Drop all supplemental groups */
-	if (setgroups(0, NULL) == -1) {
-		ret = -errno;
-		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-			    "Cannot clear supplemental groups: %s\n",
-			    strerror(errno));
-		return ret;
+	if (grp) {
+		if (setgroups(1, &grp->gr_gid) == -1) {
+			ret = -errno;
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				"Cannot set supplemental groups: %s\n",
+				strerror(errno));
+			return ret;
+		}
+	} else {
+		/* Drop all supplemental groups */
+		if (setgroups(0, NULL) == -1) {
+			ret = -errno;
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				"Cannot clear supplemental groups: %s\n",
+				strerror(errno));
+			return ret;
+		}
 	}
 
 	/* Drop privileged group */

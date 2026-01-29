@@ -27,7 +27,7 @@ extern "C" {
 /**
  * @brief Permanently dropping privileges
  */
-int drop_privileges_permanent(const char *username);
+int drop_privileges_permanent(const char *username, const char *groupname);
 
 #ifdef __cplusplus
 }
