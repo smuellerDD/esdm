@@ -1103,7 +1103,7 @@ out:
  *	* The current thread processes the privileged RPC interface.
  *	* A newly started thread processes the unprivileged RPC interface.
  */
-static int esdm_rpcs_interfaces_init(const char *username)
+static int esdm_rpcs_interfaces_init(const char *username, const char *groupname)
 {
 	struct esdm_rpcs priv_proto;
 	ProtobufCService *priv_service =
@@ -1148,7 +1148,7 @@ static int esdm_rpcs_interfaces_init(const char *username)
 			   esdm_rpcs_state_unpriv_init));
 
 	/* Permanently drop all privileges */
-	CKINT(drop_privileges_permanent(username ? username : "nobody"));
+	CKINT(drop_privileges_permanent(username ? username : "nobody", groupname ? groupname : NULL));
 
 	/* Notify all unpriv handler threads that they can become active */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_perm_dropped);
@@ -1190,7 +1190,7 @@ static int esdm_rpc_server_es_monitor(void __unused *unused)
 	return esdm_init_monitor(esdm_rpc_priv_init_complete);
 }
 
-int esdm_rpc_server_init(const char *username)
+int esdm_rpc_server_init(const char *username, const char *groupname)
 {
 	int ret = 0;
 
@@ -1223,7 +1223,7 @@ int esdm_rpc_server_init(const char *username)
 	esdm_logger(LOGGER_WARN, LOGGER_C_RPC, "RPC server started\n");
 
 	/* start the RPC server threads */
-	esdm_rpcs_interfaces_init(username);
+	esdm_rpcs_interfaces_init(username, groupname);
 
 out:
 	return ret;

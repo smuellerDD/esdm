@@ -40,6 +40,7 @@ static unsigned int foreground = 0;
 static char *pidfile = NULL;
 static int pidfile_fd = -1;
 static const char *username = NULL;
+static const char *groupname = NULL;
 
 /*******************************************************************
  * Forward Declarations
@@ -69,6 +70,8 @@ static void usage(void)
 	fprintf(stderr, "\t-p --pid\tWrite daemon PID to file\n");
 	fprintf(stderr,
 		"\t-u --username\tUnprivileged user name to switch to (default: \"nobody\")\n");
+	fprintf(stderr,
+		"\t-g --groupname\tSupplemental group name to switch to (default: none)\n");
 	fprintf(stderr, "\t-f --foreground\tExecute in foreground\n");
 	fprintf(stderr,
 		"\t-i --force_irqes\tForce to enable IRQ ES where the ESDM\n");
@@ -104,9 +107,10 @@ static void parse_opts(int argc, char *argv[])
 			{ "jent_block_disable", 0, 0, 0 },
 			{ "syslog", 0, 0, 0 },
 			{ "raise_sched_priority", 0, 0, 0 },
+			{ "groupname", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "hvp:u:fisSP", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fisSPg:", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -162,6 +166,10 @@ static void parse_opts(int argc, char *argv[])
 				/* raise_sched_priority */
 				daemon_raise_sched_priority();
 				break;
+			case 11:
+				/* groupname */
+				groupname = optarg;
+				break;
 
 			default:
 				usage();
@@ -178,6 +186,9 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'u':
 			username = optarg;
+			break;
+		case 'g':
+			groupname = optarg;
 			break;
 		case 'f':
 			foreground = 1;
@@ -214,7 +225,7 @@ static int daemon_init(void)
 	int ret;
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER, "Starting ESDM server\n");
-	CKINT(esdm_rpc_server_init(username));
+	CKINT(esdm_rpc_server_init(username, groupname));
 
 out:
 	return ret;

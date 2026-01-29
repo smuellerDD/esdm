@@ -80,3 +80,18 @@ int esdm_safe_read(int fd, uint8_t *buf, size_t buflen)
 
 	return buflen ? -errno : 0;
 }
+
+int esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
+{
+	ssize_t writelen;
+
+	do {
+		writelen = write(fd, buf, buflen);
+		if (writelen > 0) {
+			buflen -= (size_t)writelen;
+			buf += (size_t)writelen;
+		}
+	} while ((0 < writelen || errno == EINTR) && buflen);
+
+	return buflen ? -errno : 0;
+}

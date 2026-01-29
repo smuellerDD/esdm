@@ -276,6 +276,55 @@ When configuring this value to 0, the CPU entropy source will provide
 ''')
 
 ################################################################################
+# TPM 2.0 Entropy Source configuration options
+################################################################################
+
+option('es_tpm2', type: 'feature', value: 'enabled',
+       description: '''Enable support for TPM 2.0 entropy source.
+
+The ESDM may use a TPM 2.0 chip as entropy source. Enabling
+this option enables the use of the TPM 2.0 random number generator
+to seed the ESDM.
+
+Note, if this option is enabled and the underlying system
+does not offer a TPM 2.0 chip, the ESDM will
+automatically detect this and ignore the hardware.
+''')
+
+option('es_tpm2_stir', type: 'feature', value: 'disabled',
+       description: '''Enable TPM 2.0 stir support.
+
+When enabled, the ESDM forces the internal TPM 2.0 DRBG to reseed
+from its hardware entropy source before obtaining random data.
+This ensures that fresh entropy is used but is typically very slow.
+Only enable this if you require the additional assurance of a freshly
+reseeded TPM 2.0 DRBG.
+''')
+
+# Option for: ESDM_TPM2_ENTROPY_RATE
+option('es_tpm2_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+       description:'''TPM 2.0 entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256
+bits of data obtained from the TPM 2.0 entropy source. The ESDM
+enforces the limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the TPM 2.0 entropy source will provide
+256 bits of data without being credited to contain entropy.
+''')
+
+option('es_tpm2_rm_path', type: 'string', value: '/dev/tpmrm0',
+       description: '''TPM 2.0 resource manager device path.
+
+The option defines the path to the TPM 2.0 resource manager device
+used by the ESDM to access the TPM 2.0 chip. The default path is
+/dev/tpmrm0 which is the standard Linux TPM resource manager device.
+
+Adjust this path if your system provides the TPM 2.0 resource manager
+at a different location.
+''')
+
+################################################################################
 # Linux-kernel jitterentropy Entropy Source
 ################################################################################
 
