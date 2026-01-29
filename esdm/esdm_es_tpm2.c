@@ -141,6 +141,7 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 			       rsp->responseCode == TPM2_RC_TESTING;
 	} while(should_retry && retries < max_retries);
 
+	ret = rsp->responseCode == TPM2_RC_SUCCESS;
 out:
 	memset_secure(buf, 0, sizeof(buf));
 	return ret;
