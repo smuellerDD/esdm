@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
  *
  * License: see LICENSE file in root directory
  *
@@ -17,20 +17,16 @@
  * DAMAGE.
  */
 
-#ifndef PRIVILEGES_H
-#define PRIVILEGES_H
+#ifndef _ESDM_ES_TPM2_H
+#define _ESDM_ES_TPM2_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "config.h"
+#include "esdm_es_mgr_cb.h"
 
-/**
- * @brief Permanently dropping privileges
- */
-int drop_privileges_permanent(const char *username, const char *groupname);
+#ifdef ESDM_ES_TPM2
 
-#ifdef __cplusplus
-}
-#endif
+extern struct esdm_es_cb esdm_es_tpm2;
 
-#endif /* PRIVILEGES_H */
+#endif /* ESDM_ES_TPM2 */
+
+#endif /* _ESDM_ES_TPM2_H */

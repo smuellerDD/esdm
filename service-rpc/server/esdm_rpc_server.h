@@ -41,7 +41,7 @@ extern "C" {
  */
 bool esdm_rpc_client_is_privileged(void *closure_data);
 
-int esdm_rpc_server_init(const char *username);
+int esdm_rpc_server_init(const char *username, const char *groupname);
 void esdm_rpc_server_fini(void);
 
 #ifdef __cplusplus

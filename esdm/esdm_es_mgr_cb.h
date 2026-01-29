@@ -56,6 +56,9 @@ enum esdm_external_es {
 #ifdef ESDM_ES_HWRAND
 	esdm_ext_es_hwrand, /* Linux /dev/hwrng */
 #endif
+#ifdef ESDM_ES_TPM2
+	esdm_ext_es_tpm2, /* Linux TPM 2.0 */
+#endif
 #ifdef ESDM_ES_JENT_KERNEL
 	esdm_ext_es_jent_kernel, /* Linux jitterentropy in kernel */
 #endif
