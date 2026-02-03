@@ -1062,6 +1062,12 @@ static void esdm_rpcs_cleanup_term(int sig)
 		kill(server_pid, sig);
 }
 
+static void esdm_rpcs_relay_signal(int sig)
+{
+	if (server_pid > 0)
+		kill(server_pid, sig);
+}
+
 static void esdm_rpc_priv_init_complete(void)
 {
 	if (atomic_read(&esdm_rpc_init_state) != esdm_rpcs_state_uninitialized)
@@ -1160,6 +1166,8 @@ int esdm_rpc_server_init(const char *username)
 		 */
 		server_pid = pid;
 		esdm_rpcs_cleanup_signals(esdm_rpcs_cleanup_term);
+
+		signal(SIGUSR1, esdm_rpcs_relay_signal);
 
 		/* Now wait for the server to finish. */
 		waitpid(pid, NULL, 0);

@@ -118,7 +118,7 @@ static void parse_opts(int argc, char *argv[])
 				break;
 			case 1:
 				/* pid */
-				pidfile = optarg;
+				pidfile = strdup(optarg);
 				break;
 			case 2:
 				/* help */
@@ -240,8 +240,11 @@ static void dealloc(void)
 	if (pidfile_fd != -1) {
 		close(pidfile_fd);
 		pidfile_fd = -1;
-		if (pidfile != NULL)
+		if (pidfile != NULL) {
 			unlink(pidfile);
+			free(pidfile);
+			pidfile = NULL;
+		}
 	}
 
 	daemon_release();
@@ -270,6 +273,7 @@ static void install_term(void)
 {
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 		    "Install termination signal handler\n");
+
 	signal(SIGHUP, sig_term);
 	signal(SIGINT, sig_term);
 	signal(SIGQUIT, sig_term);

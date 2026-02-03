@@ -7,6 +7,8 @@ Changes 1.2.2-prerelease
 
 * fix compilation with systemd=disabled
 
+* esdm-server: Fix handling of SIGUSR1 sent by suspend/resume helper (they caused the server to terminate)
+
 Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 
