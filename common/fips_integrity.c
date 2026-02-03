@@ -36,8 +36,8 @@
 
 #include "binhexbin.h"
 #include "fips_integrity.h"
-#include "lc_hmac.h"
-#include "lc_sha256.h"
+#include "esdm_hmac.h"
+#include "esdm_sha256.h"
 
 static const char fipscheck_hmackey[] = "orboDeJITITejsirpADONivirpUkvarP";
 #define FIPS_INTEGRITY_LOGGER_PREFIX "FIPS Integrity POST: "
@@ -159,7 +159,7 @@ out:
 
 static int process_checkfile(const char *checkfile, const char *targetfile)
 {
-	LC_HMAC_CTX_ON_STACK(hmac_ctx, lc_sha256);
+	ESDM_HMAC_CTX_ON_STACK(hmac_ctx, esdm_sha256);
 	FILE *file = NULL;
 	int ret = 0, checked_any = 0;
 	uint32_t size = 0;
@@ -207,7 +207,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 		size_t hexhashlen = 0; // length of hash hex value
 		size_t linelen = strlen(buf);
 		size_t i;
-		unsigned char calculated[LC_SHA_MAX_SIZE_DIGEST];
+		unsigned char calculated[ESDM_SHA_MAX_SIZE_DIGEST];
 
 		if (linelen == 0)
 			break;
@@ -235,12 +235,12 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 		if (ret < 0)
 			goto out;
 
-		lc_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
+		esdm_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
 			     sizeof(fipscheck_hmackey) - 1);
-		lc_hmac_update(hmac_ctx, memblock, size);
-		lc_hmac_final(hmac_ctx, calculated);
+		esdm_hmac_update(hmac_ctx, memblock, size);
+		esdm_hmac_final(hmac_ctx, calculated);
 
-		if (lc_hmac_macsize(hmac_ctx) != binhashlen) {
+		if (esdm_hmac_macsize(hmac_ctx) != binhashlen) {
 			fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
 				"Calculated MAC length has unexpected length - integrity violation\n");
 			free(binhash);
@@ -265,7 +265,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 		ret = -EBADF;
 
 out:
-	lc_hmac_zero(hmac_ctx);
+	esdm_hmac_zero(hmac_ctx);
 	if (file)
 		fclose(file);
 	if (memblock)
@@ -300,14 +300,14 @@ FILE *fopen_if_not_exists(const char *filename, const char *mode) {
 
 int fips_create_checkfile(const char *checkfile, const char *targetfile)
 {
-	LC_HMAC_CTX_ON_STACK(hmac_ctx, lc_sha256);
+	ESDM_HMAC_CTX_ON_STACK(hmac_ctx, esdm_sha256);
 	uint8_t *memblock = NULL;
 	size_t hexhashlen = 0;
 	char *hexhash = NULL;
 	FILE *file = NULL;
 	int ret = 0;
 	uint32_t size = 0;
-	uint8_t calculated[LC_SHA_MAX_SIZE_DIGEST];
+	uint8_t calculated[ESDM_SHA_MAX_SIZE_DIGEST];
 	size_t written;
 
 	file = strcmp(checkfile, "-") ? fopen_if_not_exists(checkfile, "w") : stdin;
@@ -320,14 +320,14 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 	if (ret)
 		goto out;
 
-	lc_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
+	esdm_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
 		     sizeof(fipscheck_hmackey) - 1);
-	lc_hmac_update(hmac_ctx, memblock, size);
-	lc_hmac_final(hmac_ctx, calculated);
+	esdm_hmac_update(hmac_ctx, memblock, size);
+	esdm_hmac_final(hmac_ctx, calculated);
 
-	ret = bin2hex_alloc(calculated, lc_hmac_macsize(hmac_ctx),
+	ret = bin2hex_alloc(calculated, esdm_hmac_macsize(hmac_ctx),
 			    &hexhash, &hexhashlen);
-	lc_hmac_zero(hmac_ctx);
+	esdm_hmac_zero(hmac_ctx);
 	if (ret)
 		goto out;
 
@@ -343,7 +343,7 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 	}
 
 out:
-	lc_hmac_zero(hmac_ctx);
+	esdm_hmac_zero(hmac_ctx);
 	if (file)
 		fclose(file);
 	if (memblock)
