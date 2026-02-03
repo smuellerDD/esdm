@@ -85,10 +85,10 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 					   uint32_t multiplier)
 {
 #if defined(ESDM_HASH_SHA512)
-	LC_HASH_CTX_ON_STACK(shash, lc_sha512);
+	ESDM_HASH_CTX_ON_STACK(shash, esdm_sha512);
 	bool shash_free = false;
 #elif defined(ESDM_HASH_SHA3_512)
-	LC_HASH_CTX_ON_STACK(shash, lc_sha3_512);
+	ESDM_HASH_CTX_ON_STACK(shash, esdm_sha3_512);
 	bool shash_free = false;
 #else
 	void *shash = NULL;

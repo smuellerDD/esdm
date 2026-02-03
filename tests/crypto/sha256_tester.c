@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lc_sha256.h"
+#include "esdm_sha256.h"
 
 static int sha256_tester(void)
 {
@@ -32,11 +32,11 @@ static int sha256_tester(void)
 					   0x89, 0xb4, 0xde, 0x27, 0x74, 0x44,
 					   0xa7, 0x7f, 0x77, 0xcb, 0x97, 0x89,
 					   0x6f, 0xf4 };
-	uint8_t act[LC_SHA256_SIZE_DIGEST];
+	uint8_t act[ESDM_SHA256_SIZE_DIGEST];
 
-	printf("hash ctx len %lu\n", LC_HASH_CTX_SIZE(lc_sha256));
-	lc_hash(lc_sha256, msg_256, sizeof(msg_256), act);
-	if (memcmp(act, exp_256, LC_SHA256_SIZE_DIGEST))
+	printf("hash ctx len %lu\n", ESDM_HASH_CTX_SIZE(esdm_sha256));
+	esdm_hash(esdm_sha256, msg_256, sizeof(msg_256), act);
+	if (memcmp(act, exp_256, ESDM_SHA256_SIZE_DIGEST))
 		return 1;
 
 	return 0;

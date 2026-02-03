@@ -17,8 +17,8 @@
  * DAMAGE.
  */
 
-#ifndef LC_DRBG_H
-#define LC_DRBG_H
+#ifndef ESDM_DRBG_H
+#define ESDM_DRBG_H
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -41,20 +41,20 @@ extern "C" {
  * of individual buffers. The order of memory block referenced in that
  * linked list determines the order of concatenation.
  */
-struct lc_drbg_string {
+struct esdm_drbg_string {
 	const uint8_t *buf;
 	size_t len;
-	struct lc_drbg_string *next;
+	struct esdm_drbg_string *next;
 };
 
-enum lc_drbg_prefixes {
+enum esdm_drbg_prefixes {
 	DRBG_PREFIX0 = 0x00,
 	DRBG_PREFIX1,
 	DRBG_PREFIX2,
 	DRBG_PREFIX3
 };
 
-static inline void lc_drbg_string_fill(struct lc_drbg_string *string,
+static inline void esdm_drbg_string_fill(struct esdm_drbg_string *string,
 				       const uint8_t *buf, size_t len)
 {
 	string->buf = buf;
@@ -62,13 +62,13 @@ static inline void lc_drbg_string_fill(struct lc_drbg_string *string,
 	string->next = NULL;
 }
 
-static inline size_t lc_drbg_max_request_bytes(void)
+static inline size_t esdm_drbg_max_request_bytes(void)
 {
 	/* SP800-90A requires the limit 2**19 bits, but we return bytes */
 	return (1 << 16);
 }
 
-static inline size_t lc_drbg_max_addtl(void)
+static inline size_t esdm_drbg_max_addtl(void)
 {
 	/* SP800-90A requires 2**35 bytes additional info str / pers str */
 #if (__BITS_PER_LONG == 32)
@@ -87,17 +87,17 @@ static inline size_t lc_drbg_max_addtl(void)
  * Generic DRBG API
  ******************************************************************/
 
-struct lc_drbg_state {
-	void (*drbg_int_seed)(struct lc_drbg_state *drbg,
-			      struct lc_drbg_string *seed);
-	size_t (*drbg_int_generate)(struct lc_drbg_state *drbg, uint8_t *buf,
+struct esdm_drbg_state {
+	void (*drbg_int_seed)(struct esdm_drbg_state *drbg,
+			      struct esdm_drbg_string *seed);
+	size_t (*drbg_int_generate)(struct esdm_drbg_state *drbg, uint8_t *buf,
 				    size_t buflen,
-				    struct lc_drbg_string *addtl);
-	void (*drbg_int_zero)(struct lc_drbg_state *drbg);
+				    struct esdm_drbg_string *addtl);
+	void (*drbg_int_zero)(struct esdm_drbg_state *drbg);
 	unsigned int seeded : 1;
 };
 
-#define _LC_DRBG_SET_CTX(name, seeder, generator, zeroer)                      \
+#define _ESDM_DRBG_SET_CTX(name, seeder, generator, zeroer)                      \
 	name->drbg_int_seed = seeder;                                          \
 	name->drbg_int_generate = generator;                                   \
 	name->drbg_int_zero = zeroer;                                          \
@@ -116,7 +116,7 @@ struct lc_drbg_state {
  *
  * @return 0 on success, negative error value otherwise
  */
-int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
+int esdm_drbg_seed(struct esdm_drbg_state *drbg, const uint8_t *seedbuf,
 		 size_t seedlen, const uint8_t *persbuf, size_t perslen);
 
 /**
@@ -133,7 +133,7 @@ int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
  *
  * @return generated number of bytes on success, negative error value otherwise
  */
-ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
+ssize_t esdm_drbg_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
 			 size_t buflen, const uint8_t *addtlbuf,
 			 size_t addtllen);
 
@@ -145,13 +145,13 @@ ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
  *
  * @return: 0 on success, < 0 on error
  */
-void lc_drbg_zero_free(struct lc_drbg_state *drbg);
+void esdm_drbg_zero_free(struct esdm_drbg_state *drbg);
 
 /**
  * @brief Zeroize DRBG context allocated with either DRBG_CTX_ON_STACK or
  *	  drbg_alloc
  */
-static inline void lc_drbg_zero(struct lc_drbg_state *drbg)
+static inline void esdm_drbg_zero(struct esdm_drbg_state *drbg)
 {
 	drbg->seeded = 0;
 	drbg->drbg_int_zero(drbg);
@@ -173,10 +173,10 @@ static inline void lc_drbg_zero(struct lc_drbg_state *drbg)
  *
  * @return: 0 on success, < 0 on error
  */
-int lc_drbg_healthcheck_sanity(struct lc_drbg_state *drbg);
+int esdm_drbg_healthcheck_sanity(struct esdm_drbg_state *drbg);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LC_DRBG_H */
+#endif /* ESDM_DRBG_H */

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2020 - 2025, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
@@ -17,29 +17,22 @@
  * DAMAGE.
  */
 
-#ifndef LC_CHACHA20_H
-#define LC_CHACHA20_H
+#ifndef ESDM_SHA256_H
+#define ESDM_SHA256_H
 
-#include "lc_sym.h"
+#include "esdm_hash.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern const struct lc_sym *lc_chacha20;
+#define ESDM_SHA256_SIZE_BLOCK 64
+#define ESDM_SHA256_SIZE_DIGEST 32
 
-/**
- * @brief ChaCha20 block function
- *
- * Block operation from the ChaCah20 state
- *
- * @param [in] state ChaCha20 state from which to derive the block output
- * @param [out] stream ChaCha20 key stream output
- */
-void cc20_block(struct lc_sym_state *state, uint32_t *stream);
+extern const struct esdm_hash *esdm_sha256;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LC_CHACHA20_H */
+#endif /* ESDM_SHA256_H */

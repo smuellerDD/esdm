@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 - 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
@@ -17,22 +17,29 @@
  * DAMAGE.
  */
 
-#ifndef LC_SHA512_H
-#define LC_SHA512_H
+#ifndef ESDM_HASH_DRBG_SHA512_H
+#define ESDM_HASH_DRBG_SHA512_H
 
-#include "lc_hash.h"
+#include "esdm_sha512.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define LC_SHA512_SIZE_BLOCK 128
-#define LC_SHA512_SIZE_DIGEST 64
+#if defined(ESDM_DRBG_HASH_STATELEN) || defined(ESDM_DRBG_HASH_BLOCKLEN) ||        \
+	defined(ESDM_DRBG_HASH_CORE)
+#error "You have included more than one DRBG header file!"
+#endif
 
-extern const struct lc_hash *lc_sha512;
+#define ESDM_DRBG_HASH_STATELEN 111
+#define ESDM_DRBG_HASH_BLOCKLEN 64
+
+#define ESDM_DRBG_HASH_CORE esdm_sha512
+
+#include "esdm_hash_drbg.h"
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LC_SHA512_H */
+#endif /* ESDM_HASH_DRBG_SHA512_H */

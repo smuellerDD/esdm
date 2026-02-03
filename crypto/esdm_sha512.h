@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2020 - 2025, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
@@ -17,34 +17,22 @@
  * DAMAGE.
  */
 
-#ifndef LC_CHACHA20_PRIVATE_H
-#define LC_CHACHA20_PRIVATE_H
+#ifndef ESDM_SHA512_H
+#define ESDM_SHA512_H
 
-#include <stdint.h>
+#include "esdm_hash.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define LC_CC20_KEY_SIZE 32
-#define LC_CC20_KEY_SIZE_WORDS (LC_CC20_KEY_SIZE / sizeof(uint32_t))
+#define ESDM_SHA512_SIZE_BLOCK 128
+#define ESDM_SHA512_SIZE_DIGEST 64
 
-/* State according to RFC 7539 section 2.3 */
-struct lc_sym_state {
-	uint32_t constants[4];
-	union {
-		uint32_t u[LC_CC20_KEY_SIZE_WORDS];
-		uint8_t b[LC_CC20_KEY_SIZE];
-	} key;
-	uint32_t counter;
-	uint32_t nonce[3];
-};
-
-#define LC_CC20_BLOCK_SIZE sizeof(struct lc_sym_state)
-#define LC_CC20_BLOCK_SIZE_WORDS (LC_CC20_BLOCK_SIZE / sizeof(uint32_t))
+extern const struct esdm_hash *esdm_sha512;
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LC_CHACHA20_PRIVATE_H */
+#endif /* ESDM_SHA512_H */

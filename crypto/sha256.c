@@ -21,14 +21,14 @@
 #include <string.h>
 
 #include "bitshift_be.h"
-#include "lc_sha256.h"
+#include "esdm_sha256.h"
 #include "memset_secure.h"
 #include "visibility.h"
 
-struct lc_hash_state {
+struct esdm_hash_state {
 	uint32_t H[8];
 	size_t msg_len;
-	uint8_t partial[LC_SHA256_SIZE_BLOCK];
+	uint8_t partial[ESDM_SHA256_SIZE_BLOCK];
 };
 
 static const uint32_t sha256_K[] = {
@@ -45,7 +45,7 @@ static const uint32_t sha256_K[] = {
 	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
-static void sha256_init(struct lc_hash_state *ctx)
+static void sha256_init(struct esdm_hash_state *ctx)
 {
 	ctx->H[0] = 0x6a09e667;
 	ctx->H[1] = 0xbb67ae85;
@@ -71,7 +71,7 @@ static inline uint32_t ror(uint32_t x, int n)
 #define s0(x) (ror(x, 7) ^ ror(x, 18) ^ (x >> 3))
 #define s1(x) (ror(x, 17) ^ ror(x, 19) ^ (x >> 10))
 
-static inline void sha256_transform(struct lc_hash_state *ctx,
+static inline void sha256_transform(struct esdm_hash_state *ctx,
 				    const uint8_t *in)
 {
 	uint32_t W[64], a, b, c, d, e, f, g, h, T1, T2;
@@ -123,16 +123,16 @@ static inline void sha256_transform(struct lc_hash_state *ctx,
 		W[i] = 0;
 }
 
-static void sha256_update(struct lc_hash_state *ctx, const uint8_t *in,
+static void sha256_update(struct esdm_hash_state *ctx, const uint8_t *in,
 			  size_t inlen)
 {
-	unsigned int partial = ctx->msg_len % LC_SHA256_SIZE_BLOCK;
+	unsigned int partial = ctx->msg_len % ESDM_SHA256_SIZE_BLOCK;
 
 	ctx->msg_len += inlen;
 
 	/* Check if we have a partial block stored */
 	if (partial) {
-		unsigned int todo = LC_SHA256_SIZE_BLOCK - partial;
+		unsigned int todo = ESDM_SHA256_SIZE_BLOCK - partial;
 
 		/*
 		 * If the provided data is small enough to fit in the partial
@@ -155,17 +155,17 @@ static void sha256_update(struct lc_hash_state *ctx, const uint8_t *in,
 	}
 
 	/* Perform a transformation of full block-size messages */
-	for (; inlen >= LC_SHA256_SIZE_BLOCK;
-	     inlen -= LC_SHA256_SIZE_BLOCK, in += LC_SHA256_SIZE_BLOCK)
+	for (; inlen >= ESDM_SHA256_SIZE_BLOCK;
+	     inlen -= ESDM_SHA256_SIZE_BLOCK, in += ESDM_SHA256_SIZE_BLOCK)
 		sha256_transform(ctx, in);
 
 	/* If we have data left, copy it into the partial block buffer */
 	memcpy(ctx->partial, in, inlen);
 }
 
-static void sha256_final(struct lc_hash_state *ctx, uint8_t *digest)
+static void sha256_final(struct esdm_hash_state *ctx, uint8_t *digest)
 {
-	unsigned int i, partial = ctx->msg_len % LC_SHA256_SIZE_BLOCK;
+	unsigned int i, partial = ctx->msg_len % ESDM_SHA256_SIZE_BLOCK;
 
 	/*
 	 * We know a-priori that we have at least one byte free in the partial
@@ -179,24 +179,24 @@ static void sha256_final(struct lc_hash_state *ctx, uint8_t *digest)
 	 * store the final 16 bytes that is supposed to hold the message length
 	 * in bits, transform it.
 	 */
-	if (partial > (LC_SHA256_SIZE_BLOCK - (2 * sizeof(uint32_t)))) {
+	if (partial > (ESDM_SHA256_SIZE_BLOCK - (2 * sizeof(uint32_t)))) {
 		memset(ctx->partial + partial, 0,
-		       LC_SHA256_SIZE_BLOCK - partial);
+		       ESDM_SHA256_SIZE_BLOCK - partial);
 		partial = 0;
 		sha256_transform(ctx, ctx->partial);
 	}
 
 	/* Fill the unused part of the partial buffer with zeros */
-	memset(ctx->partial + partial, 0, LC_SHA256_SIZE_BLOCK - partial);
+	memset(ctx->partial + partial, 0, ESDM_SHA256_SIZE_BLOCK - partial);
 
 	/* Add the message length in bits at the end of the partial buffer */
 	ctx->msg_len <<= 3;
-	be64_to_ptr(ctx->partial + (LC_SHA256_SIZE_BLOCK - 8), ctx->msg_len);
+	be64_to_ptr(ctx->partial + (ESDM_SHA256_SIZE_BLOCK - 8), ctx->msg_len);
 
 	/* Final transformation */
 	sha256_transform(ctx, ctx->partial);
 
-	memset_secure(ctx->partial, 0, LC_SHA256_SIZE_BLOCK);
+	memset_secure(ctx->partial, 0, ESDM_SHA256_SIZE_BLOCK);
 
 	/* Output digest */
 	for (i = 0; i < 8; i++, digest += 4) {
@@ -207,20 +207,20 @@ static void sha256_final(struct lc_hash_state *ctx, uint8_t *digest)
 	}
 }
 
-static size_t sha256_get_digestsize(struct lc_hash_state *ctx)
+static size_t sha256_get_digestsize(struct esdm_hash_state *ctx)
 {
 	(void)ctx;
-	return LC_SHA256_SIZE_DIGEST;
+	return ESDM_SHA256_SIZE_DIGEST;
 }
 
-static const struct lc_hash _sha256 = {
+static const struct esdm_hash _sha256 = {
 	.init = sha256_init,
 	.update = sha256_update,
 	.final = sha256_final,
 	.set_digestsize = NULL,
 	.get_digestsize = sha256_get_digestsize,
-	.blocksize = LC_SHA256_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA256_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
 
-DSO_PUBLIC const struct lc_hash *lc_sha256 = &_sha256;
+DSO_PUBLIC const struct esdm_hash *esdm_sha256 = &_sha256;

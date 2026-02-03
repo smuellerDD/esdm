@@ -21,14 +21,14 @@
 
 #include "build_bug_on.h"
 #include "bitshift_le.h"
-#include "lc_sha3.h"
+#include "esdm_sha3.h"
 #include "memset_secure.h"
 #include "visibility.h"
 
 #define SHA3_STATE_WORDS 25
 #define SHA3_STATE_SIZE (SHA3_STATE_WORDS * sizeof(uint64_t))
-struct lc_hash_state {
-	uint8_t partial[LC_SHA3_MAX_SIZE_BLOCK];
+struct esdm_hash_state {
+	uint8_t partial[ESDM_SHA3_MAX_SIZE_BLOCK];
 	uint64_t state[SHA3_STATE_WORDS];
 	size_t msg_len;
 	size_t digestsize;
@@ -165,7 +165,7 @@ static inline void keccakp_1600(uint64_t s[25])
 
 /*********************************** SHA-3 ************************************/
 
-static inline void sha3_init(struct lc_hash_state *ctx)
+static inline void sha3_init(struct esdm_hash_state *ctx)
 {
 	unsigned int i;
 
@@ -175,85 +175,85 @@ static inline void sha3_init(struct lc_hash_state *ctx)
 	ctx->squeeze_more = 0;
 }
 
-static void sha3_224_init(struct lc_hash_state *ctx)
+static void sha3_224_init(struct esdm_hash_state *ctx)
 {
 	sha3_init(ctx);
-	ctx->r = LC_SHA3_224_SIZE_BLOCK;
-	ctx->rword = LC_SHA3_224_SIZE_BLOCK / sizeof(uint64_t);
-	ctx->digestsize = LC_SHA3_224_SIZE_DIGEST;
+	ctx->r = ESDM_SHA3_224_SIZE_BLOCK;
+	ctx->rword = ESDM_SHA3_224_SIZE_BLOCK / sizeof(uint64_t);
+	ctx->digestsize = ESDM_SHA3_224_SIZE_DIGEST;
 	ctx->padding = 0x06;
 }
 
-static size_t sha3_224_digestsize(struct lc_hash_state *ctx)
+static size_t sha3_224_digestsize(struct esdm_hash_state *ctx)
 {
 	(void)ctx;
-	return LC_SHA3_224_SIZE_DIGEST;
+	return ESDM_SHA3_224_SIZE_DIGEST;
 }
 
-static void sha3_256_init(struct lc_hash_state *ctx)
+static void sha3_256_init(struct esdm_hash_state *ctx)
 {
 	sha3_init(ctx);
-	ctx->r = LC_SHA3_256_SIZE_BLOCK;
-	ctx->rword = LC_SHA3_256_SIZE_BLOCK / sizeof(uint64_t);
-	ctx->digestsize = LC_SHA3_256_SIZE_DIGEST;
+	ctx->r = ESDM_SHA3_256_SIZE_BLOCK;
+	ctx->rword = ESDM_SHA3_256_SIZE_BLOCK / sizeof(uint64_t);
+	ctx->digestsize = ESDM_SHA3_256_SIZE_DIGEST;
 	ctx->padding = 0x06;
 }
 
-static size_t sha3_256_digestsize(struct lc_hash_state *ctx)
+static size_t sha3_256_digestsize(struct esdm_hash_state *ctx)
 {
 	(void)ctx;
-	return LC_SHA3_256_SIZE_DIGEST;
+	return ESDM_SHA3_256_SIZE_DIGEST;
 }
 
-static void sha3_384_init(struct lc_hash_state *ctx)
+static void sha3_384_init(struct esdm_hash_state *ctx)
 {
 	sha3_init(ctx);
-	ctx->r = LC_SHA3_384_SIZE_BLOCK;
-	ctx->rword = LC_SHA3_384_SIZE_BLOCK / sizeof(uint64_t);
-	ctx->digestsize = LC_SHA3_384_SIZE_DIGEST;
+	ctx->r = ESDM_SHA3_384_SIZE_BLOCK;
+	ctx->rword = ESDM_SHA3_384_SIZE_BLOCK / sizeof(uint64_t);
+	ctx->digestsize = ESDM_SHA3_384_SIZE_DIGEST;
 	ctx->padding = 0x06;
 }
 
-static size_t sha3_384_digestsize(struct lc_hash_state *ctx)
+static size_t sha3_384_digestsize(struct esdm_hash_state *ctx)
 {
 	(void)ctx;
-	return LC_SHA3_384_SIZE_DIGEST;
+	return ESDM_SHA3_384_SIZE_DIGEST;
 }
 
-static void sha3_512_init(struct lc_hash_state *ctx)
+static void sha3_512_init(struct esdm_hash_state *ctx)
 {
 	sha3_init(ctx);
-	ctx->r = LC_SHA3_512_SIZE_BLOCK;
-	ctx->rword = LC_SHA3_512_SIZE_BLOCK / sizeof(uint64_t);
-	ctx->digestsize = LC_SHA3_512_SIZE_DIGEST;
+	ctx->r = ESDM_SHA3_512_SIZE_BLOCK;
+	ctx->rword = ESDM_SHA3_512_SIZE_BLOCK / sizeof(uint64_t);
+	ctx->digestsize = ESDM_SHA3_512_SIZE_DIGEST;
 	ctx->padding = 0x06;
 }
 
-static size_t sha3_512_digestsize(struct lc_hash_state *ctx)
+static size_t sha3_512_digestsize(struct esdm_hash_state *ctx)
 {
 	(void)ctx;
-	return LC_SHA3_512_SIZE_DIGEST;
+	return ESDM_SHA3_512_SIZE_DIGEST;
 }
 
-static void shake_256_init(struct lc_hash_state *ctx)
+static void shake_256_init(struct esdm_hash_state *ctx)
 {
 	sha3_init(ctx);
-	ctx->r = LC_SHA3_256_SIZE_BLOCK;
-	ctx->rword = LC_SHA3_256_SIZE_BLOCK / sizeof(uint64_t);
+	ctx->r = ESDM_SHA3_256_SIZE_BLOCK;
+	ctx->rword = ESDM_SHA3_256_SIZE_BLOCK / sizeof(uint64_t);
 	ctx->digestsize = 0;
 	ctx->padding = 0x1f;
 }
 
-static void cshake_256_init(struct lc_hash_state *ctx)
+static void cshake_256_init(struct esdm_hash_state *ctx)
 {
 	sha3_init(ctx);
-	ctx->r = LC_SHA3_256_SIZE_BLOCK;
-	ctx->rword = LC_SHA3_256_SIZE_BLOCK / sizeof(uint64_t);
+	ctx->r = ESDM_SHA3_256_SIZE_BLOCK;
+	ctx->rword = ESDM_SHA3_256_SIZE_BLOCK / sizeof(uint64_t);
 	ctx->digestsize = 0;
 	ctx->padding = 0x04;
 }
 
-static inline void sha3_fill_state(struct lc_hash_state *ctx, const uint8_t *in)
+static inline void sha3_fill_state(struct esdm_hash_state *ctx, const uint8_t *in)
 {
 	unsigned int i;
 
@@ -270,7 +270,7 @@ static inline int sha3_aligned(const uint8_t *ptr, uint32_t alignmask)
 	return 1;
 }
 
-static inline void sha3_fill_state_aligned(struct lc_hash_state *ctx,
+static inline void sha3_fill_state_aligned(struct esdm_hash_state *ctx,
 					   const uint64_t *in)
 {
 	unsigned int i;
@@ -281,7 +281,7 @@ static inline void sha3_fill_state_aligned(struct lc_hash_state *ctx,
 	}
 }
 
-static void keccak_absorb(struct lc_hash_state *ctx, const uint8_t *in,
+static void keccak_absorb(struct esdm_hash_state *ctx, const uint8_t *in,
 			  size_t inlen)
 {
 	size_t partial = ctx->msg_len % ctx->r;
@@ -340,7 +340,7 @@ static void keccak_absorb(struct lc_hash_state *ctx, const uint8_t *in,
 	memcpy(ctx->partial, in, inlen);
 }
 
-static void keccak_squeeze(struct lc_hash_state *ctx, uint8_t *digest)
+static void keccak_squeeze(struct esdm_hash_state *ctx, uint8_t *digest)
 {
 	size_t partial = ctx->msg_len % ctx->r;
 	size_t i, digest_len = ctx->digestsize;
@@ -396,78 +396,78 @@ static void keccak_squeeze(struct lc_hash_state *ctx, uint8_t *digest)
 	*part_p = 0;
 }
 
-static void shake_set_digestsize(struct lc_hash_state *ctx, size_t digestsize)
+static void shake_set_digestsize(struct esdm_hash_state *ctx, size_t digestsize)
 {
 	ctx->digestsize = digestsize;
 }
 
-static size_t shake_get_digestsize(struct lc_hash_state *ctx)
+static size_t shake_get_digestsize(struct esdm_hash_state *ctx)
 {
 	return ctx->digestsize;
 }
 
-static const struct lc_hash _sha3_224 = {
+static const struct esdm_hash _sha3_224 = {
 	.init = sha3_224_init,
 	.update = keccak_absorb,
 	.final = keccak_squeeze,
 	.set_digestsize = NULL,
 	.get_digestsize = sha3_224_digestsize,
-	.blocksize = LC_SHA3_224_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA3_224_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
-DSO_PUBLIC const struct lc_hash *lc_sha3_224 = &_sha3_224;
+DSO_PUBLIC const struct esdm_hash *esdm_sha3_224 = &_sha3_224;
 
-static const struct lc_hash _sha3_256 = {
+static const struct esdm_hash _sha3_256 = {
 	.init = sha3_256_init,
 	.update = keccak_absorb,
 	.final = keccak_squeeze,
 	.set_digestsize = NULL,
 	.get_digestsize = sha3_256_digestsize,
-	.blocksize = LC_SHA3_256_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA3_256_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
-DSO_PUBLIC const struct lc_hash *lc_sha3_256 = &_sha3_256;
+DSO_PUBLIC const struct esdm_hash *esdm_sha3_256 = &_sha3_256;
 
-static const struct lc_hash _sha3_384 = {
+static const struct esdm_hash _sha3_384 = {
 	.init = sha3_384_init,
 	.update = keccak_absorb,
 	.final = keccak_squeeze,
 	.set_digestsize = NULL,
 	.get_digestsize = sha3_384_digestsize,
-	.blocksize = LC_SHA3_384_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA3_384_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
-DSO_PUBLIC const struct lc_hash *lc_sha3_384 = &_sha3_384;
+DSO_PUBLIC const struct esdm_hash *esdm_sha3_384 = &_sha3_384;
 
-static const struct lc_hash _sha3_512 = {
+static const struct esdm_hash _sha3_512 = {
 	.init = sha3_512_init,
 	.update = keccak_absorb,
 	.final = keccak_squeeze,
 	.set_digestsize = NULL,
 	.get_digestsize = sha3_512_digestsize,
-	.blocksize = LC_SHA3_512_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA3_512_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
-DSO_PUBLIC const struct lc_hash *lc_sha3_512 = &_sha3_512;
+DSO_PUBLIC const struct esdm_hash *esdm_sha3_512 = &_sha3_512;
 
-static const struct lc_hash _shake256 = {
+static const struct esdm_hash _shake256 = {
 	.init = shake_256_init,
 	.update = keccak_absorb,
 	.final = keccak_squeeze,
 	.set_digestsize = shake_set_digestsize,
 	.get_digestsize = shake_get_digestsize,
-	.blocksize = LC_SHA3_256_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA3_256_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
-DSO_PUBLIC const struct lc_hash *lc_shake256 = &_shake256;
+DSO_PUBLIC const struct esdm_hash *esdm_shake256 = &_shake256;
 
-static const struct lc_hash _cshake256 = {
+static const struct esdm_hash _cshake256 = {
 	.init = cshake_256_init,
 	.update = keccak_absorb,
 	.final = keccak_squeeze,
 	.set_digestsize = shake_set_digestsize,
 	.get_digestsize = shake_get_digestsize,
-	.blocksize = LC_SHA3_256_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA3_256_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
-DSO_PUBLIC const struct lc_hash *lc_cshake256 = &_cshake256;
+DSO_PUBLIC const struct esdm_hash *esdm_cshake256 = &_cshake256;

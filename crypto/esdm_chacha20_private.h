@@ -17,29 +17,34 @@
  * DAMAGE.
  */
 
-#ifndef LC_HASH_DRBG_SHA512_H
-#define LC_HASH_DRBG_SHA512_H
+#ifndef ESDM_CHACHA20_PRIVATE_H
+#define ESDM_CHACHA20_PRIVATE_H
 
-#include "lc_sha512.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if defined(LC_DRBG_HASH_STATELEN) || defined(LC_DRBG_HASH_BLOCKLEN) ||        \
-	defined(LC_DRBG_HASH_CORE)
-#error "You have included more than one DRBG header file!"
-#endif
+#define ESDM_CC20_KEY_SIZE 32
+#define ESDM_CC20_KEY_SIZE_WORDS (ESDM_CC20_KEY_SIZE / sizeof(uint32_t))
 
-#define LC_DRBG_HASH_STATELEN 111
-#define LC_DRBG_HASH_BLOCKLEN 64
+/* State according to RFC 7539 section 2.3 */
+struct esdm_sym_state {
+	uint32_t constants[4];
+	union {
+		uint32_t u[ESDM_CC20_KEY_SIZE_WORDS];
+		uint8_t b[ESDM_CC20_KEY_SIZE];
+	} key;
+	uint32_t counter;
+	uint32_t nonce[3];
+};
 
-#define LC_DRBG_HASH_CORE lc_sha512
-
-#include "lc_hash_drbg.h"
+#define ESDM_CC20_BLOCK_SIZE sizeof(struct esdm_sym_state)
+#define ESDM_CC20_BLOCK_SIZE_WORDS (ESDM_CC20_BLOCK_SIZE / sizeof(uint32_t))
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LC_HASH_DRBG_SHA512_H */
+#endif /* ESDM_CHACHA20_PRIVATE_H */

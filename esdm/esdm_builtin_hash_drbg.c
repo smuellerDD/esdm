@@ -22,30 +22,30 @@
 #include <errno.h>
 
 #include "esdm_crypto.h"
-#include "lc_hash_drbg_sha512.h"
+#include "esdm_hash_drbg_sha512.h"
 #include "esdm_builtin_hash_drbg.h"
 #include "esdm_logger.h"
 
 static int esdm_hash_drbg_seed(void *drng, const uint8_t *inbuf,
 			       size_t inbuflen)
 {
-	struct lc_drbg_state *drbg = (struct lc_drbg_state *)drng;
+	struct esdm_drbg_state *drbg = (struct esdm_drbg_state *)drng;
 
-	return lc_drbg_seed(drbg, inbuf, inbuflen, NULL, 0);
+	return esdm_drbg_seed(drbg, inbuf, inbuflen, NULL, 0);
 }
 
 static ssize_t esdm_hash_drbg_generate(void *drng, uint8_t *outbuf,
 				       size_t outbuflen)
 {
-	struct lc_drbg_state *drbg = (struct lc_drbg_state *)drng;
+	struct esdm_drbg_state *drbg = (struct esdm_drbg_state *)drng;
 
-	return lc_drbg_generate(drbg, outbuf, outbuflen, NULL, 0);
+	return esdm_drbg_generate(drbg, outbuf, outbuflen, NULL, 0);
 }
 
 static int esdm_hash_drbg_alloc(void **drng, uint32_t sec_strength)
 {
-	struct lc_drbg_state **drbg = (struct lc_drbg_state **)drng;
-	int ret = lc_drbg_hash_alloc(drbg);
+	struct esdm_drbg_state **drbg = (struct esdm_drbg_state **)drng;
+	int ret = esdm_drbg_hash_alloc(drbg);
 
 	(void)sec_strength;
 
@@ -59,9 +59,9 @@ static int esdm_hash_drbg_alloc(void **drng, uint32_t sec_strength)
 
 static void esdm_hash_drbg_dealloc(void *drng)
 {
-	struct lc_drbg_state *drbg = (struct lc_drbg_state *)drng;
+	struct esdm_drbg_state *drbg = (struct esdm_drbg_state *)drng;
 
-	lc_drbg_zero_free(drbg);
+	esdm_drbg_zero_free(drbg);
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 		    "Hash DRBG core zeroized and freed\n");
 }
@@ -129,26 +129,26 @@ static int esdm_hash_drbg_selftest(void)
 		0xcb, 0x1b, 0xbf, 0xd1, 0x1d, 0x2a
 	};
 	uint8_t act[256];
-	LC_DRBG_HASH_CTX_ON_STACK(drbg_stack);
+	ESDM_DRBG_HASH_CTX_ON_STACK(drbg_stack);
 	int ret = -EFAULT;
 
-	if (lc_drbg_healthcheck_sanity(drbg_stack))
+	if (esdm_drbg_healthcheck_sanity(drbg_stack))
 		goto out;
 
-	if (lc_drbg_seed(drbg_stack, ent_nonce, 64, pers, 32))
+	if (esdm_drbg_seed(drbg_stack, ent_nonce, 64, pers, 32))
 		goto out;
 
-	if (lc_drbg_generate(drbg_stack, act, 256, addtl1, 32) < 0)
+	if (esdm_drbg_generate(drbg_stack, act, 256, addtl1, 32) < 0)
 		goto out;
 
-	if (lc_drbg_generate(drbg_stack, act, 256, addtl2, 32) < 0)
+	if (esdm_drbg_generate(drbg_stack, act, 256, addtl2, 32) < 0)
 		goto out;
 
 	if (!memcmp(act, exp, 256))
 		ret = 0;
 
 out:
-	lc_drbg_zero(drbg_stack);
+	esdm_drbg_zero(drbg_stack);
 	return ret;
 }
 

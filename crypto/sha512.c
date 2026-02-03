@@ -21,14 +21,14 @@
 #include <string.h>
 
 #include "bitshift_be.h"
-#include "lc_sha512.h"
+#include "esdm_sha512.h"
 #include "memset_secure.h"
 #include "visibility.h"
 
-struct lc_hash_state {
+struct esdm_hash_state {
 	uint64_t H[8];
 	size_t msg_len;
-	uint8_t partial[LC_SHA512_SIZE_BLOCK];
+	uint8_t partial[ESDM_SHA512_SIZE_BLOCK];
 };
 
 static const uint64_t sha512_K[] = {
@@ -61,7 +61,7 @@ static const uint64_t sha512_K[] = {
 	0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL,
 };
 
-static void sha512_init(struct lc_hash_state *ctx)
+static void sha512_init(struct esdm_hash_state *ctx)
 {
 	ctx->H[0] = 0x6a09e667f3bcc908ULL;
 	ctx->H[1] = 0xbb67ae8584caa73bULL;
@@ -87,7 +87,7 @@ static inline uint64_t ror(uint64_t x, int n)
 #define s0(x) (ror(x, 1) ^ ror(x, 8) ^ (x >> 7))
 #define s1(x) (ror(x, 19) ^ ror(x, 61) ^ (x >> 6))
 
-static inline void sha512_transform(struct lc_hash_state *ctx,
+static inline void sha512_transform(struct esdm_hash_state *ctx,
 				    const uint8_t *in)
 {
 	uint64_t W[80], a, b, c, d, e, f, g, h, T1, T2;
@@ -139,16 +139,16 @@ static inline void sha512_transform(struct lc_hash_state *ctx,
 		W[i] = 0;
 }
 
-static void sha512_update(struct lc_hash_state *ctx, const uint8_t *in,
+static void sha512_update(struct esdm_hash_state *ctx, const uint8_t *in,
 			  size_t inlen)
 {
-	unsigned int partial = ctx->msg_len % LC_SHA512_SIZE_BLOCK;
+	unsigned int partial = ctx->msg_len % ESDM_SHA512_SIZE_BLOCK;
 
 	ctx->msg_len += inlen;
 
 	/* Check if we have a partial block stored */
 	if (partial) {
-		unsigned int todo = LC_SHA512_SIZE_BLOCK - partial;
+		unsigned int todo = ESDM_SHA512_SIZE_BLOCK - partial;
 
 		/*
 		 * If the provided data is small enough to fit in the partial
@@ -171,17 +171,17 @@ static void sha512_update(struct lc_hash_state *ctx, const uint8_t *in,
 	}
 
 	/* Perform a transformation of full block-size messages */
-	for (; inlen >= LC_SHA512_SIZE_BLOCK;
-	     inlen -= LC_SHA512_SIZE_BLOCK, in += LC_SHA512_SIZE_BLOCK)
+	for (; inlen >= ESDM_SHA512_SIZE_BLOCK;
+	     inlen -= ESDM_SHA512_SIZE_BLOCK, in += ESDM_SHA512_SIZE_BLOCK)
 		sha512_transform(ctx, in);
 
 	/* If we have data left, copy it into the partial block buffer */
 	memcpy(ctx->partial, in, inlen);
 }
 
-static void sha512_final(struct lc_hash_state *ctx, uint8_t *digest)
+static void sha512_final(struct esdm_hash_state *ctx, uint8_t *digest)
 {
-	unsigned int i, partial = ctx->msg_len % LC_SHA512_SIZE_BLOCK;
+	unsigned int i, partial = ctx->msg_len % ESDM_SHA512_SIZE_BLOCK;
 
 	/*
 	 * We know a-priori that we have at least one byte free in the partial
@@ -195,24 +195,24 @@ static void sha512_final(struct lc_hash_state *ctx, uint8_t *digest)
 	 * store the final 16 bytes that is supposed to hold the message length
 	 * in bits, transform it.
 	 */
-	if (partial > (LC_SHA512_SIZE_BLOCK - (2 * sizeof(uint64_t)))) {
+	if (partial > (ESDM_SHA512_SIZE_BLOCK - (2 * sizeof(uint64_t)))) {
 		memset(ctx->partial + partial, 0,
-		       LC_SHA512_SIZE_BLOCK - partial);
+		       ESDM_SHA512_SIZE_BLOCK - partial);
 		partial = 0;
 		sha512_transform(ctx, ctx->partial);
 	}
 
 	/* Fill the unused part of the partial buffer with zeros */
-	memset(ctx->partial + partial, 0, LC_SHA512_SIZE_BLOCK - partial);
+	memset(ctx->partial + partial, 0, ESDM_SHA512_SIZE_BLOCK - partial);
 
 	/* Add the message length in bits at the end of the partial buffer */
 	ctx->msg_len <<= 3;
-	be64_to_ptr(ctx->partial + (LC_SHA512_SIZE_BLOCK - 8), ctx->msg_len);
+	be64_to_ptr(ctx->partial + (ESDM_SHA512_SIZE_BLOCK - 8), ctx->msg_len);
 
 	/* Final transformation */
 	sha512_transform(ctx, ctx->partial);
 
-	memset_secure(ctx->partial, 0, LC_SHA512_SIZE_BLOCK);
+	memset_secure(ctx->partial, 0, ESDM_SHA512_SIZE_BLOCK);
 
 	/* Output digest */
 	for (i = 0; i < 8; i++, digest += 8) {
@@ -223,20 +223,20 @@ static void sha512_final(struct lc_hash_state *ctx, uint8_t *digest)
 	}
 }
 
-static size_t sha512_get_digestsize(struct lc_hash_state *ctx)
+static size_t sha512_get_digestsize(struct esdm_hash_state *ctx)
 {
 	(void)ctx;
-	return LC_SHA512_SIZE_DIGEST;
+	return ESDM_SHA512_SIZE_DIGEST;
 }
 
-static const struct lc_hash _sha512 = {
+static const struct esdm_hash _sha512 = {
 	.init = sha512_init,
 	.update = sha512_update,
 	.final = sha512_final,
 	.set_digestsize = NULL,
 	.get_digestsize = sha512_get_digestsize,
-	.blocksize = LC_SHA512_SIZE_BLOCK,
-	.statesize = sizeof(struct lc_hash_state),
+	.blocksize = ESDM_SHA512_SIZE_BLOCK,
+	.statesize = sizeof(struct esdm_hash_state),
 };
 
-DSO_PUBLIC const struct lc_hash *lc_sha512 = &_sha512;
+DSO_PUBLIC const struct esdm_hash *esdm_sha512 = &_sha512;

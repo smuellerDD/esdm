@@ -21,11 +21,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lc_sha512.h"
+#include "esdm_sha512.h"
 
 static int sha512_tester(void)
 {
-	struct lc_hash_ctx *ctx512 = NULL;
+	struct esdm_hash_ctx *ctx512 = NULL;
 	static const uint8_t msg_512[] = { 0x7F, 0xAD, 0x12 };
 	static const uint8_t exp_512[] = {
 		0x53, 0x35, 0x98, 0xe5, 0x29, 0x49, 0x18, 0xa0, 0xaf, 0x4b,
@@ -36,16 +36,16 @@ static int sha512_tester(void)
 		0x7c, 0xcf, 0xb8, 0xc7, 0xd8, 0x57, 0x63, 0xda, 0xee, 0x07,
 		0x9f, 0x60, 0x0c, 0x79
 	};
-	uint8_t act[LC_SHA512_SIZE_DIGEST];
+	uint8_t act[ESDM_SHA512_SIZE_DIGEST];
 	int ret;
 
-	if (lc_hash_alloc(lc_sha512, &ctx512))
+	if (esdm_hash_alloc(esdm_sha512, &ctx512))
 		return 1;
-	lc_hash_init(ctx512);
-	lc_hash_update(ctx512, msg_512, 3);
-	lc_hash_final(ctx512, act);
-	ret = memcmp(act, exp_512, LC_SHA512_SIZE_DIGEST);
-	lc_hash_zero_free(ctx512);
+	esdm_hash_init(ctx512);
+	esdm_hash_update(ctx512, msg_512, 3);
+	esdm_hash_final(ctx512, act);
+	ret = memcmp(act, exp_512, ESDM_SHA512_SIZE_DIGEST);
+	esdm_hash_zero_free(ctx512);
 	return ret ? 1 : 0;
 }
 

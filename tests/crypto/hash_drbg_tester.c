@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lc_hash_drbg_sha512.h"
+#include "esdm_hash_drbg_sha512.h"
 
 static int hash_drbg_tester(void)
 {
@@ -82,52 +82,52 @@ static int hash_drbg_tester(void)
 		0xcb, 0x1b, 0xbf, 0xd1, 0x1d, 0x2a
 	};
 	uint8_t act[sizeof(exp)];
-	LC_DRBG_HASH_CTX_ON_STACK(drbg_stack);
-	struct lc_drbg_state *drbg = NULL;
+	ESDM_DRBG_HASH_CTX_ON_STACK(drbg_stack);
+	struct esdm_drbg_state *drbg = NULL;
 	int ret = 0;
 
 	printf("hash DRBG ctx len %lu\n",
-	       LC_DRBG_HASH_CTX_SIZE(LC_DRBG_HASH_CORE));
-	if (lc_drbg_healthcheck_sanity(drbg_stack))
+	       ESDM_DRBG_HASH_CTX_SIZE(ESDM_DRBG_HASH_CORE));
+	if (esdm_drbg_healthcheck_sanity(drbg_stack))
 		return 1;
 
-	if (lc_drbg_seed(drbg_stack, ent_nonce, 64, pers, 32))
+	if (esdm_drbg_seed(drbg_stack, ent_nonce, 64, pers, 32))
 		goto out;
 
-	if (lc_drbg_generate(drbg_stack, act, sizeof(exp), addtl1, 32) < 0)
+	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl1, 32) < 0)
 		goto out;
 
-	if (lc_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
+	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 
 	ret += memcmp(act, exp, sizeof(exp)) ? 1 : 0;
 
-	lc_drbg_zero(drbg_stack);
+	esdm_drbg_zero(drbg_stack);
 
 	/* Rerun to verify that drbg_zero works properly */
-	if (lc_drbg_seed(drbg_stack, ent_nonce, 64, pers, 32))
+	if (esdm_drbg_seed(drbg_stack, ent_nonce, 64, pers, 32))
 		goto out;
 
-	if (lc_drbg_generate(drbg_stack, act, sizeof(exp), addtl1, 32) < 0)
+	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl1, 32) < 0)
 		goto out;
 
-	if (lc_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
+	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 
 	ret += memcmp(act, exp, sizeof(exp)) ? 1 : 0;
 
-	lc_drbg_zero(drbg_stack);
+	esdm_drbg_zero(drbg_stack);
 
-	if (lc_drbg_hash_alloc(&drbg))
+	if (esdm_drbg_hash_alloc(&drbg))
 		goto out;
 
-	if (lc_drbg_seed(drbg, ent_nonce, 64, pers, 32))
+	if (esdm_drbg_seed(drbg, ent_nonce, 64, pers, 32))
 		goto out;
 
-	if (lc_drbg_generate(drbg, act, sizeof(exp), addtl1, 32) < 0)
+	if (esdm_drbg_generate(drbg, act, sizeof(exp), addtl1, 32) < 0)
 		goto out;
 
-	if (lc_drbg_generate(drbg, act, sizeof(exp), addtl2, 32) < 0)
+	if (esdm_drbg_generate(drbg, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 #endif
 #if 0
@@ -182,19 +182,19 @@ static int hash_drbg_tester(void)
 		0x90, 0xff, 0xcc, 0xd9, 0x4e, 0x07, 0xa7, 0x80
 	};
 	uint8_t act[256];
-	struct lc_drbg_state *drbg;
+	struct esdm_drbg_state *drbg;
 	int ret = 1;
 
-	if (lc_drbg_alloc(&drbg))
+	if (esdm_drbg_alloc(&drbg))
 		goto out;
 
-	if (lc_drbg_seed(drbg, ent_nonce, 64, pers, 32))
+	if (esdm_drbg_seed(drbg, ent_nonce, 64, pers, 32))
 		goto out;
 
-	if (lc_drbg_generate(drbg, act, 256, NULL, 0) < 0)
+	if (esdm_drbg_generate(drbg, act, 256, NULL, 0) < 0)
 		goto out;
 
-	if (lc_drbg_generate(drbg, act, 256, NULL, 0) < 0)
+	if (esdm_drbg_generate(drbg, act, 256, NULL, 0) < 0)
 		goto out;
 #endif
 #if 0
@@ -244,26 +244,26 @@ static int hash_drbg_tester(void)
 		0xad, 0xcb, 0x66, 0xeb, 0xa2, 0xc1, 0xe9, 0x7d
 	};
 	uint8_t act[256];
-	struct lc_drbg_state *drbg;
+	struct esdm_drbg_state *drbg;
 	int ret = 1;
 
-	if (lc_drbg_alloc(&drbg))
+	if (esdm_drbg_alloc(&drbg))
 		goto out;
 
-	if (lc_drbg_seed(drbg, ent_nonce, 64, NULL, 0))
+	if (esdm_drbg_seed(drbg, ent_nonce, 64, NULL, 0))
 		goto out;
 
-	if (lc_drbg_generate(drbg, act, 256, NULL, 0) < 0)
+	if (esdm_drbg_generate(drbg, act, 256, NULL, 0) < 0)
 		goto out;
 
-	if (lc_drbg_generate(drbg, act, 256, NULL, 0) < 0)
+	if (esdm_drbg_generate(drbg, act, 256, NULL, 0) < 0)
 		goto out;
 #endif
 
 	ret += memcmp(act, exp, sizeof(exp)) ? 1 : 0;
 
 out:
-	lc_drbg_zero_free(drbg);
+	esdm_drbg_zero_free(drbg);
 	return ret;
 }
 

@@ -22,26 +22,26 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "lc_drbg.h"
+#include "esdm_drbg.h"
 #include "visibility.h"
 
 /*************************************************************************
  * DRBG interface functions
  *************************************************************************/
 DSO_PUBLIC
-int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
+int esdm_drbg_seed(struct esdm_drbg_state *drbg, const uint8_t *seedbuf,
 		 size_t seedlen, const uint8_t *persbuf, size_t perslen)
 {
-	struct lc_drbg_string seed;
-	struct lc_drbg_string pers;
+	struct esdm_drbg_string seed;
+	struct esdm_drbg_string pers;
 
 	/* 9.1 / 9.2 / 9.3.1 step 3 */
-	if (persbuf && perslen > (lc_drbg_max_addtl()))
+	if (persbuf && perslen > (esdm_drbg_max_addtl()))
 		return -EINVAL;
 
 	if (!seedbuf || !seedlen)
 		return -EINVAL;
-	lc_drbg_string_fill(&seed, seedbuf, seedlen);
+	esdm_drbg_string_fill(&seed, seedbuf, seedlen);
 
 	/*
 	 * concatenation of entropy with personalization str / addtl input)
@@ -49,7 +49,7 @@ int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
 	 * contents whether it is appropriate
 	 */
 	if (persbuf && perslen) {
-		lc_drbg_string_fill(&pers, persbuf, perslen);
+		esdm_drbg_string_fill(&pers, persbuf, perslen);
 		seed.next = &pers;
 	}
 
@@ -60,12 +60,12 @@ int lc_drbg_seed(struct lc_drbg_state *drbg, const uint8_t *seedbuf,
 }
 
 DSO_PUBLIC
-ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
+ssize_t esdm_drbg_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
 			 size_t buflen, const uint8_t *addtlbuf,
 			 size_t addtllen)
 {
-	struct lc_drbg_string addtl_data;
-	struct lc_drbg_string *addtl = NULL;
+	struct esdm_drbg_string addtl_data;
+	struct esdm_drbg_string *addtl = NULL;
 
 	if (!drbg)
 		return -EINVAL;
@@ -73,14 +73,14 @@ ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
 	if (!buflen || !buf)
 		return -EINVAL;
 
-	if (buflen > lc_drbg_max_request_bytes())
+	if (buflen > esdm_drbg_max_request_bytes())
 		return -EINVAL;
 
-	if (addtllen > lc_drbg_max_addtl())
+	if (addtllen > esdm_drbg_max_addtl())
 		return -EINVAL;
 
 	if (addtlbuf && addtllen) {
-		lc_drbg_string_fill(&addtl_data, addtlbuf, addtllen);
+		esdm_drbg_string_fill(&addtl_data, addtlbuf, addtllen);
 		addtl = &addtl_data;
 	}
 
@@ -88,18 +88,18 @@ ssize_t lc_drbg_generate(struct lc_drbg_state *drbg, uint8_t *buf,
 }
 
 DSO_PUBLIC
-void lc_drbg_zero_free(struct lc_drbg_state *drbg)
+void esdm_drbg_zero_free(struct esdm_drbg_state *drbg)
 {
 	if (!drbg)
 		return;
 
-	lc_drbg_zero(drbg);
+	esdm_drbg_zero(drbg);
 
 	free(drbg);
 }
 
 DSO_PUBLIC
-int lc_drbg_healthcheck_sanity(struct lc_drbg_state *drbg)
+int esdm_drbg_healthcheck_sanity(struct esdm_drbg_state *drbg)
 {
 	unsigned char buf[16] = { 0 };
 	size_t max_addtllen, max_request_bytes;
@@ -114,27 +114,27 @@ int lc_drbg_healthcheck_sanity(struct lc_drbg_state *drbg)
 	 * grave bug.
 	 */
 
-	max_addtllen = lc_drbg_max_addtl();
-	max_request_bytes = lc_drbg_max_request_bytes();
+	max_addtllen = esdm_drbg_max_addtl();
+	max_request_bytes = esdm_drbg_max_request_bytes();
 
 	/* overflow addtllen with additonal info string */
-	len = lc_drbg_generate(drbg, buf, sizeof(buf), buf, max_addtllen + 1);
+	len = esdm_drbg_generate(drbg, buf, sizeof(buf), buf, max_addtllen + 1);
 	if (len > 0)
 		goto out;
 
 	/* overflow max_bits */
-	len = lc_drbg_generate(drbg, buf, (max_request_bytes + 1), NULL, 0);
+	len = esdm_drbg_generate(drbg, buf, (max_request_bytes + 1), NULL, 0);
 	if (len > 0)
 		goto out;
 
 	/* overflow max addtllen with personalization string */
-	len = lc_drbg_generate(NULL, buf, sizeof(buf), NULL, 0);
+	len = esdm_drbg_generate(NULL, buf, sizeof(buf), NULL, 0);
 	if (len >= 0)
 		goto out;
 
 	ret = 0;
 
 out:
-	lc_drbg_zero(drbg);
+	esdm_drbg_zero(drbg);
 	return ret;
 }

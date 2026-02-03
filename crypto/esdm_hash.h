@@ -17,8 +17,8 @@
  * DAMAGE.
  */
 
-#ifndef LC_HASH_H
-#define LC_HASH_H
+#ifndef ESDM_HASH_H
+#define ESDM_HASH_H
 
 #include <stdint.h>
 
@@ -28,37 +28,37 @@
 extern "C" {
 #endif
 
-struct lc_hash_state;
-struct lc_hash {
-	void (*init)(struct lc_hash_state *ctx);
-	void (*update)(struct lc_hash_state *ctx, const uint8_t *in,
+struct esdm_hash_state;
+struct esdm_hash {
+	void (*init)(struct esdm_hash_state *ctx);
+	void (*update)(struct esdm_hash_state *ctx, const uint8_t *in,
 		       size_t inlen);
-	void (*final)(struct lc_hash_state *ctx, uint8_t *digest);
-	void (*set_digestsize)(struct lc_hash_state *ctx, size_t digestsize);
-	size_t (*get_digestsize)(struct lc_hash_state *ctx);
+	void (*final)(struct esdm_hash_state *ctx, uint8_t *digest);
+	void (*set_digestsize)(struct esdm_hash_state *ctx, size_t digestsize);
+	size_t (*get_digestsize)(struct esdm_hash_state *ctx);
 	unsigned int blocksize;
 	unsigned int statesize;
 };
 
-struct lc_hash_ctx {
-	const struct lc_hash *hash;
-	struct lc_hash_state *hash_state;
+struct esdm_hash_ctx {
+	const struct esdm_hash *hash;
+	struct esdm_hash_state *hash_state;
 };
 
-#define LC_ALIGNED_BUFFER(name, size, type)                                    \
+#define ESDM_ALIGNED_BUFFER(name, size, type)                                  \
 	type name[(size + sizeof(type) - 1) / sizeof(type)]                    \
 		__attribute__((aligned(sizeof(type))))
 
-#define LC_SHA_MAX_SIZE_DIGEST 64
-#define LC_HASH_STATE_SIZE(x) (x->statesize)
-#define LC_HASH_CTX_SIZE(x) (sizeof(struct lc_hash_ctx) + LC_HASH_STATE_SIZE(x))
+#define ESDM_SHA_MAX_SIZE_DIGEST 64
+#define ESDM_HASH_STATE_SIZE(x) (x->statesize)
+#define ESDM_HASH_CTX_SIZE(x) (sizeof(struct esdm_hash_ctx) + ESDM_HASH_STATE_SIZE(x))
 
-#define _LC_HASH_SET_CTX(name, hashname, ctx, offset)                          \
-	name->hash_state = (struct lc_hash_state *)((uint8_t *)ctx + offset);  \
+#define _ESDM_HASH_SET_CTX(name, hashname, ctx, offset)                          \
+	name->hash_state = (struct esdm_hash_state *)((uint8_t *)ctx + offset);  \
 	name->hash = hashname
 
-#define LC_HASH_SET_CTX(name, hashname)                                        \
-	_LC_HASH_SET_CTX(name, hashname, name, sizeof(struct lc_hash_ctx))
+#define ESDM_HASH_SET_CTX(name, hashname)                                        \
+	_ESDM_HASH_SET_CTX(name, hashname, name, sizeof(struct esdm_hash_ctx))
 
 /**
  * @brief Initialize hash context
@@ -67,11 +67,11 @@ struct lc_hash_ctx {
  *			perform hash calculation with.
  *
  * The caller must provide an allocated hash_ctx. This can be achieved by
- * using LC_HASH_CTX_ON_STACK or by using hash_alloc.
+ * using ESDM_HASH_CTX_ON_STACK or by using hash_alloc.
  */
-static inline void lc_hash_init(struct lc_hash_ctx *hash_ctx)
+static inline void esdm_hash_init(struct esdm_hash_ctx *hash_ctx)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	hash->init(hash_ctx->hash_state);
 }
@@ -84,10 +84,10 @@ static inline void lc_hash_init(struct lc_hash_ctx *hash_ctx)
  * @param [in] in Buffer holding the data whose MAC shall be calculated
  * @param [in] inlen Length of the input buffer
  */
-static inline void lc_hash_update(struct lc_hash_ctx *hash_ctx,
+static inline void esdm_hash_update(struct esdm_hash_ctx *hash_ctx,
 				  const uint8_t *in, size_t inlen)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	hash->update(hash_ctx->hash_state, in, inlen);
 }
@@ -104,15 +104,15 @@ static inline void lc_hash_update(struct lc_hash_ctx *hash_ctx,
  * ```
  * size_t outlen = full_size;
  *
- * lc_hash_init(ctx);
- * lc_hash_update(ctx, msg, msg_len);
- * lc_hash_set_digestsize(ctx, LC_SHA3_256_SIZE_BLOCK);
+ * esdm_hash_init(ctx);
+ * esdm_hash_update(ctx, msg, msg_len);
+ * esdm_hash_set_digestsize(ctx, ESDM_SHA3_256_SIZE_BLOCK);
  * for (len = outlen; len > 0;
- *      len -= lc_hash_digestsize(ctx),
- *      out += lc_hash_digestsize(ctx)) {
- *          if (len < lc_hash_digestsize(ctx))
- *                  lc_hash_set_digestsize(ctx, len);
- *          lc_hash_final(ctx, out);
+ *      len -= esdm_hash_digestsize(ctx),
+ *      out += esdm_hash_digestsize(ctx)) {
+ *          if (len < esdm_hash_digestsize(ctx))
+ *                  esdm_hash_set_digestsize(ctx, len);
+ *          esdm_hash_final(ctx, out);
  * }
  * ```
  *
@@ -122,9 +122,9 @@ static inline void lc_hash_update(struct lc_hash_ctx *hash_ctx,
  *			perform hash calculation with.
  * @param [out] digest Buffer with at least the size of the message digest.
  */
-static inline void lc_hash_final(struct lc_hash_ctx *hash_ctx, uint8_t *digest)
+static inline void esdm_hash_final(struct esdm_hash_ctx *hash_ctx, uint8_t *digest)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	hash->final(hash_ctx->hash_state, digest);
 }
@@ -136,47 +136,47 @@ static inline void lc_hash_final(struct lc_hash_ctx *hash_ctx, uint8_t *digest)
  *			perform hash calculation with.
  * @param [in] digestsize Size of the requested digest.
  */
-static inline void lc_hash_set_digestsize(struct lc_hash_ctx *hash_ctx,
+static inline void esdm_hash_set_digestsize(struct esdm_hash_ctx *hash_ctx,
 					  size_t digestsize)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	if (hash->set_digestsize)
 		hash->set_digestsize(hash_ctx->hash_state, digestsize);
 }
 
-static inline size_t lc_hash_digestsize(struct lc_hash_ctx *hash_ctx)
+static inline size_t esdm_hash_digestsize(struct esdm_hash_ctx *hash_ctx)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	return hash->get_digestsize(hash_ctx->hash_state);
 }
 
-static inline unsigned int lc_hash_blocksize(struct lc_hash_ctx *hash_ctx)
+static inline unsigned int esdm_hash_blocksize(struct esdm_hash_ctx *hash_ctx)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	return hash->blocksize;
 }
 
-static inline unsigned int lc_hash_ctxsize(struct lc_hash_ctx *hash_ctx)
+static inline unsigned int esdm_hash_ctxsize(struct esdm_hash_ctx *hash_ctx)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
 	return hash->statesize;
 }
 
 /**
- * @brief Zeroize Hash context allocated with either LC_HASH_CTX_ON_STACK or
- *	  lc_hmac_alloc
+ * @brief Zeroize Hash context allocated with either ESDM_HASH_CTX_ON_STACK or
+ *	  esdm_hmac_alloc
  *
  * @param [in] hash_state Hash context to be zeroized
  */
-static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
+static inline void esdm_hash_zero(struct esdm_hash_ctx *hash_ctx)
 {
-	const struct lc_hash *hash = hash_ctx->hash;
+	const struct esdm_hash *hash = hash_ctx->hash;
 
-	memset_secure((uint8_t *)hash_ctx + sizeof(struct lc_hash_ctx), 0,
+	memset_secure((uint8_t *)hash_ctx + sizeof(struct esdm_hash_ctx), 0,
 		      hash->statesize);
 }
 
@@ -187,12 +187,12 @@ static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
  * @param [in] hashname Pointer of type struct hash referencing the hash
  *			 implementation to be used
  */
-#define LC_HASH_CTX_ON_STACK(name, hashname)                                   \
-	LC_ALIGNED_BUFFER(name##_ctx_buf, LC_HASH_CTX_SIZE(hashname),          \
+#define ESDM_HASH_CTX_ON_STACK(name, hashname)                                   \
+	ESDM_ALIGNED_BUFFER(name##_ctx_buf, ESDM_HASH_CTX_SIZE(hashname),          \
 			  uint64_t);                                           \
-	struct lc_hash_ctx *name = (struct lc_hash_ctx *)name##_ctx_buf;       \
-	LC_HASH_SET_CTX(name, hashname);                                       \
-	lc_hash_zero(name)
+	struct esdm_hash_ctx *name = (struct esdm_hash_ctx *)name##_ctx_buf;       \
+	ESDM_HASH_SET_CTX(name, hashname);                                       \
+	esdm_hash_zero(name)
 
 /**
  * @brief Allocate Hash context on heap
@@ -203,14 +203,15 @@ static inline void lc_hash_zero(struct lc_hash_ctx *hash_ctx)
  *
  * @return: 0 on success, < 0 on error
  */
-int lc_hash_alloc(const struct lc_hash *hash, struct lc_hash_ctx **hash_ctx);
+int esdm_hash_alloc(const struct esdm_hash *hash,
+		    struct esdm_hash_ctx **hash_ctx);
 
 /**
  * @brief Zeroize and free hash context
  *
  * @param [in] hash_ctx hash context to be zeroized and freed
  */
-void lc_hash_zero_free(struct lc_hash_ctx *hash_ctx);
+void esdm_hash_zero_free(struct esdm_hash_ctx *hash_ctx);
 
 /**
  * @brief Calculate message digest - one-shot
@@ -223,20 +224,20 @@ void lc_hash_zero_free(struct lc_hash_ctx *hash_ctx);
  *
  * The hash calculation operates entirely on the stack.
  */
-static inline void lc_hash(const struct lc_hash *hash, const uint8_t *in,
-			   size_t inlen, uint8_t *digest)
+static inline void esdm_hash(const struct esdm_hash *hash, const uint8_t *in,
+			     size_t inlen, uint8_t *digest)
 {
-	LC_HASH_CTX_ON_STACK(hash_ctx, hash);
+	ESDM_HASH_CTX_ON_STACK(hash_ctx, hash);
 
-	lc_hash_init(hash_ctx);
-	lc_hash_update(hash_ctx, in, inlen);
-	lc_hash_final(hash_ctx, digest);
+	esdm_hash_init(hash_ctx);
+	esdm_hash_update(hash_ctx, in, inlen);
+	esdm_hash_final(hash_ctx, digest);
 
-	lc_hash_zero(hash_ctx);
+	esdm_hash_zero(hash_ctx);
 }
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LC_HASH_H */
+#endif /* ESDM_HASH_H */

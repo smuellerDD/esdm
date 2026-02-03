@@ -21,12 +21,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lc_hmac.h"
-#include "lc_sha512.h"
+#include "esdm_hmac.h"
+#include "esdm_sha512.h"
 
 static int hmac_sha2_512_tester(void)
 {
-	LC_HMAC_CTX_ON_STACK(hmac, lc_sha512);
+	ESDM_HMAC_CTX_ON_STACK(hmac, esdm_sha512);
 	static const uint8_t msg_512[] = { 0x32, 0x9D, 0x57, 0x59, 0xEC, 0x2B,
 					   0x51, 0xB6, 0x1F, 0xE2, 0x79, 0x18,
 					   0xE9, 0x8F, 0xA7, 0x2D };
@@ -135,14 +135,14 @@ static int hmac_sha2_512_tester(void)
 		0x40, 0xa2, 0x5a, 0x1b, 0x82, 0x5f, 0xa5, 0xa3, 0x34, 0x09,
 		0x0e, 0xf7, 0x3b, 0x7b
 	};
-	uint8_t act[LC_SHA512_SIZE_DIGEST];
+	uint8_t act[ESDM_SHA512_SIZE_DIGEST];
 
-	lc_hmac_init(hmac, key_512, sizeof(key_512));
-	lc_hmac_update(hmac, msg_512, sizeof(msg_512));
-	lc_hmac_final(hmac, act);
-	lc_hmac_zero(hmac);
+	esdm_hmac_init(hmac, key_512, sizeof(key_512));
+	esdm_hmac_update(hmac, msg_512, sizeof(msg_512));
+	esdm_hmac_final(hmac, act);
+	esdm_hmac_zero(hmac);
 
-	return memcmp(act, exp_512, LC_SHA512_SIZE_DIGEST) ? 1 : 0;
+	return memcmp(act, exp_512, ESDM_SHA512_SIZE_DIGEST) ? 1 : 0;
 }
 
 int main(int argc, char *argv[])
