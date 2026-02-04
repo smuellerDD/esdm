@@ -101,7 +101,7 @@ int linux_personalization_string(char **ptr, size_t *length)
 	if (!f) {
 		int errsv = errno;
 
-		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
 			    "Unable to open product_uuid file: %s\n",
 			    strerror(errsv));
 		ret = -errsv;
@@ -111,7 +111,7 @@ int linux_personalization_string(char **ptr, size_t *length)
 	if (!fgets(buf, sizeof(buf), f)) {
 		int errsv = errno;
 
-		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
 			    "Unable to read product_uuid file: %s\n",
 			    strerror(errsv));
 		ret = -errsv;

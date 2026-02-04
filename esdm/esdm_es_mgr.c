@@ -715,12 +715,15 @@ int esdm_es_mgr_initialize(void)
 	CKINT(esdm_pool_insert_aux((uint8_t *)&seed, sizeof(seed), 0));
 
 	/* insert machine specific personalization string, if available */
-	CKINT_LOG(linux_personalization_string(&pers_string, &pers_length),
-		  "Unable to fetch personalization string for insertion into all aux pools\n");
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		    "Insert personalization string \"%s\" into all aux pools\n",
-		    pers_string);
-	CKINT(esdm_pool_insert_aux((uint8_t *)pers_string, pers_length, 0));
+	if (linux_personalization_string(&pers_string, &pers_length)) {
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
+			    "Unable to fetch personalization string for insertion into all aux pools\n");
+	} else {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "Insert personalization string \"%s\" into all aux pools\n",
+			    pers_string);
+		CKINT(esdm_pool_insert_aux((uint8_t *)pers_string, pers_length, 0));
+	}
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 		    "Force fully seeding of all DRBGs\n");
