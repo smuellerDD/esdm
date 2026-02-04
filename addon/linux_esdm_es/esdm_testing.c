@@ -32,7 +32,7 @@
 #define ESDM_TESTING_RINGBUFFER_MASK (ESDM_TESTING_RINGBUFFER_SIZE - 1)
 
 struct esdm_testing {
-	u32 esdm_testing_rb[ESDM_TESTING_RINGBUFFER_SIZE];
+	u64 esdm_testing_rb[ESDM_TESTING_RINGBUFFER_SIZE];
 	u32 rb_reader;
 	atomic_t rb_writer;
 	atomic_t esdm_testing_enabled;
@@ -99,7 +99,7 @@ static void esdm_testing_fini(struct esdm_testing *data, u32 boot)
 	pr_warn("Disabling data collection\n");
 }
 
-static bool esdm_testing_store(struct esdm_testing *data, u32 value, u32 *boot)
+static bool esdm_testing_store(struct esdm_testing *data, u64 value, u32 *boot)
 {
 	unsigned long flags;
 
@@ -189,20 +189,20 @@ static int esdm_testing_reader(struct esdm_testing *data, u32 *boot, u8 *outbuf,
 		}
 
 		/* We copy out word-wise */
-		if (outbuflen < sizeof(u32)) {
+		if (outbuflen < sizeof(u64)) {
 			spin_unlock_irqrestore(&data->lock, flags);
 			goto out;
 		}
 
 		memcpy(outbuf, &data->esdm_testing_rb[data->rb_reader],
-		       sizeof(u32));
+		       sizeof(u64));
 		data->rb_reader++;
 
 		spin_unlock_irqrestore(&data->lock, flags);
 
-		outbuf += sizeof(u32);
-		outbuflen -= sizeof(u32);
-		collected_data += sizeof(u32);
+		outbuf += sizeof(u64);
+		outbuflen -= sizeof(u64);
+		collected_data += sizeof(u64);
 	}
 
 out:
@@ -227,11 +227,11 @@ static int esdm_testing_extract_user(struct file *file, char __user *buf,
 	 * by the user. Hence, we allocate sufficient memory to always hold
 	 * that amount of data.
 	 */
-	tmp = kmalloc(ESDM_TESTING_RINGBUFFER_SIZE + sizeof(u32), GFP_KERNEL);
+	tmp = kmalloc(ESDM_TESTING_RINGBUFFER_SIZE + sizeof(u64), GFP_KERNEL);
 	if (!tmp)
 		return -ENOMEM;
 
-	tmp_aligned = PTR_ALIGN(tmp, sizeof(u32));
+	tmp_aligned = PTR_ALIGN(tmp, sizeof(u64));
 
 	while (nbytes) {
 		int i;
@@ -287,7 +287,7 @@ static struct esdm_testing esdm_raw_hires = {
 	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_hires.read_wait)
 };
 
-bool esdm_raw_hires_entropy_store(u32 value)
+bool esdm_raw_hires_entropy_store(u64 value)
 {
 	return esdm_testing_store(&esdm_raw_hires, value, &boot_raw_hires_test);
 }
@@ -329,7 +329,7 @@ static struct esdm_testing esdm_irq_perf = {
 	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_irq_perf.read_wait)
 };
 
-bool esdm_irq_perf_time(u32 start)
+bool esdm_irq_perf_time(u64 start)
 {
 	return esdm_testing_store(&esdm_irq_perf,
 				  random_get_entropy() - start,
@@ -374,7 +374,7 @@ static struct esdm_testing esdm_raw_sched_hires = {
 		__WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_sched_hires.read_wait)
 };
 
-bool esdm_raw_sched_hires_entropy_store(u32 value)
+bool esdm_raw_sched_hires_entropy_store(u64 value)
 {
 	return esdm_testing_store(&esdm_raw_sched_hires, value,
 				  &boot_raw_sched_hires_test);
@@ -418,7 +418,7 @@ static struct esdm_testing esdm_sched_perf = {
 	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_sched_perf.read_wait)
 };
 
-bool esdm_sched_perf_time(u32 start)
+bool esdm_sched_perf_time(u64 start)
 {
 	return esdm_testing_store(&esdm_sched_perf,
 				  random_get_entropy() - start,

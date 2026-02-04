@@ -44,7 +44,9 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated entropy events */
-static DEFINE_PER_CPU(u32*, esdm_sched_array);
+static DEFINE_PER_CPU(u64*, esdm_sched_array);
+/* prev. timestamp for delta calculation */
+static DEFINE_PER_CPU(u64, esdm_sched_last_timestamp) = 0;
 /* ring buffer read ptr */
 static DEFINE_PER_CPU(u32, esdm_sched_array_rp) = 0;
 /* ring buffer write ptr */
@@ -134,7 +136,8 @@ static void esdm_sched_reset(void)
 		smp_store_release(per_cpu_ptr(&esdm_sched_array_rp, cpu), 0);
 		smp_store_release(per_cpu_ptr(&esdm_sched_array_wp, cpu), 0);
 		memzero_explicit(*per_cpu_ptr(&esdm_sched_array, cpu),
-				 ESDM_DATA_NUM_VALUES * sizeof(u32));
+				 ESDM_DATA_NUM_VALUES * sizeof(u64));
+		*per_cpu_ptr(&esdm_sched_last_timestamp, cpu) = 0;
 	}
 
 	/* keep DRBG state, as it will not output anything, until a reseed
@@ -210,7 +213,7 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 				seed_string_0,
 				(u8 *)(*per_cpu_ptr(&esdm_sched_array, cpu) +
 				       r_pos),
-				used_events * sizeof(u32));
+				used_events * sizeof(u64));
 			list_add_tail(&seed_string_0->list, &seedlist);
 		} else { /* need to skip parts in the 'middle' of the event array */
 			u32 used_at_end = ESDM_DATA_NUM_VALUES - r_pos;
@@ -219,14 +222,14 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 				seed_string_0,
 				(u8 *)(*per_cpu_ptr(&esdm_sched_array, cpu) +
 				       r_pos),
-				used_at_end * sizeof(u32));
+				used_at_end * sizeof(u64));
 			list_add_tail(&seed_string_0->list, &seedlist);
 
 			if (used_at_end < used_events) {
 				drbg_string_fill(
 					seed_string_1,
 					(u8 *)*per_cpu_ptr(&esdm_sched_array, cpu),
-					(used_events - used_at_end) * sizeof(u32));
+					(used_events - used_at_end) * sizeof(u64));
 				list_add_tail(&seed_string_1->list, &seedlist);
 			}
 		}
@@ -357,9 +360,9 @@ out:
  * Concatenate full 32 bit word at the end of time array even when current
  * ptr is not aligned to sizeof(data).
  */
-static void esdm_sched_array_add(u32 data)
+static void esdm_sched_array_add(u64 data)
 {
-	u32 *sched_array = READ_ONCE(*this_cpu_ptr(&esdm_sched_array));
+	u64 *sched_array = READ_ONCE(*this_cpu_ptr(&esdm_sched_array));
 	u32 w_pos = smp_load_acquire(this_cpu_ptr(&esdm_sched_array_wp));
 	u32 r_pos = READ_ONCE(*this_cpu_ptr(&esdm_sched_array_rp));
 
@@ -373,25 +376,34 @@ static void esdm_sched_array_add(u32 data)
 			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
 }
 
-static void esdm_time_process_common(u32 time, void (*add_time)(u32 data))
+static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 {
 	enum esdm_health_res health_test;
+	u64 *last_timestamp = this_cpu_ptr(&esdm_sched_last_timestamp);
+	u64 delta = abs(time - *last_timestamp);
 
-	if (esdm_raw_sched_hires_entropy_store(time))
+	if (*last_timestamp == 0) {
+		*last_timestamp = time;
+		return;
+	}
+
+	*last_timestamp = time;
+
+	if (esdm_raw_sched_hires_entropy_store(delta))
 		return;
 
-	health_test = esdm_health_test(time, esdm_int_es_sched);
+	health_test = esdm_health_test(delta, esdm_int_es_sched);
 	if (health_test > esdm_health_fail_use)
 		return;
 
 	if (health_test == esdm_health_pass)
-		add_time(time);
+		add_time(delta);
 }
 
 /* Batching up of entropy in per-CPU array */
 static void esdm_sched_time_process(void)
 {
-	u32 now_time = random_get_entropy();
+	u64 now_time = random_get_entropy();
 
 	if (unlikely(!esdm_gcd_tested())) {
 		/* When GCD is unknown, we process the full time stamp */
@@ -459,8 +471,8 @@ int __init esdm_es_sched_module_init(void)
 	}
 
 	for_each_possible_cpu (cpu) {
-		u32** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
-		*sched_array_cpu = kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u32), GFP_KERNEL);
+		u64** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
+		*sched_array_cpu = kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u64), GFP_KERNEL);
 		if (!(*sched_array_cpu))
 			goto free_mem;
 	}
@@ -490,7 +502,7 @@ int __init esdm_es_sched_module_init(void)
 
 free_mem:
 	for_each_possible_cpu (cpu) {
-		u32** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
+		u64** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
 		kfree(*sched_array_cpu);
 	}
 	return -ENOMEM;
@@ -520,7 +532,7 @@ void esdm_es_sched_module_exit(void)
 	esdm_sched_reset();
 
 	for_each_possible_cpu (cpu) {
-		u32** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
+		u64** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
 		kfree(*sched_array_cpu);
 	}
 
