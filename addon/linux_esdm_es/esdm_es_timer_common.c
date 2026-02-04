@@ -20,31 +20,31 @@ static bool esdm_highres_timer_val = false;
 
 /* Number of time stamps analyzed to calculate a GCD */
 #define ESDM_GCD_WINDOW_SIZE 100
-static u32 esdm_gcd_history[ESDM_GCD_WINDOW_SIZE];
+static u64 esdm_gcd_history[ESDM_GCD_WINDOW_SIZE];
 static atomic_t esdm_gcd_history_ptr = ATOMIC_INIT(-1);
 
 /* The common divisor for all timestamps */
-static u32 esdm_gcd_timer = 0;
+static u64 esdm_gcd_timer = 0;
 
 bool esdm_gcd_tested(void)
 {
 	return (esdm_gcd_timer != 0);
 }
 
-u32 esdm_gcd_get(void)
+u64 esdm_gcd_get(void)
 {
 	return esdm_gcd_timer;
 }
 
 /* Set the GCD for use in IRQ ES - if 0, the GCD calculation is restarted. */
-void esdm_gcd_set(u32 running_gcd)
+void esdm_gcd_set(u64 running_gcd)
 {
 	esdm_gcd_timer = running_gcd;
 	/* Ensure that update to global variable esdm_gcd_timer is visible */
 	mb();
 }
 
-static void esdm_gcd_set_check(u32 running_gcd)
+static void esdm_gcd_set_check(u64 running_gcd)
 {
 	if (!esdm_gcd_tested()) {
 		esdm_gcd_set(running_gcd);
@@ -52,9 +52,9 @@ static void esdm_gcd_set_check(u32 running_gcd)
 	}
 }
 
-u32 esdm_gcd_analyze(u32 *history, size_t nelem)
+u64 esdm_gcd_analyze(u64 *history, size_t nelem)
 {
-	u32 running_gcd = 0;
+	u64 running_gcd = 0;
 	size_t i;
 
 	/* Now perform the analysis on the accumulated time data. */
@@ -73,7 +73,7 @@ u32 esdm_gcd_analyze(u32 *history, size_t nelem)
 		 * This code checks for such increments, and allows the library
 		 * to output the number of such changes have occurred.
 		 */
-		running_gcd = (u32)gcd(history[i], running_gcd);
+		running_gcd = (u64)gcd(history[i], running_gcd);
 
 		/* Zeroize data */
 		history[i] = 0;
@@ -82,14 +82,14 @@ u32 esdm_gcd_analyze(u32 *history, size_t nelem)
 	return running_gcd;
 }
 
-void esdm_gcd_add_value(u32 time)
+void esdm_gcd_add_value(u64 time)
 {
-	u32 ptr = (u32)atomic_inc_return_relaxed(&esdm_gcd_history_ptr);
+	u64 ptr = (u64)atomic_inc_return_relaxed(&esdm_gcd_history_ptr);
 
 	if (ptr < ESDM_GCD_WINDOW_SIZE) {
 		esdm_gcd_history[ptr] = time;
 	} else if (ptr == ESDM_GCD_WINDOW_SIZE) {
-		u32 gcd = esdm_gcd_analyze(esdm_gcd_history,
+		u64 gcd = esdm_gcd_analyze(esdm_gcd_history,
 					   ESDM_GCD_WINDOW_SIZE);
 
 		if (!gcd)
@@ -120,10 +120,10 @@ bool esdm_highres_timer(void)
 
 int __init esdm_init_time_source(void)
 {
-	static const u32 ESDM_DATA_WORD_MASK = 0xFFFFFFFF;
+	static const u64 ESDM_DATA_WORD_MASK = 0xFFFFFFFF;
 
-	/* only 32 bit of the timestamp are stored later,
-	 * check if they sufficiently change */
+	/* check if the lower 32 bit of the timestamp
+	 * already sufficiently change */
 	if ((random_get_entropy() & ESDM_DATA_WORD_MASK) ||
 	    (random_get_entropy() & ESDM_DATA_WORD_MASK)) {
 		/*

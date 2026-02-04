@@ -224,36 +224,36 @@ config ESDM_SCHED_PERF
 /******************************************************************************/
 
 #ifdef CONFIG_ESDM_RAW_HIRES_ENTROPY
-bool esdm_raw_hires_entropy_store(u32 value);
+bool esdm_raw_hires_entropy_store(u64 value);
 #else /* CONFIG_ESDM_RAW_HIRES_ENTROPY */
-static inline bool esdm_raw_hires_entropy_store(u32 value)
+static inline bool esdm_raw_hires_entropy_store(u64 value)
 {
 	return false;
 }
 #endif /* CONFIG_ESDM_RAW_HIRES_ENTROPY */
 
 #ifdef CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
-bool esdm_raw_sched_hires_entropy_store(u32 value);
+bool esdm_raw_sched_hires_entropy_store(u64 value);
 #else /* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
-static inline bool esdm_raw_sched_hires_entropy_store(u32 value)
+static inline bool esdm_raw_sched_hires_entropy_store(u64 value)
 {
 	return false;
 }
 #endif /* CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY */
 
 #ifdef CONFIG_ESDM_IRQ_PERF
-bool esdm_irq_perf_time(u32 start);
+bool esdm_irq_perf_time(u64 start);
 #else /* CONFIG_ESDM_IRQ_PERF */
-static inline bool esdm_irq_perf_time(u32 start)
+static inline bool esdm_irq_perf_time(u64 start)
 {
 	return false;
 }
 #endif /*CONFIG_ESDM_IRQ_PERF */
 
 #ifdef CONFIG_ESDM_SCHED_PERF
-bool esdm_sched_perf_time(u32 start);
+bool esdm_sched_perf_time(u64 start);
 #else /* CONFIG_ESDM_SCHED_PERF */
-static inline bool esdm_sched_perf_time(u32 start)
+static inline bool esdm_sched_perf_time(u64 start)
 {
 	return false;
 }

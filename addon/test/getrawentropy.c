@@ -45,8 +45,8 @@ struct opts {
 
 static int getrawentropy(struct opts *opts)
 {
-#define BUFFER_SIZE (RAWENTROPY_SAMPLES * sizeof(uint32_t))
-	uint32_t requested = (uint32_t)opts->samples * sizeof(uint32_t);
+#define BUFFER_SIZE (RAWENTROPY_SAMPLES * sizeof(uint64_t))
+	uint32_t requested = (uint32_t)opts->samples * sizeof(uint64_t);
 	uint8_t *buffer_p, buffer[BUFFER_SIZE];
 	ssize_t ret;
 	int in_fd = -1;
@@ -78,17 +78,17 @@ static int getrawentropy(struct opts *opts)
 			goto out;
 		}
 
-		for (i = 0; i < (uint32_t)ret / (sizeof(uint32_t)); i++) {
-			uint32_t val;
+		for (i = 0; i < (uint32_t)ret / (sizeof(uint64_t)); i++) {
+			uint64_t val;
 
-			memcpy(&val, buffer_p, sizeof(uint32_t));
+			memcpy(&val, buffer_p, sizeof(uint64_t));
 			dprintf(out_fd, "%u\n", val);
-			buffer_p += sizeof(uint32_t);
+			buffer_p += sizeof(uint64_t);
 		}
 
 		requested -= (uint32_t)ret;
 
-		fprintf(stderr, "Fetched %lu events, still %lu to do\n", (uint32_t)ret / sizeof(uint32_t), requested  / sizeof(uint32_t));
+		fprintf(stderr, "Fetched %lu events, still %lu to do\n", (uint32_t)ret / sizeof(uint64_t), requested  / sizeof(uint64_t));
 	}
 
 	ret = 0;

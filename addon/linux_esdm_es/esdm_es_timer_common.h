@@ -77,10 +77,10 @@ config ESDM_COLLECTION_SIZE
 #define ESDM_UINT32_C(x) ESDM_PASTER(x, U)
 
 bool esdm_gcd_tested(void);
-void esdm_gcd_set(u32 running_gcd);
-u32 esdm_gcd_get(void);
-u32 esdm_gcd_analyze(u32 *history, size_t nelem);
-void esdm_gcd_add_value(u32 time);
+void esdm_gcd_set(u64 running_gcd);
+u64 esdm_gcd_get(void);
+u64 esdm_gcd_analyze(u64 *history, size_t nelem);
+void esdm_gcd_add_value(u64 time);
 bool esdm_highres_timer(void);
 
 /*
