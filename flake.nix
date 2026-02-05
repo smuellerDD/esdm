@@ -25,6 +25,12 @@
         pkgs = nixpkgs.legacyPackages.${system};
         lib = pkgs.lib;
 
+        kernelDebug = false;
+        kernelFips = true;
+        debugEsdm = true;
+        startEsdm = false;
+        startCompat = false;
+
         baseModule =
           {
             kernel,
@@ -51,16 +57,25 @@
               |  _| \___ \| | | | |\/| |   | | |  _| \___ \ | |    \ \ / /| |\/| |
               | |___ ___) | |_| | |  | |   | | | |___ ___) || |     \ V / | |  | |
               |_____|____/|____/|_|  |_|   |_| |_____|____/ |_|      \_/  |_|  |_|
+            ''
+            + lib.optionalString (startEsdm) ''
 
               ESDM is already started via systemd. Disable again if necessary.
+            ''
+            + lib.optionalString (startCompat) ''
+
+              ESDM compat services already started via systemd. Disable again if necessary.
+            ''
+            + ''
+
             '';
 
             users.users.root.initialPassword = "root";
             services.getty.autologinUser = lib.mkForce "root";
 
             services.esdm = {
-              enable = true;
-              enableLinuxCompatServices = false;
+              enable = startEsdm;
+              enableLinuxCompatServices = startCompat;
               package = self.packages.${system}.esdm;
             };
 
@@ -105,8 +120,10 @@
           kernel = lpsuper.kernel.override {
             kernelPatches =
               lpself.callPackage ./addon/linux_esdm_es/kernelPatches.nix { inherit (lpsuper) kernel; }
-              ++ lpself.callPackage ./addon/linux_esdm_es/fipsConfig.nix { inherit (lpsuper) kernel; }
-              ++ lpself.callPackage ./addon/linux_esdm_es/debug.nix { };
+              ++ lib.optionals kernelFips (
+                lpself.callPackage ./addon/linux_esdm_es/fipsConfig.nix { inherit (lpsuper) kernel; }
+              )
+              ++ lib.optionals kernelDebug (lpself.callPackage ./addon/linux_esdm_es/debug.nix { });
           };
           esdm_es = lpself.callPackage ./addon/linux_esdm_es { };
         };
@@ -186,11 +203,16 @@
               esKernel = false;
             }).overrideAttrs
               (prev: {
-                mesonFlags = prev.mesonFlags ++ [
-                  "-Db_sanitize=address,undefined"
-                ];
+                mesonFlags =
+                  prev.mesonFlags
+                  ++ lib.optionals debugEsdm [
+                    "-Db_sanitize=address,undefined"
+                    "-Dstrip=false"
+                  ];
+                mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
                 src = lib.cleanSource ./.;
+                dontStrip = debugEsdm;
               });
 
           # 6.6 is the first version currently supported by ESDM
