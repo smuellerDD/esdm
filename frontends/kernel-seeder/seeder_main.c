@@ -17,7 +17,11 @@
  * DAMAGE.
  */
 
+#define _GNU_SOURCE
+
 #include <esdm_rpc_client.h>
+
+#include <poll.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -29,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -40,6 +45,7 @@
 #include "memset_secure.h"
 
 static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
+static int notify_fd = -1; /* event fd used to notify in case of termination */
 
 /* modern Linux kernels have a 256 Bit entropy pool, always fill the whole state
  * at once, to loose less entropy in leftover hashing on pool updates.
@@ -161,9 +167,11 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 			__aligned(sizeof(uint32_t));
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
 
-	/* Wake up every 2 minutes by default */
-	struct timespec ts = { .tv_sec = seeding_interval_secs, .tv_nsec = 0 };
+	struct timespec ts;
+	struct pollfd pfd;
 	ssize_t ret;
+	int pret;
+	int fn_ret = EXIT_SUCCESS;
 
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
@@ -198,15 +206,45 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 
 		memset_secure(rpi->buf, 0, (size_t)rpi->buf_size);
 		rpi->entropy_count = 0;
-		nanosleep(&ts, NULL);
+
+
+		pfd.fd = notify_fd;
+		pfd.events = POLL_IN;
+		pfd.revents = 0;
+
+		/* Wake up every 2 minutes by default */
+		ts.tv_sec = seeding_interval_secs;
+		ts.tv_nsec = 0;
+
+		pret = ppoll(&pfd, 1,&ts, NULL);
+
+		/* error */
+		if (pret == -1 && errno != EINTR) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+					"ppoll returned with error %s\n",
+					strerror(errno));
+			goto out;
+		}
+
+		/* activity */
+		if (pret > 0) {
+			uint64_t event;
+
+			(void)read(notify_fd, &event, sizeof(event));
+			fn_ret = EXIT_FAILURE;
+			goto out;
+		}
 	}
 
-	return EXIT_SUCCESS;
+out:
+	return fn_ret;
 }
 
 /* terminate the daemon cleanly */
 static void sig_term(int sig)
 {
+	static const uint64_t event_inc = 1;
+
 	(void)sig;
 	esdm_logger(LOGGER_STATUS, LOGGER_C_SEEDER, "Shutting down cleanly\n");
 
@@ -220,6 +258,9 @@ static void sig_term(int sig)
 	signal(SIGTERM, SIG_DFL);
 
 	atomic_bool_set_false(&should_run);
+	if (notify_fd > 0) {
+		(void)write(notify_fd, &event_inc, sizeof(event_inc));
+	}
 }
 
 static void install_term(void)
@@ -310,6 +351,15 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
+	notify_fd = eventfd(0, EFD_CLOEXEC);
+	if (notify_fd < 0) {
+		esdm_logger_inc_verbosity();
+		esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
+			    "Unable to create event fd for termination notification!\n");
+		tool_ret = EXIT_FAILURE;
+		goto out;
+	}
+
 	if (esdm_rpcc_init_unpriv_service(NULL) != 0) {
 		printf("unable to initialize unprivileged ESDM service, exiting!");
 		tool_ret = EXIT_FAILURE;
@@ -327,5 +377,8 @@ int main(int argc, char **argv)
 	esdm_rpcc_fini_unpriv_service();
 
 out:
+	if (notify_fd > 0)
+		close(notify_fd);
+	notify_fd = -1;
 	return tool_ret;
 }
