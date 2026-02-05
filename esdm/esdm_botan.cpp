@@ -348,6 +348,8 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 		return -1;
 	}
 
+	state->initialized = false;
+
 	return 0;
 }
 
