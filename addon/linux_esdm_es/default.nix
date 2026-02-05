@@ -4,17 +4,8 @@
   kernel,
   kmod,
   esdm,
-  callPackage,
-  fipsMode ? false,
 }:
 
-let
-  patchedKernel = kernel.override {
-    kernelPatches =
-      callPackage ./kernelPatches.nix { inherit kernel; }
-      ++ (lib.optionals fipsMode (callPackage ./fipsConfig.nix { inherit kernel; }));
-  };
-in
 stdenv.mkDerivation rec {
   pname = "esdm_es";
 
@@ -25,12 +16,12 @@ stdenv.mkDerivation rec {
     sed -i '/depmod/d' Makefile
   '';
 
-  nativeBuildInputs = [ kmod ] ++ patchedKernel.moduleBuildDependencies;
+  nativeBuildInputs = [ kmod ] ++ kernel.moduleBuildDependencies;
 
   makeFlags = [
-    "KBUILD_OUTPUT=${patchedKernel.dev}/lib/modules/${patchedKernel.modDirVersion}/build"
-    "KERNELRELEASE=${patchedKernel.modDirVersion}"
-    "KERNEL_DIR=${patchedKernel.dev}/lib/modules/${patchedKernel.modDirVersion}/build"
+    "KBUILD_OUTPUT=${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
+    "KERNELRELEASE=${kernel.modDirVersion}"
+    "KERNEL_DIR=${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
     "INSTALL_MOD_PATH=${placeholder "out"}"
     "BUILD_TESTING=1"
     "BUILD_ES_IRQ=1"
@@ -41,7 +32,7 @@ stdenv.mkDerivation rec {
   enableParallelBuilding = true;
 
   meta = with lib; {
-    description = "A patchedKernel module for esdm entropy gathering";
+    description = "A kernel module for esdm entropy gathering";
     homepage = "http://www.chronox.de/esdm.html";
     license = [
       licenses.gpl2Only

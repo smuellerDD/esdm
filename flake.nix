@@ -35,9 +35,7 @@
           }:
           {
             boot.kernelPackages = kernel;
-            boot.kernelPatches =
-              pkgs.callPackage ./addon/linux_esdm_es/kernelPatches.nix { inherit (kernel) kernel; }
-              ++ pkgs.callPackage ./addon/linux_esdm_es/fipsConfig.nix { inherit (kernel) kernel; };
+
             boot.kernelModules = [
               "jitterentropy_rng"
               "esdm_es"
@@ -62,7 +60,7 @@
 
             services.esdm = {
               enable = true;
-              enableLinuxCompatServices = true;
+              enableLinuxCompatServices = false;
               package = self.packages.${system}.esdm;
             };
 
@@ -72,6 +70,7 @@
               tmux
               vim
               self.packages.${system}.esdm
+              gdb
             ];
 
             console.keyMap = "de";
@@ -102,26 +101,20 @@
             ];
           };
 
-        linuxPackages_6_6 = pkgs.linuxPackages_6_6.extend (
-          lpself: lpsuper: {
-            esdm_es = lpself.callPackage ./addon/linux_esdm_es { fipsMode = true; };
-          }
-        );
-        linuxPackages_6_12 = pkgs.linuxPackages_6_12.extend (
-          lpself: lpsuper: {
-            esdm_es = lpself.callPackage ./addon/linux_esdm_es { fipsMode = true; };
-          }
-        );
-        linuxPackages_6_18 = pkgs.linuxPackages_6_18.extend (
-          lpself: lpsuper: {
-            esdm_es = lpself.callPackage ./addon/linux_esdm_es { fipsMode = true; };
-          }
-        );
-        linuxPackages_latest = pkgs.linuxPackages_latest.extend (
-          lpself: lpsuper: {
-            esdm_es = lpself.callPackage ./addon/linux_esdm_es { fipsMode = true; };
-          }
-        );
+        addEsdmToKernel = lpself: lpsuper: {
+          kernel = lpsuper.kernel.override {
+            kernelPatches =
+              lpself.callPackage ./addon/linux_esdm_es/kernelPatches.nix { inherit (lpsuper) kernel; }
+              ++ lpself.callPackage ./addon/linux_esdm_es/fipsConfig.nix { inherit (lpsuper) kernel; }
+              ++ lpself.callPackage ./addon/linux_esdm_es/debug.nix { };
+          };
+          esdm_es = lpself.callPackage ./addon/linux_esdm_es { };
+        };
+
+        linuxPackages_6_6 = pkgs.linuxPackages_6_6.extend addEsdmToKernel;
+        linuxPackages_6_12 = pkgs.linuxPackages_6_12.extend addEsdmToKernel;
+        linuxPackages_6_18 = pkgs.linuxPackages_6_18.extend addEsdmToKernel;
+        linuxPackages_latest = pkgs.linuxPackages_latest.extend addEsdmToKernel;
       in
       {
         # nix fmt
@@ -150,6 +143,12 @@
                     (
                       { ... }:
                       {
+                        boot.kernelParams = [
+                          "kmemleak=on"
+                          "page_owner=on"
+                          "log_buf_len=32M"
+                        ];
+
                         virtualisation = {
                           efi.OVMF = pkgs.OVMFFull.fd;
                           useEFIBoot = true;
@@ -157,7 +156,7 @@
                             enable = true;
                           };
                           memorySize = 2048;
-                          cores = 4;
+                          cores = 10;
                           qemu.options = [
                             "-smbios type=1,uuid=2715dd9b-5684-4eeb-ae88-a62bb4232563"
                           ];
@@ -186,33 +185,33 @@
               esHwrandEntropyRate = 0;
               esKernel = false;
             }).overrideAttrs
-              {
+              (prev: {
+                mesonFlags = prev.mesonFlags ++ [
+                  "-Db_sanitize=address,undefined"
+                ];
+                doCheck = false;
                 src = lib.cleanSource ./.;
-              };
+              });
 
           # 6.6 is the first version currently supported by ESDM
           esdm_es_6_6 = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
             kernel = pkgs.linux_6_6;
-            fipsMode = true;
           };
           # 6.12 is the next LTS kernel after 6.6
           esdm_es_6_12 = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
             kernel = pkgs.linux_6_12;
-            fipsMode = true;
           };
           # 6.18 is the next LTS kernel after 6.12
           esdm_es_6_18 = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
             kernel = pkgs.linux_6_18;
-            fipsMode = true;
           };
           # always allow testing with latest kernel
           esdm_es_latest = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
             kernel = pkgs.linux_latest;
-            fipsMode = true;
           };
         };
 
