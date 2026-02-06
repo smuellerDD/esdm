@@ -305,18 +305,15 @@ static int esdm_jent_initialize(void)
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
 	CKINT(esdm_jent_async_init());
 
-	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled()) {
+	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() || esdm_ntg1_2024_compliant()) {
 		flags |= JENT_FORCE_FIPS;
 	}
 
-	if (esdm_ntg1_2024_compliant()) {
+	/* always enable NTG.1 when version is recent enough.
+	 * This is only relevant during initialization. */
 #if JENT_VERSION >= 3070000
-		flags |= JENT_NTG1;
+	flags |= JENT_NTG1;
 #endif
-		/* should also be set by JENT_NTG1, just set as
-		 * part of defensive programming */
-		flags |= JENT_FORCE_FIPS;
-	}
 
 	esdm_jent_state = jent_entropy_collector_alloc(0, flags);
 	CKNULL(esdm_jent_state, -EFAULT);
@@ -350,11 +347,12 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 " Library version: %u\n"
 		 " Standards compliance: %s%s\n"
 		 " Entropy Rate per 256 data bits: %u\n",
-		 esdm_jent_poolsize(), jent_version(),
+		 esdm_jent_poolsize(),
+		 jent_version(),
 		 (esdm_sp80090c_compliant() ||
 		  esdm_config_fips_enabled() ||
 		  esdm_ntg1_2024_compliant()) ? "SP800-90B " : "",
-		 (esdm_ntg1_2024_compliant() && jent_version() >= 3070000 && jent_secure_memory) ? "NTG.1(2024)" : "",
+		 (jent_version() >= 3070000 && jent_secure_memory) ? "NTG.1(2024)" : "",
 		 esdm_jent_entropylevel(256));
 }
 
