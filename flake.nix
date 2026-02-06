@@ -193,7 +193,7 @@
             (pkgs.esdm.override {
               selinux = false;
               esSched = true;
-              esSchedEntropyRate = 256;
+              esSchedEntropyRate = 0;
               esCPU = true;
               esCPUEntropyRate = 0;
               esIRQ = true;
@@ -201,6 +201,34 @@
               esHwrand = true;
               esHwrandEntropyRate = 0;
               esKernel = false;
+              ais2031 = false;
+              # remove later, for testing with NTG.1 capable jitterentropy
+              jitterentropy = pkgs.jitterentropy.overrideAttrs (
+                _: prevAttrs: {
+                  version = "3.7.0";
+                  src = pkgs.fetchFromGitHub {
+                    owner = "smuellerDD";
+                    repo = "jitterentropy-library";
+                    rev = "83f25c29e00accac182e2916a20c03300f78f9c9";
+                    hash = "sha256-ITbxj0yLI0E1vgQuqwGJfGeiwTgpZ/RB9d7GSSPHknI=";
+                  };
+                  # for secure memory
+                  propagatedBuildInputs = [
+                    pkgs.openssl
+                  ];
+                  patches = [ ];
+                  postPatch = ''
+                    sed -i '/add_subdirectory(tests\/gcd)/d' CMakeLists.txt
+                  '';
+                  # better find openssl
+                  nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.pkg-config ];
+                  # enables secure memory mode
+                  cmakeFlags = [
+                    "-DEXTERNAL_CRYPTO=OPENSSL"
+                    "-DBUILD_SHARED_LIBS=ON"
+                  ];
+                }
+              );
             }).overrideAttrs
               (prev: {
                 mesonFlags =
