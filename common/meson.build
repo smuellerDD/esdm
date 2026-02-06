@@ -89,6 +89,8 @@ conf_data.set('THREADING_MAX_THREADS', get_option('threading_max_threads'))
 conf_data.set('ESDM_ES_JENT', get_option('es_jent').enabled())
 conf_data.set('ESDM_JENT_ENTROPY_RATE',
 	      get_option('es_jent_entropy_rate'))
+conf_data.set('ESDM_JENT_OSR',
+	      get_option('es_jent_osr'))
 
 # In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
 # need to result in a value larger than zero

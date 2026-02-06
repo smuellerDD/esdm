@@ -315,7 +315,7 @@ static int esdm_jent_initialize(void)
 	flags |= JENT_NTG1;
 #endif
 
-	esdm_jent_state = jent_entropy_collector_alloc(0, flags);
+	esdm_jent_state = jent_entropy_collector_alloc(ESDM_JENT_OSR, flags);
 	CKNULL(esdm_jent_state, -EFAULT);
 
 	atomic_set(&esdm_jent_initialized, 1);
@@ -346,14 +346,16 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 " Available entropy: %u\n"
 		 " Library version: %u\n"
 		 " Standards compliance: %s%s\n"
-		 " Entropy Rate per 256 data bits: %u\n",
+		 " Entropy Rate per 256 data bits: %u\n"
+		 " Oversampling Rate: %u\n",
 		 esdm_jent_poolsize(),
 		 jent_version(),
 		 (esdm_sp80090c_compliant() ||
 		  esdm_config_fips_enabled() ||
 		  esdm_ntg1_2024_compliant()) ? "SP800-90B " : "",
 		 (jent_version() >= 3070000 && jent_secure_memory) ? "NTG.1(2024)" : "",
-		 esdm_jent_entropylevel(256));
+		 esdm_jent_entropylevel(256),
+		ESDM_JENT_OSR);
 }
 
 static bool esdm_jent_active(void)

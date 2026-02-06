@@ -18,6 +18,16 @@ data obtained from the Jitter RNG entropy source. The ESDM enforces the
 limit that this value must be in the range between 0 and 256.
 ''')
 
+# Option for: ESDM_JENT_OSR
+option('es_jent_osr', type: 'integer', min: 3, max: 256, value: 3,
+       description:'''Jitter RNG entropy source oversampling rate
+
+The option defines the oversampling multiplier used in jitterentropy.
+This is often adapted to get more conservative entropy estimates.
+Please note, that every increase reduces the output performance
+of this source due to increased internal sampling rounds.
+''')
+
 # Option for: ESDM_JENT_ENTROPY_BLOCKS
 option('es_jent_entropy_blocks', type: 'integer', value: 128,
        description:'''Jitter RNG entropy buffer size
