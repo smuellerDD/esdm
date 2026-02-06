@@ -103,6 +103,10 @@ out:
 	return (int)ret;
 }
 
+void usage() {
+	fprintf(stderr, "Usage: getrawentropy [--samples NUM] [--debugfs-file FILE] [--outfile FILE] [--help]\n");
+}
+
 int main(int argc, char *argv[])
 {
 	struct opts opts;
@@ -115,15 +119,19 @@ int main(int argc, char *argv[])
 	while (1) {
 		int opt_index = 0;
 		static struct option options[] = {
+			{ "help", 0, 0, 'h' },
 			{ "samples", required_argument, 0, 's' },
 			{ "debugfs-file", required_argument, 0, 'f' },
 			{ "outfile", required_argument, 0, 'o' },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "f:s:o:", options, &opt_index);
+		c = getopt_long(argc, argv, "hf:s:o:", options, &opt_index);
 		if (c == -1)
 			break;
 		switch (c) {
+		case 'h':
+			usage();
+			return EXIT_FAILURE;
 		case 's':
 			opts.samples = strtoul(optarg, NULL, 10);
 			if (opts.samples == ULONG_MAX)
