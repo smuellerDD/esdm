@@ -236,6 +236,9 @@
                   ++ lib.optionals debugEsdm [
                     "-Db_sanitize=address,undefined"
                     "-Dstrip=false"
+                  ]
+                  ++ [
+                    "-Des_jent_osr=4"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
