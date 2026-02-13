@@ -684,6 +684,34 @@ int esdm_rpcc_set_min_reseed_secs(unsigned int seconds);
  */
 int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data);
 
+/******************************************************************************
+ * entropy source specific handlers
+ ******************************************************************************/
+
+/**
+ * @brief RPC-version of esdm_jent_status
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * @param [out] buf Buffer to be filled with human-readable status information.
+ *		    The string will be NULL-terminated.
+ * @param [in] buflen Size of the buffer provided by the caller.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_jent_status(char *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_jent_status
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_jent_status_int(char *buf, size_t buflen, void *int_data);
+
 /**
  * @brief Invoke a function up to 5 times if EINTR was returned
  *

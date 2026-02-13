@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2026, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
@@ -17,27 +17,30 @@
  * DAMAGE.
  */
 
-#ifndef _ESDM_ES_JENT_H
-#define _ESDM_ES_JENT_H
+#include <string.h>
 
-#include "config.h"
-#include "esdm_es_mgr_cb.h"
-#include "visibility.h"
+#include "esdm.h"
+#include "esdm_rpc_service.h"
+#include "math_helper.h"
+#include "unpriv_access.pb-c.h"
+#include "esdm_es_jent.h"
 
-#ifdef ESDM_ES_JENT
+void esdm_rpc_jent_status(UnprivAccess_Service *service,
+			  const JentStatusRequest *request,
+			  JentStatusResponse_Closure closure, void *closure_data)
+{
+	JentStatusResponse response = JENT_STATUS_RESPONSE__INIT;
+	char status[ESDM_RPC_MAX_MSG_SIZE];
+	(void)service;
 
-DSO_PUBLIC
-int esdm_jent_status(char* buf, size_t buf_length);
-
-extern struct esdm_es_cb esdm_es_jent;
-
-#else /* ESDM_ES_JENT */
-
-DSO_PUBLIC
-static int esdm_jent_status(char* buf, size_t buf_length) {
-	return -ENOENT;
+	if (request == NULL) {
+		response.ret = -(int32_t)sizeof(status);
+		closure(&response, closure_data);
+	} else {
+		esdm_jent_status(status,
+				 min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE));
+		response.ret = 0;
+		response.buffer = status;
+		closure(&response, closure_data);
+	}
 }
-
-#endif /* ESDM_ES_JENT */
-
-#endif /* _ESDM_ES_JENT_H */
