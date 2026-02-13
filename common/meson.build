@@ -91,6 +91,14 @@ conf_data.set('ESDM_JENT_ENTROPY_RATE',
 	      get_option('es_jent_entropy_rate'))
 conf_data.set('ESDM_JENT_OSR',
 	      get_option('es_jent_osr'))
+conf_data.set('ESDM_JENT_NTG1',
+	      get_option('es_jent_ntg1').enabled())
+conf_data.set('ESDM_JENT_MAX_MEM',
+	      get_option('es_jent_max_mem'))
+conf_data.set('ESDM_JENT_HASH_LOOP_COUNT',
+	      get_option('es_jent_hash_loop_count'))
+conf_data.set('ESDM_JENT_ALL_CACHES',
+	      get_option('es_jent_all_caches').enabled())
 
 # In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
 # need to result in a value larger than zero

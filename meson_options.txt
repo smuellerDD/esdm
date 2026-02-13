@@ -28,6 +28,14 @@ Please note, that every increase reduces the output performance
 of this source due to increased internal sampling rounds.
 ''')
 
+option('es_jent_ntg1', type: 'feature', value: 'disabled')
+
+option('es_jent_max_mem', type: 'integer', min: -1, max: 20, value: -1)
+
+option('es_jent_hash_loop_count', type: 'integer', min: -1, max: 7, value: -1)
+
+option('es_jent_all_caches', type: 'feature', value: 'disabled')
+
 # Option for: ESDM_JENT_ENTROPY_BLOCKS
 option('es_jent_entropy_blocks', type: 'integer', value: 128,
        description:'''Jitter RNG entropy buffer size
