@@ -63,6 +63,8 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-s --status\t\t\tShow status string of all entropy sources.\n");
 	fprintf(stderr,
+		"\t-J --jent-status\t\t\tShow internal status string of jitterentropy source.\n");
+	fprintf(stderr,
 		"\t-S --is-fully-seeded\t\tCheck if ESDM is ready to return random bytes\n");
 	fprintf(stderr,
 		"\t-r --get-random BYTE\t\tGet BYTE random bytes (hex formatted)\n");
@@ -148,6 +150,21 @@ static void handle_status(void)
 			    "Fetching ESDM status failed!\n");
 	} else {
 		esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Status --\n%s",
+			    status_buffer);
+	}
+}
+
+static void handle_jent_status(void)
+{
+	char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
+	memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
+	int ret;
+	esdm_invoke(esdm_rpcc_jent_status(&status_buffer[0], ESDM_RPC_MAX_MSG_SIZE));
+	if (ret != 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Fetching ESDM jitterentropy status failed!\n");
+	} else {
+		esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Jitterentropy Status --\n%s",
 			    status_buffer);
 	}
 }
@@ -763,6 +780,7 @@ int main(int argc, char **argv)
 	bool reseed_crng = false;
 	bool seed_via_os = false;
 	bool reseed_via_os = false;
+	bool jent_status = false;
 	int verbosity = 2;
 	bool use_syslog = false;
 	int return_val = EXIT_SUCCESS;
@@ -789,6 +807,7 @@ int main(int argc, char **argv)
 		int opt_index = 0;
 		static struct option opts[] = {
 			{ "status", 0, 0, 0 },
+			{ "jent-status", 0, 0, 0 },
 			{ "help", 0, 0, 0 },
 			{ "is-fully-seeded", 0, 0, 0 },
 			{ "get-random", 1, 0, 0 },
@@ -826,7 +845,7 @@ int main(int argc, char **argv)
 			{ "fips-checkfile", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:", opts,
+		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:J", opts,
 				&opt_index);
 		if (-1 == c)
 			break;
@@ -1039,6 +1058,10 @@ int main(int argc, char **argv)
 				/* fips check file */
 				fips_check_file = optarg;
 				break;
+			case 36:
+				/* display jitterentropy source status */
+				jent_status = true;
+				break;
 			}
 			break;
 		case 's':
@@ -1117,6 +1140,10 @@ int main(int argc, char **argv)
 			/* fips check file */
 			fips_check_file = optarg;
 			break;
+		case 'J':
+			/* display jitterentropy source status */
+			jent_status = true;
+			break;
 		}
 	}
 
@@ -1165,6 +1192,8 @@ int main(int argc, char **argv)
 #endif
 	} else if (status) {
 		handle_status();
+	} else if (jent_status) {
+		handle_jent_status();
 	} else if (is_fully_seeded) {
 		return_val = handle_is_fully_seeded();
 	} else if (get_random) {

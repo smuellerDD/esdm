@@ -12,6 +12,7 @@ server_rpc_src = files([
 	'esdm_rpc_get_write_wakeup_thresh_s.c',
 	'esdm_rpc_is_fully_seeded_s.c',
 	'esdm_rpc_is_min_seeded_s.c',
+	'esdm_rpc_jent_status_s.c',
 	'esdm_rpc_rnd_add_entropy_s.c',
 	'esdm_rpc_rnd_add_to_ent_cnt_s.c',
 	'esdm_rpc_rnd_clear_pool_s.c',

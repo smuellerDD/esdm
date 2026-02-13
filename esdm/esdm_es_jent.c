@@ -67,6 +67,22 @@ static volatile enum esdm_jent_async_state
 static struct rand_data *esdm_jent_state_thread = NULL;
 #endif
 
+int esdm_jent_status(char* buf, size_t buf_length) {
+	int ret = -ENOENT;
+
+#if JENT_VERSION >= 3070000
+	mutex_w_lock(&esdm_jent_lock);
+	if (atomic_read(&esdm_jent_initialized) && esdm_jent_state) {
+		ret = jent_status(esdm_jent_state, buf, buf_length);
+	} else {
+		ret = -EAGAIN;
+	}
+	mutex_w_unlock(&esdm_jent_lock);
+#endif
+
+	return ret;
+}
+
 static bool esdm_jent_ntg1() {
 #if JENT_VERSION >= 3070000
 	const bool jent_secure_memory = jent_secure_memory_supported();

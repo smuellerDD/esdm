@@ -13,6 +13,7 @@ client_rpc_src = files([
 	'esdm_rpc_get_write_wakeup_thresh_c.c',
 	'esdm_rpc_is_fully_seeded_c.c',
 	'esdm_rpc_is_min_seeded_c.c',
+	'esdm_rpc_jent_status_c.c',
 	'esdm_rpc_rnd_add_entropy_c.c',
 	'esdm_rpc_rnd_add_to_ent_cnt_c.c',
 	'esdm_rpc_rnd_clear_pool_c.c',
