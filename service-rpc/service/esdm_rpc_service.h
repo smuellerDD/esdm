@@ -195,6 +195,11 @@ void esdm_rpc_set_min_reseed_secs(PrivAccess_Service *service,
 				  SetMinReseedSecsResponse_Closure closure,
 				  void *closure_data);
 
+/* entropy source specific implementations */
+void esdm_rpc_jent_status(UnprivAccess_Service *service,
+			  const JentStatusRequest *request,
+			  JentStatusResponse_Closure closure, void *closure_data);
+
 /******************************************************************************
  * Definition of Protobuf-C service
  ******************************************************************************/
