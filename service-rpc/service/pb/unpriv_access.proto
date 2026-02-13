@@ -32,6 +32,32 @@ message StatusResponse {
 }
 
 /******************************************************************************
+ * get_jent_status
+ ******************************************************************************/
+
+/**
+ * @brief Request to get Jitterentropy status
+ *
+ * @param maxlen Maximum size of buffer
+ */
+message JentStatusRequest {
+	uint32 maxlen = 1;
+}
+
+/**
+ * @brief Response to get status
+ *
+ * @param buffer_len Number of bytes present in the buffer - if no message
+ *		     buffer is returned, this value specifies the number of
+ *		     required bytes.
+ * @param buffer Buffer with ASCII status - this is a NULL-terminated string
+ */
+message JentStatusResponse {
+	int32 ret = 1;
+	string buffer = 2;
+}
+
+/******************************************************************************
  * get_ent_level
  ******************************************************************************/
 
@@ -412,4 +438,7 @@ service UnprivAccess {
 				    (GetWriteWakeupThreshResponse);
 	rpc RpcGetMinReseedSecs (GetMinReseedSecsRequest) returns
 				(GetMinReseedSecsResponse);
+
+	/* entropy source specific calls */
+	rpc RpcJentStatus (JentStatusRequest) returns (JentStatusResponse);
 }
