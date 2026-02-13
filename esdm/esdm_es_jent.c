@@ -20,6 +20,7 @@
  */
 
 #include <jitterentropy.h>
+#include <stdio.h>
 
 #include "atomic.h"
 #include "build_bug_on.h"
@@ -78,6 +79,8 @@ int esdm_jent_status(char* buf, size_t buf_length) {
 		ret = -EAGAIN;
 	}
 	mutex_w_unlock(&esdm_jent_lock);
+#else
+	snprintf(buf, buf_length, "{}");
 #endif
 
 	return ret;
@@ -345,7 +348,6 @@ static int esdm_jent_initialize(void)
 	if (esdm_jent_ntg1()) {
 		flags |= JENT_NTG1;
 	}
-#endif
 
 	switch (ESDM_JENT_MAX_MEM) {
 	case 1:
@@ -436,6 +438,7 @@ static int esdm_jent_initialize(void)
 		flags |= JENT_HASHLOOP_128;
 		break;
 	}
+#endif /* JENT_VERSION >= 3070000 */
 
 	esdm_jent_state = jent_entropy_collector_alloc(ESDM_JENT_OSR, flags);
 	CKNULL(esdm_jent_state, -EFAULT);
