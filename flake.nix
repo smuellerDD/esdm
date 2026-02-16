@@ -86,6 +86,7 @@
               vim
               self.packages.${system}.esdm
               gdb
+              sp800-90b-entropyassessment
             ];
 
             console.keyMap = "de";
@@ -209,8 +210,8 @@
                   src = pkgs.fetchFromGitHub {
                     owner = "smuellerDD";
                     repo = "jitterentropy-library";
-                    rev = "83f25c29e00accac182e2916a20c03300f78f9c9";
-                    hash = "sha256-ITbxj0yLI0E1vgQuqwGJfGeiwTgpZ/RB9d7GSSPHknI=";
+                    rev = "ddca470398249758d0943283ea846b4aebd2c385";
+                    hash = "sha256-d8LqMvq3wJlnrSJhMVoKni9X/Wvvk7q6s4y3TYwqcl4=";
                   };
                   # for secure memory
                   propagatedBuildInputs = [
@@ -224,6 +225,7 @@
                   nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.pkg-config ];
                   # enables secure memory mode
                   cmakeFlags = [
+                    "-DINTERNAL_TIMER=OFF"
                     "-DEXTERNAL_CRYPTO=OPENSSL"
                     "-DBUILD_SHARED_LIBS=ON"
                   ];
