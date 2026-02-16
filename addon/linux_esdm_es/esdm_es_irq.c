@@ -366,7 +366,7 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 {
 	enum esdm_health_res health_test;
 	u64 *last_timestamp = this_cpu_ptr(&esdm_irq_last_timestamp);
-	u64 delta = abs(time - *last_timestamp);
+	u64 delta = esdm_delta_abs(time, *last_timestamp);
 
 	if (*last_timestamp == 0) {
 		*last_timestamp = time;
@@ -378,12 +378,12 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 	if (esdm_raw_hires_entropy_store(delta))
 		return;
 
-	health_test = esdm_health_test(delta, esdm_int_es_irq);
+	health_test = esdm_health_test(time, esdm_int_es_irq);
 	if (health_test > esdm_health_fail_use)
 		return;
 
 	if (health_test == esdm_health_pass)
-		add_time(delta);
+		add_time(time);
 }
 
 /*

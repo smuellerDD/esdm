@@ -380,7 +380,7 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 {
 	enum esdm_health_res health_test;
 	u64 *last_timestamp = this_cpu_ptr(&esdm_sched_last_timestamp);
-	u64 delta = abs(time - *last_timestamp);
+	u64 delta = esdm_delta_abs(time, *last_timestamp);
 
 	if (*last_timestamp == 0) {
 		*last_timestamp = time;
@@ -392,12 +392,12 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 	if (esdm_raw_sched_hires_entropy_store(delta))
 		return;
 
-	health_test = esdm_health_test(delta, esdm_int_es_sched);
+	health_test = esdm_health_test(time, esdm_int_es_sched);
 	if (health_test > esdm_health_fail_use)
 		return;
 
 	if (health_test == esdm_health_pass)
-		add_time(delta);
+		add_time(time);
 }
 
 /* Batching up of entropy in per-CPU array */

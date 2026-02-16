@@ -83,6 +83,11 @@ u64 esdm_gcd_analyze(u64 *history, size_t nelem);
 void esdm_gcd_add_value(u64 time);
 bool esdm_highres_timer(void);
 
+static inline u64 esdm_delta_abs(u64 a, u64 b)
+{
+	return (b > a) ? (b - a) : (a - b);
+}
+
 /*
  * Number of time values to store in the array - in small environments
  * only one atomic_t variable per CPU is used.
