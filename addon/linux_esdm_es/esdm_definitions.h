@@ -15,11 +15,9 @@
  * Specific settings for different use cases
  */
 #ifdef CONFIG_CRYPTO_FIPS
-/* adjusted by two bit, to reach full entropy in (HMAC-)DRBG output also with
- * BSI formulas: HMAC-DRBG(SHA-512) "loses" 2 bits in (re-)seeding due to
- * Hash(Hash(Entropy)). Each hash operation "loses" 1 bit. */
-#define ESDM_OVERSAMPLE_ES_BITS (64 + 2)
-#define ESDM_SEED_BUFFER_INIT_ADD_BITS (128 + 2)
+/* adjusted by 1 bit too reach full entropy in internal state after HMAC update */
+#define ESDM_OVERSAMPLE_ES_BITS (64 + 1)
+#define ESDM_SEED_BUFFER_INIT_ADD_BITS (128 + 1)
 #else /* CONFIG_CRYPTO_FIPS */
 #define ESDM_OVERSAMPLE_ES_BITS 0
 #define ESDM_SEED_BUFFER_INIT_ADD_BITS 0
