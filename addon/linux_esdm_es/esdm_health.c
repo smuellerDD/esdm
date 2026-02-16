@@ -18,9 +18,9 @@
 
 /* Stuck Test */
 struct esdm_stuck_test {
-	u32 last_time; /* Stuck test: time of previous event */
-	u32 last_delta; /* Stuck test: delta of previous event */
-	u32 last_delta2; /* Stuck test: 2. time derivation of previous event */
+	u64 last_time; /* Stuck test: time of previous event */
+	u64 last_delta; /* Stuck test: delta of previous event */
+	u64 last_delta2; /* Stuck test: 2. time derivation of previous event */
 };
 
 /* Repetition Count Test */
@@ -391,7 +391,7 @@ static void esdm_apt_restart(struct esdm_apt *apt)
  * @health [in] Reference to health state
  * @now_time [in] Time stamp to process
  */
-static void esdm_apt_insert(struct esdm_health *health, unsigned int now_time,
+static void esdm_apt_insert(struct esdm_health *health, u64 now_time,
 			    enum esdm_internal_es es)
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
@@ -498,7 +498,7 @@ static void esdm_rct(struct esdm_health *health, enum esdm_internal_es es,
  * high-resolution time stamps are identified after initialization.
  ***************************************************************************/
 
-static u32 esdm_delta(u32 prev, u32 next)
+static u32 esdm_delta(u64 prev, u64 next)
 {
 	/*
 	 * Note that this (unsigned) subtraction does yield the correct value
@@ -515,12 +515,12 @@ static u32 esdm_delta(u32 prev, u32 next)
  * @return: 0 event occurrence not stuck (good time stamp)
  *	    != 0 event occurrence stuck (reject time stamp)
  */
-static int esdm_timestamp_stuck(enum esdm_internal_es es, u32 now_time)
+static int esdm_timestamp_stuck(enum esdm_internal_es es, u64 now_time)
 {
 	struct esdm_stuck_test *stuck = this_cpu_ptr(esdm_stuck_test_array);
-	u32 delta = esdm_delta(stuck[es].last_time, now_time);
-	u32 delta2 = esdm_delta(stuck[es].last_delta, delta);
-	u32 delta3 = esdm_delta(stuck[es].last_delta2, delta2);
+	u64 delta = esdm_delta(stuck[es].last_time, now_time);
+	u64 delta2 = esdm_delta(stuck[es].last_delta, delta);
+	u64 delta3 = esdm_delta(stuck[es].last_delta2, delta2);
 
 	stuck[es].last_time = now_time;
 	stuck[es].last_delta = delta;
@@ -554,7 +554,7 @@ void esdm_health_disable(void)
  *
  * @now_time Time stamp
  */
-enum esdm_health_res esdm_health_test(u32 now_time, enum esdm_internal_es es)
+enum esdm_health_res esdm_health_test(u64 now_time, enum esdm_internal_es es)
 {
 	struct esdm_health *health = &esdm_health;
 	int stuck;
