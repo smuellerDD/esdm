@@ -611,7 +611,7 @@ static int handle_stress_fork(void)
 	}
 
 	if (errno != ECHILD) {
-		printf("error in some child occured\n");
+		printf("error in some child occurred\n");
 		fflush(stdout);
 		return EXIT_FAILURE;
 	}
@@ -807,7 +807,6 @@ int main(int argc, char **argv)
 		int opt_index = 0;
 		static struct option opts[] = {
 			{ "status", 0, 0, 0 },
-			{ "jent-status", 0, 0, 0 },
 			{ "help", 0, 0, 0 },
 			{ "is-fully-seeded", 0, 0, 0 },
 			{ "get-random", 1, 0, 0 },
@@ -843,6 +842,7 @@ int main(int argc, char **argv)
 			{ "stress-fork", 0, 0, 0 },
 			{ "fips-targetfile", 1, 0, 0 },
 			{ "fips-checkfile", 1, 0, 0 },
+			{ "jent-status", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:J", opts,
