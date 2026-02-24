@@ -366,7 +366,7 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 {
 	enum esdm_health_res health_test;
 	u64 *last_timestamp = this_cpu_ptr(&esdm_irq_last_timestamp);
-	u64 delta = esdm_delta_abs(time, *last_timestamp);
+	u64 delta = time - *last_timestamp;
 
 	if (*last_timestamp == 0) {
 		*last_timestamp = time;
