@@ -189,6 +189,31 @@
         };
 
         packages = {
+          jitterentropy = pkgs.jitterentropy.overrideAttrs (
+            _: prevAttrs: {
+              version = "3.7.0";
+              src = pkgs.fetchFromGitHub {
+                owner = "smuellerDD";
+                repo = "jitterentropy-library";
+                rev = "e7bf6282407d1ea52815cdd7746b4c086c0b19af";
+                hash = "sha256-PC8CQBRjJKWWfSLuEWyl09yjxZ9XS2ZGI7OMSFPwZ48=";
+              };
+              # for secure memory
+              propagatedBuildInputs = [
+                pkgs.openssl
+              ];
+              patches = [ ];
+              # better find openssl
+              nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.pkg-config ];
+              # enables secure memory mode
+              cmakeFlags = [
+                "-DINTERNAL_TIMER=OFF"
+                "-DEXTERNAL_CRYPTO=OPENSSL"
+                "-DBUILD_SHARED_LIBS=ON"
+              ];
+            }
+          );
+
           # this currently defaults to the botan crypto backend
           esdm =
             (pkgs.esdm.override {
@@ -204,33 +229,7 @@
               esKernel = false;
               ais2031 = false;
               # remove later, for testing with NTG.1 capable jitterentropy
-              jitterentropy = pkgs.jitterentropy.overrideAttrs (
-                _: prevAttrs: {
-                  version = "3.7.0";
-                  src = pkgs.fetchFromGitHub {
-                    owner = "smuellerDD";
-                    repo = "jitterentropy-library";
-                    rev = "ddca470398249758d0943283ea846b4aebd2c385";
-                    hash = "sha256-d8LqMvq3wJlnrSJhMVoKni9X/Wvvk7q6s4y3TYwqcl4=";
-                  };
-                  # for secure memory
-                  propagatedBuildInputs = [
-                    pkgs.openssl
-                  ];
-                  patches = [ ];
-                  postPatch = ''
-                    sed -i '/add_subdirectory(tests\/gcd)/d' CMakeLists.txt
-                  '';
-                  # better find openssl
-                  nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.pkg-config ];
-                  # enables secure memory mode
-                  cmakeFlags = [
-                    "-DINTERNAL_TIMER=OFF"
-                    "-DEXTERNAL_CRYPTO=OPENSSL"
-                    "-DBUILD_SHARED_LIBS=ON"
-                  ];
-                }
-              );
+              inherit (self.packages.${system}) jitterentropy;
             }).overrideAttrs
               (prev: {
                 mesonFlags =
@@ -251,22 +250,22 @@
           # 6.6 is the first version currently supported by ESDM
           esdm_es_6_6 = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
-            kernel = pkgs.linux_6_6;
+            inherit (linuxPackages_6_6) kernel;
           };
           # 6.12 is the next LTS kernel after 6.6
           esdm_es_6_12 = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
-            kernel = pkgs.linux_6_12;
+            inherit (linuxPackages_6_12) kernel;
           };
           # 6.18 is the next LTS kernel after 6.12
           esdm_es_6_18 = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
-            kernel = pkgs.linux_6_18;
+            inherit (linuxPackages_6_18) kernel;
           };
           # always allow testing with latest kernel
           esdm_es_latest = pkgs.callPackage ./addon/linux_esdm_es {
             inherit (pkgs) lib;
-            kernel = pkgs.linux_latest;
+            inherit (linuxPackages_latest) kernel;
           };
         };
 
@@ -296,7 +295,7 @@
               botan3
               fuse3
               gnutls
-              jitterentropy
+              self.packages.${system}.jitterentropy
               libkcapi
               libselinux
               openssl
@@ -312,7 +311,7 @@
         };
 
         # shortcut for development
-        liveIso = self.nixosConfigurations.${system}.live_6_12.config.system.build.isoImage;
+        liveIso = self.nixosConfigurations.${system}.live_6_18.config.system.build.isoImage;
       }
     );
 }
