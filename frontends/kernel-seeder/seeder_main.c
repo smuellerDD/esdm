@@ -229,8 +229,11 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 		/* activity */
 		if (pret > 0) {
 			uint64_t event;
+			ssize_t read_ret;
 
-			(void)read(notify_fd, &event, sizeof(event));
+			/* make compiler happy */
+			read_ret = read(notify_fd, &event, sizeof(event));
+			(void) read_ret;
 			fn_ret = EXIT_FAILURE;
 			goto out;
 		}
@@ -259,7 +262,11 @@ static void sig_term(int sig)
 
 	atomic_bool_set_false(&should_run);
 	if (notify_fd > 0) {
-		(void)write(notify_fd, &event_inc, sizeof(event_inc));
+		ssize_t write_ret;
+
+		/* make compiler happy */
+		write_ret = write(notify_fd, &event_inc, sizeof(event_inc));
+		(void) write_ret;
 	}
 }
 
