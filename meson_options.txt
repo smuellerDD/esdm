@@ -28,13 +28,46 @@ Please note, that every increase reduces the output performance
 of this source due to increased internal sampling rounds.
 ''')
 
-option('es_jent_ntg1', type: 'feature', value: 'disabled')
+option('es_jent_ntg1', type: 'feature', value: 'disabled',
+       description:'''Jitter RNG NTG.1 compliance mode
 
-option('es_jent_max_mem', type: 'integer', min: -1, max: 20, value: -1)
+The options enables the jitter RNGs NTG.1 mode (an BSI AIS 20/31 functionality
+class). This internally also enables FIPS mode and health tests.
+Please make sure, that you configured jitterentropy according to
+entropy estimates on your target platform. Otherwise failing health tests
+may disable the output of this entropy source.
+''')
 
-option('es_jent_hash_loop_count', type: 'integer', min: -1, max: 7, value: -1)
+option('es_jent_max_mem', type: 'integer', min: -1, max: 20, value: -1,
+       description:'''Jitter RNG max memory buffer size
 
-option('es_jent_all_caches', type: 'feature', value: 'disabled')
+The jitter RNG performs random accesses on a memory buffer as part of
+its noise source. Use this option to adapt the size of the buffer after
+entropy measurements with differents memory sizes. Please consult the
+source code of your jitterentropy version for a current meaning of the
+values. At the time of writing this description text e.g. 16 would allocate
+32 MB.
+''')
+
+option('es_jent_hash_loop_count', type: 'integer', min: -1, max: 7, value: -1,
+       description:'''Jitter RNG hash loop count
+
+The jitter RNG performs SHA3-256 iterations as part of
+its noise source. Use this option to adapt the number of iterations.
+Please consult the source code of your jitterentropy version for a current
+meaning of the values. At the time of writing this description text e.g. 3
+would iterate 8 times.
+''')
+
+option('es_jent_all_caches', type: 'feature', value: 'disabled',
+       description:'''Jitter RNG cache logic use all caches
+
+If no max memory size is given, the jitter RNG estimates an
+adequate size of the memory buffer dependending on the cache
+size of the system. Typically only the size of the L1 is used for
+this. With this option, the sum all caches up to L3 is taken
+into account.
+''')
 
 # Option for: ESDM_JENT_ENTROPY_BLOCKS
 option('es_jent_entropy_blocks', type: 'integer', value: 128,
