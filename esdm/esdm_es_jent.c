@@ -263,7 +263,7 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 	}
 }
 
-static int esdm_jent_async_init(void)
+static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
 	unsigned int i;
 	int ret = 0;
@@ -271,7 +271,7 @@ static int esdm_jent_async_init(void)
 	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++)
 		esdm_jent_async_set[i] = buffer_empty;
 
-	esdm_jent_state_thread = jent_entropy_collector_alloc(0, 0);
+	esdm_jent_state_thread = jent_entropy_collector_alloc(osr, flags);
 	CKNULL(esdm_jent_state_thread, -EFAULT);
 
 out:
@@ -297,7 +297,7 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 	mutex_w_unlock(&esdm_jent_lock);
 }
 
-static inline int esdm_jent_async_init(void)
+static inline int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
 	return 0;
 }
@@ -334,11 +334,6 @@ static int esdm_jent_initialize(void)
 	esdm_jent_finalize();
 
 	mutex_w_init(&esdm_jent_lock, 1, 1);
-
-	CKINT(jent_entropy_init());
-
-	/* Initialize the Jitter RNG after the clocksources are initialized. */
-	CKINT(esdm_jent_async_init());
 
 	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() || esdm_ntg1_2024_compliant()) {
 		flags |= JENT_FORCE_FIPS;
@@ -440,6 +435,11 @@ static int esdm_jent_initialize(void)
 	}
 #endif /* JENT_VERSION >= 3070000 */
 
+	CKINT(jent_entropy_init_ex(ESDM_JENT_OSR, flags));
+
+	/* Initialize the Jitter RNG after the clocksources are initialized. */
+	CKINT(esdm_jent_async_init(ESDM_JENT_OSR, flags));
+
 	esdm_jent_state = jent_entropy_collector_alloc(ESDM_JENT_OSR, flags);
 	CKNULL(esdm_jent_state, -EFAULT);
 
@@ -471,7 +471,8 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 jent_version(),
 		 (esdm_sp80090c_compliant() ||
 		  esdm_config_fips_enabled() ||
-		  esdm_ntg1_2024_compliant()) ? "SP800-90B " : "",
+		  esdm_ntg1_2024_compliant() ||
+		  esdm_jent_ntg1()) ? "SP800-90B " : "",
 		 esdm_jent_ntg1() ? "NTG.1(2024)" : "",
 		 esdm_jent_entropylevel(256),
 		ESDM_JENT_OSR);
