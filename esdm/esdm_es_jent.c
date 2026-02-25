@@ -122,7 +122,7 @@ static uint32_t esdm_jent_poolsize(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_jent_get(struct rand_data *ec, struct entropy_es *eb_es,
+static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
 			  uint32_t requested_bits, bool __unused unused)
 {
 	ssize_t ret;
@@ -131,13 +131,9 @@ static void esdm_jent_get(struct rand_data *ec, struct entropy_es *eb_es,
 	if (!atomic_read(&esdm_jent_initialized))
 		goto err;
 
-	if (esdm_config_fips_enabled()) {
-		ret = jent_read_entropy(ec, (char *)eb_es->e,
-					requested_bits >> 3);
-	} else {
-		ret = jent_read_entropy_safe(&ec, (char *)eb_es->e,
-					     requested_bits >> 3);
-	}
+
+	ret = jent_read_entropy_safe(ec, (char *)eb_es->e,
+				     requested_bits >> 3);
 
 	if (ret < 0) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
@@ -149,7 +145,7 @@ static void esdm_jent_get(struct rand_data *ec, struct entropy_es *eb_es,
 	esdm_logger(
 		LOGGER_DEBUG, LOGGER_C_ES,
 		"obtained %u bits of entropy from %ssynchronous Jitter RNG noise source instance\n",
-		ent_bits, (ec == esdm_jent_state) ? "" : "a");
+		ent_bits, (*ec == esdm_jent_state) ? "" : "a");
 
 	eb_es->e_bits = ent_bits;
 	return;
@@ -180,7 +176,7 @@ static int esdm_jent_async_monitor(void)
 		 * Always gather entropy data excluding
 		 * potential oversampling factor.
 		 */
-		esdm_jent_get(esdm_jent_state_thread, &esdm_jent_async[i],
+		esdm_jent_get(&esdm_jent_state_thread, &esdm_jent_async[i],
 			      requested_bits, false);
 
 		esdm_jent_async_set[i] = buffer_filled;
@@ -222,7 +218,7 @@ static void esdm_jent_async_get(struct entropy_es *eb_es,
 			    slot);
 
 		mutex_w_lock(&esdm_jent_lock);
-		esdm_jent_get(esdm_jent_state, eb_es, requested_bits, unused);
+		esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
 		mutex_w_unlock(&esdm_jent_lock);
 
 		esdm_es_mgr_monitor_wakeup();
@@ -258,7 +254,7 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 		esdm_jent_async_get(eb_es, requested_bits, unused);
 	} else {
 		mutex_w_lock(&esdm_jent_lock);
-		esdm_jent_get(esdm_jent_state, eb_es, requested_bits, unused);
+		esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
 		mutex_w_unlock(&esdm_jent_lock);
 	}
 }
@@ -293,7 +289,7 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
 	mutex_w_lock(&esdm_jent_lock);
-	esdm_jent_get(esdm_jent_state, eb_es, requested_bits, unused);
+	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
 	mutex_w_unlock(&esdm_jent_lock);
 }
 
