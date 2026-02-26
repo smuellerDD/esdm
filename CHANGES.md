@@ -9,6 +9,18 @@ Changes 1.2.2-prerelease
 
 * esdm-server: Fix handling of SIGUSR1 sent by suspend/resume helper (they caused the server to terminate)
 
+* Add backtracking resistance to internal state/output of aux pool
+
+* Automatically add device specific personalization string based on product uuid from DMI, when available
+
+* Assure 256 bit security level on all Intel CPUs
+
+* Fixes for esdm_es and switch to 64 bit timestamps and usage of time deltas
+
+* Support for Linux kernel 6.18 in esdm_es
+
+* Added support for NTG.1 compliant jitterentropy-library 3.7.0
+
 Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 
