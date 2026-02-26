@@ -195,8 +195,8 @@
               src = pkgs.fetchFromGitHub {
                 owner = "smuellerDD";
                 repo = "jitterentropy-library";
-                rev = "e7bf6282407d1ea52815cdd7746b4c086c0b19af";
-                hash = "sha256-PC8CQBRjJKWWfSLuEWyl09yjxZ9XS2ZGI7OMSFPwZ48=";
+                rev = "e4ed627044c9215ba8b358df45a74e15bdce1cc0";
+                hash = "sha256-HvWZDdGb7zxdZUQITGtpvbivMvIVF90K06wPvT5rWzQ=";
               };
               # for secure memory
               propagatedBuildInputs = [
