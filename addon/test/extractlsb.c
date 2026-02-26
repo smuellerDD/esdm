@@ -45,7 +45,7 @@ static unsigned char extract(uint64_t sample, uint64_t mask)
 
 	for (i = 0; i < BITS_PER_SAMPLE && mask; i++) {
 		if (mask & 1) {
-			byte |= (sample & 1) << j;
+			byte |= (unsigned char)((sample & 1) << j);
 			j++;
 		}
 		mask >>= 1;
