@@ -133,4 +133,5 @@ void handle_stress_process(double timeout_sec, uint32_t request_size,
 		waitpid(processes[i], NULL, 0);
 		close(sockets[i]);
 	}
+	free(sockets);
 }
