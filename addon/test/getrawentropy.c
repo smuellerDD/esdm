@@ -82,7 +82,7 @@ static int getrawentropy(struct opts *opts)
 			uint64_t val;
 
 			memcpy(&val, buffer_p, sizeof(uint64_t));
-			dprintf(out_fd, "%u\n", val);
+			dprintf(out_fd, "%lu\n", val);
 			buffer_p += sizeof(uint64_t);
 		}
 
@@ -103,7 +103,7 @@ out:
 	return (int)ret;
 }
 
-void usage() {
+static void usage(void) {
 	fprintf(stderr, "Usage: getrawentropy [--samples NUM] [--debugfs-file FILE] [--outfile FILE] [--help]\n");
 }
 

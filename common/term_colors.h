@@ -43,6 +43,9 @@ extern "C" {
 		va_list args;                                                  \
 		int ret;                                                       \
                                                                                \
+		if (format == NULL)                                            \
+			return -EINVAL;                                        \
+                                                                               \
 		fprintf(stream, "%s", color);                                  \
 		va_start(args, format);                                        \
 		ret = vfprintf(stream, format, args);                          \

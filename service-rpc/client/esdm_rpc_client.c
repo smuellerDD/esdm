@@ -102,6 +102,11 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	unsigned int attempts = 0;
 	int errsv;
 
+	/* defensive check, detected by modern compilers if missing */
+	if (socketname == NULL) {
+		return -EFAULT;
+	}
+
 	if (rpc_conn->fd >= 0) {
 		reset_conn_socket(rpc_conn);
 	}
