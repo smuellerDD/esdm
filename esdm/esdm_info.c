@@ -25,15 +25,12 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
+#include "esdm_es_jent.h"
 #include "esdm_es_sched.h"
 #include "esdm_info.h"
 #include "esdm_logger.h"
 #include "test_pertubation.h"
 #include "visibility.h"
-
-#ifdef ESDM_ES_JENT
-#include <jitterentropy.h>
-#endif
 
 static unsigned int esdm_nodes = 1;
 
@@ -61,11 +58,6 @@ void esdm_status(char *buf, size_t buflen)
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	size_t len;
 	uint32_t i;
-#if defined(ESDM_ES_JENT) && JENT_VERSION >= 3070000
-	const bool jent_ntg1 = jent_secure_memory_supported();
-#else
-	const bool jent_ntg1 = false;
-#endif
 
 	if (!buf) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
@@ -89,7 +81,7 @@ void esdm_status(char *buf, size_t buflen)
 		 esdm_nodes, esdm_config_fips_enabled() ? "FIPS 140 " : "",
 		 esdm_sp80090c_compliant() ? "SP800-90C " : "",
 		 esdm_ntg1_compliant() ? "NTG.1(2011) " : "",
-		 (esdm_ntg1_2024_compliant() || jent_ntg1) ? "NTG.1(2024)" : "",
+		 (esdm_ntg1_2024_compliant() || esdm_jent_ntg1()) ? "NTG.1(2024)" : "",
 		 esdm_state_min_seeded() ? "true" : "false",
 		 esdm_state_fully_seeded() ? "true" : "false",
 		 esdm_avail_entropy());
