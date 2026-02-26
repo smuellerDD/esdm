@@ -86,7 +86,7 @@ int esdm_jent_status(char* buf, size_t buf_length) {
 	return ret;
 }
 
-static bool esdm_jent_ntg1() {
+bool esdm_jent_ntg1(void) {
 #if JENT_VERSION >= 3070000
 	const bool jent_secure_memory = jent_secure_memory_supported();
 # ifdef ESDM_JENT_NTG1
