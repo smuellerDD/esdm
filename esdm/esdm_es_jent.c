@@ -86,21 +86,19 @@ int esdm_jent_status(char* buf, size_t buf_length) {
 	return ret;
 }
 
-static bool esdm_jent_ntg1() {
 #if JENT_VERSION >= 3070000
+static bool esdm_jent_ntg1()
+{
 	const bool jent_secure_memory = jent_secure_memory_supported();
 # ifdef ESDM_JENT_NTG1
 	const bool jent_ntg1 = true;
 # else
 	const bool jent_ntg1 = false;
 # endif
-#else
-	const bool jent_secure_memory = false;
-	const bool jent_ntg1 = false;
-#endif
 
 	return jent_secure_memory && jent_ntg1;
 }
+#endif
 
 static uint32_t esdm_jent_entropylevel(uint32_t requested_bits)
 {
