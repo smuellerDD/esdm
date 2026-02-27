@@ -48,7 +48,7 @@ static void esdm_gcd_set_check(u64 running_gcd)
 {
 	if (!esdm_gcd_tested()) {
 		esdm_gcd_set(running_gcd);
-		pr_debug("Setting GCD to %u\n", running_gcd);
+		pr_debug("Setting GCD to %llu\n", running_gcd);
 	}
 }
 
@@ -101,7 +101,7 @@ void esdm_gcd_add_value(u64 time)
 		 * becoming too large.
 		 */
 		if (gcd >= 1000) {
-			pr_warn("calculated GCD is larger than expected: %u\n",
+			pr_warn("calculated GCD is larger than expected: %llu\n",
 				gcd);
 			gcd = 1000;
 		}
