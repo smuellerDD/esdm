@@ -8,8 +8,9 @@
  * Copyright (C) 2022-2025, Stephan Mueller <smueller@chronox.de>
  */
 
-#include "esdm_definitions.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
+#include "esdm_definitions.h"
 
 #include <crypto/drbg.h>
 #include <linux/init.h>
