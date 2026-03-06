@@ -48,10 +48,12 @@ static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
 static int notify_fd = -1; /* event fd used to notify in case of termination */
 static bool force_pr = false; /* force seeding kernel from pr instance of esdm */
 
-/* modern Linux kernels have a 256 Bit entropy pool, always fill the whole state
- * at once, to loose less entropy in leftover hashing on pool updates.
+/*
+ * modern Linux kernels have a 256 Bit entropy pool, always provide
+ * twice the amount for full entropy inside the pool after leftover hashing
+ * on pool updates.
  */
-#define ESDM_SERVER_LINUX_ENTROPY_BYTES 32
+#define ESDM_SERVER_LINUX_ENTROPY_BYTES (2 * 32)
 
 static bool pr_mode() {
 #if defined(ESDM_AIS2031_NTG1_SEEDING_STRATEGY) || defined(ESDM_JENT_NTG1)
