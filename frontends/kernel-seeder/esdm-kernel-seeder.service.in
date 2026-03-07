@@ -11,6 +11,7 @@ Wants=esdm-server.service
 After=esdm-server.service
 
 [Service]
+Type=notify
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-kernel-seeder -i 10 --syslog
