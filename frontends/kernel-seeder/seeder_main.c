@@ -235,8 +235,8 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 		pfd.events = POLL_IN;
 		pfd.revents = 0;
 
-		/* Wake up every 2 minutes by default */
-		ts.tv_sec = seeding_interval_secs;
+		/* Wake up every 2 minutes by default and every 2 sec if not initially seeded kernel */
+		ts.tv_sec = had_one_sucessful_seed ? seeding_interval_secs : 2;
 		ts.tv_nsec = 0;
 
 		pret = ppoll(&pfd, 1,&ts, NULL);
