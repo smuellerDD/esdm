@@ -1074,7 +1074,7 @@ static void esdm_rpc_priv_init_complete(void)
 		return;
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		    "Privileged intiialization complete\n");
+		    "Privileged initialization complete\n");
 	/* Notification that the privileged initialization is complete. */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_priv_init_complete);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
