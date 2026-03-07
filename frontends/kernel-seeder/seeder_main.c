@@ -43,14 +43,27 @@
 #include "esdm_logger.h"
 #include "helper.h"
 #include "memset_secure.h"
+#include "systemd_support.h"
 
 static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
 static int notify_fd = -1; /* event fd used to notify in case of termination */
+static bool force_pr = false; /* force seeding kernel from pr instance of esdm */
+static bool had_one_sucessful_seed = false; /* used for ready notification */
 
-/* modern Linux kernels have a 256 Bit entropy pool, always fill the whole state
- * at once, to loose less entropy in leftover hashing on pool updates.
+/*
+ * modern Linux kernels have a 256 Bit entropy pool, always provide
+ * twice the amount for full entropy inside the pool after leftover hashing
+ * on pool updates.
  */
-#define ESDM_SERVER_LINUX_ENTROPY_BYTES 32
+#define ESDM_SERVER_LINUX_ENTROPY_BYTES (2 * 32)
+
+static bool pr_mode() {
+#if defined(ESDM_AIS2031_NTG1_SEEDING_STRATEGY) || defined(ESDM_JENT_NTG1)
+	return true;
+#else
+	return force_pr;
+#endif
+}
 
 static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force_crng_reseed)
 {
@@ -157,7 +170,7 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force
 
 static void usage(void)
 {
-	printf("esdm-kernel-seeder [-i --interval SECS] [-h --help] [-v --verbosity]\n");
+	printf("esdm-kernel-seeder [-i --interval SECS] [-h --help] [-v --verbosity] [-p --force-pr]\n");
 }
 
 static int handle_reseeding(int64_t seeding_interval_secs)
@@ -176,44 +189,54 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
 	while (atomic_bool_read(&should_run)) {
-#ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
-		ret = esdm_rpcc_get_random_bytes_pr((uint8_t *)rpi->buf,
-						    (size_t)rpi->buf_size);
-#else
-		ret = esdm_rpcc_get_random_bytes_full((uint8_t *)rpi->buf,
-						      (size_t)rpi->buf_size);
-#endif
+		if (pr_mode()) {
+			ret = esdm_rpcc_get_random_bytes_pr(
+				(uint8_t *)rpi->buf,
+				(size_t)rpi->buf_size
+			);
+		} else {
+			ret = esdm_rpcc_get_random_bytes_full(
+				(uint8_t *)rpi->buf,
+				(size_t)rpi->buf_size
+			);
+		}
+
 		if (ret < 0) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
 				    "Failure in generating random bits: %zd\n",
 				    ret);
 		} else {
 			rpi->entropy_count = ESDM_LINUX_RESEED_ENTROPY_COUNT;
-#ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
-			/*
-			 * Immediately force CRNG reseed in NTG.1 mode
-			 *
-			 * While not strictly necessary, this enables you
-			 * to better reason, when your seeds take effect
-			 * and allows control via the reseeding interval in secs,
-			 * without using another small daemon.
-			 */
-			esdm_rpcs_linux_insert_entropy(rpi, true);
-#else
-			esdm_rpcs_linux_insert_entropy(rpi, false);
-#endif
+			if (pr_mode()) {
+				/*
+				 * Immediately force CRNG reseed in NTG.1/PR mode
+				 *
+				 * While not strictly necessary, this enables you
+				 * to better reason, when your seeds take effect
+				 * and allows control via the reseeding interval in secs,
+				 * without using another small daemon.
+				 */
+				ret = esdm_rpcs_linux_insert_entropy(rpi, true);
+			} else {
+				ret = esdm_rpcs_linux_insert_entropy(rpi, false);
+			}
 		}
 
 		memset_secure(rpi->buf, 0, (size_t)rpi->buf_size);
 		rpi->entropy_count = 0;
 
+		if (ret == 0 && !had_one_sucessful_seed) {
+			(void)systemd_notify_ready();
+			systemd_notify_status("Running");
+			had_one_sucessful_seed = true;
+		}
 
 		pfd.fd = notify_fd;
 		pfd.events = POLL_IN;
 		pfd.revents = 0;
 
-		/* Wake up every 2 minutes by default */
-		ts.tv_sec = seeding_interval_secs;
+		/* Wake up every 2 minutes by default and every 2 sec if not initially seeded kernel */
+		ts.tv_sec = had_one_sucessful_seed ? seeding_interval_secs : 2;
 		ts.tv_nsec = 0;
 
 		pret = ppoll(&pfd, 1,&ts, NULL);
@@ -301,8 +324,9 @@ int main(int argc, char **argv)
 						{ "help", 0, 0, 0 },
 						{ "verbosity", 0, 0, 0 },
 						{ "syslog", 0, 0, 0 },
+						{ "force-pr", 0, 0, 0 },
 						{ 0, 0, 0, 0 } };
-		c = getopt_long(argc, argv, "i:hvs", opts, &opt_index);
+		c = getopt_long(argc, argv, "i:hvsp", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -325,6 +349,10 @@ int main(int argc, char **argv)
 				/* syslog */
 				esdm_logger_enable_syslog("esdm-kernel-seeder");
 				break;
+			case 4:
+				/* force_pr */
+				force_pr = true;
+				break;
 			}
 			break;
 		case 'i':
@@ -338,6 +366,9 @@ int main(int argc, char **argv)
 			break;
 		case 's':
 			esdm_logger_enable_syslog("esdm-kernel-seeder");
+			break;
+		case 'p':
+			force_pr = true;
 			break;
 		}
 	}
@@ -357,6 +388,8 @@ int main(int argc, char **argv)
 		tool_ret = EXIT_FAILURE;
 		goto out;
 	}
+
+	systemd_notify_status("Starting");
 
 	notify_fd = eventfd(0, EFD_CLOEXEC);
 	if (notify_fd < 0) {
@@ -378,10 +411,18 @@ int main(int argc, char **argv)
 	esdm_logger(LOGGER_STATUS, LOGGER_C_SEEDER,
 		    "Start kernel (re-)seeding with %li s interval!\n",
 		    seeding_interval_secs);
+	if (pr_mode()) {
+		esdm_logger(LOGGER_STATUS, LOGGER_C_SEEDER,
+		    "Using prediction resistant mode to seed kernel!\n");
+	}
+
+	systemd_notify_status("Waiting for initial kernel seed operation");
 
 	tool_ret = handle_reseeding(seeding_interval_secs);
 
 	esdm_rpcc_fini_unpriv_service();
+
+	systemd_notify_stopping();
 
 out:
 	if (notify_fd > 0)
