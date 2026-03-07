@@ -37,37 +37,48 @@ After=systemd-modules-load.service
 
 [Service]
 @SERVICE_TYPE@
-DeviceAllow=/dev/null rw
-DeviceAllow=/dev/hwrng r
-DeviceAllow=/dev/random r
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL
 DeviceAllow=/dev/esdm r
 DeviceAllow=/dev/esdm_es r
+DeviceAllow=/dev/hwrng r
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/random r
 DevicePolicy=strict
-Restart=on-failure
-RestartSec=5s
 ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog
 IPAddressDeny=any
+KillMode=mixed
 LimitMEMLOCK=0
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 MountFlags=private
 NoNewPrivileges=yes
+PIDFile=/run/esdm-server.pid
 PrivateMounts=no
 PrivateNetwork=yes
 PrivateTmp=yes
 PrivateUsers=no
+ProcSubset=pid
+ProtectClock=yes
 ProtectControlGroups=yes
 ProtectHome=yes
+ProtectHostname=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
+ProtectProc=invisible
 ProtectSystem=strict
 ReadOnlyPaths=-/
 ReadWritePaths=/run
 RemoveIPC=yes
-RestrictAddressFamilies=
+Restart=on-failure
+RestartSec=5s
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=mnt cgroup net
 RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service @setuid @ipc @resources
 UMask=0077
-KillMode=mixed
 
 [Install]
 WantedBy=basic.target

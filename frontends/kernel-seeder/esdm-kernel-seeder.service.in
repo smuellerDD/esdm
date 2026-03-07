@@ -12,10 +12,44 @@ After=esdm-server.service
 
 [Service]
 Type=notify
+AmbientCapabilities=CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_SYS_ADMIN
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-kernel-seeder -i 10 --syslog
 KillMode=mixed
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/random rw
+DevicePolicy=strict
+IPAddressDeny=any
+LimitMEMLOCK=0
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+MountFlags=private
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateMounts=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateUsers=no
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ProtectClock=yes
+ProtectKernelLogs=yes
+ProtectHostname=yes
+ProcSubset=pid
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+ReadOnlyPaths=-/
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
 
 [Install]
 WantedBy=basic.target
