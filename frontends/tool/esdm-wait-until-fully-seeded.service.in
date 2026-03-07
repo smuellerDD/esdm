@@ -8,6 +8,50 @@ After=esdm-server.service
 Type=oneshot
 ExecStart=@PATH@/esdm-tool --wait-until-seeded -1 --use-syslog
 
+# Run as unprivileged dynamic user
+DynamicUser=yes
+RemoveIPC=yes
+
+# Filesystem
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+PrivateUsers=yes
+
+# Network — block everything since we only need Unix sockets
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+PrivateNetwork=yes
+
+# Process isolation
+ProtectProc=invisible
+ProcSubset=pid
+
+# Privilege hardening
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Syscall filtering
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# Misc hardening
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+UMask=0077
+
 [Install]
 WantedBy=basic.target
 Alias=esdm-wait-until-fully-seeded.service
