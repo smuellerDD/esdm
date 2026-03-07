@@ -43,10 +43,12 @@
 #include "esdm_logger.h"
 #include "helper.h"
 #include "memset_secure.h"
+#include "systemd_support.h"
 
 static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
 static int notify_fd = -1; /* event fd used to notify in case of termination */
 static bool force_pr = false; /* force seeding kernel from pr instance of esdm */
+static bool had_one_sucessful_seed = false; /* used for ready notification */
 
 /*
  * modern Linux kernels have a 256 Bit entropy pool, always provide
@@ -214,15 +216,20 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 				 * and allows control via the reseeding interval in secs,
 				 * without using another small daemon.
 				 */
-				esdm_rpcs_linux_insert_entropy(rpi, true);
+				ret = esdm_rpcs_linux_insert_entropy(rpi, true);
 			} else {
-				esdm_rpcs_linux_insert_entropy(rpi, false);
+				ret = esdm_rpcs_linux_insert_entropy(rpi, false);
 			}
 		}
 
 		memset_secure(rpi->buf, 0, (size_t)rpi->buf_size);
 		rpi->entropy_count = 0;
 
+		if (ret == 0 && !had_one_sucessful_seed) {
+			(void)systemd_notify_ready();
+			systemd_notify_status("Running");
+			had_one_sucessful_seed = true;
+		}
 
 		pfd.fd = notify_fd;
 		pfd.events = POLL_IN;
@@ -382,6 +389,8 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
+	systemd_notify_status("Starting");
+
 	notify_fd = eventfd(0, EFD_CLOEXEC);
 	if (notify_fd < 0) {
 		esdm_logger_inc_verbosity();
@@ -407,9 +416,13 @@ int main(int argc, char **argv)
 		    "Using prediction resistant mode to seed kernel!\n");
 	}
 
+	systemd_notify_status("Waiting for initial kernel seed operation");
+
 	tool_ret = handle_reseeding(seeding_interval_secs);
 
 	esdm_rpcc_fini_unpriv_service();
+
+	systemd_notify_stopping();
 
 out:
 	if (notify_fd > 0)
