@@ -36,13 +36,14 @@ extern struct esdm_es_cb esdm_es_jent;
 
 #else /* ESDM_ES_JENT */
 
-DSO_PUBLIC
-static int esdm_jent_status(char* buf, size_t buf_length) {
+static inline int esdm_jent_status(char* buf, size_t buf_length) {
+	(void)buf;
+	(void)buf_length;
+
 	return -ENOENT;
 }
 
-DSO_PUBLIC
-bool esdm_jent_ntg1(void) {
+static inline bool esdm_jent_ntg1(void) {
 	return false;
 }
 
