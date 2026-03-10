@@ -88,6 +88,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		      size_t inbuflen, bool fully_seeded,
 		      const char *drng_type);
 void esdm_drng_seed_work(void);
+void esdm_try_fully_seeded(void);
 void esdm_force_fully_seeded(void);
 void esdm_force_fully_seeded_all_drbgs(void);
 
