@@ -489,7 +489,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 		if (init_ops)
 			esdm_init_ops(&collected_seedbuf);
 
-		/*
+	/*
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for
@@ -990,6 +990,17 @@ void esdm_force_fully_seeded(void)
 	esdm_pool_unlock();
 }
 
+/* only try to reach fully seeded level, does not block timeout read indefinitely */
+void esdm_try_fully_seeded(void)
+{
+	if (esdm_pool_all_nodes_seeded_get())
+		return;
+
+	esdm_pool_lock();
+	__esdm_drng_seed_work(false);
+	esdm_pool_unlock();
+}
+
 /* Force all DRBG to be fully seeded */
 void esdm_force_fully_seeded_all_drbgs(void)
 {
@@ -1033,13 +1044,14 @@ static int esdm_drng_sleep_while_nonoperational_timeout(struct timespec *ts)
 {
 	int ret = 0;
 
-	esdm_force_fully_seeded();
+	esdm_try_fully_seeded();
 	if (esdm_state_operational())
 		return 0;
 	thread_timedwait_event(&esdm_init_wait,
 			       esdm_state_operational() &&
-				       !atomic_read(&esdm_drng_mgr_terminate),
+			       !atomic_read(&esdm_drng_mgr_terminate),
 			       ts);
+
 	return ret;
 }
 
