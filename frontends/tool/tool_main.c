@@ -1004,6 +1004,7 @@ int main(int argc, char **argv)
 						strerror(errno));
 					exit(EXIT_FAILURE);
 				}
+				getrandom_mode = RAND_MODE_FULL_TIMEOUT;
 				break;
 			case 25:
 				/* allow-unseeded */
