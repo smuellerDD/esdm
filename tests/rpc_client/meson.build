@@ -28,14 +28,6 @@ if get_option('esdm-server').enabled()
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
 
-	rpc_get_random_bytes_min_test = executable(
-			'rpc_get_random_bytes_min_test',
-			[ esdm_tester_common, 'rpc_get_random_bytes_min_test.c' ],
-			include_directories: include_dirs_client,
-			dependencies: [ dependencies_client ],
-			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
-		)
-
 	rpc_get_random_bytes_test = executable(
 			'rpc_get_random_bytes_test',
 			[ esdm_tester_common, 'rpc_get_random_bytes_test.c' ],
@@ -59,7 +51,7 @@ if get_option('esdm-server').enabled()
 			dependencies: [ dependencies_client ],
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
-	
+
 	rpc_ent_lvl_test = executable(
 			'rpc_ent_lvl_test',
 			[ esdm_tester_common, 'rpc_ent_lvl.c' ],
@@ -90,10 +82,6 @@ if get_option('esdm-server').enabled()
 		is_parallel: false)
 
 	test('RPC call get_random_bytes_pr_test', rpc_get_random_bytes_pr_test,
-		env: [ tester_esdm_env ],
-		is_parallel: false)
-
-	test('RPC call get_random_bytes_min_test', rpc_get_random_bytes_min_test,
 		env: [ tester_esdm_env ],
 		is_parallel: false)
 

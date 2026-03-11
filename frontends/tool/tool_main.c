@@ -45,7 +45,6 @@
 
 enum RANDOM_MODE {
 	RAND_MODE_NONE = 0,
-	RAND_MODE_MIN,
 	RAND_MODE_FULL,
 	RAND_MODE_FULL_TIMEOUT,
 	RAND_MODE_PR,
@@ -108,8 +107,6 @@ static void handle_usage(void)
 		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
 	fprintf(stderr,
 		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");
-	fprintf(stderr,
-		"\t--min-seeded\t\t\tUse get-random in minimal seeded mode.\n");
 	fprintf(stderr,
 		"\t--timeout-msec MSEC\t\tUse get-random in timeout mode.\n");
 	fprintf(stderr,
@@ -201,10 +198,6 @@ static int handle_get_random(size_t num_rand_bytes, enum RANDOM_MODE mode,
 		case RAND_MODE_NONE:
 			esdm_invoke(
 				esdm_rpcc_get_random_bytes(bytes, chunk_size));
-			break;
-		case RAND_MODE_MIN:
-			esdm_invoke(esdm_rpcc_get_random_bytes_min(bytes,
-								   chunk_size));
 			break;
 		case RAND_MODE_FULL:
 			esdm_invoke(esdm_rpcc_get_random_bytes_full(
@@ -829,7 +822,6 @@ int main(int argc, char **argv)
 			{ "raw-bytes", 0, 0, 0 },
 			{ "reseed-delay-ms", 1, 0, 0 },
 			{ "seed-via-os", 0, 0, 0 },
-			{ "min-seeded", 0, 0, 0 },
 			{ "timeout-msec", 1, 0, 0 },
 			{ "allow-unseeded", 0, 0, 0 },
 			{ "is-running", 0, 0, 0 },
@@ -991,10 +983,6 @@ int main(int argc, char **argv)
 				seed_via_os = true;
 				break;
 			case 23:
-				/* min-seeded */
-				getrandom_mode = RAND_MODE_MIN;
-				break;
-			case 24:
 				/* timeout-msec */
 				timeout_msec = strtol(optarg, NULL, 10);
 				if (errno) {
@@ -1006,32 +994,32 @@ int main(int argc, char **argv)
 				}
 				getrandom_mode = RAND_MODE_FULL_TIMEOUT;
 				break;
-			case 25:
+			case 24:
 				/* allow-unseeded */
 				getrandom_mode = RAND_MODE_NONE;
 				break;
-			case 26:
+			case 25:
 				/* is-running */
 				is_running = true;
 				break;
-			case 27:
+			case 26:
 				/* get-seed */
 				get_seed = true;
 				break;
-			case 28:
+			case 27:
 				/* endless-stress */
 				endless_stress = true;
 				break;
-			case 29:
+			case 28:
 				/* used in endless-stress mode, server can be stopped and restarted */
 				continue_on_failure = true;
 				break;
-			case 30:
+			case 29:
 				/* decrease-verbosity */
 				if (verbosity > 0)
 					verbosity--;
 				break;
-			case 31:
+			case 30:
 				/* stress-request-size */
 				stress_request_size =
 					(uint32_t)strtol(optarg, NULL, 10);
@@ -1043,23 +1031,23 @@ int main(int argc, char **argv)
 					exit(EXIT_FAILURE);
 				}
 				break;
-			case 32:
+			case 31:
 				/* stress-cpu-usage */
 				stress_cpu_usage = true;
 				break;
-			case 33:
+			case 32:
 				/* stress-fork */
 				stress_fork = true;
 				break;
-			case 34:
+			case 33:
 				/* fips target file */
 				fips_target_file = optarg;
 				break;
-			case 35:
+			case 34:
 				/* fips check file */
 				fips_check_file = optarg;
 				break;
-			case 36:
+			case 35:
 				/* display jitterentropy source status */
 				jent_status = true;
 				break;

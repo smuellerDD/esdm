@@ -74,7 +74,6 @@ void esdm_status(char *buf, size_t buflen)
 		 "ESDM security strength in bits: %d\n"
 		 "Number of DRNG instances: %u\n"
 		 "Standards compliance: %s%s%s%s\n"
-		 "ESDM minimally seeded: %s\n"
 		 "ESDM fully seeded: %s\n"
 		 "ESDM entropy level: %u\n",
 		 drng->drng_cb->drng_name(), esdm_security_strength(),
@@ -82,7 +81,6 @@ void esdm_status(char *buf, size_t buflen)
 		 esdm_sp80090c_compliant() ? "SP800-90C " : "",
 		 esdm_ntg1_compliant() ? "NTG.1(2011) " : "",
 		 (esdm_ntg1_2024_compliant() || esdm_jent_ntg1()) ? "NTG.1(2024)" : "",
-		 esdm_state_min_seeded() ? "true" : "false",
 		 esdm_state_fully_seeded() ? "true" : "false",
 		 esdm_avail_entropy());
 

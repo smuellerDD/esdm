@@ -424,8 +424,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
  *
  * The caller must hold the DRNG lock.
  */
-static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
-					 const char *drng_type)
+static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, const char *drng_type)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 		collected_seedbuf;
@@ -481,12 +480,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 
 		/*
 		 * Set the seeding state of the ESDM
-		 *
-		 * Do not call esdm_init_ops(seedbuf) here as the atomic DRNG
-		 * does not serve common users.
 		 */
-		if (init_ops)
-			esdm_init_ops(&collected_seedbuf);
+		esdm_init_ops(&collected_seedbuf);
 
 	/*
 	 * Emergency reseeding: If we reached the min seed threshold now
@@ -511,16 +506,16 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, bool init_ops,
 
 static void esdm_drng_seed_nolock(struct esdm_drng *drng)
 {
-	BUILD_BUG_ON(ESDM_MIN_SEED_ENTROPY_BITS >
+	BUILD_BUG_ON(ESDM_FULL_SEED_ENTROPY_BITS >
 		     ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
 	/* (Re-)Seed DRNG */
-	esdm_drng_seed_es_nolock(drng, true, "regular");
+	esdm_drng_seed_es_nolock(drng, "regular");
 }
 
 static void esdm_drng_seed(struct esdm_drng *drng)
 {
-	BUILD_BUG_ON(ESDM_MIN_SEED_ENTROPY_BITS >
+	BUILD_BUG_ON(ESDM_FULL_SEED_ENTROPY_BITS >
 		     ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
 	/* (Re-)Seed DRNG */
@@ -801,7 +796,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				}
 
 				collected_ent_bits = esdm_drng_seed_es_nolock(
-					drng, true, "regular");
+					drng, "regular");
 
 				esdm_pool_unlock();
 
@@ -1029,19 +1024,6 @@ static int esdm_drng_sleep_while_nonoperational_timeout(struct timespec *ts)
 	return ret;
 }
 
-static int esdm_drng_sleep_while_non_min_seeded(unsigned int nonblock)
-{
-	esdm_force_fully_seeded();
-	if (esdm_state_min_seeded())
-		return 0;
-	if (nonblock)
-		return -EAGAIN;
-	thread_wait_event(&esdm_init_wait,
-			  esdm_state_min_seeded() &&
-				  !atomic_read(&esdm_drng_mgr_terminate));
-	return 0;
-}
-
 DSO_PUBLIC
 ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		      enum esdm_get_seed_flags flags)
@@ -1175,23 +1157,6 @@ ssize_t esdm_get_random_bytes_full_timeout(uint8_t *buf, size_t nbytes,
 	if (ret)
 		return ret;
 
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
-}
-
-DSO_PUBLIC
-ssize_t esdm_get_random_bytes_min(uint8_t *buf, size_t nbytes)
-{
-	esdm_drng_sleep_while_non_min_seeded(0);
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
-}
-
-DSO_PUBLIC
-ssize_t esdm_get_random_bytes_min_noblock(uint8_t *buf, size_t nbytes)
-{
-	int ret = esdm_drng_sleep_while_non_min_seeded(1);
-
-	if (ret)
-		return ret;
 	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
 }
 
