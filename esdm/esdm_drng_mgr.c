@@ -709,7 +709,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	if (!outbuf || !outbuflen)
 		return 0;
 
-	if (!esdm_get_available())
+	if (!esdm_get_available() || !esdm_state_operational())
 		return -EOPNOTSUPP;
 
 	outbuflen = min_size(outbuflen, SSIZE_MAX);
