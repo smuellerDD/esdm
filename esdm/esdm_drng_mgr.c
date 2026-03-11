@@ -33,7 +33,6 @@
 #include "esdm_builtin_sha512.h"
 #include "esdm_config.h"
 #include "esdm_crypto.h"
-#include "esdm_drng_atomic.h"
 #include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
@@ -517,9 +516,6 @@ static void esdm_drng_seed_nolock(struct esdm_drng *drng)
 
 	/* (Re-)Seed DRNG */
 	esdm_drng_seed_es_nolock(drng, true, "regular");
-
-	/* (Re-)Seed atomic DRNG from regular DRNG */
-	esdm_drng_atomic_seed_drng(drng);
 }
 
 static void esdm_drng_seed(struct esdm_drng *drng)
@@ -531,9 +527,6 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 	mutex_w_lock(&drng->lock);
 	esdm_drng_seed_nolock(drng);
 	mutex_w_unlock(&drng->lock);
-
-	/* (Re-)Seed atomic DRNG from regular DRNG */
-	esdm_drng_atomic_seed_drng(drng);
 }
 
 static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
@@ -561,25 +554,9 @@ static void __esdm_drng_seed_work(bool force)
 	struct esdm_drng **esdm_drng;
 
 	/*
-	 * If the DRNG is not yet initialized, let us try to seed the atomic
-	 * DRNG.
+	 * If the DRNG is not yet initialized, return early.
 	 */
 	if (!esdm_get_available()) {
-		struct esdm_drng *atomic;
-
-		if (thread_queue_sleeper(&esdm_init_wait)) {
-			esdm_init_ops(NULL);
-			return;
-		}
-		atomic = esdm_get_atomic();
-		if (!atomic || atomic->fully_seeded)
-			return;
-
-		atomic->force_reseed |= force;
-		mutex_w_lock(&atomic->lock);
-		esdm_drng_seed_es_nolock(atomic, false, "atomic");
-		mutex_w_unlock(&atomic->lock);
-
 		return;
 	}
 
@@ -679,8 +656,6 @@ void esdm_drng_force_reseed(void)
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 			    "force reseed of DRNG on CPU %u\n", node);
 	}
-
-	esdm_drng_atomic_force_reseed();
 
 out:
 	esdm_drng_put_instances();
@@ -971,7 +946,6 @@ void esdm_reset(void)
 	esdm_drng_reset(&esdm_drng_pr);
 	mutex_w_unlock(&esdm_drng_pr.lock);
 
-	esdm_drng_atomic_reset();
 	esdm_set_entropy_thresh(ESDM_FULL_SEED_ENTROPY_BITS);
 
 	esdm_reset_state();
