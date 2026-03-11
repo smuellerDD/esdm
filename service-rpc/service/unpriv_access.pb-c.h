@@ -21,16 +21,12 @@ typedef struct JentStatusRequest JentStatusRequest;
 typedef struct JentStatusResponse JentStatusResponse;
 typedef struct GetEntLvlRequest GetEntLvlRequest;
 typedef struct GetEntLvlResponse GetEntLvlResponse;
-typedef struct IsMinSeededRequest IsMinSeededRequest;
-typedef struct IsMinSeededResponse IsMinSeededResponse;
 typedef struct IsFullySeededRequest IsFullySeededRequest;
 typedef struct IsFullySeededResponse IsFullySeededResponse;
 typedef struct GetRandomBytesFullRequest GetRandomBytesFullRequest;
 typedef struct GetRandomBytesFullResponse GetRandomBytesFullResponse;
 typedef struct GetRandomBytesFullTimeoutRequest GetRandomBytesFullTimeoutRequest;
 typedef struct GetRandomBytesFullTimeoutResponse GetRandomBytesFullTimeoutResponse;
-typedef struct GetRandomBytesMinRequest GetRandomBytesMinRequest;
-typedef struct GetRandomBytesMinResponse GetRandomBytesMinResponse;
 typedef struct GetRandomBytesPrRequest GetRandomBytesPrRequest;
 typedef struct GetRandomBytesPrResponse GetRandomBytesPrResponse;
 typedef struct GetSeedRequest GetSeedRequest;
@@ -154,37 +150,6 @@ struct  GetEntLvlResponse
 
 /*
  **
- * @brief Request to get min. seeded status
- */
-struct  IsMinSeededRequest
-{
-  ProtobufCMessage base;
-};
-#define IS_MIN_SEEDED_REQUEST__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&is_min_seeded_request__descriptor) \
- }
-
-
-/*
- **
- * @brief Response to get min. seeded status
- * @param ret Return code (0 on success, < 0 on error)
- * @param min_seeded minimally seeded status (true if minimally seeded,
- *					 false otherwise)
- */
-struct  IsMinSeededResponse
-{
-  ProtobufCMessage base;
-  int32_t ret;
-  protobuf_c_boolean min_seeded;
-};
-#define IS_MIN_SEEDED_RESPONSE__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&is_min_seeded_response__descriptor) \
-, 0, 0 }
-
-
-/*
- **
  * @brief Request to get fully seeded status
  */
 struct  IsFullySeededRequest
@@ -283,41 +248,6 @@ struct  GetRandomBytesFullTimeoutResponse
 };
 #define GET_RANDOM_BYTES_FULL_TIMEOUT_RESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_full_timeout_response__descriptor) \
-, 0, {0,NULL} }
-
-
-/*
- **
- * @brief Request to get random bytes from minimally seeded DRNG
- * @param len number of random bytes that are requested
- */
-struct  GetRandomBytesMinRequest
-{
-  ProtobufCMessage base;
-  uint64_t len;
-};
-#define GET_RANDOM_BYTES_MIN_REQUEST__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_min_request__descriptor) \
-, 0 }
-
-
-/*
- **
- * @brief Response providing random bytes from minimally seeded DRNG
- * @param ret Return code of generation request (> 0 on success with the value
- *	      indicating the generated number of random bytes,
- *	      < -255 indicating the maximum number of bytes that can be
- *	      transferred in one request, < 0 on error)
- * @param randval Random bytes
- */
-struct  GetRandomBytesMinResponse
-{
-  ProtobufCMessage base;
-  int64_t ret;
-  ProtobufCBinaryData randval;
-};
-#define GET_RANDOM_BYTES_MIN_RESPONSE__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_min_response__descriptor) \
 , 0, {0,NULL} }
 
 
@@ -695,44 +625,6 @@ GetEntLvlResponse *
 void   get_ent_lvl_response__free_unpacked
                      (GetEntLvlResponse *message,
                       ProtobufCAllocator *allocator);
-/* IsMinSeededRequest methods */
-void   is_min_seeded_request__init
-                     (IsMinSeededRequest         *message);
-size_t is_min_seeded_request__get_packed_size
-                     (const IsMinSeededRequest   *message);
-size_t is_min_seeded_request__pack
-                     (const IsMinSeededRequest   *message,
-                      uint8_t             *out);
-size_t is_min_seeded_request__pack_to_buffer
-                     (const IsMinSeededRequest   *message,
-                      ProtobufCBuffer     *buffer);
-IsMinSeededRequest *
-       is_min_seeded_request__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   is_min_seeded_request__free_unpacked
-                     (IsMinSeededRequest *message,
-                      ProtobufCAllocator *allocator);
-/* IsMinSeededResponse methods */
-void   is_min_seeded_response__init
-                     (IsMinSeededResponse         *message);
-size_t is_min_seeded_response__get_packed_size
-                     (const IsMinSeededResponse   *message);
-size_t is_min_seeded_response__pack
-                     (const IsMinSeededResponse   *message,
-                      uint8_t             *out);
-size_t is_min_seeded_response__pack_to_buffer
-                     (const IsMinSeededResponse   *message,
-                      ProtobufCBuffer     *buffer);
-IsMinSeededResponse *
-       is_min_seeded_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   is_min_seeded_response__free_unpacked
-                     (IsMinSeededResponse *message,
-                      ProtobufCAllocator *allocator);
 /* IsFullySeededRequest methods */
 void   is_fully_seeded_request__init
                      (IsFullySeededRequest         *message);
@@ -846,44 +738,6 @@ GetRandomBytesFullTimeoutResponse *
                       const uint8_t       *data);
 void   get_random_bytes_full_timeout_response__free_unpacked
                      (GetRandomBytesFullTimeoutResponse *message,
-                      ProtobufCAllocator *allocator);
-/* GetRandomBytesMinRequest methods */
-void   get_random_bytes_min_request__init
-                     (GetRandomBytesMinRequest         *message);
-size_t get_random_bytes_min_request__get_packed_size
-                     (const GetRandomBytesMinRequest   *message);
-size_t get_random_bytes_min_request__pack
-                     (const GetRandomBytesMinRequest   *message,
-                      uint8_t             *out);
-size_t get_random_bytes_min_request__pack_to_buffer
-                     (const GetRandomBytesMinRequest   *message,
-                      ProtobufCBuffer     *buffer);
-GetRandomBytesMinRequest *
-       get_random_bytes_min_request__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   get_random_bytes_min_request__free_unpacked
-                     (GetRandomBytesMinRequest *message,
-                      ProtobufCAllocator *allocator);
-/* GetRandomBytesMinResponse methods */
-void   get_random_bytes_min_response__init
-                     (GetRandomBytesMinResponse         *message);
-size_t get_random_bytes_min_response__get_packed_size
-                     (const GetRandomBytesMinResponse   *message);
-size_t get_random_bytes_min_response__pack
-                     (const GetRandomBytesMinResponse   *message,
-                      uint8_t             *out);
-size_t get_random_bytes_min_response__pack_to_buffer
-                     (const GetRandomBytesMinResponse   *message,
-                      ProtobufCBuffer     *buffer);
-GetRandomBytesMinResponse *
-       get_random_bytes_min_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   get_random_bytes_min_response__free_unpacked
-                     (GetRandomBytesMinResponse *message,
                       ProtobufCAllocator *allocator);
 /* GetRandomBytesPrRequest methods */
 void   get_random_bytes_pr_request__init
@@ -1209,12 +1063,6 @@ typedef void (*GetEntLvlRequest_Closure)
 typedef void (*GetEntLvlResponse_Closure)
                  (const GetEntLvlResponse *message,
                   void *closure_data);
-typedef void (*IsMinSeededRequest_Closure)
-                 (const IsMinSeededRequest *message,
-                  void *closure_data);
-typedef void (*IsMinSeededResponse_Closure)
-                 (const IsMinSeededResponse *message,
-                  void *closure_data);
 typedef void (*IsFullySeededRequest_Closure)
                  (const IsFullySeededRequest *message,
                   void *closure_data);
@@ -1232,12 +1080,6 @@ typedef void (*GetRandomBytesFullTimeoutRequest_Closure)
                   void *closure_data);
 typedef void (*GetRandomBytesFullTimeoutResponse_Closure)
                  (const GetRandomBytesFullTimeoutResponse *message,
-                  void *closure_data);
-typedef void (*GetRandomBytesMinRequest_Closure)
-                 (const GetRandomBytesMinRequest *message,
-                  void *closure_data);
-typedef void (*GetRandomBytesMinResponse_Closure)
-                 (const GetRandomBytesMinResponse *message,
                   void *closure_data);
 typedef void (*GetRandomBytesPrRequest_Closure)
                  (const GetRandomBytesPrRequest *message,
@@ -1302,10 +1144,6 @@ struct UnprivAccess_Service
                           const GetEntLvlRequest *input,
                           GetEntLvlResponse_Closure closure,
                           void *closure_data);
-  void (*rpc_is_min_seeded)(UnprivAccess_Service *service,
-                            const IsMinSeededRequest *input,
-                            IsMinSeededResponse_Closure closure,
-                            void *closure_data);
   void (*rpc_is_fully_seeded)(UnprivAccess_Service *service,
                               const IsFullySeededRequest *input,
                               IsFullySeededResponse_Closure closure,
@@ -1318,10 +1156,6 @@ struct UnprivAccess_Service
                                             const GetRandomBytesFullTimeoutRequest *input,
                                             GetRandomBytesFullTimeoutResponse_Closure closure,
                                             void *closure_data);
-  void (*rpc_get_random_bytes_min)(UnprivAccess_Service *service,
-                                   const GetRandomBytesMinRequest *input,
-                                   GetRandomBytesMinResponse_Closure closure,
-                                   void *closure_data);
   void (*rpc_get_random_bytes_pr)(UnprivAccess_Service *service,
                                   const GetRandomBytesPrRequest *input,
                                   GetRandomBytesPrResponse_Closure closure,
@@ -1368,11 +1202,9 @@ void unpriv_access__init (UnprivAccess_Service *service,
     { UNPRIV_ACCESS__BASE_INIT,\
       function_prefix__ ## rpc_status,\
       function_prefix__ ## rpc_get_ent_lvl,\
-      function_prefix__ ## rpc_is_min_seeded,\
       function_prefix__ ## rpc_is_fully_seeded,\
       function_prefix__ ## rpc_get_random_bytes_full,\
       function_prefix__ ## rpc_get_random_bytes_full_timeout,\
-      function_prefix__ ## rpc_get_random_bytes_min,\
       function_prefix__ ## rpc_get_random_bytes_pr,\
       function_prefix__ ## rpc_get_random_bytes,\
       function_prefix__ ## rpc_get_seed,\
@@ -1390,10 +1222,6 @@ void unpriv_access__rpc_get_ent_lvl(ProtobufCService *service,
                                     const GetEntLvlRequest *input,
                                     GetEntLvlResponse_Closure closure,
                                     void *closure_data);
-void unpriv_access__rpc_is_min_seeded(ProtobufCService *service,
-                                      const IsMinSeededRequest *input,
-                                      IsMinSeededResponse_Closure closure,
-                                      void *closure_data);
 void unpriv_access__rpc_is_fully_seeded(ProtobufCService *service,
                                         const IsFullySeededRequest *input,
                                         IsFullySeededResponse_Closure closure,
@@ -1406,10 +1234,6 @@ void unpriv_access__rpc_get_random_bytes_full_timeout(ProtobufCService *service,
                                                       const GetRandomBytesFullTimeoutRequest *input,
                                                       GetRandomBytesFullTimeoutResponse_Closure closure,
                                                       void *closure_data);
-void unpriv_access__rpc_get_random_bytes_min(ProtobufCService *service,
-                                             const GetRandomBytesMinRequest *input,
-                                             GetRandomBytesMinResponse_Closure closure,
-                                             void *closure_data);
 void unpriv_access__rpc_get_random_bytes_pr(ProtobufCService *service,
                                             const GetRandomBytesPrRequest *input,
                                             GetRandomBytesPrResponse_Closure closure,
@@ -1455,16 +1279,12 @@ extern const ProtobufCMessageDescriptor jent_status_request__descriptor;
 extern const ProtobufCMessageDescriptor jent_status_response__descriptor;
 extern const ProtobufCMessageDescriptor get_ent_lvl_request__descriptor;
 extern const ProtobufCMessageDescriptor get_ent_lvl_response__descriptor;
-extern const ProtobufCMessageDescriptor is_min_seeded_request__descriptor;
-extern const ProtobufCMessageDescriptor is_min_seeded_response__descriptor;
 extern const ProtobufCMessageDescriptor is_fully_seeded_request__descriptor;
 extern const ProtobufCMessageDescriptor is_fully_seeded_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_full_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_full_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_full_timeout_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_full_timeout_response__descriptor;
-extern const ProtobufCMessageDescriptor get_random_bytes_min_request__descriptor;
-extern const ProtobufCMessageDescriptor get_random_bytes_min_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_pr_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_pr_response__descriptor;
 extern const ProtobufCMessageDescriptor get_seed_request__descriptor;

@@ -216,28 +216,6 @@ int esdm_rpcc_get_ent_lvl(unsigned int *entlvl);
 int esdm_rpcc_get_ent_lvl_int(unsigned int *entlvl, void *int_data);
 
 /**
- * @brief RPC-version of esdm_state_min_seeded
- *
- * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
- * can be invoked by any user.
- *
- * @param [out] min_seeded true, if ESDM server is minimally seeded
- *
- * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
- *	    and the caller may try again)
- */
-int esdm_rpcc_is_min_seeded(bool *min_seeded);
-
-/**
- * @brief See esdm_rpcc_is_min_seeded
- *
- * The function allows specifying an interrupt callback data structure that
- * is used when invoking the interrupt check function registered with
- * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
- */
-int esdm_rpcc_is_min_seeded_int(bool *min_seeded, void *int_data);
-
-/**
  * @brief RPC-version of esdm_state_fully_seeded
  *
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
@@ -313,34 +291,6 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout(uint8_t *buf, size_t buflen,
 ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 						    struct timespec *ts,
 						    void *int_data);
-
-/**
- * @brief RPC-version of esdm_get_random_bytes_min
- *
- * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
- * can be invoked by any user.
- *
- * This function blocks until the ESDM is minimally seeded. The call provides
- * no guarantee whether the DRNG initial seed level stipulated by SP800-90C is
- * reached.
- *
- * @param [out] buf Buffer to be filled with random bits.
- * @param [in] buflen Size of the buffer to be filled.
- *
- * @return: read data length on success, < 0 on error (-EINTR means connection
- *	    was interrupted and the caller may try again)
- */
-ssize_t esdm_rpcc_get_random_bytes_min(uint8_t *buf, size_t buflen);
-
-/**
- * @brief See esdm_rpcc_get_random_bytes_min
- *
- * The function allows specifying an interrupt callback data structure that
- * is used when invoking the interrupt check function registered with
- * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
- */
-ssize_t esdm_rpcc_get_random_bytes_min_int(uint8_t *buf, size_t buflen,
-					   void *int_data);
 
 /**
  * @brief RPC-version of esdm_get_random_bytes_pr

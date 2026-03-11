@@ -145,7 +145,7 @@ static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
 	if (out == NULL)
 		return outlen;
 
-	esdm_invoke(esdm_rpcc_get_random_bytes_min(out, outlen));
+	esdm_invoke(esdm_rpcc_get_random_bytes_full(out, outlen));
 
 	if (ret == (ssize_t)outlen)
 		return outlen;

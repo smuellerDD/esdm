@@ -48,24 +48,6 @@ out:
 	return ret;
 }
 
-static int get_random_bytes_min(struct opt_data *opts)
-{
-	uint8_t buf[16];
-	ssize_t rc;
-	int ret = 0;
-
-	(void)opts;
-
-	rc = esdm_rpcc_get_random_bytes_min(buf, sizeof(buf));
-	if (rc < 0) {
-		ret = -(int)rc;
-		goto out;
-	}
-
-out:
-	return ret;
-}
-
 static int get_random_bytes(struct opt_data *opts)
 {
 	uint8_t buf[16];
@@ -100,7 +82,6 @@ static int parse_opts(int argc, char *argv[], struct opt_data *opts)
 			{ "help", no_argument, 0, 'h' },
 
 			{ "get_random_bytes_full", no_argument, 0, 'f' },
-			{ "get_random_bytes_min", no_argument, 0, 'm' },
 			{ "get_random_bytes", no_argument, 0, 0 },
 
 			{ 0, 0, 0, 0 }
@@ -128,11 +109,6 @@ static int parse_opts(int argc, char *argv[], struct opt_data *opts)
 				goto out;
 				break;
 			case 3:
-				/* get_random_bytes_min */
-				ret = get_random_bytes_min(opts);
-				goto out;
-				break;
-			case 4:
 				/* get_random_bytes */
 				ret = get_random_bytes(opts);
 				goto out;
@@ -148,10 +124,6 @@ static int parse_opts(int argc, char *argv[], struct opt_data *opts)
 
 		case 'f':
 			ret = get_random_bytes_full(opts);
-			goto out;
-			break;
-		case 'm':
-			ret = get_random_bytes_min(opts);
 			goto out;
 			break;
 		case 'h':

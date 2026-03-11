@@ -56,7 +56,6 @@
 struct esdm_state {
 	bool esdm_operational; /* Is DRNG operational? */
 	bool esdm_fully_seeded; /* Is DRNG fully seeded? */
-	bool esdm_min_seeded; /* Is DRNG minimally seeded? */
 	bool all_online_nodes_seeded; /* All DRNGs nodes seeded? */
 
 	/*
@@ -73,7 +72,6 @@ struct esdm_state {
 };
 
 static struct esdm_state esdm_state = {
-	false,
 	false,
 	false,
 	false,
@@ -322,17 +320,6 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 
 /********************************** Helper ***********************************/
 
-void esdm_debug_report_seedlevel(const char *name)
-{
-	if (!esdm_state_min_seeded())
-		esdm_logger(
-			LOGGER_VERBOSE, LOGGER_C_ES,
-			"%s called without reaching minimally seeded level (available entropy %u)\n",
-			name, esdm_avail_entropy());
-
-	esdm_force_fully_seeded();
-}
-
 /*
  * Reading of the ESDM pool is only allowed by one caller. The reading is
  * only performed to (re)seed DRNGs. Thus, if this "lock" is already taken,
@@ -374,7 +361,6 @@ void esdm_reset_state(void)
 	}
 	esdm_state.esdm_operational = false;
 	esdm_state.esdm_fully_seeded = false;
-	esdm_state.esdm_min_seeded = false;
 	esdm_state.all_online_nodes_seeded = false;
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
@@ -393,13 +379,6 @@ void esdm_pool_all_nodes_seeded(bool set)
 bool esdm_pool_all_nodes_seeded_get(void)
 {
 	return esdm_state.all_online_nodes_seeded;
-}
-
-/* Return boolean whether ESDM reached minimally seed level */
-DSO_PUBLIC
-bool esdm_state_min_seeded(void)
-{
-	return esdm_state.esdm_min_seeded;
 }
 
 /* Return boolean whether ESDM reached fully seed level */
@@ -598,38 +577,22 @@ void esdm_init_ops(struct entropy_buf *eb)
 			seed_bits += esdm_es[i]->curr_entropy(ent_thresh);
 	}
 
-	/* DRNG is seeded with full security strength */
+	/* DRNG is already seeded with full security strength */
 	if (state->esdm_fully_seeded) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
-	} else if (esdm_fully_seeded(!state->all_online_nodes_seeded, seed_bits,
-				     eb)) {
+		return;
+	}
+
+	if (esdm_fully_seeded(!state->all_online_nodes_seeded, seed_bits,
+			     eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
-		state->esdm_min_seeded = true;
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			    "ESDM fully seeded with %u bits of entropy\n",
 			    seed_bits);
 		esdm_set_entropy_thresh(requested_bits);
-	} else if (!state->esdm_min_seeded) {
-		/* DRNG is seeded with at least 128 bits of entropy */
-		if (seed_bits >= ESDM_MIN_SEED_ENTROPY_BITS) {
-			state->esdm_min_seeded = true;
-			esdm_logger(
-				LOGGER_VERBOSE, LOGGER_C_ES,
-				"ESDM minimally seeded with %u bits of entropy\n",
-				seed_bits);
-			esdm_set_entropy_thresh(requested_bits);
-			esdm_init_wakeup();
-
-			/* DRNG is seeded with at least ESDM_INIT_ENTROPY_BITS bits */
-		} else if (seed_bits >= ESDM_INIT_ENTROPY_BITS) {
-			esdm_logger(
-				LOGGER_VERBOSE, LOGGER_C_ES,
-				"ESDM initial entropy level %u bits of entropy\n",
-				seed_bits);
-			esdm_set_entropy_thresh(ESDM_MIN_SEED_ENTROPY_BITS);
-		}
+		esdm_init_wakeup();
 	}
 }
 
@@ -794,7 +757,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	struct esdm_state *state = &esdm_state;
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
 				      esdm_security_strength() :
-				      ESDM_MIN_SEED_ENTROPY_BITS;
+				      ESDM_FULL_SEED_ENTROPY_BITS;
 	int ret;
 
 	/* Guarantee that requested bits is a multiple of bytes */

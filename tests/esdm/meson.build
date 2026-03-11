@@ -23,14 +23,6 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
-	esdm_get_random_bytes_min_test = executable(
-		'esdm_get_random_bytes_min_test',
-		[ 'esdm_get_random_bytes_min_test.c' ],
-		include_directories: include_dirs_server,
-		link_with: esdm_lib,
-		dependencies: dependencies_server,
-	)
-
 	esdm_get_random_bytes_test = executable(
 		'esdm_get_random_bytes_test',
 		[ 'esdm_get_random_bytes_test.c' ],
@@ -74,7 +66,6 @@ if get_option('esdm-server').enabled()
 	test('ESDM API call esdm_status', esdm_status_test)
 	test('ESDM API call esdm_version', esdm_version_test)
 	test('ESDM API call esdm_get_random_bytes_full', esdm_get_random_bytes_full_test)
-	test('ESDM API call esdm_get_random_bytes_min', esdm_get_random_bytes_min_test)
 	test('ESDM API call esdm_get_random_bytes', esdm_get_random_bytes_test)
 	test('ESDM DRNG manager max w/o reseed - 1 DRNG', esdm_drng_mgr_max_wo_reseed_test,
 		args : [ '1' ],

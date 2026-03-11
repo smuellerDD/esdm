@@ -51,7 +51,6 @@ int main(int argc, char *argv[])
 	    !strstr(buf, "ESDM security strength") ||
 	    !strstr(buf, "Number of DRNG instances") ||
 	    !strstr(buf, "Standards compliance") ||
-	    !strstr(buf, "ESDM minimally seeded") ||
 	    !strstr(buf, "ESDM fully seeded")) {
 		printf("Unexpected status: %s\n", buf);
 		ret = 1;

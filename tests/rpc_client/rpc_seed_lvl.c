@@ -41,19 +41,6 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	ret = esdm_rpcc_is_min_seeded(&is_seeded);
-	if (ret < 0) {
-		printf("RPC is_min_seeded returned error %d\n", ret);
-		ret = 1;
-		goto out;
-	}
-
-	if (!is_seeded) {
-		printf("RPC is_min_seeded returned false\n");
-		ret = 1;
-		goto out;
-	}
-
 	ret = esdm_rpcc_is_fully_seeded(&is_seeded);
 	if (ret < 0) {
 		printf("RPC is_fully_seeded returned error %d\n", ret);
