@@ -21,6 +21,10 @@ Changes 1.2.2-prerelease
 
 * Added support for NTG.1 compliant jitterentropy-library 3.7.0
 
+* remove minimally seeded stage
+
+* remove placeholder for atomic DRNG
+
 Changes 1.2.1
 * Reduce lock contention and increase throughput (thanks to Markus Theil)
 
