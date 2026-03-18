@@ -864,7 +864,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 
 	if (!found_drng && esdm_drng && esdm_drng[node] &&
 	    esdm_drng[node]->fully_seeded &&
-	    mutex_w_trylock(&esdm_drng[node]->lock)) {
+	    mutex_w_trylock(&esdm_drng[node]->lock) == 0) {
 		mutex_w_unlock(&esdm_drng[node]->lock);
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
@@ -883,7 +883,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 			/* every node starts probing at different offsets */
 			j = ((uint32_t)i + node) % num_nodes;
 			if (esdm_drng[j] && esdm_drng[j]->fully_seeded &&
-			    mutex_w_trylock(&drng->lock)) {
+			    mutex_w_trylock(&drng->lock) == 0) {
 				mutex_w_unlock(&drng->lock);
 				found_drng = true;
 				drng = esdm_drng[j];
@@ -1048,7 +1048,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	 * We only allow ONE caller at any time to prevent a DoS on the RPC
 	 * interface considering this is a slow operation.
 	 */
-	if (!mutex_w_trylock(&esdm_get_seed_lock))
+	if (mutex_w_trylock(&esdm_get_seed_lock) != 0)
 		return -EAGAIN;
 
 	CKINT(esdm_drng_sleep_while_not_all_nodes_seeded(
@@ -1113,7 +1113,7 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 	 * a caller cannot flood the RPC lines with requests to the slow
 	 * PR DRNG and cause a denial of service to the others.
 	 */
-	if (!mutex_w_trylock(&esdm_pr_lock))
+	if (mutex_w_trylock(&esdm_pr_lock) != 0)
 		return -EAGAIN;
 
 	ret = esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);

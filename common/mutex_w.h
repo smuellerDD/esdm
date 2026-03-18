@@ -25,6 +25,7 @@
 #include <time.h>
 
 #include "bool.h"
+#include "ret_checkers.h"
 
 /**
  * @brief Reader / Writer mutex based on pthread
@@ -44,18 +45,18 @@ typedef struct {
  * Mutual exclusion lock (covering also the reader lock use case).
  * @param [in] mutex lock variable to lock
  */
-static inline void mutex_w_lock(mutex_w_t *mutex)
+static inline int mutex_w_lock(mutex_w_t *mutex)
 {
-	pthread_mutex_lock(&mutex->lock);
+	return pthread_mutex_lock(&mutex->lock);
 }
 
 /**
  * Unlock the lock
  * @param [in] mutex lock variable to lock
  */
-static inline void mutex_w_unlock(mutex_w_t *mutex)
+static inline int mutex_w_unlock(mutex_w_t *mutex)
 {
-	pthread_mutex_unlock(&mutex->lock);
+	return pthread_mutex_unlock(&mutex->lock);
 }
 
 /**
@@ -65,25 +66,35 @@ static inline void mutex_w_unlock(mutex_w_t *mutex)
  *		      or unlocked (0).
  * @param [in] robust initialize a robust mutex (1) or not (0)
  */
-static inline void mutex_w_init(mutex_w_t *mutex, int locked, int robust)
+static inline int mutex_w_init(mutex_w_t *mutex, int locked, int robust)
 {
-	pthread_mutexattr_init(&mutex->ma);
+	int ret = 0;
+
+	CKINT(pthread_mutexattr_init(&mutex->ma));
 	mutex->ma_used = 1;
 
 	if (robust)
-		pthread_mutexattr_setrobust(&mutex->ma, PTHREAD_MUTEX_ROBUST);
+		CKINT(pthread_mutexattr_setrobust(&mutex->ma, PTHREAD_MUTEX_ROBUST));
 
-	pthread_mutex_init(&mutex->lock, &mutex->ma);
+	CKINT(pthread_mutex_init(&mutex->lock, &mutex->ma));
 
 	if (locked)
-		mutex_w_lock(mutex);
+		CKINT(mutex_w_lock(mutex));
+
+out:
+	return ret;
 }
 
-static inline void mutex_w_destroy(mutex_w_t *mutex)
+static inline int mutex_w_destroy(mutex_w_t *mutex)
 {
-	pthread_mutex_destroy(&mutex->lock);
+	int ret = 0;
+
+	CKINT(pthread_mutex_destroy(&mutex->lock));
 	if (mutex->ma_used)
-		pthread_mutexattr_destroy(&mutex->ma);
+		CKINT(pthread_mutexattr_destroy(&mutex->ma));
+
+out:
+	return ret;
 }
 
 /**
@@ -93,11 +104,9 @@ static inline void mutex_w_destroy(mutex_w_t *mutex)
  * @param [in] mutex lock variable to lock
  * @return true if lock was taken, false if lock was not taken
  */
-static inline bool mutex_w_trylock(mutex_w_t *mutex)
+static inline int mutex_w_trylock(mutex_w_t *mutex)
 {
-	if (pthread_mutex_trylock(&mutex->lock))
-		return false;
-	return true;
+	return pthread_mutex_trylock(&mutex->lock);
 }
 
 /*
