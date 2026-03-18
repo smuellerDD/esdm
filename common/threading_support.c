@@ -361,7 +361,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 
 		j = lower + (k + rand_offset) % num_elements;
 
-		if (mutex_w_trylock(&threads[j].inuse)) {
+		if (mutex_w_trylock(&threads[j].inuse) == 0) {
 			/*
 			 * The thread is currently executing a body of code -
 			 * kick the worker.
@@ -453,7 +453,7 @@ int thread_wait(void)
 				continue;
 
 			/* If the thread executes a job, skip but wait. */
-			if (!mutex_w_trylock(&threads[i].inuse)) {
+			if (mutex_w_trylock(&threads[i].inuse) != 0) {
 				wait = true;
 				continue;
 			}

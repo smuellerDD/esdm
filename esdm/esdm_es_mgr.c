@@ -328,7 +328,7 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
  */
 int esdm_pool_trylock(void)
 {
-	return mutex_w_trylock(&esdm_state.reseed_in_progress);
+	return mutex_w_trylock(&esdm_state.reseed_in_progress) == 0;
 }
 
 void esdm_pool_lock(void)
