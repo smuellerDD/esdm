@@ -19,7 +19,7 @@
  * DAMAGE.
  */
 
-#define _POSIX_C_SOURCE 200112L
+#define _GNU_SOURCE
 #include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
