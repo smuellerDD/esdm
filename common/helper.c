@@ -33,7 +33,7 @@ uint32_t esdm_online_nodes(void)
 
 	/* We do not need more DRNGs than we have CPUs */
 	if (cpus == UINT32_MAX) {
-#ifdef _POSIX_SOURCE
+#ifdef _GNU_SOURCE
 		long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 		if (ncpus > 0) {
