@@ -43,7 +43,7 @@ uint32_t esdm_online_nodes(void)
 			 * esdm_curr_node().
 			 */
 			cpus = min_uint32((uint32_t)ncpus,
-					  THREADING_MAX_THREADS);
+					  THREADING_WORKER_THREADS);
 		} else {
 			cpus = 1;
 		}

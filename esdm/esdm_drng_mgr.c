@@ -637,7 +637,7 @@ void esdm_drng_force_reseed(void)
 	if (!esdm_drng || esdm_drng_check_disable_threshold(&esdm_drng_init)) {
 		esdm_drng_init.force_reseed = esdm_drng_init.fully_seeded;
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-			    "force reseed of initial DRNG\n");
+			    "force reseed of initial DRNG = %i\n", esdm_drng_init.force_reseed);
 		goto out;
 	}
 
@@ -649,7 +649,7 @@ void esdm_drng_force_reseed(void)
 
 		drng->force_reseed = drng->fully_seeded;
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-			    "force reseed of DRNG on CPU %u\n", node);
+			    "force reseed of DRNG on CPU %u = %i\n", node, drng->force_reseed);
 	}
 
 out:
@@ -849,10 +849,11 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	struct esdm_drng *drng = &esdm_drng_init;
 	uint32_t num_nodes = esdm_config_online_nodes();
 	uint32_t node = esdm_config_curr_node();
+	uint32_t offset = arc4random();
 	bool found_drng = false;
 	ssize_t ret;
+	uint32_t i;
 	uint32_t j;
-	int32_t i;
 
 	if (pr) {
 		esdm_logger(
@@ -862,29 +863,16 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 		found_drng = true;
 	}
 
-	if (!found_drng && esdm_drng && esdm_drng[node] &&
-	    esdm_drng[node]->fully_seeded &&
-	    mutex_w_trylock(&esdm_drng[node]->lock) == 0) {
-		mutex_w_unlock(&esdm_drng[node]->lock);
-		esdm_logger(
-			LOGGER_DEBUG, LOGGER_C_DRNG,
-			"Using DRNG instance on node %u to service generate request\n",
-			node);
-		drng = esdm_drng[node];
-		found_drng = true;
-	}
-
-	/*
-	 * try to find free drng heuristically first in order to better utilize
-	 * systems with RPC high load and a low total core count
-	 */
 	if (!found_drng && esdm_drng) {
-		for (i = (int32_t)num_nodes - 1; i >= 0; --i) {
+		for (i = 0; i < num_nodes; ++i) {
 			/* every node starts probing at different offsets */
-			j = ((uint32_t)i + node) % num_nodes;
+			j = ((uint32_t)i + node + offset) % num_nodes;
+			/* always try node 0 (init drng) last, as it can disable the operational state */
+			if (j == 0)
+				continue;
 			if (esdm_drng[j] && esdm_drng[j]->fully_seeded &&
-			    mutex_w_trylock(&drng->lock) == 0) {
-				mutex_w_unlock(&drng->lock);
+				mutex_w_trylock(&esdm_drng[j]->lock) == 0) {
+				mutex_w_unlock(&esdm_drng[j]->lock);
 				found_drng = true;
 				drng = esdm_drng[j];
 				esdm_logger(
@@ -902,7 +890,6 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 			"Using DRNG instance on node 0 to service generate request\n");
 	}
 
-	CKINT(esdm_drng_mgr_initialize());
 	CKINT(esdm_drng_get(drng, outbuf, outbuflen));
 
 out:

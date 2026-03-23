@@ -73,7 +73,8 @@ enum esdm_request_type {
 	es_kernel_feeder,
 	rpc_unpriv_server,
 	rpc_priv_server,
-	rpc_handler,
+	rpc_handler_unpriv,
+	rpc_handler_priv,
 	cuse_poll,
 };
 
