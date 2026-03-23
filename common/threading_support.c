@@ -495,8 +495,11 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 	case rpc_priv_server:
 		snprintf(name, sizeof(name), "ESDM priv_rpc");
 		break;
-	case rpc_handler:
-		snprintf(name, sizeof(name), "ESDM hdl_rpc%u", id);
+	case rpc_handler_priv:
+		snprintf(name, sizeof(name), "ESDM rpc_p%03u", id);
+		break;
+	case rpc_handler_unpriv:
+		snprintf(name, sizeof(name), "ESDM rpc_up%03u", id);
 		break;
 	case cuse_poll:
 		snprintf(name, sizeof(name), "ESDM cuse_poll");

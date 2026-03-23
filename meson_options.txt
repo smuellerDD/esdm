@@ -343,9 +343,9 @@ present when using /dev/random with the flag O_SYNC or
 getrandom(2) with GRND_RANDOM.
 ''')
 
-# Option for: THREADING_MAX_THREADS
-option('threading_max_threads', type: 'integer', min: 1, value: 1024,
-       description:'''Maximum number of concurrent threads supported.
+# Option for: THREADING_WORKER_THREADS
+option('threading_worker_threads', type: 'integer', min: 1, value: 64,
+       description:'''Maximum number of concurrent worker threads supported.
 
 This value can be set to any arbitrary number. Depending on the number
 of threads, the required numbers of thread contexts are statically allocated.
@@ -572,19 +572,6 @@ option('esdm-tool', type: 'feature', value: 'enabled',
 ################################################################################
 # Server-related Configuration
 ################################################################################
-
-option('esdm-server-term-on-signal', type: 'boolean', value: true,
-       description:'''ESDM-Server: Terminate on signal
-
-When enabled, the ESDM server sleeps on accept() either until a connection
-arrives or until a terminating signal is received. When a signal is recieved,
-the workerloop terminates and with it the server terminates. Conversely if
-this option is disabled, the ESDM server wakes up regularly to check whether
-the termination signal was received.
-
-This option is intended when for unknown reasons the accept() does not terminate
-even though the server shall exit.
-''')
 
 option('esdm-server-rpc-idle-timeout-usec', type: 'integer', value: 2000000,
        description:'''ESDM-Server: idle connection timeout

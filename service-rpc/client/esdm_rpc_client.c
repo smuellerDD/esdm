@@ -59,8 +59,10 @@ static void reset_conn_socket(esdm_rpc_client_connection_t *rpc_conn)
 	if (rpc_conn == NULL) {
 		return;
 	}
-	if (rpc_conn->fd >= 0)
+	if (rpc_conn->fd >= 0) {
+		shutdown(rpc_conn->fd, SHUT_RDWR);
 		close(rpc_conn->fd);
+	}
 	rpc_conn->fd = -1;
 	memset(&rpc_conn->last_used, 0, sizeof(rpc_conn->last_used));
 }
@@ -407,17 +409,9 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			     const ProtobufCMessageDescriptor *message_desc,
 			     ProtobufCClosure closure, void *closure_data)
 {
-	ProtobufCAllocator esdm_rpc_client_allocator = {
-		.alloc = &esdm_rpc_alloc,
-		.free = &esdm_rpc_free,
-		.allocator_data = NULL,
-	};
-	BUFFER_INIT(tls);
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
 	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)] __aligned(
-		sizeof(uint64_t));
-	uint8_t unpacked[ESDM_RPC_MAX_MSG_SIZE + 128] __aligned(
 		sizeof(uint64_t));
 	size_t total_received = 0;
 	ssize_t received;
@@ -428,10 +422,6 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
-
-	tls.buf = unpacked;
-	tls.len = sizeof(unpacked);
-	esdm_rpc_client_allocator.allocator_data = &tls;
 
 	/* The cast is appropriate as the buffer is aligned to 64 bits. */
 	received_data = (struct esdm_rpc_proto_sc *)buf;
@@ -525,12 +515,12 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * processing of data which returns it to the caller.
 		 */
 		ProtobufCMessage *msg = protobuf_c_message_unpack(
-			message_desc, &esdm_rpc_client_allocator,
+			message_desc, NULL,
 			header->message_length, received_data->data);
 		if (msg) {
 			closure(msg, closure_data);
 			protobuf_c_message_free_unpacked(
-				msg, &esdm_rpc_client_allocator);
+				msg, NULL);
 			esdm_logger(
 				LOGGER_DEBUG, LOGGER_C_RPC,
 				"Data with length %u send to client closure handler\n",
@@ -560,7 +550,6 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 out:
 	memset_secure(buf, 0, total_received);
-	memset_secure(tls.buf, 0, tls.consumed);
 	return ret;
 }
 
@@ -821,11 +810,8 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 	/* Protection against client programming errors */
 	uint32_t node = min_uint32(esdm_rpcc_curr_node(), num_conn);
 	bool found_unused_conn = false;
-	struct timespec abstime;
-	int lock_res;
 	int ret = 0;
 	uint32_t i;
-	int32_t j;
 
 	CKNULL(rpc_conn_array, -EFAULT);
 	CKNULL(ret_rpc_conn, -EFAULT);
@@ -848,36 +834,16 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 		}
 	}
 
-	/* as escalation step try timed locking */
-	if (!found_unused_conn && num_conn > 0) {
-		/* try in reverse order of probing above for less lock contention */
-		for (j = (int32_t)num_conn - 1; j >= 0; --j) {
-			/* every core probes at another offset */
-			rpc_conn_p = rpc_conn_array +
-				     ((uint32_t)j + node) % num_conn;
-
-			clock_gettime(CLOCK_MONOTONIC, &abstime);
-			// 5ms
-			abstime.tv_nsec += 5000000;
-			lock_res = mutex_w_timedlock(&rpc_conn_p->ref_cnt,
-						     &abstime);
-
-			if (lock_res == 0) {
-				found_unused_conn = true;
-				break;
-			}
-		}
-	}
-
 	if (!found_unused_conn) {
 		rpc_conn_p = rpc_conn_array + node % num_conn;
 
 		/*
-		* Wait until the previous call completed - each connection handle is
+		* Wait until the previous call completed - each connection handle
 		* has only one caller at one given time. Lock the ref_cnt if we
 		* obtained the connection handle.
 		*/
 		mutex_w_lock(&rpc_conn_p->ref_cnt);
+		found_unused_conn = true;
 	}
 
 	if (atomic_read(&rpc_conn_p->state) != esdm_rpcc_initialized) {

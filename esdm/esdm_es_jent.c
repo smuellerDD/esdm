@@ -295,6 +295,9 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 
 static inline int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
+	(void) osr;
+	(void) flags;
+
 	return 0;
 }
 
