@@ -84,8 +84,8 @@ conf_data.set('ESDM_BOTAN_DRNG_HMAC', get_option('botan_drng_type') == 'hmac')
 
 # This option currently is not configurable!
 conf_data.set('CONFIG_ESDM_USE_PTHREAD', true)
-conf_data.set('THREADING_WORKER_THREADS', get_option('threading_worker_threads'))
-conf_data.set('THREADING_MAX_THREADS', get_option('threading_worker_threads') + 3)
+conf_data.set('THREADING_MAX_WORKER_THREADS', get_option('threading_max_worker_threads'))
+conf_data.set('THREADING_MAX_THREADS', get_option('threading_max_worker_threads') + 3)
 
 conf_data.set('ESDM_ES_JENT', get_option('es_jent').enabled())
 conf_data.set('ESDM_JENT_ENTROPY_RATE',

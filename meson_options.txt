@@ -343,8 +343,8 @@ present when using /dev/random with the flag O_SYNC or
 getrandom(2) with GRND_RANDOM.
 ''')
 
-# Option for: THREADING_WORKER_THREADS
-option('threading_worker_threads', type: 'integer', min: 1, value: 64,
+# Option for: THREADING_MAX_WORKER_THREADS
+option('threading_max_worker_threads', type: 'integer', min: 1, value: 64,
        description:'''Maximum number of concurrent worker threads supported.
 
 This value can be set to any arbitrary number. Depending on the number
