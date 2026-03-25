@@ -827,7 +827,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	if (proto->privileged) {
 		num_threads = 1;
 	} else {
-		num_threads = min_size(esdm_config_online_nodes(), THREADING_WORKER_THREADS);
+		num_threads = min_size(esdm_config_online_nodes(), THREADING_MAX_WORKER_THREADS);
 	}
 
 	threads = calloc(num_threads, sizeof(struct esdm_rpc_thread));
