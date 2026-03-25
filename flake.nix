@@ -233,7 +233,9 @@
             }).overrideAttrs
               (prev: {
                 mesonFlags =
-                  prev.mesonFlags
+                  (builtins.filter (
+                    x: (!lib.hasInfix "max_threads" x) && (!lib.hasInfix "term-on-signal" x)
+                  ) prev.mesonFlags)
                   ++ lib.optionals debugEsdm [
                     "-Db_sanitize=address,undefined"
                     "-Dstrip=false"
