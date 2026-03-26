@@ -178,7 +178,8 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 			}
 		}
 
-		if (priv_init_complete && priv_init_completion) {
+		if (!priv_init_completed && priv_init_complete &&
+		    priv_init_completion) {
 			priv_init_completion();
 			priv_init_completed = true;
 		}
@@ -307,7 +308,7 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 
 		data[0] = requested_bits;
 		data[1] = 0;
-		ret = ioctl(fd, ioctl_cmd, &data);
+		ret = ioctl(fd, ioctl_cmd, data);
 		if (ret >= 0) {
 			*configured_bits = requested_bits;
 			esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
