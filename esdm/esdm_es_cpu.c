@@ -38,7 +38,18 @@ static uint32_t esdm_cpu_data_multiplier = 0;
 
 static int esdm_cpu_init(void)
 {
-	esdm_cpu_data_multiplier = 0;
+	esdm_cpu_data_multiplier = cpu_es_multiplier();
+	if (!esdm_cpu_data_multiplier)
+		esdm_cpu_data_multiplier = 1;
+
+	/* Apply configured multiplier */
+	esdm_cpu_data_multiplier = max_uint32(esdm_cpu_data_multiplier,
+					      ESDM_CPU_FULL_ENT_MULTIPLIER);
+
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+		    "Setting CPU ES multiplier to %u\n",
+		    esdm_cpu_data_multiplier);
+
 	return 0;
 }
 
@@ -97,7 +108,7 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 	const struct esdm_hash_cb *hash_cb;
 	struct esdm_drng *drng = esdm_drng_node_instance();
 	uint32_t ent_bits = 0, i, partial_bits = 0, digestsize, digestsize_bits,
-		 full_bits;
+		 full_bits, full_chunks;
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
@@ -114,34 +125,39 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 	/* Cap to maximum entropy that can ever be generated with given hash */
 	esdm_cap_requested(digestsize_bits, requested_bits);
 	full_bits = requested_bits * multiplier;
+	full_chunks = multiplier;
 
 	/* Calculate oversampling for SP800-90C */
 	if (esdm_sp80090c_compliant()) {
 		/* Complete amount of bits to be pulled */
 		full_bits += ESDM_OVERSAMPLE_ES_BITS * multiplier;
 		/* Full blocks that will be pulled */
-		multiplier = full_bits / requested_bits;
+		full_chunks = full_bits / requested_bits;
 		/* Partial block in bits to be pulled */
-		partial_bits = full_bits - (multiplier * requested_bits);
+		partial_bits = full_bits - (full_chunks * requested_bits);
 	}
 
 	if (hash_cb->hash_init(shash))
-		goto out;
+		goto err;
 
 	/* Hash all data from the CPU entropy source */
-	for (i = 0; i < multiplier; i++) {
+	for (i = 0; i < full_chunks; i++) {
 		ent_bits = esdm_get_cpu_data(outbuf, requested_bits);
 		if (!ent_bits)
-			goto out;
+			goto err;
 
 		if (hash_cb->hash_update(shash, outbuf, ent_bits >> 3))
 			goto err;
 	}
 
 	/* Hash partial block, if applicable */
-	ent_bits = esdm_get_cpu_data(outbuf, partial_bits);
-	if (ent_bits && hash_cb->hash_update(shash, outbuf, ent_bits >> 3))
-		goto err;
+	if (partial_bits) {
+		ent_bits = esdm_get_cpu_data(outbuf, partial_bits);
+		if (!ent_bits)
+			goto err;
+		if (hash_cb->hash_update(shash, outbuf, ent_bits >> 3))
+			goto err;
+	}
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "pulled %u bits from CPU RNG entropy source\n", full_bits);
@@ -172,6 +188,7 @@ out:
 	return ent_bits;
 
 err:
+	memset_secure(outbuf, 0, requested_bits >> 3);
 	ent_bits = 0;
 	goto out;
 }
@@ -182,23 +199,6 @@ err:
  */
 static uint32_t esdm_cpu_multiplier(void)
 {
-	unsigned long __maybe_unused v;
-
-	if (esdm_cpu_data_multiplier > 0)
-		return esdm_cpu_data_multiplier;
-
-	esdm_cpu_data_multiplier = cpu_es_multiplier();
-	if (!esdm_cpu_data_multiplier)
-		esdm_cpu_data_multiplier = 1;
-
-	/* Apply configured multiplier */
-	esdm_cpu_data_multiplier = max_uint32(esdm_cpu_data_multiplier,
-					      ESDM_CPU_FULL_ENT_MULTIPLIER);
-
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-		    "Setting CPU ES multiplier to %u\n",
-		    esdm_cpu_data_multiplier);
-
 	return esdm_cpu_data_multiplier;
 }
 
