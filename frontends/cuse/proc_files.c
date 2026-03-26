@@ -329,11 +329,13 @@ static int esdm_proc_pre_init(void)
 		esdm_proc_uuid(file);
 	} else {
 		do {
-			rc = read(fd, file->valdata, ESDM_PROC_UUID_LEN);
+			rc = read(fd, file->valdata + data_read,
+				  ESDM_PROC_UUID_LEN - 1 - data_read);
 			if (rc <= 0)
 				break;
 			data_read += (size_t)rc;
 		} while (data_read < (ESDM_PROC_UUID_LEN - 1));
+		close(fd);
 		file->valdata[ESDM_PROC_UUID_LEN - 1] = '\0';
 		file->vallen = ESDM_PROC_UUID_LEN - 1;
 	}

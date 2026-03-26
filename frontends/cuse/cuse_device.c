@@ -562,9 +562,11 @@ err:
 			LOGGER_VERBOSE, LOGGER_C_CUSE,
 			"Use fallback to provide data due to RPC error code %zd\n",
 			ret);
+		written = 0;
 		do {
-			ret = write(fallback_fd, buf, size);
-			written += (size_t)ret;
+			ret = write(fallback_fd, buf + written, size - written);
+			if (ret > 0)
+				written += (size_t)ret;
 		} while (ret > 0 && written < size);
 	}
 
@@ -915,8 +917,11 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	mutex_w_unlock(&esdm_cuse_ph_lock);
 
 	if (i == ESDM_CUSE_MAX_PH) {
-		err_code = EBUSY;
-		goto err;
+		/*
+		 * No free slot. ph was not stored.
+		 * Destroy, as callee is responsible for ph.
+		 */
+		fuse_pollhandle_destroy(ph);
 	}
 
 	return;
@@ -1058,7 +1063,7 @@ static const char *usage =
 	"    --min=MIN|-m MIN        device minor number\n"
 	"    --name=NAME|-n NAME     device name (mandatory)\n"
 	"    --verbosity=NUM|-v NUM  verbosity level\n"
-	"    --username=USER|-v USER unprivileged user name (default: \"nobody\")\n"
+	"    --username=USER|-u USER unprivileged user name (default: \"nobody\")\n"
 	"    -d   -o debug           enable debug output (implies -f)\n"
 	"    -f                      foreground operation\n"
 	"    -s                      disable multi-threaded operation\n"
