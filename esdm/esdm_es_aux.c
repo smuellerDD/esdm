@@ -166,8 +166,18 @@ static int esdm_aux_init_pool(struct esdm_pool *pool)
 		CKINT(hash_cb->hash_alloc(&pool->aux_pool_out));
 	}
 	pool->initialized = false;
+	mutex_unlock(&drng->hash_lock);
+	return ret;
 
 out:
+	if (pool->aux_pool_state && hash_cb->hash_dealloc) {
+		hash_cb->hash_dealloc(pool->aux_pool_state);
+		pool->aux_pool_state = NULL;
+	}
+	if (pool->aux_pool_out && hash_cb->hash_dealloc) {
+		hash_cb->hash_dealloc(pool->aux_pool_out);
+		pool->aux_pool_out = NULL;
+	}
 	mutex_unlock(&drng->hash_lock);
 	return ret;
 }
@@ -196,7 +206,7 @@ static int esdm_aux_init(void)
 		esdm_pools[i].initialized = false;
 		mutex_w_init(&esdm_pools[i].lock, 0, 0);
 		esdm_pools[i].idx = i;
-		esdm_aux_init_pool(&esdm_pools[i]);
+		CKINT(esdm_aux_init_pool(&esdm_pools[i]));
 	}
 
 	esdm_set_wakeup_bits();
@@ -209,6 +219,7 @@ static int esdm_aux_init(void)
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY, "Aux ES hash allocated\n");
 
+out:
 	return ret;
 }
 
@@ -225,6 +236,7 @@ static void esdm_aux_fini_pool(struct esdm_pool *pool)
 	}
 	pool->aux_pool_state = NULL;
 	pool->aux_pool_out = NULL;
+	pool->initialized = false;
 	mutex_unlock(&drng->hash_lock);
 }
 
@@ -348,8 +360,10 @@ static int esdm_aux_switch_hash_pool(struct esdm_pool *pool,
 	esdm_set_digestsize(new_cb->hash_digestsize(pool->aux_pool_out));
 
 out:
-	new_cb->hash_dealloc(nhash_state);
-	new_cb->hash_dealloc(nhash_out);
+	if (nhash_state)
+		new_cb->hash_dealloc(nhash_state);
+	if (nhash_out)
+		new_cb->hash_dealloc(nhash_out);
 	memset_secure(digest_state, 0, sizeof(digest_state));
 	memset_secure(digest_out, 0, sizeof(digest_out));
 	return ret;
