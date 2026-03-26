@@ -393,14 +393,13 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 			esdm_invoke(esdm_rpcc_get_random_bytes_full(
 				buffer, buffer_size));
 		}
-	}
-
-	if (ret != (ssize_t)buffer_size) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-			    "Failed to get bytes from ESDM, exiting!\n");
-		free(buffer);
-		buffer = NULL;
-		return EXIT_FAILURE;
+		if (ret != (ssize_t)buffer_size) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "Failed to get bytes from ESDM, exiting!\n");
+			free(buffer);
+			buffer = NULL;
+			return EXIT_FAILURE;
+		}
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &after);
@@ -495,6 +494,7 @@ static int handle_is_running(void)
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_TOOL,
 			"ESDM is not running. Unable to fetch random bytes.\n");
+		return EXIT_FAILURE;
 	}
 
 	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
@@ -515,7 +515,7 @@ static int handle_get_seed(bool allow_not_fully_seeded, bool raw)
 		return EXIT_FAILURE;
 	}
 
-	if (allow_not_fully_seeded)
+	if (!allow_not_fully_seeded)
 		flags |= ESDM_GET_SEED_FULLY_SEEDED;
 
 	esdm_invoke(esdm_rpcc_get_seed(buffer, ESDM_RPC_MAX_DATA, flags));
@@ -718,7 +718,8 @@ static int handle_reseed_via_os(long reseed_delay_ms)
 				esdm_logger(
 					LOGGER_ERR, LOGGER_C_TOOL,
 					"Invalid sleep timeout for reseed delay ms: %li, exiting!\n",
-					reseed_delay_ms) ret_val = EXIT_FAILURE;
+					reseed_delay_ms);
+				ret_val = EXIT_FAILURE;
 				goto out_1;
 			}
 		}
@@ -998,6 +999,7 @@ int main(int argc, char **argv)
 				break;
 			case 13:
 				/* stress-duration */
+				errno = 0;
 				stress_duration_sec = strtol(optarg, NULL, 10);
 				if (errno) {
 					esdm_logger(
@@ -1037,6 +1039,7 @@ int main(int argc, char **argv)
 				break;
 			case 21:
 				/* reseed-delay-ms */
+				errno = 0;
 				reseed_delay_ms = strtol(optarg, NULL, 10);
 				if (errno) {
 					esdm_logger(
@@ -1089,6 +1092,7 @@ int main(int argc, char **argv)
 				break;
 			case 30:
 				/* stress-request-size */
+				errno = 0;
 				stress_request_size =
 					(uint32_t)strtol(optarg, NULL, 10);
 				if (errno) {
