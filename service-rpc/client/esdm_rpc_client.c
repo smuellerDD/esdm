@@ -244,7 +244,7 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 
 			esdm_logger(
 				LOGGER_ERR, LOGGER_C_RPC,
-				"Writting of data to file descriptor %d failed: %s\n",
+				"Writing of data to file descriptor %d failed: %s\n",
 				rpc_conn->fd, strerror(errsv));
 
 			return -errsv;
@@ -255,9 +255,9 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 		/* Cover short writes, e.g. due to timeouts */
 		data += (size_t)ret;
 		len -= (size_t)ret;
-	} while (written < len);
+	} while (len > 0);
 
-	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
+	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", written);
 
 	return 0;
 }
@@ -544,7 +544,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
 			    "Server returned with an error\n");
-		msg = ERR_PTR(-EINTR);
+		msg = ERR_PTR(-EPROTO);
 		closure(msg, closure_data);
 	}
 
