@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <protobuf-c/protobuf-c.h>
 #include <semaphore.h>
 #include <signal.h>
@@ -155,6 +156,7 @@ static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 				const uint8_t *data, size_t len)
 {
+	const int TIMEOUT_MS = 5;
 	size_t written = 0;
 	ssize_t ret;
 
@@ -164,8 +166,35 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 	do {
 		ret = write(rpc_conn->child_fd, data, len);
 		/* we use non-blocking sockets */
-		if (ret < 0 && errno == EAGAIN)
-			continue;
+		if (ret < 0 && errno == EAGAIN) {
+			/* Wait a short moment for writeability, but not forever */
+			struct pollfd pfd = {
+				.fd = rpc_conn->child_fd,
+				.events = POLLOUT
+			};
+			int poll_ret = poll(&pfd, 1, TIMEOUT_MS);
+
+			/* early check for writeable */
+			if (poll_ret > 0 && pfd.revents & EPOLLOUT) {
+				continue;
+			}
+
+			/* signal? */
+			if (poll_ret < 0 && errno == EINTR) {
+				continue;
+			}
+
+			/* connection lost? */
+			if (poll_ret < 0 && pfd.revents & (POLLERR | POLLHUP)) {
+				ret = -EPIPE;
+				break;
+			}
+
+			/* timeout or error: fall through */
+			if (poll_ret <= 0) {
+				ret = -errno;
+			}
+		};
 
 		if (ret < 0) {
 			int errsv = errno;
