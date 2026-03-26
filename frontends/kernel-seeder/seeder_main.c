@@ -96,7 +96,7 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force
 				return -errsv;
 			}
 
-			esdm_rpcs_linux_fd = open("/dev/random", O_RDONLY);
+			esdm_rpcs_linux_fd = open("/dev/random", O_WRONLY);
 			if (esdm_rpcs_linux_fd < 0) {
 				errsv = errno;
 
@@ -117,7 +117,7 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force
 			return -errsv;
 		}
 	} else {
-		esdm_rpcs_linux_fd = open("/dev/esdm", O_RDONLY);
+		esdm_rpcs_linux_fd = open("/dev/esdm", O_WRONLY);
 		if (esdm_rpcs_linux_fd < 0) {
 			errsv = errno;
 
@@ -144,19 +144,19 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force
 			    rpi->entropy_count);
 	}
 
-	if (force_crng_reseed) {
+	/* only perform crng reseed, if entropy add was a success */
+	if (errsv == 0 && force_crng_reseed) {
 		/* need to use ESDM cuse interface? */
 		if (esdm_rpcs_linux_ioctl == 43)
 			esdm_rpcs_linux_ioctl = 44;
-		else {
+		else
 			esdm_rpcs_linux_ioctl = RNDRESEEDCRNG;
-		}
 
 		errsv = ioctl(esdm_rpcs_linux_fd, esdm_rpcs_linux_ioctl);
 		if (errsv != 0) {
 			errsv = errno;
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
-					"Error during forced Linux kernel CRNG reseed: %s\n", strerror(errsv));
+					"Error during forced Linux kernel CRNG reseed: %s\n", strerror(errno));
 		} else {
 			esdm_logger(LOGGER_DEBUG, LOGGER_C_SEEDER,
 					"Linux kernel CRNG forcefully reseeded\n");
@@ -232,7 +232,7 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 		}
 
 		pfd.fd = notify_fd;
-		pfd.events = POLL_IN;
+		pfd.events = POLLIN;
 		pfd.revents = 0;
 
 		/* Wake up every 2 minutes by default and every 2 sec if not initially seeded kernel */
@@ -284,7 +284,7 @@ static void sig_term(int sig)
 	signal(SIGTERM, SIG_DFL);
 
 	atomic_bool_set_false(&should_run);
-	if (notify_fd > 0) {
+	if (notify_fd >= 0) {
 		ssize_t write_ret;
 
 		/* make compiler happy */
