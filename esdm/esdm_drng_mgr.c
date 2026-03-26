@@ -173,7 +173,7 @@ int esdm_drng_alloc_common(struct esdm_drng *drng,
 
 	drng->drng_cb = drng_cb;
 	CKINT(drng_cb->drng_alloc(&drng->drng,
-				  ESDM_DRNG_SECURITY_STRENGTH_BYTES))
+				  ESDM_DRNG_SECURITY_STRENGTH_BYTES));
 	esdm_drng_reset(drng);
 
 out:
