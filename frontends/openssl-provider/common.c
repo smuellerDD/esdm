@@ -137,18 +137,19 @@ esdm_rand_reseed(void *ctx __unused, int prediction_resistance __unused,
 }
 
 static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
-			      unsigned int outlen, size_t min_noncelen __unused,
+			      unsigned int strength __unused,
+			      size_t min_noncelen,
 			      size_t max_noncelen __unused)
 {
 	ssize_t ret;
 
 	if (out == NULL)
-		return outlen;
+		return min_noncelen;
 
-	esdm_invoke(esdm_rpcc_get_random_bytes_full(out, outlen));
+	esdm_invoke(esdm_rpcc_get_random_bytes_full(out, min_noncelen));
 
-	if (ret == (ssize_t)outlen)
-		return outlen;
+	if (ret == (ssize_t)min_noncelen)
+		return min_noncelen;
 	else
 		return 0;
 }
@@ -169,10 +170,12 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 
 	if (buf_len < min_len)
 		goto err;
-	if (buf_len / 8 > max_len)
+	if (buf_len > max_len)
 		goto err;
 
 	*buffer = OPENSSL_secure_zalloc(buf_len);
+	if (*buffer == NULL)
+		goto err;
 	if (prediction_resistance) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(*buffer, buf_len));
 	} else {
@@ -205,6 +208,8 @@ static int esdm_rand_enable_locking(void *ctx)
 	struct esdm_rand_ctx *rand = ctx;
 
 	rand->lock = CRYPTO_THREAD_lock_new();
+	if (rand->lock == NULL)
+		return 0;
 	return 1;
 }
 
