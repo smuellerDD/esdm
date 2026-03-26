@@ -82,7 +82,7 @@ static int esdm_irq_set_entropy_rate(uint32_t requested_bits)
 	}
 
 	/* Set current entropy rate */
-	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_CONF, &entropy);
+	ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_CONF, entropy);
 	if (ret < 0)
 		return -EINVAL;
 
@@ -127,7 +127,7 @@ static int esdm_irq_initialize(void)
 	 * the privileges any more to do so.
 	 */
 	if (fd < 0)
-		fd = open("/dev/esdm_es", O_RDONLY);
+		fd = open("/dev/esdm_es", O_RDONLY | O_CLOEXEC);
 
 	if (fd < 0) {
 		esdm_logger(
@@ -145,6 +145,7 @@ static int esdm_irq_initialize(void)
 						     LOGGER_WARN,
 			LOGGER_C_ES,
 			"Disabling interrupt-based entropy source which is not present in kernel\n");
+		esdm_irq_entropy_fd = fd;
 		esdm_irq_finalize();
 		return 0;
 	}
