@@ -104,7 +104,7 @@ static int esdm_botan_hash_alloc(void **hash)
 	struct esdm_botan_hash_ctx *tmp;
 	struct esdm_botan_hash_ctx **ctx = (struct esdm_botan_hash_ctx **)hash;
 
-	tmp = new struct esdm_botan_hash_ctx;
+	tmp = new(std::nothrow) struct esdm_botan_hash_ctx;
 	if (!tmp)
 		return -ENOMEM;
 
@@ -301,7 +301,7 @@ static ssize_t esdm_botan_drbg_generate(void *drng, uint8_t *outbuf,
 
 	ret = clock_gettime(CLOCK_MONOTONIC, &ts);
 	if (ret) {
-		return -ret;
+		return -errno;
 	}
 
 	/* always use additional data in order to perform additional mixing steps
@@ -324,7 +324,8 @@ esdm_botan_drbg_dealloc_internal(struct esdm_botan_drng_state *state)
 
 static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 {
-	struct esdm_botan_drng_state *state = new struct esdm_botan_drng_state;
+	struct esdm_botan_drng_state *state =
+		new(std::nothrow) struct esdm_botan_drng_state;
 
 	(void)sec_strength;
 
@@ -332,21 +333,22 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 		return -ENOMEM;
 
 #ifdef ESDM_BOTAN_DRNG_CHACHA20
-	state->drbg.reset(new Botan::ChaCha_RNG());
+	state->drbg.reset(new(std::nothrow) Botan::ChaCha_RNG());
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 		    "Botan ChaCha20 DRNG core allocated\n");
 #endif
 #ifdef ESDM_BOTAN_DRNG_HMAC
-	state->drbg.reset(new Botan::HMAC_DRBG("SHA-512"));
+	state->drbg.reset(new(std::nothrow) Botan::HMAC_DRBG("SHA-512"));
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 		    "Botan SP800-90A HMAC-DRBG core allocated\n");
 #endif
 
-	*drng = state;
 	if (state->drbg == nullptr) {
-		esdm_botan_drbg_dealloc_internal(state);
+		delete state;
 		return -1;
 	}
+
+	*drng = state;
 
 	state->initialized = false;
 
