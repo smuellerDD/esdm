@@ -179,6 +179,7 @@ static int esdm_jent_async_monitor(void)
 		esdm_jent_get(&esdm_jent_state_thread, &esdm_jent_async[i],
 			      requested_bits, false);
 
+		__sync_synchronize();
 		esdm_jent_async_set[i] = buffer_filled;
 
 		esdm_logger(
@@ -239,6 +240,7 @@ static void esdm_jent_async_get(struct entropy_es *eb_es,
 
 	memset_secure(&esdm_jent_async[slot], 0, sizeof(struct entropy_es));
 
+	__sync_synchronize();
 	esdm_jent_async_set[slot] = buffer_empty;
 
 	if (!(slot % (ESDM_JENT_ENTROPY_BLOCKS / 4)) && slot)
@@ -440,7 +442,11 @@ static int esdm_jent_initialize(void)
 	CKINT(esdm_jent_async_init(ESDM_JENT_OSR, flags));
 
 	esdm_jent_state = jent_entropy_collector_alloc(ESDM_JENT_OSR, flags);
-	CKNULL(esdm_jent_state, -EFAULT);
+	if (!esdm_jent_state) {
+		esdm_jent_async_fini();
+		ret = -EFAULT;
+		goto out;
+	}
 
 	atomic_set(&esdm_jent_initialized, 1);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
