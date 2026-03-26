@@ -72,7 +72,8 @@ static int esdm_jent_kernel_init(void)
 	return 0;
 }
 
-static uint32_t esdm_jent_kernel_entropylevel(uint32_t requested_bits)
+/* Caller must hold jent_rng_mutex. */
+static uint32_t esdm_jent_kernel_entropylevel_locked(uint32_t requested_bits)
 {
 	if (jent_rng == NULL)
 		return 0;
@@ -81,12 +82,26 @@ static uint32_t esdm_jent_kernel_entropylevel(uint32_t requested_bits)
 		esdm_config_es_jent_kernel_entropy_rate(), requested_bits);
 }
 
+static uint32_t esdm_jent_kernel_entropylevel(uint32_t requested_bits)
+{
+	uint32_t ret;
+
+	mutex_reader_lock(&jent_rng_mutex);
+	ret = esdm_jent_kernel_entropylevel_locked(requested_bits);
+	mutex_reader_unlock(&jent_rng_mutex);
+
+	return ret;
+}
+
 static uint32_t esdm_jent_kernel_poolsize(void)
 {
-	if (jent_rng == NULL)
-		return 0;
+	uint32_t ret;
 
-	return esdm_jent_kernel_entropylevel(esdm_security_strength());
+	mutex_reader_lock(&jent_rng_mutex);
+	ret = esdm_jent_kernel_entropylevel_locked(esdm_security_strength());
+	mutex_reader_unlock(&jent_rng_mutex);
+
+	return ret;
 }
 
 static void esdm_jent_kernel_get(struct entropy_es *eb_es,
@@ -100,7 +115,7 @@ static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 	if (kcapi_rng_generate(jent_rng, eb_es->e, requested_bits >> 3) < 0)
 		goto err;
 
-	eb_es->e_bits = esdm_jent_kernel_entropylevel(requested_bits);
+	eb_es->e_bits = esdm_jent_kernel_entropylevel_locked(requested_bits);
 	esdm_logger(
 		LOGGER_DEBUG, LOGGER_C_ES,
 		"obtained %u bits of entropy from kernel-based jitter RNG entropy source\n",
@@ -117,17 +132,28 @@ err:
 
 static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 {
-	/* Assume the esdm_drng_init lock is taken by caller */
+	uint32_t poolsize, entropy_rate;
+
+	mutex_reader_lock(&jent_rng_mutex);
+	poolsize = esdm_jent_kernel_entropylevel_locked(esdm_security_strength());
+	entropy_rate = esdm_jent_kernel_entropylevel_locked(256);
+	mutex_reader_unlock(&jent_rng_mutex);
+
 	snprintf(buf, buflen,
 		 " Available entropy: %u\n"
 		 " Entropy Rate per 256 data bits: %u\n",
-		 esdm_jent_kernel_poolsize(),
-		 esdm_jent_kernel_entropylevel(256));
+		 poolsize, entropy_rate);
 }
 
 static bool esdm_jent_kernel_active(void)
 {
-	return jent_rng != NULL;
+	bool ret;
+
+	mutex_reader_lock(&jent_rng_mutex);
+	ret = jent_rng != NULL;
+	mutex_reader_unlock(&jent_rng_mutex);
+
+	return ret;
 }
 
 struct esdm_es_cb esdm_es_jent_kernel = {
