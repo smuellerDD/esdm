@@ -74,6 +74,7 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 
 	for (i = 0; i < cores; ++i) {
 		pthread_join(threads[i], NULL);
+		close(sockets[i]);
 	}
 
 	free(threads);

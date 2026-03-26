@@ -98,7 +98,7 @@ static void get_cpu_utilization(struct timespec *start)
 				       (double)total_diff;
 
 			char cpu[16];
-			sprintf(cpu, "# CPU%3li", i);
+			snprintf(cpu, sizeof(cpu), "# CPU%3li", i);
 			printf("%s Usage: %6.2lf%%\n",
 			       i == 0 ? "# CPU  A" : cpu, usage);
 		}
@@ -162,8 +162,8 @@ static void handle_message(struct test_msg *m)
 	char *t_b = format_time_sec(m->mean_duration);
 	char *t_c = format_time_sec(m->max_duration);
 
-	/* final does not send current timestamp */
 	if (m->is_exit) {
+		/* final does not send current timestamp */
 		printf("ID: %li, Final: %i, Current mean: %s, Current max: %s, Calls/Sec: %lf\n",
 		       m->id, m->is_exit, t_b, t_c, m->req_per_sec);
 	} else {
