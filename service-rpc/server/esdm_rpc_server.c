@@ -175,7 +175,7 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 			int poll_ret = poll(&pfd, 1, TIMEOUT_MS);
 
 			/* early check for writeable */
-			if (poll_ret > 0 && pfd.revents & EPOLLOUT) {
+			if (poll_ret > 0 && pfd.revents & POLLOUT) {
 				continue;
 			}
 
@@ -185,14 +185,14 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 			}
 
 			/* connection lost? */
-			if (poll_ret < 0 && pfd.revents & (POLLERR | POLLHUP)) {
+			if (poll_ret > 0 && pfd.revents & (POLLERR | POLLHUP)) {
 				ret = -EPIPE;
 				break;
 			}
 
 			/* timeout or error: fall through */
 			if (poll_ret <= 0) {
-				ret = -errno;
+				ret = (poll_ret == 0) ? -ETIMEDOUT : -errno;
 			}
 		};
 
@@ -201,7 +201,7 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 
 			esdm_logger(
 				LOGGER_VERBOSE, LOGGER_C_RPC,
-				"Writting of data to file descriptor %d failed: %s\n",
+				"Writing of data to file descriptor %d failed: %s\n",
 				rpc_conn->child_fd, strerror(errsv));
 
 			if (errsv == EPIPE) {
@@ -573,7 +573,7 @@ static void esdm_rpcs_release_conn(struct esdm_rpcs_connection *rpc_conn)
 		rpc_conn->child_fd = -1;
 	}
 	if (rpc_conn->received_data) {
-		memset_secure(rpc_conn->buf, 0, sizeof(*rpc_conn->buf));
+		memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
 		rpc_conn->received_data = NULL;
 	}
 	free(rpc_conn);
@@ -671,7 +671,7 @@ static int esdm_rpcs_handler(void *args)
 	while (atomic_read(&server_exit) == 0) {
 		int nfds = epoll_wait(epfd, events, (int)max_events, -1);
 		/* signal? */
-		if (nfds == -EINTR) {
+		if (nfds < 0 && errno == EINTR) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 				    "epoll_wait interrupted\n");
 			continue;
@@ -722,13 +722,12 @@ static int esdm_rpcs_handler(void *args)
 					continue;
 				}
 				rpc_conn = calloc(1, sizeof(struct esdm_rpcs_connection));
-				if (rpc_conn == NULL &&
-					errno == -ENOMEM) {
+				if (rpc_conn == NULL) {
 					esdm_logger(
 						LOGGER_ERR,
 						LOGGER_C_RPC,
 						"Unable to alloc client conn\n");
-					ret = -errno;
+					ret = -ENOMEM;
 					goto out;
 				}
 				rpc_conn->child_fd =
