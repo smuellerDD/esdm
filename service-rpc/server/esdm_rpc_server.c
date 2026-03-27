@@ -829,10 +829,10 @@ out:
 		esdm_rpcs_release_conn(tmp1);
 	}
 
-	if (tfd > 0) {
+	if (tfd >= 0) {
 		close(tfd);
 	}
-	if (epfd > 0) {
+	if (epfd >= 0) {
 		close(epfd);
 	}
 
@@ -946,7 +946,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		    SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC,
 		    0);
 	if (fd < 0) {
-		errsv = -errno;
+		errsv = errno;
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "RPC Server: cannot create socket: %s\n",
 			    strerror(errsv));
@@ -954,7 +954,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	}
 
 	if (bind(fd, address, address_len) < 0) {
-		errsv = -errno;
+		errsv = errno;
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "RPC Server: cannot bind to socket: %s\n",
 			    strerror(errsv));
@@ -963,7 +963,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	}
 
 	if (listen(fd, 4096) < 0) {
-		errsv = -errno;
+		errsv = errno;
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "RPC Server: cannot listen on socket: %s\n",
 			    strerror(errsv));
