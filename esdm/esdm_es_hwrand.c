@@ -120,8 +120,8 @@ static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 						      requested_bits - done_bits);
 		if (esdm_safe_read(esdm_hwrand_fd, buffer, tpm2_guaranteed_read_len))
 			goto err;
-		done_bits += chunk_size_bits;
 		memcpy(eb_es->e + (done_bits >> 3), buffer, (chunk_size_bits >> 3));
+		done_bits += chunk_size_bits;
 	} while (done_bits < requested_bits);
 
 	eb_es->e_bits = esdm_hwrand_entropylevel(requested_bits);
