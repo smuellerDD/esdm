@@ -995,9 +995,6 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 			    "use systemd provided socket %s = %i\n",
 			    socket_name, fd);
 
-		/* double check, that we are responsible for this socket/fd */
-		assert(systemd_listen_pid() == getppid());
-
 		if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &length) == -1) {
 			esdm_logger(
 				LOGGER_ERR, LOGGER_C_SERVER,
