@@ -139,6 +139,10 @@ static int mmap_file(const char *filename, uint8_t **memory, uint32_t *size)
 		goto out;
 
 	*memory = NULL;
+	if (sb.st_size < 0 || (unsigned long long)sb.st_size > UINT32_MAX) {
+		ret = -EOVERFLOW;
+		goto out;
+	}
 	*size = (uint32_t)sb.st_size;
 
 	if (sb.st_size) {

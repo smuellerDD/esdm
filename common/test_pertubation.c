@@ -35,11 +35,12 @@ atomic_t seed_entropy_ptr = ATOMIC_INIT(-1);
 
 void esdm_test_seed_entropy(uint32_t ent)
 {
-	if (atomic_read(&seed_entropy_ptr) >=
-	    ((int)ARRAY_SIZE(seed_entropy) - 1))
+	int idx = atomic_inc(&seed_entropy_ptr);
+
+	if (idx < 0 || idx >= (int)ARRAY_SIZE(seed_entropy))
 		return;
 
-	seed_entropy[atomic_inc(&seed_entropy_ptr)] = ent;
+	seed_entropy[idx] = ent;
 }
 
 /******************************************************************************/
@@ -123,15 +124,19 @@ static int esdm_test_shm_status_create_shm(void)
 					       S_IWGRP | S_IROTH | S_IWOTH);
 			errsv = errno;
 
-			if (esdm_test_shmid) {
+			if (esdm_test_shmid >= 0) {
 				esdm_test_shm_status_reset();
 				esdm_logger(
 					LOGGER_DEBUG, LOGGER_C_ANY,
 					"ESDM test shared memory segment created\n");
 			}
 		}
-		CKNULL_LOG(esdm_test_shmid, -errsv,
-			   "ESDM test shared memory segment creation failed\n");
+		if (esdm_test_shmid < 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				    "ESDM test shared memory segment creation failed\n");
+			ret = -errsv;
+			goto out;
+		}
 	}
 
 	tmp = shmat(esdm_test_shmid, NULL, 0);

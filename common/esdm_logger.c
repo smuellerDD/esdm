@@ -140,7 +140,6 @@ static void log_syslog(int severity, const char *format, ...)
 	int log_prio = LOG_NOTICE;
 
 	va_start(args, format);
-	va_end(args);
 	switch (severity) {
 	case LOGGER_DEBUG2:
 		log_prio = LOG_DEBUG;
@@ -166,6 +165,7 @@ static void log_syslog(int severity, const char *format, ...)
 		log_prio = LOG_INFO;
 	}
 	vsyslog(log_prio, format, args);
+	va_end(args);
 }
 
 DSO_PUBLIC
