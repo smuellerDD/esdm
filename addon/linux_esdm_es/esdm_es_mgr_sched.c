@@ -89,7 +89,6 @@ int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg)
 		break;
 
 	default:
-		printk("ioctl6 %u\n", cmd);
 		ret = -ENOIOCTLCMD;
 		break;
 	}

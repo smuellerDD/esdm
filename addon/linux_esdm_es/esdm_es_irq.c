@@ -498,7 +498,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	ret = esdm_irq_register(esdm_add_interrupt_randomness);
 	if (ret) {
 		pr_warn("cannot register ESDM IRQ ES\n");
-		goto err;
+		goto free_arrays;
 	}
 
 	pr_info("ESDM IRQ ES registered, DRBG: %s\n",
@@ -508,7 +508,8 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 free_arrays:
 	for_each_possible_cpu (cpu) {
 		u64** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
-		kfree(*irq_array_cpu);
+		kfree_sensitive(*irq_array_cpu);
+		*irq_array_cpu = NULL;
 	}
 
 err:
@@ -573,7 +574,8 @@ void esdm_es_irq_module_exit(void)
 
 	for_each_possible_cpu (cpu) {
 		u64** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
-		kfree(*irq_array_cpu);
+		kfree_sensitive(*irq_array_cpu);
+		*irq_array_cpu = NULL;
 	}
 
 	pr_info("ESDM IRQ ES unregistered\n");

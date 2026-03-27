@@ -483,7 +483,7 @@ int __init esdm_es_sched_module_init(void)
 		sizeof(esdm_sched_drbg_domain_separation) - 1);
 	if (!esdm_sched_drbg_state) {
 		pr_warn("could not alloc DRBG for post-processing\n");
-		return -EINVAL;
+		goto free_mem;
 	}
 
 	/* register scheduler hook */
@@ -492,7 +492,7 @@ int __init esdm_es_sched_module_init(void)
 		pr_warn("Unable to register ESDM scheduler ES\n");
 		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg_state);
 		esdm_sched_drbg_state = NULL;
-		return -EINVAL;
+		goto free_mem;
 	}
 
 	pr_info("ESDM Scheduler ES registered, DRBG: %s\n",
@@ -503,7 +503,8 @@ int __init esdm_es_sched_module_init(void)
 free_mem:
 	for_each_possible_cpu (cpu) {
 		u64** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
-		kfree(*sched_array_cpu);
+		kfree_sensitive(*sched_array_cpu);
+		*sched_array_cpu = NULL;
 	}
 	return -ENOMEM;
 }
@@ -533,7 +534,8 @@ void esdm_es_sched_module_exit(void)
 
 	for_each_possible_cpu (cpu) {
 		u64** sched_array_cpu = per_cpu_ptr(&esdm_sched_array, cpu);
-		kfree(*sched_array_cpu);
+		kfree_sensitive(*sched_array_cpu);
+		*sched_array_cpu = NULL;
 	}
 
 	pr_info("ESDM Scheduler ES unregistered\n");
