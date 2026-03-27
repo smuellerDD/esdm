@@ -171,7 +171,7 @@ static void parse_opts(int argc, char *argv[])
 			verbosity++;
 			break;
 		case 'p':
-			pidfile = optarg;
+			pidfile = strdup(optarg);
 			break;
 		case 'h':
 			usage();
@@ -287,9 +287,11 @@ static void create_pid_file(const char *pid_file)
 	/* Ensure only one copy */
 	pidfile_fd =
 		open(pid_file, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
-	if (pidfile_fd == -1)
+	if (pidfile_fd == -1) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot open pid file\n");
+		return;
+	}
 
 	if (lockf(pidfile_fd, F_TLOCK, 0) == -1) {
 		if (errno == EAGAIN || errno == EACCES) {

@@ -191,7 +191,7 @@ static int getentropy_common(void *buffer, size_t length)
 
 		/* We received insufficient data */
 		if ((size_t)rc != length) {
-			errno = -EFAULT;
+			errno = EFAULT;
 			return -1;
 		}
 	}

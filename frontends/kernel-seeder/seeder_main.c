@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 	systemd_notify_stopping();
 
 out:
-	if (notify_fd > 0)
+	if (notify_fd >= 0)
 		close(notify_fd);
 	notify_fd = -1;
 	return tool_ret;
