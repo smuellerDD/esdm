@@ -42,7 +42,7 @@ static ssize_t esdm_chacha20_generate(void *drng, uint8_t *outbuf,
 	struct lc_chacha20_drng_ctx *cc20 = (struct lc_chacha20_drng_ctx *)drng;
 
 	lc_cc20_drng_generate(cc20, outbuf, outbuflen);
-	return (int)outbuflen;
+	return (ssize_t)outbuflen;
 }
 
 static int esdm_chacha20_alloc(void **drng, uint32_t sec_strength)

@@ -112,7 +112,7 @@ bool fips_enabled(void)
 						LOGGER_ERR, LOGGER_C_ANY,
 						"FIPS: Cannot open fips_enabled file: %s\n",
 						strerror(errno));
-					return -EIO;
+					return false;
 				}
 			}
 
