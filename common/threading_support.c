@@ -543,8 +543,10 @@ static int thread_wait_all(bool system_threads)
 
 	/* Wait for all worker threads. */
 	for (i = 0; i < upper; i++) {
-		if (atomic_bool_read(&threads_in_cancel))
-			return -ESHUTDOWN;
+		if (atomic_bool_read(&threads_in_cancel)) {
+			ret = -ESHUTDOWN;
+			goto out;
+		}
 		if (thread_dirty(i)) {
 			pthread_join(threads[i].thread_id, NULL);
 			ret |= threads[i].ret_ancestor;
@@ -558,8 +560,8 @@ static int thread_wait_all(bool system_threads)
 	for (i = 0; i < upper; i++)
 		atomic_bool_set_false(&threads[i].shutdown);
 
+out:
 	mutex_w_unlock(&threads_cleanup);
-
 	return ret;
 }
 

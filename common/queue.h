@@ -43,10 +43,12 @@ struct thread_wait_queue {
 	}
 
 #define thread_wait_no_event(queue)                                            \
-	pthread_mutex_lock(&(queue)->thread_wait_lock);                        \
-	pthread_cond_wait(&(queue)->thread_wait_cv,                            \
-			  &(queue)->thread_wait_lock);                         \
-	pthread_mutex_unlock(&(queue)->thread_wait_lock)
+	do {                                                                   \
+		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
+		pthread_cond_wait(&(queue)->thread_wait_cv,                    \
+				  &(queue)->thread_wait_lock);                 \
+		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
+	} while (0)
 
 /* Timed wait on event, reltime is the relative time to wait */
 #define thread_timedwait_no_event(queue, reltime)                              \
@@ -57,7 +59,7 @@ struct thread_wait_queue {
 		clock_gettime(CLOCK_MONOTONIC, &__ts);                         \
 		__ts.tv_sec += (reltime)->tv_sec;                              \
 		__ts.tv_nsec += (reltime)->tv_nsec;                            \
-		if (__ts.tv_nsec > 1000000000) {                               \
+		if (__ts.tv_nsec >= 1000000000) {                               \
 			__ts.tv_sec += __ts.tv_nsec / 1000000000;              \
 			__ts.tv_nsec = __ts.tv_nsec % 1000000000;              \
 		}                                                              \
