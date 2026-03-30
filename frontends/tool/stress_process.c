@@ -75,13 +75,20 @@ void handle_stress_process(double timeout_sec, uint32_t request_size,
 		processes = calloc((size_t)cores, sizeof(pid_t));
 	}
 
+	if (!sockets || !processes) {
+		free(sockets);
+		free(processes);
+		processes = NULL;
+		return;
+	}
+
 	{
 		struct sigaction sa;
 		sa.sa_handler = SIG_IGN;
 		sigemptyset(&sa.sa_mask);
 		sa.sa_flags = 0;
 		if (sigaction(SIGCHLD, &sa, 0) == -1) {
-			perror(0);
+			perror("sigaction");
 			exit(EXIT_FAILURE);
 		}
 	}

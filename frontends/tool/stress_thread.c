@@ -55,6 +55,11 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 
 	threads = calloc((size_t)cores, sizeof(pthread_t));
 	sockets = calloc((size_t)cores, sizeof(int));
+	if (!threads || !sockets) {
+		free(threads);
+		free(sockets);
+		return;
+	}
 
 	for (i = 0; i < cores; ++i) {
 		int socks[2];
@@ -63,6 +68,12 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 		sockets[i] = socks[0];
 
 		struct thread_arg *arg = malloc(sizeof(struct thread_arg));
+		if (!arg) {
+			close(socks[0]);
+			close(socks[1]);
+			cores = i;
+			break;
+		}
 		arg->timeout = timeout_sec;
 		arg->id = i;
 		arg->sock_fd = socks[1];
