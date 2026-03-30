@@ -35,7 +35,7 @@ void *esdm_rpc_alloc(void *allocator_data, size_t size)
 	size += (unsigned long)new_aligned - (unsigned long)new;
 
 	/* If the size request overflows the available memory, return nothing */
-	if (size > (tlh->len - tlh->consumed))
+	if (tlh->consumed > tlh->len || size > (tlh->len - tlh->consumed))
 		return NULL;
 
 	/* Adjust the consumed memory indicator */

@@ -133,10 +133,13 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	/* Connect to the Unix domain socket */
 	addr.sun_family = AF_UNIX;
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
-	strncpy(addr.sun_path, socketname, sizeof(addr.sun_path));
-#pragma GCC diagnostic pop
+	if (strlen(socketname) >= sizeof(addr.sun_path)) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Socket path too long: %s\n", socketname);
+		return -ENAMETOOLONG;
+	}
+	memset(addr.sun_path, 0, sizeof(addr.sun_path));
+	memcpy(addr.sun_path, socketname, strlen(socketname));
 
 	rpc_conn->fd =
 		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
@@ -481,11 +484,14 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				header->method_index, header->request_id);
 
 			/*
-			 * Truncate the buffer length if client specified
-			 * too much buffer data.
+			 * Reject if the server specified too much buffer
+			 * data. As the server also checks this, it is a
+			 * clear protocol violation.
 			 */
-			if (header->message_length > ESDM_RPC_MAX_MSG_SIZE)
-				header->message_length = ESDM_RPC_MAX_MSG_SIZE;
+			if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
+				ret = -EOVERFLOW;
+				break;
+			}
 
 			/* How much data are we expecting to fetch? */
 			data_to_fetch = header->message_length;
@@ -953,9 +959,13 @@ static void cleanup_after_fork_unprivileged(void)
 {
 	uint32_t i;
 
-	/* close all unprivileged sockets */
+	/* close all unprivileged sockets and reinit robust mutexes */
 	for (i = 0; i < unpriv_rpc_conn_num; ++i) {
 		reset_conn_socket(&unpriv_rpc_conn[i]);
+		mutex_w_destroy(&rpc_conn->ref_cnt);
+		mutex_w_destroy(&rpc_conn->lock);
+		mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
+		mutex_w_init(&rpc_conn->lock, 0, 1);
 	}
 }
 
@@ -964,9 +974,13 @@ static void cleanup_after_fork_privileged(void)
 {
 	uint32_t i;
 
-	/* close all privileged sockets */
+	/* close all privileged sockets and reinit robust mutexes */
 	for (i = 0; i < priv_rpc_conn_num; ++i) {
 		reset_conn_socket(&priv_rpc_conn[i]);
+		mutex_w_destroy(&rpc_conn->ref_cnt);
+		mutex_w_destroy(&rpc_conn->lock);
+		mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
+		mutex_w_init(&rpc_conn->lock, 0, 1);
 	}
 }
 
