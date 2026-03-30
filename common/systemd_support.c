@@ -177,10 +177,9 @@ int systemd_listen_fd_for_name(const char *name)
 	if (num_listen_fds <= 0)
 		return -1;
 
-	fd_names_copy = calloc(1, strlen(listen_fd_names) + 1);
+	fd_names_copy = strdup(listen_fd_names);
 	if (!fd_names_copy)
 		return -1;
-	strcpy(fd_names_copy, listen_fd_names);
 
 	/* without tokens present, strtok_r returns the whole string */
 	token = strtok_r(fd_names_copy, ":", &saveptr);

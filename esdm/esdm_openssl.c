@@ -202,6 +202,7 @@ static int esdm_openssl_drbg_derive_seed_nonce(const uint8_t *inbuf,
 	 * when setting new test entropy the next time.
 	 */
 	*entropy_buf = OPENSSL_zalloc(esdm_openssl_hash_digestsize(hash));
+	CKNULL(*entropy_buf, -ENOMEM);
 	CKINT(esdm_openssl_hash_final(hash, *entropy_buf));
 
 	if (!need_nonce)
@@ -221,6 +222,7 @@ static int esdm_openssl_drbg_derive_seed_nonce(const uint8_t *inbuf,
 	 * when setting new test entropy the next time.
 	 */
 	*nonce_buf = OPENSSL_zalloc(esdm_openssl_hash_digestsize(hash));
+	CKNULL(*nonce_buf, -ENOMEM);
 	CKINT(esdm_openssl_hash_final(hash, *nonce_buf));
 
 out:

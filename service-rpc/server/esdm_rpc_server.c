@@ -503,14 +503,14 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		goto out_clear;
 	}
 
-	rpc_conn->total_received += (size_t)received;
-	rpc_conn->buf_p += (size_t)received;
-
 	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			"Reading %zd bytes, already consumed %zu bytes\n",
+			"Read %zd bytes, already consumed %zu bytes\n",
 			received, rpc_conn->total_received);
+
+	rpc_conn->total_received += (size_t)received;
+	rpc_conn->buf_p += (size_t)received;
 
 	/* We insist on having at least a header received. */
 	if (rpc_conn->total_received < sizeof(*rpc_conn->received_data)) {

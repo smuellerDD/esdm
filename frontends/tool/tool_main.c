@@ -971,8 +971,12 @@ int main(int argc, char **argv)
 				write_to_aux_pool = true;
 				if (aux_data != NULL)
 					free(aux_data);
-				aux_data = calloc(1, strlen(optarg) + 1);
-				aux_data = strcpy(aux_data, optarg);
+				aux_data = strdup(optarg);
+				if (!aux_data) {
+					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+						    "allocation failure\n");
+					exit(EXIT_FAILURE);
+				}
 				break;
 			case 8:
 				/* write-entropy-bits */
@@ -1178,8 +1182,12 @@ int main(int argc, char **argv)
 			write_to_aux_pool = true;
 			if (aux_data != NULL)
 				free(aux_data);
-			aux_data = calloc(1, strlen(optarg) + 1);
-			aux_data = strcpy(aux_data, optarg);
+			aux_data = strdup(optarg);
+			if (!aux_data) {
+				esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+					    "allocation failure\n");
+				exit(EXIT_FAILURE);
+			}
 			break;
 		case 'B':
 			errno = 0;

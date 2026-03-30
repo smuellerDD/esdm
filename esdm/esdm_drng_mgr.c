@@ -530,9 +530,12 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 		    "reseed triggered by system events for DRNG on node %d\n",
 		    node);
 	esdm_drng_seed(drng);
-	if (drng->fully_seeded) {
-		/* Prevent reseed storm */
-		drng->last_seeded.tv_sec += node * 60;
+	if (node > 0) {
+		/* Prevent reseed storm: stagger re-seed times across nodes */
+		mutex_w_lock(&drng->lock);
+		if (drng->fully_seeded)
+			drng->last_seeded.tv_sec += node * 60;
+		mutex_w_unlock(&drng->lock);
 	}
 }
 
@@ -759,7 +762,9 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				 * next time, but continue to generate random
 				 * bits.
 				 */
+				mutex_w_lock(&drng->lock);
 				drng->force_reseed = true;
+				mutex_w_unlock(&drng->lock);
 			} else { /* Perform synchronous reseed */
 				mutex_w_lock(&drng->lock);
 				/* double check, as we did not lock the DRNG in the first check*/
@@ -870,9 +875,13 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 			/* always try node 0 (init drng) last, as it can disable the operational state */
 			if (j == 0)
 				continue;
-			if (esdm_drng[j] && esdm_drng[j]->fully_seeded &&
-				mutex_w_trylock(&esdm_drng[j]->lock) == 0) {
+			if (esdm_drng[j] &&
+			    mutex_w_trylock(&esdm_drng[j]->lock) == 0) {
+				bool seeded = esdm_drng[j]->fully_seeded;
+
 				mutex_w_unlock(&esdm_drng[j]->lock);
+				if (!seeded)
+					continue;
 				found_drng = true;
 				drng = esdm_drng[j];
 				esdm_logger(
@@ -1019,7 +1028,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	struct entropy_buf *eb = (struct entropy_buf *)(buf + 2);
 	uint64_t buflen = sizeof(struct entropy_buf) + 2 * sizeof(uint64_t);
 	uint64_t collected_bits = 0;
-	int ret;
+	int ret = 0;
 
 	/* Ensure buffer is aligned as required */
 	BUILD_BUG_ON(sizeof(buflen) < ESDM_KCAPI_ALIGN);
