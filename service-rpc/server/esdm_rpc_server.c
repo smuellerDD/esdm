@@ -536,11 +536,14 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 			header->request_id);
 
 		/*
-		* Truncate the buffer length if client specified
-		* too much buffer data.
+		* Fail, if the buffer length the client specified
+		* contains too much buffer data. As the client also
+		* checks this, it is a clear failure.
 		*/
-		if (header->message_length > ESDM_RPC_MAX_MSG_SIZE)
-			header->message_length = ESDM_RPC_MAX_MSG_SIZE;
+		if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
+			ret = -EINVAL;
+			goto out_clear;
+		}
 
 		/* How much data are we expecting to fetch? */
 		rpc_conn->data_to_fetch = header->message_length;
