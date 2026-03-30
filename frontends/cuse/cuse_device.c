@@ -742,6 +742,10 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 
 	/* ESDM-specific IOCTL: get ESDM information */
 	case 42:
+		if (!esdm_cuse_shm_status) {
+			fuse_reply_err(req, EAGAIN);
+			break;
+		}
 		if (out_bufsz < esdm_cuse_shm_status->infolen) {
 			struct iovec iov = { arg,
 					     esdm_cuse_shm_status->infolen };

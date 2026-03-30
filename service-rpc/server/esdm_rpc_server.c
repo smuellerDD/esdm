@@ -128,7 +128,12 @@ static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 	struct stat statbuf;
 	int fd;
 
-	if (stat(path, &statbuf) < 0)
+	/*
+	 * Use lstat to detect symlinks - do not follow them.
+	 * This prevents a symlink attack where an attacker replaces the
+	 * socket file between stat and unlink.
+	 */
+	if (lstat(path, &statbuf) < 0)
 		return;
 	if (!S_ISSOCK(statbuf.st_mode))
 		return;
@@ -147,8 +152,22 @@ static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
 		return;
 	}
 
-	/* ok, we should delete the stale socket */
+	/*
+	 * Re-verify with lstat before unlink to narrow the TOCTOU window.
+	 * Verify inode hasn't changed since our first check.
+	 */
 	close(fd);
+	{
+		struct stat statbuf2;
+
+		if (lstat(path, &statbuf2) < 0)
+			return;
+		if (!S_ISSOCK(statbuf2.st_mode))
+			return;
+		if (statbuf.st_ino != statbuf2.st_ino ||
+		    statbuf.st_dev != statbuf2.st_dev)
+			return;
+	}
 	unlink(path);
 }
 
@@ -920,13 +939,8 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 
 	if (unix_socket) {
 		protocol_family = PF_UNIX;
-		memset(&addr_un, 0, sizeof(addr_un));
 		addr_un.sun_family = AF_UNIX;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-truncation"
-		strncpy(addr_un.sun_path, unix_socket,
-			sizeof(addr_un.sun_path));
-#pragma GCC diagnostic pop
+		snprintf(addr_un.sun_path, sizeof(addr_un.sun_path), "%s", unix_socket);
 		address_len = sizeof(addr_un);
 		address = (struct sockaddr *)(&addr_un);
 

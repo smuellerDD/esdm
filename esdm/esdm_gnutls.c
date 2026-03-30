@@ -62,8 +62,16 @@ static int esdm_gnutls_hash_final(void *hash, uint8_t *digest)
 static int esdm_gnutls_hash_alloc(void **ctx)
 {
 	gnutls_hash_hd_t *hd = (gnutls_hash_hd_t *)ctx;
+	int ret;
 
-	gnutls_hash_init(hd, ESDM_GNUTLS_HASH);
+	ret = gnutls_hash_init(hd, ESDM_GNUTLS_HASH);
+	if (ret < 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "GnuTLS hash init failed: %s\n",
+			    gnutls_strerror(ret));
+		*hd = NULL;
+		return -EFAULT;
+	}
 	return 0;
 }
 

@@ -82,7 +82,7 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 			return -errsv;
 		}
 
-		fd = creat(mount_dst, 0777);
+		fd = creat(mount_dst, 0666);
 		if (fd < 0) {
 			errsv = errno;
 
