@@ -1096,6 +1096,10 @@ static int esdm_rpcs_unpriv_init(void *args)
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_unpriv_init);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 
+	if (atomic_read(&server_exit) != 0) {
+		goto out;
+	}
+
 	/* Wait for the mother to drop the privileges. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
 			  (atomic_read(&esdm_rpc_init_state) ==
@@ -1158,6 +1162,10 @@ static int esdm_rpcs_interfaces_init(const char *username, const char *groupname
 	CKINT_LOG(thread_start(esdm_rpcs_unpriv_init, NULL,
 			       ESDM_THREAD_RPC_UNPRIV_GROUP, NULL),
 		  "Starting server thread failed\n");
+
+	if (atomic_read(&server_exit) != 0) {
+		goto out;
+	}
 
 	/* Wait for the unprivileged thread to complete initialization. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
@@ -1230,6 +1238,10 @@ int esdm_rpc_server_init(const char *username, const char *groupname)
 				ESDM_THREAD_ES_MONITOR, NULL)) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_RPC,
 				"Starting ES monitor thread failed\n");
+	}
+
+	if (atomic_read(&server_exit) != 0) {
+		goto out;
 	}
 
 	/* Wait for the privileged initialization to complete. */
