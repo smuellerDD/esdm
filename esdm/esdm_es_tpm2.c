@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include "bitshift.h"
+#include "build_bug_on.h"
 #include "conv_be_le.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
@@ -37,12 +38,14 @@
 static int tpm2_fd = -1;
 static DEFINE_MUTEX_UNLOCKED(tpm2_mutex);
 
-/* return code */
-typedef uint32_t TPM2_RC;
-/* command code */
-typedef uint32_t TPM2_CC;
 /* session type */
 typedef uint16_t TPM2_ST;
+
+/* command code */
+typedef uint32_t TPM2_CC;
+
+/* return code */
+typedef uint32_t TPM2_RC;
 
 static const TPM2_ST TPM2_ST_NO_SESSIONS = 0x8001;
 
@@ -244,6 +247,8 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 {
 #ifdef ESDM_TPM2_STIR
 	uint8_t stir_buf[32 + 2] = { 0 };
+	struct timespec stir_clock_real;
+	struct timespec stir_clock_monotonic;
 	struct TPM2CommandHeader stirrandom_cmd = {
 		.tag = TPM2_ST_NO_SESSIONS,
 		.commandSize =
@@ -269,15 +274,23 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 #ifdef ESDM_TPM2_STIR
 	/*
 	 * Explicitly trigger a reseed of the TPM's internal DRBG before
-	 * requesting random data. Also mix in some glibc randomness from
-	 * arc4random as uncredited additional input data of the DRBG.
+	 * requesting random data. Also mix in additional data on every
+	 * request for additional domain separation inside the TPM.
+	 * It is highly unlikely, to get the exact same realtime and monotonic
+	 * time tuples on all systems every time.
 	 */
 
 	/* stir buffer size */
 	be16_to_ptr(stir_buf, 32);
-	/* inject uncredited random bytes as additional DRBG input */
-	arc4random_buf(stir_buf + 2, sizeof(stir_buf) - 2);
-	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf, sizeof(stir_buf),
+
+	/* inject 32 byte taken from real and monotonic time as additional input without entropy */
+	(void) clock_gettime(CLOCK_REALTIME, &stir_clock_real);
+	(void) clock_gettime(CLOCK_MONOTONIC, &stir_clock_monotonic);
+	BUILD_BUG_ON(sizeof(stir_buf) < 2 + sizeof(stir_clock_real) + sizeof(stir_clock_monotonic));
+	memcpy(stir_buf + 2, &stir_clock_real, sizeof(stir_clock_real));
+	memcpy(stir_buf + 2 + sizeof(stir_clock_real), &stir_clock_monotonic, sizeof(stir_clock_monotonic));
+
+	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf, 2 + sizeof(stir_clock_real) + sizeof(stir_clock_monotonic),
 				    &stirrandom_rsp, NULL, 0)) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 			    "TPM 2.0 stir random failed\n");
