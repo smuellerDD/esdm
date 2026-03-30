@@ -962,10 +962,10 @@ static void cleanup_after_fork_unprivileged(void)
 	/* close all unprivileged sockets and reinit robust mutexes */
 	for (i = 0; i < unpriv_rpc_conn_num; ++i) {
 		reset_conn_socket(&unpriv_rpc_conn[i]);
-		mutex_w_destroy(&rpc_conn->ref_cnt);
-		mutex_w_destroy(&rpc_conn->lock);
-		mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
-		mutex_w_init(&rpc_conn->lock, 0, 1);
+		mutex_w_destroy(&unpriv_rpc_conn[i].ref_cnt);
+		mutex_w_destroy(&unpriv_rpc_conn[i].lock);
+		mutex_w_init(&unpriv_rpc_conn[i].ref_cnt, 0, 1);
+		mutex_w_init(&unpriv_rpc_conn[i].lock, 0, 1);
 	}
 }
 
@@ -977,10 +977,10 @@ static void cleanup_after_fork_privileged(void)
 	/* close all privileged sockets and reinit robust mutexes */
 	for (i = 0; i < priv_rpc_conn_num; ++i) {
 		reset_conn_socket(&priv_rpc_conn[i]);
-		mutex_w_destroy(&rpc_conn->ref_cnt);
-		mutex_w_destroy(&rpc_conn->lock);
-		mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
-		mutex_w_init(&rpc_conn->lock, 0, 1);
+		mutex_w_destroy(&priv_rpc_conn[i].ref_cnt);
+		mutex_w_destroy(&priv_rpc_conn[i].lock);
+		mutex_w_init(&priv_rpc_conn[i].ref_cnt, 0, 1);
+		mutex_w_init(&priv_rpc_conn[i].lock, 0, 1);
 	}
 }
 
