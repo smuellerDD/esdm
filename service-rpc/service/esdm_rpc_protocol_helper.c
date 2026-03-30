@@ -27,7 +27,7 @@
 static int esdm_rpc_write_data_to_buf(struct esdm_rpc_write_data_buf *write_buf,
 				      const uint8_t *data, size_t len)
 {
-	if (write_buf->dst_written + len > (ESDM_RPC_MAX_MSG_SIZE))
+	if (len > ESDM_RPC_MAX_MSG_SIZE - write_buf->dst_written)
 		return -EOVERFLOW;
 
 	memcpy(write_buf->dst_buf + write_buf->dst_written, data, len);

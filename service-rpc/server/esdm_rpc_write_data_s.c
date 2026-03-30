@@ -35,6 +35,9 @@ void esdm_rpc_write_data(UnprivAccess_Service *service,
 	if (request == NULL || request->data.data == NULL) {
 		response.ret = -EFAULT;
 		closure(&response, closure_data);
+	} else if (request->data.len > ESDM_RPC_MAX_DATA) {
+		response.ret = -EINVAL;
+		closure(&response, closure_data);
 	} else {
 		esdm_test_shm_status_add_rpc_server_written(request->data.len);
 		response.ret = esdm_pool_insert_aux(request->data.data,

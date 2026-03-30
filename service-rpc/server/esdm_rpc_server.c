@@ -232,9 +232,11 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 		}
 
 		written += (size_t)ret;
-	} while (written < len);
+		data += (size_t)ret;
+		len -= (size_t)ret;
+	} while (len > 0);
 
-	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
+	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", written);
 
 	return 0;
 }
@@ -552,6 +554,11 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 		* To allow comparison with total_received, let us
 		* add the header length to the data to fetch value.
 		*/
+		if (rpc_conn->data_to_fetch >
+		    UINT32_MAX - (uint32_t)sizeof(*rpc_conn->received_data)) {
+			ret = -EOVERFLOW;
+			goto out_clear;
+		}
 		rpc_conn->data_to_fetch += sizeof(*rpc_conn->received_data);
 	}
 

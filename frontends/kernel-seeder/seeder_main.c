@@ -50,6 +50,22 @@ static int notify_fd = -1; /* event fd used to notify in case of termination */
 static bool force_pr = false; /* force seeding kernel from pr instance of esdm */
 static bool had_one_sucessful_seed = false; /* used for ready notification */
 
+static int64_t parse_int64_arg(const char *str, const char *name)
+{
+	char *endptr = NULL;
+	long long val;
+
+	errno = 0;
+	val = strtoll(str, &endptr, 10);
+	if (errno || endptr == str || (endptr && *endptr != '\0')) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
+			    "conversion of %s failed: %s\n", name,
+			    strerror(errno ? errno : EINVAL));
+		exit(EXIT_FAILURE);
+	}
+	return (int64_t)val;
+}
+
 /*
  * modern Linux kernels have a 256 Bit entropy pool, always provide
  * twice the amount for full entropy inside the pool after leftover hashing
@@ -335,7 +351,7 @@ int main(int argc, char **argv)
 			case 0:
 				/* seeding interval */
 				seeding_interval_secs =
-					strtoll(optarg, NULL, 10);
+					parse_int64_arg(optarg, "interval");
 				break;
 			case 1:
 				/* help */
@@ -356,7 +372,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'i':
-			seeding_interval_secs = strtoll(optarg, NULL, 10);
+			seeding_interval_secs = parse_int64_arg(optarg, "interval");
 			break;
 		case 'h':
 			help = true;

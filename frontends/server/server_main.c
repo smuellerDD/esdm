@@ -307,7 +307,7 @@ static void create_pid_file(const char *pid_file)
 	if (pidfile_fd == -1) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot open pid file\n");
-		return;
+		exit(1);
 	}
 
 	if (lockf(pidfile_fd, F_TLOCK, 0) == -1) {
@@ -318,7 +318,7 @@ static void create_pid_file(const char *pid_file)
 		} else {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 				    "Cannot lock pid file\n");
-			return;
+			exit(1);
 		}
 	}
 
@@ -383,12 +383,21 @@ static void daemonize(void)
 			    "Cannot change directory\n");
 
 	/* Redirect standard files to /dev/null */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-result"
-	freopen("/dev/null", "r", stdin);
-	freopen("/dev/null", "w", stdout);
-	freopen("/dev/null", "w", stderr);
-#pragma GCC diagnostic pop
+	{
+		int devnull = open("/dev/null", O_RDWR);
+
+		if (devnull < 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot open /dev/null: %s\n",
+				    strerror(errno));
+		} else {
+			dup2(devnull, STDIN_FILENO);
+			dup2(devnull, STDOUT_FILENO);
+			dup2(devnull, STDERR_FILENO);
+			if (devnull > STDERR_FILENO)
+				close(devnull);
+		}
+	}
 }
 
 int main(int argc, char *argv[])

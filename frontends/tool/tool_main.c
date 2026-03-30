@@ -51,6 +51,26 @@ enum RANDOM_MODE {
 };
 
 /*
+ * Safe strtol wrapper: initializes errno, validates endptr, and exits on
+ * conversion failure (trailing garbage, empty string, overflow).
+ */
+static long parse_long_arg(const char *str, const char *name)
+{
+	char *endptr = NULL;
+	long val;
+
+	errno = 0;
+	val = strtol(str, &endptr, 10);
+	if (errno || endptr == str || (endptr && *endptr != '\0')) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "conversion of %s failed: %s\n", name,
+			    strerror(errno ? errno : EINVAL));
+		exit(EXIT_FAILURE);
+	}
+	return val;
+}
+
+/*
  * Commands
  */
 static void handle_usage(void)
@@ -934,15 +954,15 @@ int main(int argc, char **argv)
 			case 3:
 				/* get-random */
 				get_random = true;
-				errno = 0;
-				num_rand_bytes =
-					(size_t)strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of bytes failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
+				{
+					long val = parse_long_arg(optarg, "bytes");
+
+					if (val < 0) {
+						esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+							    "bytes must be non-negative\n");
+						exit(EXIT_FAILURE);
+					}
+					num_rand_bytes = (size_t)val;
 				}
 				break;
 			case 4:
@@ -956,15 +976,7 @@ int main(int argc, char **argv)
 			case 6:
 				/* wait-until-seeded */
 				wait_until_seeded = true;
-				errno = 0;
-				seed_test_tries = strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of seed tries failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
-				}
+				seed_test_tries = parse_long_arg(optarg, "seed tries");
 				break;
 			case 7:
 				/* write-to-aux-pool */
@@ -980,15 +992,15 @@ int main(int argc, char **argv)
 				break;
 			case 8:
 				/* write-entropy-bits */
-				errno = 0;
-				write_entropy_bits =
-					(uint32_t)strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of bytes failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
+				{
+					long val = parse_long_arg(optarg, "entropy bits");
+
+					if (val < 0 || (unsigned long)val > UINT32_MAX) {
+						esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+							    "entropy bits out of range\n");
+						exit(EXIT_FAILURE);
+					}
+					write_entropy_bits = (uint32_t)val;
 				}
 				break;
 			case 9:
@@ -1009,15 +1021,8 @@ int main(int argc, char **argv)
 				break;
 			case 13:
 				/* stress-duration */
-				errno = 0;
-				stress_duration_sec = strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of stress-duration failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
-				}
+				stress_duration_sec = parse_long_arg(optarg,
+								     "stress-duration");
 				break;
 			case 14:
 				/* clear-pool */
@@ -1049,15 +1054,8 @@ int main(int argc, char **argv)
 				break;
 			case 21:
 				/* reseed-delay-ms */
-				errno = 0;
-				reseed_delay_ms = strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of reseed-delay-ms failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
-				}
+				reseed_delay_ms = parse_long_arg(optarg,
+								 "reseed-delay-ms");
 				break;
 			case 22:
 				/* seed-via-os */
@@ -1065,14 +1063,8 @@ int main(int argc, char **argv)
 				break;
 			case 23:
 				/* timeout-msec */
-				timeout_msec = strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of timeout-msec failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
-				}
+				timeout_msec = parse_long_arg(optarg,
+							     "timeout-msec");
 				getrandom_mode = RAND_MODE_FULL_TIMEOUT;
 				break;
 			case 24:
@@ -1102,15 +1094,16 @@ int main(int argc, char **argv)
 				break;
 			case 30:
 				/* stress-request-size */
-				errno = 0;
-				stress_request_size =
-					(uint32_t)strtol(optarg, NULL, 10);
-				if (errno) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"conversion of stress-request-size failed, exiting: %s\n",
-						strerror(errno));
-					exit(EXIT_FAILURE);
+				{
+					long val = parse_long_arg(optarg,
+								 "stress-request-size");
+
+					if (val < 0 || (unsigned long)val > UINT32_MAX) {
+						esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+							    "stress-request-size out of range\n");
+						exit(EXIT_FAILURE);
+					}
+					stress_request_size = (uint32_t)val;
 				}
 				break;
 			case 31:
@@ -1150,14 +1143,15 @@ int main(int argc, char **argv)
 			break;
 		case 'r':
 			get_random = true;
-			errno = 0;
-			num_rand_bytes = (size_t)strtol(optarg, NULL, 10);
-			if (errno) {
-				esdm_logger(
-					LOGGER_ERR, LOGGER_C_TOOL,
-					"conversion of bytes failed, exiting: %s\n",
-					strerror(errno));
-				exit(EXIT_FAILURE);
+			{
+				long val = parse_long_arg(optarg, "bytes");
+
+				if (val < 0) {
+					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+						    "bytes must be non-negative\n");
+					exit(EXIT_FAILURE);
+				}
+				num_rand_bytes = (size_t)val;
 			}
 			break;
 		case 'e':
@@ -1168,15 +1162,7 @@ int main(int argc, char **argv)
 			break;
 		case 'w':
 			wait_until_seeded = true;
-			errno = 0;
-			seed_test_tries = strtol(optarg, NULL, 10);
-			if (errno) {
-				esdm_logger(
-					LOGGER_ERR, LOGGER_C_TOOL,
-					"conversion of seed tries failed, exiting: %s\n",
-					strerror(errno));
-				exit(EXIT_FAILURE);
-			}
+			seed_test_tries = parse_long_arg(optarg, "seed tries");
 			break;
 		case 'W':
 			write_to_aux_pool = true;
@@ -1190,14 +1176,15 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'B':
-			errno = 0;
-			write_entropy_bits = (uint32_t)strtol(optarg, NULL, 10);
-			if (errno) {
-				esdm_logger(
-					LOGGER_ERR, LOGGER_C_TOOL,
-					"conversion of bytes failed, exiting: %s\n",
-					strerror(errno));
-				exit(EXIT_FAILURE);
+			{
+				long val = parse_long_arg(optarg, "entropy bits");
+
+				if (val < 0 || (unsigned long)val > UINT32_MAX) {
+					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+						    "entropy bits out of range\n");
+					exit(EXIT_FAILURE);
+				}
+				write_entropy_bits = (uint32_t)val;
 			}
 			break;
 		case 'b':
