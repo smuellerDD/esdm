@@ -39,11 +39,16 @@ void esdm_rpc_rnd_add_to_ent_cnt(PrivAccess_Service *service,
 		response.ret = -EPERM;
 		closure(&response, closure_data);
 	} else {
-		uint32_t ent_count_bits = esdm_get_aux_ent() + request->entcnt;
+		uint32_t aux_ent = esdm_get_aux_ent();
 		uint32_t digestsize_bits = esdm_get_digestsize();
+		uint32_t ent_count_bits;
 
-		if (ent_count_bits > digestsize_bits)
+		/* Guard against integer overflow in addition */
+		if (request->entcnt > digestsize_bits ||
+		    aux_ent > digestsize_bits - request->entcnt)
 			ent_count_bits = digestsize_bits;
+		else
+			ent_count_bits = aux_ent + request->entcnt;
 		esdm_pool_set_entropy(ent_count_bits);
 
 		response.ret = 0;

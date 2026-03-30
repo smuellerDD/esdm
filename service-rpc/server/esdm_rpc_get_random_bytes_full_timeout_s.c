@@ -44,6 +44,9 @@ void esdm_rpc_get_random_bytes_full_timeout(
 	if (request == NULL || request->len > sizeof(rndval)) {
 		response.ret = -(int32_t)sizeof(rndval);
 		closure(&response, closure_data);
+	} else if (request->tv_nsec > 999999999) {
+		response.ret = -EINVAL;
+		closure(&response, closure_data);
 	} else {
 		struct timespec ts = {
 			.tv_sec = (time_t)request->tv_sec,

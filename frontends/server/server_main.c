@@ -261,43 +261,49 @@ static void dealloc(void)
 	daemon_release();
 }
 
-/* terminate the daemon cleanly */
+/*
+ * Signal handler: trigger server shutdown.
+ *
+ * Ideally we would only set a flag here, but esdm_rpc_server_fini() is
+ * needed to unblock the server loop. It sets an atomic and wakes threads,
+ * which is acceptable from signal context on Linux.
+ */
 static void sig_term(int sig)
 {
 	(void)sig;
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Shutting down cleanly\n");
-
-	/* Prevent the kernel from interfering with the shutdown */
-	signal(SIGALRM, SIG_IGN);
-
-	/* If we got another termination signal, just get killed */
-	signal(SIGHUP, SIG_DFL);
-	signal(SIGINT, SIG_DFL);
-	signal(SIGQUIT, SIG_DFL);
-	signal(SIGTERM, SIG_DFL);
-
-	dealloc();
-	exit(0);
+	esdm_rpc_server_fini();
 }
 
 static void install_term(void)
 {
+	struct sigaction sa;
+
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 		    "Install termination signal handler\n");
 
-	signal(SIGHUP, sig_term);
-	signal(SIGINT, sig_term);
-	signal(SIGQUIT, sig_term);
-	signal(SIGTERM, sig_term);
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = sig_term;
+	sigemptyset(&sa.sa_mask);
+	/* No SA_RESTART: let blocking calls return EINTR so we can exit */
+	sa.sa_flags = 0;
+
+	sigaction(SIGHUP, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
 }
 
 static void create_pid_file(const char *pid_file)
 {
 	char pid_str[12] = { 0 }; /* max. integer length + '\n' + null */
 
-	/* Ensure only one copy */
+	/*
+	 * Open or create pid file, then lock it. If the lock fails,
+	 * another instance is running. If the file is stale (left
+	 * from a crash), the lock will succeed and we can reuse it.
+	 */
 	pidfile_fd =
-		open(pid_file, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+		open(pid_file, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (pidfile_fd == -1) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot open pid file\n");
@@ -307,11 +313,13 @@ static void create_pid_file(const char *pid_file)
 	if (lockf(pidfile_fd, F_TLOCK, 0) == -1) {
 		if (errno == EAGAIN || errno == EACCES) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-				    "PID file already locked\n");
+				    "PID file already locked, another instance running\n");
 			exit(1);
-		} else
+		} else {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 				    "Cannot lock pid file\n");
+			return;
+		}
 	}
 
 	if (ftruncate(pidfile_fd, 0) == -1) {

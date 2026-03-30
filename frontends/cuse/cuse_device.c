@@ -741,21 +741,29 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 		break;
 
 	/* ESDM-specific IOCTL: get ESDM information */
-	case 42:
+	case 42: {
+		size_t infolen;
+
 		if (!esdm_cuse_shm_status) {
 			fuse_reply_err(req, EAGAIN);
 			break;
 		}
-		if (out_bufsz < esdm_cuse_shm_status->infolen) {
-			struct iovec iov = { arg,
-					     esdm_cuse_shm_status->infolen };
+
+		/* Clamp infolen to buffer bounds to prevent overread */
+		infolen = esdm_cuse_shm_status->infolen;
+		if (infolen > ESDM_SHM_STATUS_INFO_SIZE)
+			infolen = ESDM_SHM_STATUS_INFO_SIZE;
+
+		if (out_bufsz < infolen) {
+			struct iovec iov = { arg, infolen };
 
 			fuse_reply_ioctl_retry(req, NULL, 0, &iov, 1);
 		} else {
 			fuse_reply_ioctl(req, 0, esdm_cuse_shm_status->info,
-					 esdm_cuse_shm_status->infolen);
+					 infolen);
 		}
 		break;
+	}
 
 	/* ESDM-specific IOCTL: Reseed kernel directly */
 	case 43:
