@@ -40,7 +40,7 @@ static inline uint32_t ptr_to_32(const uint8_t *p)
 	return ptr_to_be32(p);
 }
 
-static inline uint32_t ptr_to_16(const uint8_t *p)
+static inline uint16_t ptr_to_16(const uint8_t *p)
 {
 	return ptr_to_be16(p);
 }
@@ -57,7 +57,7 @@ static inline uint32_t ptr_to_32(const uint8_t *p)
 	return ptr_to_le32(p);
 }
 
-static inline uint32_t ptr_to_16(const uint8_t *p)
+static inline uint16_t ptr_to_16(const uint8_t *p)
 {
 	return ptr_to_le16(p);
 }
