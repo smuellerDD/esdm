@@ -91,6 +91,13 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 	int retries = 0;
 	int ret = -1;
 
+	if (sizeof(struct TPM2CommandHeader) + cmd_buffer_len > sizeof(buf) ||
+	    sizeof(struct TPM2ResponseHeader) + rsp_buffer_len > sizeof(buf)) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "TPM 2.0 transceive: buffer too small\n");
+		goto out;
+	}
+
 	do {
 		retries++;
 		memset(buf, 0, sizeof(buf));
