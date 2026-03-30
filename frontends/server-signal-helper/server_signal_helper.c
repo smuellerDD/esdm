@@ -49,8 +49,9 @@ static bool signal_suspend(char *pidfile_path)
 	}
 	fclose(pidfile);
 
+	errno = 0;
 	pid = (pid_t)strtol(pid_string, NULL, 10);
-	if (errno) {
+	if (errno || pid <= 0) {
 		perror("PID conversion failed");
 		return false;
 	}
@@ -61,7 +62,7 @@ static bool signal_suspend(char *pidfile_path)
 
 static bool signal_resume(void)
 {
-	int ret;
+	int ret = -1;
 
 	if (esdm_rpcc_init_unpriv_service(NULL) != 0)
 		return false;

@@ -75,10 +75,15 @@ int esdm_safe_read(int fd, uint8_t *buf, size_t buflen)
 		if (readlen > 0) {
 			buflen -= (size_t)readlen;
 			buf += (size_t)readlen;
+		} else if (readlen == 0) {
+			/* EOF */
+			return buflen ? -ENODATA : 0;
+		} else if (errno != EINTR) {
+			return -errno;
 		}
-	} while ((0 < readlen || errno == EINTR) && buflen);
+	} while (buflen);
 
-	return buflen ? -errno : 0;
+	return 0;
 }
 
 int esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
@@ -90,8 +95,12 @@ int esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
 		if (writelen > 0) {
 			buflen -= (size_t)writelen;
 			buf += (size_t)writelen;
+		} else if (writelen == 0) {
+			return buflen ? -ENODATA : 0;
+		} else if (errno != EINTR) {
+			return -errno;
 		}
-	} while ((0 < writelen || errno == EINTR) && buflen);
+	} while (buflen);
 
-	return buflen ? -errno : 0;
+	return 0;
 }

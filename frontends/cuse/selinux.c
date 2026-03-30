@@ -20,6 +20,7 @@
 #include <selinux/selinux.h>
 #include <selinux/restorecon.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "esdm_logger.h"
 #include "ret_checkers.h"
@@ -32,19 +33,32 @@ int esdm_cuse_restore_label(const char *pathname)
 
 int esdm_cuse_add_label(const char *pathname, struct fuse_args *fuse_args)
 {
-	char tmp[128];
+	char *tmp = NULL;
 	char *con = NULL;
 	int ret;
+	int len;
 
 	CKINT_LOG(getfilecon(pathname, &con),
 		  "Cannot obtain label for file %s\n", pathname);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Obtained SELinux label %s\n",
 		    con);
-	snprintf(tmp, sizeof(tmp), "-ocontext=%s", con);
+
+	len = snprintf(NULL, 0, "-ocontext=%s", con);
+	if (len < 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+	tmp = malloc((size_t)len + 1);
+	if (!tmp) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	snprintf(tmp, (size_t)len + 1, "-ocontext=%s", con);
 	CKINT_LOG(fuse_opt_add_arg(fuse_args, tmp),
 		  "Cannot add FUSE argument\n");
 
 out:
+	free(tmp);
 	if (con)
 		freecon(con);
 	return ret;

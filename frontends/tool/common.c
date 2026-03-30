@@ -55,7 +55,7 @@ static void get_cpu_utilization(struct timespec *start)
 			break;
 		}
 		char cpu[10];
-		sscanf(line, "%s %llu %llu %llu %llu %llu %llu %llu %llu %llu",
+		sscanf(line, "%9s %llu %llu %llu %llu %llu %llu %llu %llu %llu",
 		       cpu, &curr[core_count].user, &curr[core_count].nice,
 		       &curr[core_count].system, &curr[core_count].idle,
 		       &curr[core_count].iowait, &curr[core_count].irq,

@@ -403,8 +403,14 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	const struct esdm_hash_cb *hash_cb;
 	int ret;
 
-	/* There can never be more entropy than the size of the input buffer. */
-	entropy_bits = min_uint32(entropy_bits, (uint32_t)(inbuflen << 3));
+	/*
+	 * There can never be more entropy than the size of the input buffer.
+	 * Guard against overflow for large inbuflen values.
+	 */
+	if (inbuflen > (UINT32_MAX >> 3))
+		entropy_bits = min_uint32(entropy_bits, UINT32_MAX);
+	else
+		entropy_bits = min_uint32(entropy_bits, (uint32_t)(inbuflen << 3));
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
@@ -442,11 +448,19 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	/*
 	 * Cap the available entropy to the hash output size compliant to
 	 * SP800-90B section 3.1.5.1 table 1.
+	 *
+	 * Guard against overflow in the addition.
 	 */
-	entropy_bits += atomic_read_u32(&pool->aux_entropy_bits);
-	esdm_pool_set_entropy_pool(
-		pool,
-		min_uint32(entropy_bits, hash_cb->hash_digestsize(shash) << 3));
+	{
+		uint32_t existing = atomic_read_u32(&pool->aux_entropy_bits);
+		uint32_t cap = hash_cb->hash_digestsize(shash) << 3;
+
+		if (entropy_bits > cap - min_uint32(existing, cap))
+			entropy_bits = cap;
+		else
+			entropy_bits += existing;
+		esdm_pool_set_entropy_pool(pool, min_uint32(entropy_bits, cap));
+	}
 
 out:
 	mutex_reader_unlock(&drng->hash_lock);

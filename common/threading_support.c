@@ -110,8 +110,9 @@ static pthread_mutex_t thread_schedule_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t thread_wait_cv;
 static pthread_mutex_t thread_wait_lock = PTHREAD_MUTEX_INITIALIZER;
 
-/* PRNG handle for access randomization */
-static struct xoshiro_state prng_state;
+/* PRNG handle for access randomization - thread-local to avoid data races */
+static _Thread_local struct xoshiro_state prng_state;
+static _Thread_local int prng_initialized = 0;
 
 static inline unsigned int thread_get_special_slot(unsigned int thread_group)
 {
@@ -354,6 +355,10 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 
 	num_elements = upper - lower;
 	/* searching with random offset increases thread utilization under high load */
+	if (!prng_initialized) {
+		xoshiro_init(&prng_state);
+		prng_initialized = 1;
+	}
 	rand_offset = (unsigned int)xoshiro_generate(&prng_state) % num_elements;
 	for (k = 0; k < num_elements; ++k) {
 		if (atomic_bool_read(&threads_in_cancel))

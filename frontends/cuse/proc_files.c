@@ -182,13 +182,21 @@ static int esdm_proc_get_write_wakeup_thresh(struct esdm_proc_file *file)
 static int esdm_proc_set_write_wakeup_thresh(struct esdm_proc_file *file,
 					     const char *buf, size_t buflen)
 {
-	unsigned long thresh = strtoul(buf, NULL, 0);
+	char tmp[32];
+	unsigned long thresh;
 	int ret;
 
 	(void)file;
-	(void)buflen;
 
-	if (thresh >= UINT32_MAX)
+	/* Ensure NUL-terminated input for strtoul */
+	if (buflen == 0 || buflen >= sizeof(tmp))
+		return -EINVAL;
+	memcpy(tmp, buf, buflen);
+	tmp[buflen] = '\0';
+
+	errno = 0;
+	thresh = strtoul(tmp, NULL, 0);
+	if (errno || thresh >= UINT32_MAX)
 		return -ERANGE;
 
 	esdm_proc_raise_privilege();
@@ -206,13 +214,21 @@ static int esdm_proc_get_min_reseed_secs(struct esdm_proc_file *file)
 static int esdm_proc_set_min_reseed_secs(struct esdm_proc_file *file,
 					 const char *buf, size_t buflen)
 {
-	unsigned long thresh = strtoul(buf, NULL, 0);
+	char tmp[32];
+	unsigned long thresh;
 	int ret;
 
 	(void)file;
-	(void)buflen;
 
-	if (thresh >= UINT32_MAX)
+	/* Ensure NUL-terminated input for strtoul */
+	if (buflen == 0 || buflen >= sizeof(tmp))
+		return -EINVAL;
+	memcpy(tmp, buf, buflen);
+	tmp[buflen] = '\0';
+
+	errno = 0;
+	thresh = strtoul(tmp, NULL, 0);
+	if (errno || thresh >= UINT32_MAX)
 		return -ERANGE;
 
 	esdm_proc_raise_privilege();
@@ -540,6 +556,8 @@ static int esdm_proc_write(const char *path, const char *buf, size_t size,
 	pathlen--;
 	if (offset < 0)
 		return -EINVAL;
+	if ((size_t)offset > size)
+		return -EINVAL;
 
 	for (i = 0; i < ARRAY_SIZE(esdm_proc_files); i++) {
 		struct esdm_proc_file *file = &esdm_proc_files[i];
@@ -550,7 +568,8 @@ static int esdm_proc_write(const char *path, const char *buf, size_t size,
 			if (!file->write_data)
 				return -EOPNOTSUPP;
 
-			CKINT(file->write_data(file, buf + offset, size));
+			CKINT(file->write_data(file, buf + offset,
+					       size - (size_t)offset));
 			return (int)size;
 		}
 	}
