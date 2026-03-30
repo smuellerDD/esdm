@@ -17,6 +17,8 @@
  * DAMAGE.
  */
 
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esdm.h"
@@ -29,17 +31,27 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		     StatusResponse_Closure closure, void *closure_data)
 {
 	StatusResponse response = STATUS_RESPONSE__INIT;
-	char status[ESDM_RPC_MAX_MSG_SIZE];
+	char *status;
 	(void)service;
 
 	if (request == NULL) {
-		response.ret = -(int32_t)sizeof(status);
+		response.ret = -(int32_t)ESDM_RPC_MAX_MSG_SIZE;
 		closure(&response, closure_data);
-	} else {
-		esdm_status(status,
-			    min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE));
-		response.ret = 0;
-		response.buffer = status;
-		closure(&response, closure_data);
+		return;
 	}
+
+	status = malloc(ESDM_RPC_MAX_MSG_SIZE);
+	if (!status) {
+		response.ret = -ENOMEM;
+		closure(&response, closure_data);
+		return;
+	}
+
+	esdm_status(status,
+		    min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE));
+	response.ret = 0;
+	response.buffer = status;
+	closure(&response, closure_data);
+
+	free(status);
 }
