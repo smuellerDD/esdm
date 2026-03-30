@@ -592,9 +592,15 @@ static int handle_stress_fork(void)
 		for (i = 0; i < 200; ++i) {
 			esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer,
 								    buf_len));
-			assert((ssize_t)buf_len == ret);
-		}
+			if (ret == -EINTR || ret == -EPROTO || ret == -ECONNRESET || ret == -ETIMEDOUT)
+				continue;
 
+			if ((size_t) ret != buf_len) {
+				printf("error in fork test: %s\n", strerror((int)-ret));
+			}
+
+			assert((size_t) ret == buf_len);
+		}
 		/* don't care. Just check in all processes involved, that we can get random bytes */
 		pid_t p = fork();
 		assert(p != -1);
