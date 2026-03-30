@@ -50,6 +50,11 @@ static void esdm_rpcc_get_random_bytes_full_timeout_cb(
 		return;
 	}
 
+	if (!response->randval.data || !response->randval.len) {
+		buffer->ret = -EFAULT;
+		return;
+	}
+
 	buffer->ret = (ssize_t)min_size(response->randval.len, buffer->buflen);
 	memcpy(buffer->buf, response->randval.data, (size_t)buffer->ret);
 

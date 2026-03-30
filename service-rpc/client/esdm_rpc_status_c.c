@@ -44,6 +44,10 @@ static void esdm_rpcc_status_cb(const StatusResponse *response,
 	buffer->ret = response->ret;
 	if (response->ret < 0)
 		return;
+	if (!response->buffer || !buffer->buflen) {
+		buffer->ret = -EFAULT;
+		return;
+	}
 
 	snprintf(buffer->buf, buffer->buflen, "%s", response->buffer);
 }

@@ -44,6 +44,10 @@ static void esdm_rpcc_jent_status_cb(const JentStatusResponse *response,
 	buffer->ret = response->ret;
 	if (response->ret < 0)
 		return;
+	if (!response->buffer || !buffer->buflen) {
+		buffer->ret = -EFAULT;
+		return;
+	}
 
 	snprintf(buffer->buf, buffer->buflen, "%s", response->buffer);
 }

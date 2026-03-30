@@ -277,7 +277,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 			goto out;
 		}
 
-		if (memcmp(calculated, binhash, sizeof(calculated))) {
+		if (memcmp(calculated, binhash, binhashlen)) {
 			fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
 				"Message mismatch - integrity violation\n");
 			free(binhash);
