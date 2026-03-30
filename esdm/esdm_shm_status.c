@@ -144,16 +144,29 @@ static void esdm_shm_status_server_exit(void)
 static void esdm_shm_status_signal_suspend(int sig)
 {
 	(void)sig;
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER, "Suspend signal received\n");
-
+	/*
+	 * Do not call esdm_logger() here - it is not async-signal-safe
+	 * and can deadlock if the signal arrives while a lock is held.
+	 */
 	esdm_shm_status_set_suspend();
 }
 
 static void esdm_shm_status_install_signal_suspend(void)
 {
+	struct sigaction sa;
+
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 		    "Install suspend signal handler\n");
-	signal(SIGUSR1, esdm_shm_status_signal_suspend);
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = esdm_shm_status_signal_suspend;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	if (sigaction(SIGUSR1, &sa, NULL) < 0)
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "Cannot install suspend signal handler: %s\n",
+			    strerror(errno));
 }
 
 static void _esdm_shm_status_delete_sem(sem_t **sem)

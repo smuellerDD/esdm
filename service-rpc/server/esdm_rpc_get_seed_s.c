@@ -50,11 +50,13 @@ void esdm_rpc_get_seed(UnprivAccess_Service *service,
 				      request->flags | ESDM_GET_SEED_NONBLOCK);
 
 		if (response.ret >= 0) {
-			size_t resp_len = rndval[0] + sizeof(uint64_t);
+			size_t resp_len;
 
-			/* Guard against buffer overread */
-			if (resp_len > sizeof(rndval))
+			/* Guard against buffer overread and overflow */
+			if (rndval[0] > sizeof(rndval) - sizeof(uint64_t))
 				resp_len = sizeof(rndval);
+			else
+				resp_len = (size_t)rndval[0] + sizeof(uint64_t);
 
 			esdm_test_shm_status_add_rpc_server_written(rndval[0]);
 			response.randval.data = (uint8_t *)rndval;

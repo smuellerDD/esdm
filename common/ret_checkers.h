@@ -27,37 +27,37 @@ extern "C" {
 #endif
 
 #define CKINT(x)                                                               \
-	{                                                                      \
-		ret = x;                                                       \
+	do {                                                                   \
+		ret = (x);                                                     \
 		if (ret < 0)                                                   \
 			goto out;                                              \
-	}
+	} while (0)
 
 #define CKINT_LOG(x, ...)                                                      \
-	{                                                                      \
-		ret = x;                                                       \
+	do {                                                                   \
+		ret = (x);                                                     \
 		if (ret < 0) {                                                 \
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);    \
 			goto out;                                              \
 		}                                                              \
-	}
+	} while (0)
 
 #define CKNULL(v, r)                                                           \
-	{                                                                      \
-		if (!v) {                                                      \
-			ret = r;                                               \
+	do {                                                                   \
+		if (!(v)) {                                                    \
+			ret = (r);                                             \
 			goto out;                                              \
 		}                                                              \
-	}
+	} while (0)
 
 #define CKNULL_LOG(v, r, ...)                                                  \
-	{                                                                      \
-		if (!v) {                                                      \
+	do {                                                                   \
+		if (!(v)) {                                                    \
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, __VA_ARGS__);    \
-			ret = r;                                               \
+			ret = (r);                                             \
 			goto out;                                              \
 		}                                                              \
-	}
+	} while (0)
 
 #ifdef __cplusplus
 }

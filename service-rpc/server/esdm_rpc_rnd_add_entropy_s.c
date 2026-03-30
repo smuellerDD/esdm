@@ -41,7 +41,7 @@ void esdm_rpc_rnd_add_entropy(PrivAccess_Service *service,
 		closure(&response, closure_data);
 
 	} else {
-		if (request->randval.len > UINT32_MAX) {
+		if (request->randval.len > ESDM_RPC_MAX_DATA) {
 			response.ret = -EINVAL;
 		} else {
 			response.ret =
