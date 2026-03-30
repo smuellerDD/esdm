@@ -20,6 +20,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -90,14 +91,19 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 	int retries = 0;
 	int ret = -1;
 
-	be16_to_ptr((uint8_t *)&cmd->tag, cmd->tag);
-	be32_to_ptr((uint8_t *)&cmd->commandSize, cmd->commandSize);
-	be32_to_ptr((uint8_t *)&cmd->commandCode, cmd->commandCode);
-
 	do {
 		retries++;
 		memset(buf, 0, sizeof(buf));
-		memcpy(buf, cmd, sizeof(struct TPM2CommandHeader));
+
+		/* Serialize command header as big-endian into buf */
+		be16_to_ptr(buf + offsetof(struct TPM2CommandHeader, tag),
+			    cmd->tag);
+		be32_to_ptr(buf + offsetof(struct TPM2CommandHeader,
+					   commandSize),
+			    cmd->commandSize);
+		be32_to_ptr(buf + offsetof(struct TPM2CommandHeader,
+					   commandCode),
+			    cmd->commandCode);
 		memcpy(buf + sizeof(struct TPM2CommandHeader), cmd_buffer,
 		       cmd_buffer_len);
 
@@ -246,9 +252,12 @@ static uint32_t esdm_es_tpm2_poolsize(void)
 static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 {
 #ifdef ESDM_TPM2_STIR
-	uint8_t stir_buf[32 + 2] = { 0 };
 	struct timespec stir_clock_real;
 	struct timespec stir_clock_monotonic;
+	static const uint16_t stir_data_len =
+		sizeof(stir_clock_real) + sizeof(stir_clock_monotonic);
+	uint8_t stir_buf[sizeof(uint16_t) + sizeof(stir_clock_real) +
+			 sizeof(stir_clock_monotonic)] = { 0 };
 	struct TPM2CommandHeader stirrandom_cmd = {
 		.tag = TPM2_ST_NO_SESSIONS,
 		.commandSize =
@@ -281,16 +290,18 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 	 */
 
 	/* stir buffer size */
-	be16_to_ptr(stir_buf, 32);
+	be16_to_ptr(stir_buf, stir_data_len);
 
-	/* inject 32 byte taken from real and monotonic time as additional input without entropy */
+	/* inject real and monotonic time as additional input without entropy */
 	(void) clock_gettime(CLOCK_REALTIME, &stir_clock_real);
 	(void) clock_gettime(CLOCK_MONOTONIC, &stir_clock_monotonic);
-	BUILD_BUG_ON(sizeof(stir_buf) < 2 + sizeof(stir_clock_real) + sizeof(stir_clock_monotonic));
-	memcpy(stir_buf + 2, &stir_clock_real, sizeof(stir_clock_real));
-	memcpy(stir_buf + 2 + sizeof(stir_clock_real), &stir_clock_monotonic, sizeof(stir_clock_monotonic));
+	memcpy(stir_buf + sizeof(uint16_t), &stir_clock_real,
+	       sizeof(stir_clock_real));
+	memcpy(stir_buf + sizeof(uint16_t) + sizeof(stir_clock_real),
+	       &stir_clock_monotonic, sizeof(stir_clock_monotonic));
 
-	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf, 2 + sizeof(stir_clock_real) + sizeof(stir_clock_monotonic),
+	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf,
+				    sizeof(stir_buf),
 				    &stirrandom_rsp, NULL, 0)) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 			    "TPM 2.0 stir random failed\n");
@@ -368,11 +379,12 @@ static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		    eb_es->e_bits);
 
 	mutex_unlock(&tpm2_mutex);
-
+	memset_secure(buffer, 0, sizeof(buffer));
 	return;
 
 err:
 	mutex_unlock(&tpm2_mutex);
+	memset_secure(buffer, 0, sizeof(buffer));
 	eb_es->e_bits = 0;
 }
 
