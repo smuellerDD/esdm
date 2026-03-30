@@ -55,20 +55,11 @@ void buffer_free(struct buffer *buf)
 {
 	if (!buf)
 		return;
-	if (buf->buf)
+	if (buf->buf) {
+		memset_secure(buf->buf, 0, buf->len);
 		free(buf->buf);
+	}
 	buf->buf = NULL;
 	buf->len = 0;
 	buf->consumed = 0;
 }
-
-#if 0
-void buffer_free_secure(struct buffer *buf)
-{
-	if (!buf)
-		return;
-	if (buf->buf)
-		memset_secure(buf->buf, 0, buf->len);
-	buffer_free(buf);
-}
-#endif

@@ -64,6 +64,7 @@ int drop_privileges_transient(const char *user)
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Cannot drop to unprivileged group: %s\n",
 			    strerror(errno));
+		return ret;
 	}
 
 	/* Drop privileged user */
@@ -72,6 +73,7 @@ int drop_privileges_transient(const char *user)
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Cannot drop to unprivileged user: %s\n",
 			    strerror(errno));
+		return ret;
 	}
 
 	esdm_logger(

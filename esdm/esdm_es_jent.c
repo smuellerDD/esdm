@@ -180,7 +180,7 @@ static int esdm_jent_async_monitor(void)
 			      requested_bits, false);
 
 		__sync_synchronize();
-		esdm_jent_async_set[i] = buffer_filled;
+		__sync_lock_test_and_set(&esdm_jent_async_set[i], buffer_filled);
 
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_ES,
@@ -241,7 +241,7 @@ static void esdm_jent_async_get(struct entropy_es *eb_es,
 	memset_secure(&esdm_jent_async[slot], 0, sizeof(struct entropy_es));
 
 	__sync_synchronize();
-	esdm_jent_async_set[slot] = buffer_empty;
+	__sync_lock_test_and_set(&esdm_jent_async_set[slot], buffer_empty);
 
 	if (!(slot % (ESDM_JENT_ENTROPY_BLOCKS / 4)) && slot)
 		esdm_es_mgr_monitor_wakeup();
