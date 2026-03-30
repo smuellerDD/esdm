@@ -46,6 +46,12 @@ static sem_t *esdm_semid_urandom = SEM_FAILED;
 /* Level-triggered semaphore when the ESDM needs entropy */
 static sem_t *esdm_semid_need_entropy_level = SEM_FAILED;
 
+/*
+ * in_signal_handler is set to prevent calling non-async-signal-safe
+ * functions (like esdm_logger) from signal handler context.
+ */
+static volatile sig_atomic_t in_signal_handler = 0;
+
 static void _esdm_shm_status_up(sem_t *sem)
 {
 	int semval = 0;
@@ -65,9 +71,12 @@ static void _esdm_shm_status_up(sem_t *sem)
 	if (semval > 0)
 		return;
 
-	if (sem_post(sem))
-		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-			    "Cannot unlock semaphore\n");
+	if (sem_post(sem)) {
+		/* esdm_logger is not async-signal-safe, skip in signal context */
+		if (!in_signal_handler)
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				    "Cannot unlock semaphore\n");
+	}
 }
 
 static void esdm_shm_status_up(void)
@@ -148,7 +157,9 @@ static void esdm_shm_status_signal_suspend(int sig)
 	 * Do not call esdm_logger() here - it is not async-signal-safe
 	 * and can deadlock if the signal arrives while a lock is held.
 	 */
+	in_signal_handler = 1;
 	esdm_shm_status_set_suspend();
+	in_signal_handler = 0;
 }
 
 static void esdm_shm_status_install_signal_suspend(void)

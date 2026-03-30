@@ -34,7 +34,7 @@
 
 static unsigned int esdm_nodes = 1;
 
-static inline size_t esdm_remaining_buf_len(char *buf, size_t buflen)
+static inline size_t esdm_used_buf_len(char *buf, size_t buflen)
 {
 	size_t len = strlen(buf);
 
@@ -67,7 +67,7 @@ void esdm_status(char *buf, size_t buflen)
 
 	snprintf(buf, buflen, "ESDM %slibrary version: %s\n", TESTMODE_STR,
 		 VERSION);
-	len = esdm_remaining_buf_len(buf, buflen);
+	len = esdm_used_buf_len(buf, buflen);
 
 	snprintf(buf + len, buflen - len,
 		 "DRNG name: %s\n"
@@ -86,13 +86,13 @@ void esdm_status(char *buf, size_t buflen)
 
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {
-		len = esdm_remaining_buf_len(buf, buflen);
+		len = esdm_used_buf_len(buf, buflen);
 		snprintf(buf + len, buflen - len,
 			 "Entropy Source %u properties:\n"
 			 " Name: %s\n",
 			 i, esdm_es[i]->name);
 
-		len = esdm_remaining_buf_len(buf, buflen);
+		len = esdm_used_buf_len(buf, buflen);
 		esdm_es[i]->state(buf + len, buflen - len);
 	}
 }
