@@ -24,6 +24,7 @@
 
 #include "bitshift_be.h"
 #include "esdm_hash_drbg_sha512.h"
+#include "memset_secure.h"
 #include "visibility.h"
 
 /***************************************************************
@@ -126,7 +127,7 @@ static void drbg_hash_df(struct esdm_drbg_hash_state *drbg, uint8_t *outval,
 		len += blocklen;
 	}
 
-	memset(tmp, 0, ESDM_DRBG_HASH_BLOCKLEN);
+	memset_secure(tmp, 0, ESDM_DRBG_HASH_BLOCKLEN);
 }
 
 /* update function for Hash DRBG as defined in 10.1.1.2 / 10.1.1.3 */
@@ -160,7 +161,7 @@ static void drbg_hash_update(struct esdm_drbg_hash_state *drbg,
 	/* 10.1.1.2 / 10.1.1.3 step 4 */
 	drbg_hash_df(drbg, drbg->C, ESDM_DRBG_HASH_STATELEN, &data1);
 
-	memset(drbg->scratchpad, 0, ESDM_DRBG_HASH_STATELEN);
+	memset_secure(drbg->scratchpad, 0, ESDM_DRBG_HASH_STATELEN);
 }
 
 /* processing of additional information string for Hash DRBG */
@@ -186,7 +187,7 @@ static void drbg_hash_process_addtl(struct esdm_drbg_hash_state *drbg,
 	drbg_add_buf(drbg->V, ESDM_DRBG_HASH_STATELEN, drbg->scratchpad,
 		     ESDM_DRBG_HASH_BLOCKLEN);
 
-	memset(drbg->scratchpad, 0, ESDM_DRBG_HASH_BLOCKLEN);
+	memset_secure(drbg->scratchpad, 0, ESDM_DRBG_HASH_BLOCKLEN);
 }
 
 /* Hashgen defined in 10.1.1.4 */
@@ -220,8 +221,8 @@ static size_t drbg_hash_hashgen(struct esdm_drbg_hash_state *drbg, uint8_t *buf,
 			drbg_add_buf(src, ESDM_DRBG_HASH_STATELEN, &prefix, 1);
 	}
 
-	memset(drbg->scratchpad, 0,
-	       (ESDM_DRBG_HASH_STATELEN + ESDM_DRBG_HASH_BLOCKLEN));
+	memset_secure(drbg->scratchpad, 0,
+		      (ESDM_DRBG_HASH_STATELEN + ESDM_DRBG_HASH_BLOCKLEN));
 	return len;
 }
 
@@ -257,7 +258,7 @@ static size_t drbg_hash_generate_internal(struct esdm_drbg_hash_state *drbg,
 	be64_to_ptr(req, drbg->reseed_ctr);
 	drbg_add_buf(drbg->V, ESDM_DRBG_HASH_STATELEN, req, sizeof(req));
 
-	memset(drbg->scratchpad, 0, ESDM_DRBG_HASH_BLOCKLEN);
+	memset_secure(drbg->scratchpad, 0, ESDM_DRBG_HASH_BLOCKLEN);
 	return len;
 }
 
