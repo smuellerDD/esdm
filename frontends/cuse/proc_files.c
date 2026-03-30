@@ -151,7 +151,7 @@ static int esdm_proc_data(struct esdm_proc_file *file,
 			  int (*content)(unsigned int *entcnt))
 {
 	unsigned int val = 0;
-	int ret;
+	int ret = 0;
 
 	esdm_invoke(content(&val));
 	if (ret) {
@@ -184,7 +184,7 @@ static int esdm_proc_set_write_wakeup_thresh(struct esdm_proc_file *file,
 {
 	char tmp[32];
 	unsigned long thresh;
-	int ret;
+	int ret = 0;
 
 	(void)file;
 
@@ -216,7 +216,7 @@ static int esdm_proc_set_min_reseed_secs(struct esdm_proc_file *file,
 {
 	char tmp[32];
 	unsigned long thresh;
-	int ret;
+	int ret = 0;
 
 	(void)file;
 
@@ -240,7 +240,7 @@ static int esdm_proc_set_min_reseed_secs(struct esdm_proc_file *file,
 
 static int esdm_proc_get_status(struct esdm_proc_file *file)
 {
-	int ret;
+	int ret = 0;
 
 	esdm_invoke(esdm_rpcc_status(file->valdata, ESDM_PROC_BUF_LEN));
 	if (ret)

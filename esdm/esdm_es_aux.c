@@ -322,7 +322,7 @@ static int esdm_aux_switch_hash_pool(struct esdm_pool *pool,
 	void *nhash_out = NULL;
 	uint8_t digest_state[ESDM_MAX_DIGESTSIZE];
 	uint8_t digest_out[ESDM_MAX_DIGESTSIZE];
-	int ret;
+	int ret = 0;
 
 	if (!pool->initialized)
 		return 0;
@@ -374,7 +374,7 @@ static int esdm_aux_switch_hash(struct esdm_drng *drng, int __unused u,
 				const struct esdm_hash_cb *old_cb)
 {
 	size_t i;
-	int ret;
+	int ret = 0;
 
 	if (!esdm_pools[0].initialized)
 		return 0;
@@ -401,7 +401,7 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	struct hash_ctx *ohash = (struct hash_ctx *)pool->aux_pool_out;
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	const struct esdm_hash_cb *hash_cb;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * There can never be more entropy than the size of the input buffer.
@@ -418,7 +418,6 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	if (!pool->initialized) {
 		CKINT(hash_cb->hash_init(shash));
 		CKINT(hash_cb->hash_init(ohash));
-		pool->initialized = true;
 
 		/*
 		 * Domain separation between state and output pool
@@ -426,6 +425,9 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 		 */
 		CKINT(hash_cb->hash_update(shash, (uint8_t *)"STATE0", 6));
 		CKINT(hash_cb->hash_update(ohash, (uint8_t *)"OUTPUT", 6));
+
+		/* Mark initialized only after domain separation succeeds */
+		pool->initialized = true;
 	}
 
 	/*
