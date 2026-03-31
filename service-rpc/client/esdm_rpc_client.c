@@ -22,6 +22,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -95,10 +96,6 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		.tv_sec = 0,
 		.tv_nsec = 1U << (ESDM_CLIENT_CONNECT_TIMEOUT_EXPONENT)
 	};
-	struct timeval tv = {
-		.tv_sec = 0,
-		.tv_usec = (1U << (ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT)) >> 10
-	};
 	struct stat statbuf;
 	struct sockaddr_un addr;
 	unsigned int attempts = 0;
@@ -142,28 +139,12 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	memcpy(addr.sun_path, socketname, strlen(socketname));
 
 	rpc_conn->fd =
-		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Error creating socket: %s\n", strerror(errsv));
-
-		reset_conn_socket(rpc_conn);
-
-		return -errsv;
-	}
-
-	/* Set timeout on socket */
-	if (setsockopt(rpc_conn->fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv,
-		       sizeof(tv)) < 0 ||
-	    setsockopt(rpc_conn->fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv,
-		       sizeof(tv)) < 0) {
-		errsv = errno;
-
-		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Error setting timeout on socket: %s\n",
-			    strerror(errsv));
 
 		reset_conn_socket(rpc_conn);
 
@@ -187,7 +168,7 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 			errsv = 0;
 		}
 	} while (attempts < (ESDM_CLIENT_RECONNECT_ATTEMPTS) &&
-		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR));
+		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR || errsv == EINPROGRESS));
 
 	if (errsv || attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -205,14 +186,29 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 					 const uint8_t *data, size_t len)
 {
+	static const int CLIENT_TX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	size_t written = 0;
 	ssize_t ret;
+	int pret;
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
 
 	do {
 		ret = write(rpc_conn->fd, data, len);
+		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			struct pollfd pfd = { .fd = rpc_conn->fd, .events = POLLOUT };
+
+			pret = poll(&pfd, 1, CLIENT_TX_TIMEOUT_MS);
+			/* data available before timeout? */
+			if (pret > 0) {
+				continue;
+			}
+			if (pret < 0 && errno == EINTR) {
+				continue;
+			}
+		}
+
 		if (ret < 0) {
 			int errsv = errno;
 
@@ -221,7 +217,7 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 			 * EAGAIN/EWOULDBLOCK is due to the socket
 			 * timeout -> call write again
 			 */
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			if (pret == 0) {
 				/* Does the caller wants us to interrupt? */
 				if (rpc_conn->interrupt_func &&
 				    rpc_conn->interrupt_func(
@@ -412,6 +408,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			     const ProtobufCMessageDescriptor *message_desc,
 			     ProtobufCClosure closure, void *closure_data)
 {
+	static const int CLIENT_RX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
 	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)] __aligned(
@@ -420,8 +417,13 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	ssize_t received;
 	uint32_t data_to_fetch = 0;
 	int ret = 0;
+	int pret;
 	uint8_t *buf_p = buf;
 	bool interrupted = false;
+	struct timeval tv = {
+		.tv_sec = 0,
+		.tv_usec = (1U << (ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT)) >> 10
+	};
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
@@ -433,9 +435,24 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	do {
 		received =
 			read(rpc_conn->fd, buf_p, sizeof(buf) - total_received);
+
+		pret = 0;
+		if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			struct pollfd pfd = { .fd = rpc_conn->fd, .events = POLLIN };
+
+			pret = poll(&pfd, 1, CLIENT_RX_TIMEOUT_MS);
+			/* data available before timeout? */
+			if (pret > 0) {
+				continue;
+			}
+			if (pret < 0 && errno == EINTR) {
+				continue;
+			}
+		}
+
+		/* Handle a read timeout */
 		if (received < 0) {
-			/* Handle a read timeout due to SO_RCVTIMEO */
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			if (pret == 0) {
 				/* Does the caller wants us to interrupt? */
 				if (rpc_conn->interrupt_func &&
 				    rpc_conn->interrupt_func(
