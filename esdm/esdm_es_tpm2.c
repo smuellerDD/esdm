@@ -90,6 +90,7 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 	static const int max_retries = 5;
 	int retries = 0;
 	int ret = -1;
+	ssize_t safe_ret = -1;
 
 	if (sizeof(struct TPM2CommandHeader) + cmd_buffer_len > sizeof(buf) ||
 	    sizeof(struct TPM2ResponseHeader) + rsp_buffer_len > sizeof(buf)) {
@@ -103,7 +104,8 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		memset(buf, 0, sizeof(buf));
 
 		/* Serialize command header as big-endian into buf */
-		be16_to_ptr(buf + offsetof(struct TPM2CommandHeader, tag),
+		be16_to_ptr(buf + offsetof(struct TPM2CommandHeader,
+					   tag),
 			    cmd->tag);
 		be32_to_ptr(buf + offsetof(struct TPM2CommandHeader,
 					   commandSize),
@@ -111,11 +113,15 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		be32_to_ptr(buf + offsetof(struct TPM2CommandHeader,
 					   commandCode),
 			    cmd->commandCode);
-		memcpy(buf + sizeof(struct TPM2CommandHeader), cmd_buffer,
-		       cmd_buffer_len);
+		memcpy(buf + sizeof(struct TPM2CommandHeader),
+			cmd_buffer,
+			cmd_buffer_len);
 
-		if (esdm_safe_write(tpm2_fd, buf,
+		safe_ret = esdm_safe_write(tpm2_fd, buf,
 				    sizeof(struct TPM2CommandHeader) +
+					    cmd_buffer_len);
+
+		if (safe_ret != (ssize_t)(sizeof(struct TPM2CommandHeader) +
 					    cmd_buffer_len)) {
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 				    "TPM 2.0 command write failed\n");
@@ -124,14 +130,21 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 			goto out;
 		}
 
-		if (esdm_safe_read(tpm2_fd, buf,
+		safe_ret = esdm_safe_read(tpm2_fd, buf,
 				   sizeof(struct TPM2ResponseHeader) +
-					   rsp_buffer_len)) {
+					   rsp_buffer_len);
+
+		/* TPM 2.0 may return less than requested data. Skip. */
+		if (safe_ret && safe_ret < (ssize_t)sizeof(struct TPM2ResponseHeader)) {
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
-				    "TPM 2.0 response read failed\n");
+				    "TPM 2.0 response read failed: %i\n", ret);
 			close(tpm2_fd);
 			tpm2_fd = -1;
 			goto out;
+		}
+		if (safe_ret > 0 && safe_ret != (ssize_t)(sizeof(struct TPM2ResponseHeader) +
+					   rsp_buffer_len)) {
+			continue;
 		}
 
 		memcpy(rsp, buf, sizeof(struct TPM2ResponseHeader));
@@ -355,7 +368,7 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			     bool __unused unsused)
 {
-	static const uint32_t tpm2_max_chunk_bits = 32 * 8;
+	static const uint32_t tpm2_max_chunk_bytes = 32;
 	uint8_t buffer[32];
 	uint32_t done_bits = 0;
 
@@ -370,11 +383,11 @@ static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 	while (done_bits < requested_bits) {
 		uint32_t chunk_bits =
-			min_uint32(tpm2_max_chunk_bits,
+			min_uint32(tpm2_max_chunk_bytes << 3,
 				   requested_bits - done_bits);
 		uint32_t chunk_bytes = chunk_bits >> 3;
 
-		if (esdm_es_tpm2_get_internal(buffer, chunk_bytes))
+		if (esdm_es_tpm2_get_internal(buffer, tpm2_max_chunk_bytes))
 			goto err;
 		memcpy(eb_es->e + (done_bits >> 3), buffer, chunk_bytes);
 		done_bits += chunk_bits;

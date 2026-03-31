@@ -20,6 +20,7 @@
 #include "arch.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -66,41 +67,48 @@ uint32_t esdm_curr_node(void)
 	return (cpu % esdm_online_nodes());
 }
 
-int esdm_safe_read(int fd, uint8_t *buf, size_t buflen)
+ssize_t esdm_safe_read(int fd, uint8_t *buf, size_t buflen)
 {
 	ssize_t readlen;
+	ssize_t bytes_read = 0;
 
 	do {
 		readlen = read(fd, buf, buflen);
 		if (readlen > 0) {
 			buflen -= (size_t)readlen;
 			buf += (size_t)readlen;
+			bytes_read += (size_t)readlen;
 		} else if (readlen == 0) {
-			/* EOF */
-			return buflen ? -ENODATA : 0;
+			goto out;
 		} else if (errno != EINTR) {
-			return -errno;
+			bytes_read = -errno;
+			goto out;
 		}
 	} while (buflen);
 
-	return 0;
+out:
+	return bytes_read;
 }
 
-int esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
+ssize_t esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
 {
 	ssize_t writelen;
+	ssize_t bytes_written = 0;
 
 	do {
 		writelen = write(fd, buf, buflen);
 		if (writelen > 0) {
 			buflen -= (size_t)writelen;
 			buf += (size_t)writelen;
+			bytes_written += (size_t)writelen;
 		} else if (writelen == 0) {
-			return buflen ? -ENODATA : 0;
+			goto out;
 		} else if (errno != EINTR) {
-			return -errno;
+			bytes_written = -errno;
+			goto out;
 		}
 	} while (buflen);
 
-	return 0;
+out:
+	return bytes_written;
 }
