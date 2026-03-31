@@ -77,7 +77,7 @@ ssize_t esdm_safe_read(int fd, uint8_t *buf, size_t buflen)
 		if (readlen > 0) {
 			buflen -= (size_t)readlen;
 			buf += (size_t)readlen;
-			bytes_read += (size_t)readlen;
+			bytes_read += readlen;
 		} else if (readlen == 0) {
 			goto out;
 		} else if (errno != EINTR) {
@@ -100,7 +100,7 @@ ssize_t esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
 		if (writelen > 0) {
 			buflen -= (size_t)writelen;
 			buf += (size_t)writelen;
-			bytes_written += (size_t)writelen;
+			bytes_written += writelen;
 		} else if (writelen == 0) {
 			goto out;
 		} else if (errno != EINTR) {
