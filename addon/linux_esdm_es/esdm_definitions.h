@@ -16,8 +16,8 @@
  */
 #ifdef CONFIG_CRYPTO_FIPS
 /* adjusted by 1 bit too reach full entropy in internal state after HMAC update */
-#define ESDM_OVERSAMPLE_ES_BITS (64 + 1)
-#define ESDM_SEED_BUFFER_INIT_ADD_BITS (128 + 1)
+#define ESDM_OVERSAMPLE_ES_BITS 64
+#define ESDM_SEED_BUFFER_INIT_ADD_BITS 128
 #else /* CONFIG_CRYPTO_FIPS */
 #define ESDM_OVERSAMPLE_ES_BITS 0
 #define ESDM_SEED_BUFFER_INIT_ADD_BITS 0
@@ -75,12 +75,12 @@ static inline bool esdm_sp80090c_compliant(void)
 
 static inline u32 esdm_compress_osr(void)
 {
-	return esdm_sp80090c_compliant() ? ESDM_OVERSAMPLE_ES_BITS : 0;
+	return esdm_sp80090c_compliant() ? (ESDM_OVERSAMPLE_ES_BITS + 1) : 0;
 }
 
 static inline u32 esdm_init_osr(void)
 {
-	return esdm_sp80090c_compliant() ? ESDM_SEED_BUFFER_INIT_ADD_BITS : 0;
+	return esdm_sp80090c_compliant() ? (ESDM_SEED_BUFFER_INIT_ADD_BITS + 1) : 0;
 }
 
 static inline u32 esdm_reduce_by_osr(u32 entropy_bits)
