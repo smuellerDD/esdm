@@ -21,6 +21,7 @@
 #define HELPER_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,8 +45,8 @@ static inline int aligned(const uint8_t *ptr, uint32_t alignmask)
 
 uint32_t esdm_online_nodes(void);
 uint32_t esdm_curr_node(void);
-int esdm_safe_read(int fd, uint8_t *buf, size_t buflen);
-int esdm_safe_write(int fd, uint8_t *buf, size_t buflen);
+ssize_t esdm_safe_read(int fd, uint8_t *buf, size_t buflen);
+ssize_t esdm_safe_write(int fd, uint8_t *buf, size_t buflen);
 
 #ifdef __cplusplus
 }
