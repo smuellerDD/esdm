@@ -27,7 +27,7 @@
 
         kernelDebug = false;
         kernelFips = true;
-        debugEsdm = true;
+        debugEsdm = false;
         startEsdm = false;
         startCompat = false;
 

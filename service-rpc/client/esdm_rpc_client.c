@@ -188,8 +188,8 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 {
 	static const int CLIENT_TX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	size_t written = 0;
+	int pret = -1;
 	ssize_t ret;
-	int pret;
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
@@ -420,10 +420,6 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	int pret;
 	uint8_t *buf_p = buf;
 	bool interrupted = false;
-	struct timeval tv = {
-		.tv_sec = 0,
-		.tv_usec = (1U << (ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT)) >> 10
-	};
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
