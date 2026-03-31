@@ -1035,6 +1035,16 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 			return -1;
 		}
 
+		(void)fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+		int flags = fcntl(fd, F_GETFL);
+		if (!(flags & O_NONBLOCK)) {
+			esdm_logger(
+				LOGGER_STATUS, LOGGER_C_SERVER,
+				"systemd provided socket cannot be set to non-blocking");
+			close(fd);
+			return -1;
+		}
+
 		proto->server_listening_fd = fd;
 		proto->service = service;
 		return 0;
