@@ -743,7 +743,11 @@ static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
 
 static uint32_t esdm_aux_max_entropy(void)
 {
+#ifdef ESDM_AUX_INPUT_HAS_FULL_ENTROPY
+	return esdm_get_digestsize() * ESDM_NUM_AUX_POOLS;
+#else
 	return esdm_reduce_by_osr(esdm_get_digestsize()) * ESDM_NUM_AUX_POOLS;
+#endif
 }
 
 static void esdm_aux_es_state(char *buf, size_t buflen)
