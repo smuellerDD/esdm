@@ -77,7 +77,6 @@ RestrictNamespaces=mnt cgroup net
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
-SystemCallFilter=@system-service @memlock
 UMask=0077
 
 [Install]
