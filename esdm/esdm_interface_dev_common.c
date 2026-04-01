@@ -23,7 +23,7 @@
 #include "esdm_shm_status.h"
 #include "queue.h"
 
-DECLARE_WAIT_QUEUE(esdm_write_wait);
+static DECLARE_WAIT_QUEUE(esdm_write_wait);
 
 /********************************** Helper ***********************************/
 

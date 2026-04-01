@@ -9,8 +9,6 @@
 #include "config.h"
 
 /******************* Upstream functions hooked into the ESDM ******************/
-extern struct thread_wait_queue esdm_write_wait;
-
 void esdm_writer_wakeup(void);
 
 /************ Downstream functions used by interface implementations **********/
