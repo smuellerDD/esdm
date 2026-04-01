@@ -800,11 +800,8 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		thread_start(esdm_rpcs_handler, &threads[t], 0, NULL);
 	}
 
-	while (atomic_read(&server_exit) == 0) {
-		/* 125ms */
-		struct timespec ts = { .tv_sec = 0, .tv_nsec = 125000000 };
-		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
-	}
+	thread_wait_event(&esdm_rpc_thread_init_wait,
+			  (atomic_read(&server_exit) != 0));
 
 	for (t = 0; t < num_threads; ++t) {
 		uint64_t val = 1;
