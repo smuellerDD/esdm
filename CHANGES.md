@@ -1,4 +1,16 @@
 Changes 1.2.2-prerelease
+* Add TPM 2.0 entropy source
+
+* Reworked threading concept towards multi-connection workers for less memory usage
+
+* Add jitterentropy status RPC call and expose in esdm-tool
+
+* Kernel seeder: add systemd notify support, improve startup speed, double inserted entropy amount
+
+* RPC: set non-blocking sockets, add timeout to non-blocking writes, simplify per-connection buffers, improved performance
+
+* More robust signal handling, overflow checks and argument validation
+
 * RPM SPEC file fixes for openSUSE
 
 * add PPC DARN instruction availability check
