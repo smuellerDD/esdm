@@ -171,12 +171,14 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 				const uint8_t *data, size_t len)
 {
 	const int TIMEOUT_MS = 5;
+	int retries = 0;
 	ssize_t ret;
 
 	if (rpc_conn->child_fd < 0)
 		return -EINVAL;
 
 	do {
+		retries++;
 		ret = write(rpc_conn->child_fd, data, len);
 		/* we use non-blocking sockets */
 		if (ret < 0 && errno == EAGAIN) {
@@ -224,7 +226,7 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 
 			return -errsv;
 		}
-	} while (ret < 0);
+	} while (ret < 0 && retries <= ESDM_MAX_RX_TX_RETRIES);
 
 	/*
 	 * SOCK_SEQPACKET guarantees atomic messages - a short write is a
@@ -1165,9 +1167,6 @@ out:
 
 void esdm_rpc_server_fini(void)
 {
-	/* comment out when debugging with address sanitizer */
-	thread_stop_spawning();
-
 	atomic_set(&server_exit, 1);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 
@@ -1177,6 +1176,5 @@ void esdm_rpc_server_fini(void)
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
 
-	/* set first argument to false, when debugging with address sanitizer */
-	thread_release(true, false);
+	thread_release(false, false);
 }

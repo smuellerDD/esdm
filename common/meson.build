@@ -153,15 +153,13 @@ conf_data.set('ESDM_FIPS140', get_option('fips140'))
 conf_data.set('ESDM_CLIENT_CONNECT_TIMEOUT_EXPONENT', get_option('client-connect-timeout-exponent'))
 conf_data.set('ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT', get_option('client-rx-tx-timeout-exponent'))
 conf_data.set('ESDM_CLIENT_RECONNECT_ATTEMPTS', get_option('client-reconnect-attempts'))
+conf_data.set('ESDM_MAX_RX_TX_RETRIES', 5)
 
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
 
 if build_machine.system() == 'linux'
 	conf_data.set('ESDM_LINUX', 1)
 endif
-
-conf_data.set('ESDM_RPCC_BUF_WRITE', not get_option('small_memory'))
-conf_data.set('ESDM_RPCS_BUF_WRITE', not get_option('small_memory'))
 
 conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'))
 
