@@ -181,8 +181,7 @@ static void handle_jent_status(void)
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Fetching ESDM jitterentropy status failed!\n");
 	} else {
-		esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Jitterentropy Status --\n%s",
-			    status_buffer);
+		printf("%s\n", status_buffer);
 	}
 }
 
