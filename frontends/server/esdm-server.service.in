@@ -47,8 +47,7 @@ DeviceAllow=/dev/random r
 DevicePolicy=strict
 ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog -vvv
 IPAddressDeny=any
-KillMode=mixed
-LimitMEMLOCK=0
+LimitMEMLOCK=infinity
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 MountFlags=private
@@ -78,8 +77,7 @@ RestrictNamespaces=mnt cgroup net
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
-SystemCallFilter=@system-service
-SystemCallFilter=~@aio @chown @clock @cpu-emulation @debug @keyring @memlock @module @mount @obsolete @pkey @raw-io @reboot @sandbox @swap
+SystemCallFilter=@system-service @memlock
 UMask=0077
 
 [Install]
