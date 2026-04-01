@@ -331,7 +331,7 @@ static void esdm_proc_term(void)
 static int esdm_proc_pre_init(void)
 {
 	struct esdm_proc_file *file = &esdm_proc_files[0];
-	char buf[ESDM_RPC_MAX_MSG_SIZE];
+	char buf[ESDM_RPC_MAX_DATA];
 	size_t data_read = 0;
 	ssize_t rc;
 	int fd;

@@ -57,7 +57,7 @@ struct esdm_rpc_client_connection {
 	atomic_t state;
 
 	/* per request data */
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(struct esdm_rpc_proto_cs)];
+	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE];
 
 	/*
 	 * Used to track successfull reads from esdm-server.

@@ -158,10 +158,10 @@ static void handle_usage(void)
 
 static void handle_status(void)
 {
-	char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
-	memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
+	char status_buffer[ESDM_RPC_MAX_DATA];
+	memset(&status_buffer[0], 0, ESDM_RPC_MAX_DATA);
 	int ret;
-	esdm_invoke(esdm_rpcc_status(&status_buffer[0], ESDM_RPC_MAX_MSG_SIZE));
+	esdm_invoke(esdm_rpcc_status(&status_buffer[0], ESDM_RPC_MAX_DATA));
 	if (ret != 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Fetching ESDM status failed!\n");
@@ -173,10 +173,10 @@ static void handle_status(void)
 
 static void handle_jent_status(void)
 {
-	char status_buffer[ESDM_RPC_MAX_MSG_SIZE];
-	memset(&status_buffer[0], 0, ESDM_RPC_MAX_MSG_SIZE);
+	char status_buffer[ESDM_RPC_MAX_DATA];
+	memset(&status_buffer[0], 0, ESDM_RPC_MAX_DATA);
 	int ret;
-	esdm_invoke(esdm_rpcc_jent_status(&status_buffer[0], ESDM_RPC_MAX_MSG_SIZE));
+	esdm_invoke(esdm_rpcc_jent_status(&status_buffer[0], ESDM_RPC_MAX_DATA));
 	if (ret != 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Fetching ESDM jitterentropy status failed!\n");

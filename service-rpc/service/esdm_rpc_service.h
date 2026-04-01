@@ -20,6 +20,7 @@
 #ifndef ESDM_RPC_SERVICE_H
 #define ESDM_RPC_SERVICE_H
 
+#include <stdint.h>
 #include <sys/ipc.h>
 
 #include "atomic_bool.h"
@@ -208,8 +209,11 @@ extern PrivAccess_Service priv_access_service;
  * let us pick a value with some more leeway.
  */
 #define ESDM_RPC_MAX_MSG_SIZE 65536
+#define ESDM_RPC_MAX_RPC_HEADER_SIZE sizeof(struct esdm_rpc_proto_sc_header)
+#define ESDM_RPC_MAX_INTERNAL_MSG_HEADER_SIZE sizeof(uint64_t)
+#define ESDM_RPC_MAX_INTERNAL_MSG_SIZE (ESDM_RPC_MAX_MSG_SIZE - ESDM_RPC_MAX_RPC_HEADER_SIZE)
 #define ESDM_RPC_MAX_DATA                                                      \
-	(ESDM_RPC_MAX_MSG_SIZE - sizeof(struct esdm_rpc_proto_sc_header))
+	(ESDM_RPC_MAX_INTERNAL_MSG_SIZE - ESDM_RPC_MAX_INTERNAL_MSG_HEADER_SIZE)
 
 #ifdef __cplusplus
 }

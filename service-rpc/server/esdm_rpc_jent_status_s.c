@@ -36,12 +36,12 @@ void esdm_rpc_jent_status(UnprivAccess_Service *service,
 	(void)service;
 
 	if (request == NULL) {
-		response.ret = -(int32_t)ESDM_RPC_MAX_MSG_SIZE;
+		response.ret = -(int32_t)ESDM_RPC_MAX_DATA;
 		closure(&response, closure_data);
 		return;
 	}
 
-	status = malloc(ESDM_RPC_MAX_MSG_SIZE);
+	status = malloc(ESDM_RPC_MAX_DATA);
 	if (!status) {
 		response.ret = -ENOMEM;
 		closure(&response, closure_data);
@@ -49,7 +49,7 @@ void esdm_rpc_jent_status(UnprivAccess_Service *service,
 	}
 
 	esdm_jent_status(status,
-			 min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE));
+			 min_uint32(request->maxlen, ESDM_RPC_MAX_DATA));
 	response.ret = 0;
 	response.buffer = status;
 	closure(&response, closure_data);

@@ -85,7 +85,7 @@ struct esdm_rpcs_connection {
 	struct timespec last_used;
 
 	/* per request data */
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(struct esdm_rpc_proto_cs)];
+	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE];
 
 	/* list handling for cleanup */
 	TAILQ_ENTRY(esdm_rpcs_connection) tailq;
@@ -256,36 +256,30 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 
 	size_t message_length;
 	int ret;
-	uint8_t *data_buf;
 	struct esdm_rpc_proto_sc_header *sc_header;
 	struct esdm_rpc_write_data_buf tmp = {
 		.dst_written = 0,
 	};
-	size_t data_buf_size = 0;
 
 	tmp.base.append = esdm_rpc_append_data;
 
 	message_length = protobuf_c_message_get_packed_size(message);
-	if (message_length > ESDM_RPC_MAX_MSG_SIZE) {
+	if (message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			    "Unexpected message length: %zu\n", message_length);
+			    "Unexpected message length: %zu > %zu\n", message_length, ESDM_RPC_MAX_INTERNAL_MSG_SIZE);
 		return -EFAULT;
 	}
 
-	data_buf_size = ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length +
-				sizeof(uint64_t) - 1;
-
-	if (data_buf_size > sizeof(rpc_conn->buf)) {
+	if (message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ > sizeof(rpc_conn->buf)) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Message too large for connection buffer: %zu > %zu\n",
-			    data_buf_size, sizeof(rpc_conn->buf));
+			    message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ, sizeof(rpc_conn->buf));
 		return -EOVERFLOW;
 	}
 
-	data_buf = rpc_conn->buf;
-	tmp.dst_buf = (data_buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ);
+	tmp.dst_buf = (rpc_conn->buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ);
 
-	sc_header = (struct esdm_rpc_proto_sc_header *)data_buf;
+	sc_header = (struct esdm_rpc_proto_sc_header *)rpc_conn->buf;
 	sc_header->status_code = le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SUCCESS);
 	sc_header->method_index = le_bswap32(rpc_conn->method_index);
 	sc_header->message_length = le_bswap32(message_length);
@@ -305,9 +299,7 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		goto out;
 	}
 
-	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, data_buf,
-				       ESDM_RPCS_BUF_WRITE_HEADER_SZ +
-					       message_length),
+	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, rpc_conn->buf, ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length),
 		  "Submission of message data failed with error %d\n", ret);
 
 out:
@@ -317,7 +309,7 @@ out:
 	 * and clear data from ESDM in your application or patch
 	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	memset_secure(rpc_conn->buf, 0, data_buf_size);
+	memset_secure(rpc_conn->buf, 0, ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length);
 
 	return ret;
 }
@@ -462,7 +454,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	* contains too much buffer data. As the client also
 	* checks this, it is a clear failure.
 	*/
-	if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
+	if (header->message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
 		ret = -EINVAL;
 		goto out;
 	}

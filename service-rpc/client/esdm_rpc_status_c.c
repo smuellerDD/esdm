@@ -66,7 +66,7 @@ int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data)
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
-	msg.maxlen = ESDM_RPC_MAX_MSG_SIZE;
+	msg.maxlen = ESDM_RPC_MAX_DATA;
 	unpriv_access__rpc_status(&rpc_conn->service, &msg, esdm_rpcc_status_cb,
 				  &buffer);
 
