@@ -36,6 +36,7 @@ typedef struct {
 	pthread_mutex_t lock;
 	int ma_used;
 	pthread_mutexattr_t ma;
+	int robust;
 } mutex_w_t;
 
 #define MUTEX_W_UNLOCKED { .lock = PTHREAD_MUTEX_INITIALIZER, .ma_used = 0 }
@@ -50,8 +51,14 @@ typedef struct {
 static inline int mutex_w_lock(mutex_w_t *mutex)
 {
 	int ret = pthread_mutex_lock(&mutex->lock);
-	assert(ret == 0);
-	(void)ret;
+	if (mutex->robust) {
+		assert(ret == 0 || ret == EOWNERDEAD);
+	} else {
+		assert(ret == 0);
+	}
+	if (ret == EOWNERDEAD) {
+		pthread_mutex_consistent(&mutex->lock);
+	}
 	return ret;
 }
 
@@ -62,8 +69,14 @@ static inline int mutex_w_lock(mutex_w_t *mutex)
 static inline int mutex_w_unlock(mutex_w_t *mutex)
 {
 	int ret = pthread_mutex_unlock(&mutex->lock);
-	assert(ret == 0);
-	(void)ret;
+	if (mutex->robust) {
+		assert(ret == 0 || ret == EOWNERDEAD);
+	} else {
+		assert(ret == 0);
+	}
+	if (ret == EOWNERDEAD) {
+		pthread_mutex_consistent(&mutex->lock);
+	}
 	return ret;
 }
 
@@ -81,8 +94,10 @@ static inline int mutex_w_init(mutex_w_t *mutex, int locked, int robust)
 	CKINT(pthread_mutexattr_init(&mutex->ma));
 	mutex->ma_used = 1;
 
-	if (robust)
+	if (robust) {
 		CKINT(pthread_mutexattr_setrobust(&mutex->ma, PTHREAD_MUTEX_ROBUST));
+		mutex->robust = 1;
+	}
 
 	CKINT(pthread_mutex_init(&mutex->lock, &mutex->ma));
 
