@@ -286,7 +286,7 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 	tmp.base.append = esdm_rpc_append_data;
 
 	message_length = protobuf_c_message_get_packed_size(message);
-	if (message_length > ESDM_RPC_MAX_MSG_SIZE) {
+	if (message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
 			    "Unexpected message length: %zu\n", message_length);
 		return -EFAULT;
@@ -412,7 +412,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * data. As the server also checks this, it is a
 		 * clear protocol violation.
 		 */
-		if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
+		if (header->message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
 			ret = -EOVERFLOW;
 			break;
 		}

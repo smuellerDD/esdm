@@ -484,7 +484,7 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	 */
 	while (read_bytes < size) {
 		size_t todo =
-			min_size(ESDM_RPC_MAX_MSG_SIZE, size - read_bytes);
+			min_size(ESDM_RPC_MAX_DATA, size - read_bytes);
 
 		esdm_cuse_unpriv_call_start();
 		esdm_invoke(get(tmpbuf_p + read_bytes, todo, req));
@@ -536,7 +536,7 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
 	while (written < size) {
-		size_t todo = min_size(ESDM_RPC_MAX_MSG_SIZE, size - written);
+		size_t todo = min_size(ESDM_RPC_MAX_DATA, size - written);
 
 		esdm_cuse_unpriv_call_start();
 		esdm_invoke(esdm_rpcc_write_data_int(
