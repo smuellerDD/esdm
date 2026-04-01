@@ -83,9 +83,7 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
 #endif
 
 /*
- * Default DRNG callback that provides the crypto primitive which is
- * allocated either during late kernel boot stage. So, it is permissible for
- * the callback to perform memory allocation operations.
+ * Default DRNG callback that provides the crypto primitive.
  */
 const struct esdm_drng_cb *esdm_default_drng_cb =
 #if defined(ESDM_DRNG_HASH_DRBG)

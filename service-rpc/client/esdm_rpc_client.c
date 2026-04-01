@@ -499,7 +499,8 @@ static void esdm_client_invoke(ProtobufCService *service,
 		 * Connect to the server if we do not have a connection,
 		 * otherwise reuse the session.
 		 *
-		 * Server keeps the connection open for ESDM_RPC_IDLE_TIMEOUT_USEC, consider it closed a bit earlier.
+		 * Server keeps the connection open for
+		 * ESDM_RPC_IDLE_TIMEOUT_USEC, consider it closed a bit earlier.
 		 */
 		if (rpc_conn->fd == -1 ||
 		    used_before_secs >= half_server_timeout) {
@@ -759,10 +760,10 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 		rpc_conn_p = rpc_conn_array + node % num_conn;
 
 		/*
-		* Wait until the previous call completed - each connection handle
-		* has only one caller at one given time. Lock the ref_cnt if we
-		* obtained the connection handle.
-		*/
+		 * Wait until the previous call completed - each connection
+		 * handle has only one caller at one given time. Lock the
+		 * ref_cnt if we obtained the connection handle.
+		 */
 		mutex_w_lock(&rpc_conn_p->ref_cnt);
 		found_unused_conn = true;
 	}

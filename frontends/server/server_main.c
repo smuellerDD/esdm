@@ -376,8 +376,10 @@ static void daemonize(void)
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot obtain new SID for child\n");
 
-	/* Change the current working directory.  This prevents the current
-	 * directory from being locked; hence not being able to remove it. */
+	/*
+	 * Change the current working directory.  This prevents the current
+	 * directory from being locked; hence not being able to remove it.
+	 */
 	if ((chdir("/")) < 0)
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot change directory\n");
