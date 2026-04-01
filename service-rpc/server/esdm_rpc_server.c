@@ -224,7 +224,11 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 
 			return -errsv;
 		}
-	} while (ret != len);
+	} while (ret < 0);
+
+	if (ret != (ssize_t)len) {
+		len = 0;
+	}
 
 	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
@@ -419,7 +423,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 			received);
 
 	/* We insist on having at least a header received. */
-	if (received < sizeof(struct esdm_rpc_proto_cs_header)) {
+	if (received < (ssize_t)sizeof(struct esdm_rpc_proto_cs_header)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -450,7 +454,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	}
 
 	/* Is data received to small? */
-	if (received < sizeof(struct esdm_rpc_proto_cs_header) + header->message_length) {
+	if (received < (ssize_t)(sizeof(struct esdm_rpc_proto_cs_header) + header->message_length)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -464,7 +468,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 out:
 	if (received > 0) {
-		memset_secure(rpc_conn->buf, 0, received);
+		memset_secure(rpc_conn->buf, 0, (size_t)received);
 	}
 	return ret;
 }

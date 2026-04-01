@@ -246,8 +246,11 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 
 			return -errsv;
 		}
-	} while (ret != len);
+	} while (ret < 0);
 
+	if (ret != (ssize_t)len) {
+		len = 0;
+	}
 	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
 	return 0;
@@ -328,7 +331,6 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
 	ssize_t received;
-	uint32_t data_to_fetch = 0;
 	int ret = 0;
 	int pret;
 	bool interrupted = false;
@@ -380,43 +382,37 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			break;
 		}
 
-		if (received < sizeof(*received_data))
+		if (received < (ssize_t)sizeof(*header))
 			continue;
 
-		if (!data_to_fetch) {
-			header = &received_data->header;
+		header = &received_data->header;
 
-			/* Convert incoming data to LE */
-			header->status_code = le_bswap32(header->status_code);
-			header->message_length =
-				le_bswap32(header->message_length);
-			header->method_index = le_bswap32(header->method_index);
-			header->request_id = le_bswap32(header->request_id);
+		/* Convert incoming data to LE */
+		header->status_code = le_bswap32(header->status_code);
+		header->message_length =
+			le_bswap32(header->message_length);
+		header->method_index = le_bswap32(header->method_index);
+		header->request_id = le_bswap32(header->request_id);
 
-			esdm_logger(
-				LOGGER_DEBUG, LOGGER_C_RPC,
-				"Client received: server status %u, message length %u, message index %u, request ID %u\n",
-				header->status_code, header->message_length,
-				header->method_index, header->request_id);
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_RPC,
+			"Client received: server status %u, message length %u, message index %u, request ID %u\n",
+			header->status_code, header->message_length,
+			header->method_index, header->request_id);
 
-			/*
-			 * Reject if the server specified too much buffer
-			 * data. As the server also checks this, it is a
-			 * clear protocol violation.
-			 */
-			if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
-				ret = -EOVERFLOW;
-				break;
-			}
+		/*
+		 * Reject if the server specified too much buffer
+		 * data. As the server also checks this, it is a
+		 * clear protocol violation.
+		 */
+		if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
+			ret = -EOVERFLOW;
+			break;
+		}
 
-			/* How much data are we expecting to fetch? */
-			data_to_fetch = header->message_length;
-
-			if (received < sizeof(struct esdm_rpc_proto_sc_header) + header->message_length) {
-				ret = -EPROTO;
-				break;
-			}
-
+		if (received < (ssize_t)(sizeof(struct esdm_rpc_proto_sc_header) + header->message_length)) {
+			ret = -EPROTO;
+			break;
 		}
 	} while (received <= 0);
 
@@ -463,7 +459,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 out:
 	if (received > 0) {
-		memset_secure(rpc_conn->buf, 0, received);
+		memset_secure(rpc_conn->buf, 0, (size_t)received);
 	}
 	return ret;
 }
