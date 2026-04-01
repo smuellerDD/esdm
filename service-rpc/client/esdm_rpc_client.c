@@ -1001,24 +1001,30 @@ static void cleanup_after_fork_privileged(void)
  * in two threads at different times */
 static void register_fork_handler_unprivileged(void)
 {
+	/* handlers stay registered after fork, only register once */
+	if (owner_pid_unprivileged == -1) {
+		pthread_atfork(NULL, NULL, &register_fork_handler_unprivileged);
+	}
+
 	/* also works in the initial call */
 	if (getpid() != owner_pid_unprivileged) {
 		owner_pid_unprivileged = getpid();
 		cleanup_after_fork_unprivileged();
 	}
-
-	pthread_atfork(NULL, NULL, &register_fork_handler_unprivileged);
 }
 
 /* need different handlers in order to not interfere with the other case, when opened
  * in two threads at different times */
 static void register_fork_handler_privileged(void)
 {
+	/* handlers stay registered after fork, only register once */
+	if (owner_pid_privileged == -1) {
+		pthread_atfork(NULL, NULL, &register_fork_handler_privileged);
+	}
+
 	/* also works in the initial call */
 	if (getpid() != owner_pid_privileged) {
 		owner_pid_privileged = getpid();
 		cleanup_after_fork_privileged();
 	}
-
-	pthread_atfork(NULL, NULL, &register_fork_handler_privileged);
 }
