@@ -555,10 +555,10 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	service->invoke = esdm_client_invoke;
 	service->destroy = esdm_client_destroy;
 
-	mutex_w_init(&rpc_conn->ref_cnt, 0, 1);
+	mutex_w_init(&rpc_conn->ref_cnt, 0, 0);
 	rpc_conn->fd = -1;
 	reset_conn_socket(rpc_conn);
-	mutex_w_init(&rpc_conn->lock, 0, 1);
+	mutex_w_init(&rpc_conn->lock, 0, 0);
 	atomic_set(&rpc_conn->state, esdm_rpcc_initialized);
 
 out:
@@ -879,8 +879,8 @@ static void cleanup_after_fork_unprivileged(void)
 		reset_conn_socket(&unpriv_rpc_conn[i]);
 		mutex_w_destroy(&unpriv_rpc_conn[i].ref_cnt);
 		mutex_w_destroy(&unpriv_rpc_conn[i].lock);
-		mutex_w_init(&unpriv_rpc_conn[i].ref_cnt, 0, 1);
-		mutex_w_init(&unpriv_rpc_conn[i].lock, 0, 1);
+		mutex_w_init(&unpriv_rpc_conn[i].ref_cnt, 0, 0);
+		mutex_w_init(&unpriv_rpc_conn[i].lock, 0, 0);
 	}
 }
 
@@ -894,8 +894,8 @@ static void cleanup_after_fork_privileged(void)
 		reset_conn_socket(&priv_rpc_conn[i]);
 		mutex_w_destroy(&priv_rpc_conn[i].ref_cnt);
 		mutex_w_destroy(&priv_rpc_conn[i].lock);
-		mutex_w_init(&priv_rpc_conn[i].ref_cnt, 0, 1);
-		mutex_w_init(&priv_rpc_conn[i].lock, 0, 1);
+		mutex_w_init(&priv_rpc_conn[i].ref_cnt, 0, 0);
+		mutex_w_init(&priv_rpc_conn[i].lock, 0, 0);
 	}
 }
 
