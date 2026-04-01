@@ -21,6 +21,8 @@
 #define _MUTEX_W_PTHREAD_H
 
 #define _GNU_SOURCE
+#include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 #include <time.h>
 
@@ -47,7 +49,10 @@ typedef struct {
  */
 static inline int mutex_w_lock(mutex_w_t *mutex)
 {
-	return pthread_mutex_lock(&mutex->lock);
+	int ret = pthread_mutex_lock(&mutex->lock);
+	assert(ret == 0);
+	(void)ret;
+	return ret;
 }
 
 /**
@@ -56,7 +61,10 @@ static inline int mutex_w_lock(mutex_w_t *mutex)
  */
 static inline int mutex_w_unlock(mutex_w_t *mutex)
 {
-	return pthread_mutex_unlock(&mutex->lock);
+	int ret = pthread_mutex_unlock(&mutex->lock);
+	assert(ret == 0);
+	(void)ret;
+	return ret;
 }
 
 /**
@@ -106,7 +114,10 @@ out:
  */
 static inline int mutex_w_trylock(mutex_w_t *mutex)
 {
-	return pthread_mutex_trylock(&mutex->lock);
+	int ret = pthread_mutex_trylock(&mutex->lock);
+	assert(ret == 0 || ret == EBUSY);
+	(void)ret;
+	return ret;
 }
 
 /*
@@ -119,7 +130,10 @@ extern int pthread_mutex_clocklock(pthread_mutex_t *mutex, clockid_t clockid,
 static inline int mutex_w_timedlock(mutex_w_t *mutex,
 				    const struct timespec *abstime)
 {
-	return pthread_mutex_clocklock(&mutex->lock, CLOCK_MONOTONIC, abstime);
+	int ret = pthread_mutex_clocklock(&mutex->lock, CLOCK_MONOTONIC, abstime);
+	assert(ret == 0 || ret == ETIMEDOUT);
+	(void)ret;
+	return ret;
 }
 
 #endif /* _MUTEX_W_PTHREAD_H */

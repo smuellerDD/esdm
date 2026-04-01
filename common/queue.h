@@ -21,6 +21,8 @@
 #define QUEUE_H
 
 #define _GNU_SOURCE
+#include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 
 #ifdef __cplusplus
@@ -44,29 +46,38 @@ struct thread_wait_queue {
 
 #define thread_wait_no_event(queue)                                            \
 	do {                                                                   \
-		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
-		pthread_cond_wait(&(queue)->thread_wait_cv,                    \
+		int __mret __attribute__((unused));                            \
+		                                                               \
+		__mret = pthread_mutex_lock(&(queue)->thread_wait_lock);       \
+		assert(__mret == 0);                                           \
+		__mret = pthread_cond_wait(&(queue)->thread_wait_cv,           \
 				  &(queue)->thread_wait_lock);                 \
-		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
+		assert(__mret == 0);                                           \
+		__mret = pthread_mutex_unlock(&(queue)->thread_wait_lock);     \
+		assert(__mret == 0);                                           \
 	} while (0)
 
 /* Timed wait on event, reltime is the relative time to wait */
 #define thread_timedwait_no_event(queue, reltime)                              \
 	do {                                                                   \
 		struct timespec __ts;                                          \
+		int __mret __attribute__((unused));                            \
                                                                                \
-		pthread_mutex_lock(&(queue)->thread_wait_lock);                \
+		__mret = pthread_mutex_lock(&(queue)->thread_wait_lock);       \
+		assert(__mret == 0);                                           \
 		clock_gettime(CLOCK_MONOTONIC, &__ts);                         \
 		__ts.tv_sec += (reltime)->tv_sec;                              \
 		__ts.tv_nsec += (reltime)->tv_nsec;                            \
-		if (__ts.tv_nsec >= 1000000000) {                               \
+		if (__ts.tv_nsec >= 1000000000) {                              \
 			__ts.tv_sec += __ts.tv_nsec / 1000000000;              \
 			__ts.tv_nsec = __ts.tv_nsec % 1000000000;              \
 		}                                                              \
 		ret = -pthread_cond_clockwait(&(queue)->thread_wait_cv,        \
 					      &(queue)->thread_wait_lock,      \
 					      CLOCK_MONOTONIC, &__ts);         \
-		pthread_mutex_unlock(&(queue)->thread_wait_lock);              \
+		assert(ret == 0 || ret == -ETIMEDOUT);                         \
+		__mret = -pthread_mutex_unlock(&(queue)->thread_wait_lock);    \
+		assert(__mret == 0);                                           \
 	} while (0)
 
 #define thread_wait_event(queue, condition)                                    \
@@ -81,21 +92,29 @@ struct thread_wait_queue {
 
 static inline bool thread_queue_sleeper(struct thread_wait_queue *queue)
 {
-	if (pthread_mutex_trylock(&queue->thread_wait_lock))
+	int ret __attribute__((unused));
+	ret = pthread_mutex_trylock(&queue->thread_wait_lock);
+	if (ret == 0)
 		return true;
+	assert(ret == EBUSY);
 
-	pthread_mutex_unlock(&(queue)->thread_wait_lock);
+	ret = pthread_mutex_unlock(&(queue)->thread_wait_lock);
+	assert(ret == 0);
 	return false;
 }
 
 #define thread_wake(queue)                                                     \
 	do {                                                                   \
-		pthread_cond_signal(&(queue)->thread_wait_cv);                 \
+		int __cret __attribute__((unused));                            \
+		__cret = pthread_cond_signal(&(queue)->thread_wait_cv);        \
+		assert(__cret == 0);                                           \
 	} while (0);
 
 #define thread_wake_all(queue)                                                 \
 	do {                                                                   \
-		pthread_cond_broadcast(&(queue)->thread_wait_cv);              \
+		int __cret __attribute__((unused));                                                    \
+		__cret = pthread_cond_broadcast(&(queue)->thread_wait_cv);     \
+		assert(__cret == 0);                                           \
 	} while (0);
 
 #ifdef __cplusplus

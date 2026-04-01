@@ -623,6 +623,7 @@ static int handle_stress_fork(void)
 		/* don't care. Just check in all processes involved, that we can get random bytes */
 		pid_t p = fork();
 		assert(p != -1);
+		(void)p;
 	}
 
 	while (wait(NULL) > 0) {
