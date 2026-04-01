@@ -15,49 +15,10 @@ StartLimitIntervalSec=500
 StartLimitBurst=5
 Wants=esdm-server.service
 After=esdm-server.service
+Before=esdm-kernel-seeder.service
 PartOf=esdm-linux-compat.target
 
 [Service]
 Restart=on-failure
 RestartSec=5s
-ExecStart=@PATH@/esdm-cuse-urandom -f --syslog
-
-# Filesystem
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadOnlyPaths=-/
-ReadWritePaths=/dev /run
-
-# Network
-IPAddressDeny=any
-PrivateNetwork=yes
-RestrictAddressFamilies=AF_UNIX
-
-# Process isolation
-ProtectProc=invisible
-ProcSubset=pid
-ProtectControlGroups=yes
-ProtectKernelModules=yes
-ProtectKernelTunables=yes
-ProtectKernelLogs=yes
-ProtectClock=yes
-ProtectHostname=yes
-
-# Privilege hardening
-NoNewPrivileges=yes
-RestrictSUIDSGID=yes
-LimitMEMLOCK=0
-
-# Syscall filtering
-SystemCallArchitectures=native
-SystemCallFilter=@system-service @mount @setuid
-
-# Misc hardening
-RestrictNamespaces=mnt cgroup net
-RestrictRealtime=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-MountFlags=private
-RemoveIPC=yes
-UMask=0077
+ExecStart=@PATH@/esdm-cuse-urandom -f --syslog -v 3
