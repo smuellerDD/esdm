@@ -381,13 +381,17 @@ static int handle_write_to_aux_pool(const char *aux_data,
 	return EXIT_SUCCESS;
 }
 
-static const size_t MAX_BENCHMARK_BUFFER_EXP = 12;
+static const size_t MAX_BENCHMARK_BUFFER_EXP = 16;
 
 static int do_benchmark_single(bool pr, size_t buffer_size)
 {
 	struct timespec before, after;
 	size_t num_iterations;
-	uint8_t *buffer = malloc(buffer_size);
+	uint8_t *buffer = NULL;
+
+	if (buffer_size > ESDM_RPC_MAX_DATA)
+		buffer_size = ESDM_RPC_MAX_DATA;
+	buffer = malloc(buffer_size);
 
 	if (buffer == NULL) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
@@ -397,8 +401,12 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 
 	if (pr) {
 		num_iterations = 20;
+	} else if (buffer_size < 1000) {
+		num_iterations = 5000;
+	} else if (buffer_size > 5000) {
+		num_iterations = 1000;
 	} else {
-		num_iterations = 10000;
+		num_iterations = 250;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &before);
@@ -432,7 +440,7 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 
 	char *data_rate = format_byte_sec(data_rate_b_s);
 
-	printf("PR: %i | Req. Size: %4zu | Iter. Rate: %9.2lf 1/s | Data Rate: %s\n",
+	printf("PR: %i | Req. Size: %5zu | Iter. Rate: %9.2lf 1/s | Data Rate: %s\n",
 	       pr, buffer_size, iteration_rate, data_rate);
 
 	free(data_rate);
@@ -446,7 +454,7 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 static int do_benchmark(void)
 {
 	for (int pr = 0; pr < 2; ++pr) {
-		for (size_t exp = 0; exp < MAX_BENCHMARK_BUFFER_EXP; ++exp) {
+		for (size_t exp = 0; exp <= MAX_BENCHMARK_BUFFER_EXP; ++exp) {
 			/* skip larger tests for prediction resistant mode, as this is mostly
 			 * used for seeding purposes with <= 512 Bit */
 			if (pr && (1 << exp) > 64)
