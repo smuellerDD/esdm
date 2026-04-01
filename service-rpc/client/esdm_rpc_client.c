@@ -261,8 +261,6 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 	return 0;
 }
 
-#ifdef ESDM_RPCC_BUF_WRITE
-
 /*
  * Implementation of packing data and sending it out. Properties:
  *
@@ -341,67 +339,6 @@ out:
 	}
 	return ret;
 }
-
-#else /* ESDM_RPCC_BUF_WRITE */
-
-static void esdm_rpc_client_append_data(ProtobufCBuffer *buffer, size_t len,
-					const uint8_t *data)
-{
-	struct esdm_rpcc_write_buf *buf = (struct esdm_rpcc_write_buf *)buffer;
-	int ret = esdm_rpc_client_write_data_fd(buf->rpc_conn, data, len);
-
-	if (ret < 0)
-		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Submission of payload data failed with error %d\n",
-			    ret);
-}
-
-/*
- * Implementation of packing data and sending it out. Properties:
- *
- * - multiple calls to write data out to the file descriptor
- *
- * - no additional memory required
- */
-static int esdm_rpc_client_pack(const ProtobufCMessage *message,
-				unsigned int method_index,
-				esdm_rpc_client_connection_t *rpc_conn)
-{
-	struct esdm_rpc_proto_cs_header cs_header;
-	struct esdm_rpcc_write_buf tmp = { 0 };
-	size_t message_length;
-	int ret;
-
-	message_length = protobuf_c_message_get_packed_size(message);
-	tmp.base.append = esdm_rpc_client_append_data;
-	tmp.rpc_conn = rpc_conn;
-
-	cs_header.method_index = le_bswap32(method_index);
-	cs_header.message_length = le_bswap32(message_length);
-	cs_header.request_id = le_bswap32(0);
-
-	esdm_logger(
-		LOGGER_DEBUG, LOGGER_C_RPC,
-		"Client sending: message length %u, message index %u, request ID %u\n",
-		cs_header.message_length, cs_header.method_index,
-		cs_header.request_id);
-
-	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, (uint8_t *)&cs_header,
-						sizeof(cs_header)),
-		  "Submission of header data failed with error %d\n", ret);
-
-	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
-	    message_length) {
-		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-			    "Short write of data to file descriptor \n");
-		ret = -EFAULT;
-	}
-
-out:
-	return ret;
-}
-
-#endif /* ESDM_RPCC_BUF_WRITE */
 
 static int
 esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,

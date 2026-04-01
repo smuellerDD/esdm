@@ -241,8 +241,6 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 	return 0;
 }
 
-#ifdef ESDM_RPCS_BUF_WRITE
-
 /*
  * Implementation of packing data and sending it out. Properties:
  *
@@ -315,68 +313,6 @@ out:
 		free(data_buf_alloc);
 	return ret;
 }
-
-#else /* ESDM_RPCS_BUF_WRITE */
-
-/* Write out data from a ProtobufC buffer. */
-static void esdm_rpcs_append_data(ProtobufCBuffer *buffer, size_t len,
-				  const uint8_t *data)
-{
-	struct esdm_rpcs_write_buf *buf = (struct esdm_rpcs_write_buf *)buffer;
-	int ret = esdm_rpcs_write_data(buf->rpc_conn, data, len);
-
-	if (ret < 0)
-		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Submission of payload data failed with error %d\n",
-			    ret);
-}
-
-/*
- * Implementation of packing data and sending it out. Properties:
- *
- * - multiple calls to write data out to the file descriptor
- *
- * - no additional memory required
- */
-static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
-				   struct esdm_rpcs_connection *rpc_conn)
-{
-	struct esdm_rpc_proto_sc_header sc_header;
-	struct esdm_rpcs_write_buf tmp = { 0 };
-	size_t message_length;
-	int ret;
-
-	message_length = protobuf_c_message_get_packed_size(message);
-	tmp.base.append = esdm_rpcs_append_data;
-	tmp.rpc_conn = rpc_conn;
-
-	sc_header.status_code = le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SUCCESS);
-	sc_header.method_index = le_bswap32(rpc_conn->method_index);
-	sc_header.message_length = le_bswap32(message_length);
-	sc_header.request_id = le_bswap32(rpc_conn->request_id);
-
-	esdm_logger(
-		LOGGER_DEBUG, LOGGER_C_RPC,
-		"Server sending: server status %u, message length %u, message index %u, request ID %u\n",
-		sc_header.status_code, sc_header.message_length,
-		sc_header.method_index, sc_header.request_id);
-
-	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, (uint8_t *)&sc_header,
-				       sizeof(sc_header)),
-		  "Submission of header data failed with error %d\n", ret);
-
-	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
-	    message_length) {
-		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-			    "Short write of data to file descriptor\n");
-		ret = -EFAULT;
-	}
-
-out:
-	return ret;
-}
-
-#endif /* ESDM_RPCS_BUF_WRITE */
 
 /* Pack the message into a ProtobufC structure and write it to the receiver. */
 static int esdm_rpcs_pack(const ProtobufCMessage *message,
