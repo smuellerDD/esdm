@@ -43,7 +43,7 @@ AmbientCapabilities=
 # Syscall filtering
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources
+SystemCallFilter=~@aio @chown @clock @cpu-emulation @debug @ipc @keyring @memlock @module @mount @obsolete @pkey @privileged @raw-io @reboot @resources @sandbox @setuid @swap
 
 # Misc hardening
 RestrictNamespaces=yes
