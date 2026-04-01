@@ -638,14 +638,6 @@ further and a high rate of short connections may saturates them.
 # Auxiliary Options
 ################################################################################
 
-option('small_memory', type: 'boolean', value: false,
-       description:'''Reduce Memory Footprint
-
-When enabled, the code is compiled such that it attempts to reduce the memory
-foot print of the entire code base as much as possible. This goes to the expense
-of the performance.
-''')
-
 option('validation-helpers', type: 'feature', value: 'disabled',
        description: 'Enabled build of entropy validation helpers for esdm_es.')
 

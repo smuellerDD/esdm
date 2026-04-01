@@ -187,6 +187,7 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 					 const uint8_t *data, size_t len)
 {
 	static const int CLIENT_TX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
+	unsigned int retries = 0;
 	int pret = -1;
 	ssize_t ret;
 
@@ -194,6 +195,7 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 		return -EINVAL;
 
 	do {
+		retries++;
 		ret = write(rpc_conn->fd, data, len);
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
 			struct pollfd pfd = { .fd = rpc_conn->fd, .events = POLLOUT };
@@ -246,7 +248,7 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 
 			return -errsv;
 		}
-	} while (ret < 0);
+	} while (ret < 0 && retries <= ESDM_MAX_RX_TX_RETRIES);
 
 	/*
 	 * SOCK_SEQPACKET guarantees atomic messages - a short write is a
@@ -338,6 +340,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
 	ssize_t received;
+	unsigned int retries = 0;
 	int ret = 0;
 	int pret;
 	bool interrupted = false;
@@ -350,6 +353,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 	/* Read the data into the local buffer storage */
 	do {
+		retries++;
 		received =
 			read(rpc_conn->fd, rpc_conn->buf, sizeof(rpc_conn->buf));
 
@@ -421,7 +425,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			ret = -EPROTO;
 			break;
 		}
-	} while (received <= 0);
+	} while (received <= 0 && retries <= ESDM_MAX_RX_TX_RETRIES);
 
 	if (header &&
 	    header->status_code == PROTOBUF_C_RPC_STATUS_CODE_SUCCESS) {
