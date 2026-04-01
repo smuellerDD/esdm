@@ -49,6 +49,7 @@ RestrictNamespaces=yes
 RestrictRealtime=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
+SystemCallFilter=~@aio @chown @clock @cpu-emulation @debug @keyring @memlock @module @mount @obsolete @pkey @privileged @raw-io @reboot @resources @sandbox @setuid @swap
 UMask=0077
 
 [Install]

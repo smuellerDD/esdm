@@ -22,3 +22,42 @@ Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-proc --relabel --syslog -f -o allow_other /proc/sys/kernel/random
 KillMode=mixed
+
+# Filesystem
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=-/
+ReadWritePaths=/proc/sys/kernel/random /run
+
+# Network
+IPAddressDeny=any
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+
+# Process isolation
+ProtectProc=default
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# Privilege hardening
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LimitMEMLOCK=0
+
+# Syscall filtering
+SystemCallArchitectures=native
+SystemCallFilter=@system-service @mount
+SystemCallFilter=~@aio @clock @cpu-emulation @debug @keyring @module @obsolete @pkey @raw-io @reboot @sandbox @setuid @swap
+
+# Misc hardening
+RestrictNamespaces=mnt cgroup net
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+MountFlags=private
+RemoveIPC=yes
+UMask=0077

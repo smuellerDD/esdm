@@ -14,5 +14,47 @@ Type=oneshot
 ExecStart=@PATH@/esdm-server-signal-helper --resume
 TimeoutSec=0
 
+# Filesystem
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadOnlyPaths=-/
+
+# Network
+IPAddressDeny=any
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+
+# Process isolation
+ProtectProc=invisible
+ProcSubset=pid
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# Privilege hardening
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitMEMLOCK=0
+
+# Syscall filtering
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@aio @chown @clock @cpu-emulation @debug @keyring @memlock @module @mount @obsolete @pkey @privileged @raw-io @reboot @resources @sandbox @setuid @swap
+
+# Misc hardening
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+UMask=0077
+
 [Install]
 WantedBy=sleep.target

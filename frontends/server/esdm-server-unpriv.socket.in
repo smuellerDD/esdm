@@ -6,6 +6,7 @@ ListenSequentialPacket=@SOCKET_PATH@
 SocketMode=0666
 SocketUser=root
 SocketGroup=root
+PassCredentials=yes
 FileDescriptorName=ESDM_RPC_UNPRIV_SOCKET
 Service=esdm-server.service
 
