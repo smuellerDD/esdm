@@ -750,8 +750,6 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			min_uint32((uint32_t)outbuflen, ESDM_DRNG_MAX_REQSIZE);
 		ssize_t ret;
 
-		iterations++;
-
 		/* In normal operation, check whether to reseed */
 		if (!pr && esdm_drng_must_reseed(drng, true)) {
 			if (!esdm_pool_trylock()) {
@@ -837,7 +835,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		if (pr) {
 			/* Force the async reseed for PR DRNG */
 			esdm_unset_fully_seeded(drng);
-			if (outbuflen && iterations % pr_yield_iterations == 0)
+			if (outbuflen && iterations++ % pr_yield_iterations == 0)
 				sched_yield();
 		}
 	}
