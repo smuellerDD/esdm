@@ -771,6 +771,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	/* always reseed the DRNG with the current time stamp */
 	ret = clock_gettime(CLOCK_MONOTONIC, &eb->now);
 	assert(ret == 0);
+	(void) ret;
 
 	/*
 	 * Require at least 128 bits of entropy for any reseed. If the ESDM is

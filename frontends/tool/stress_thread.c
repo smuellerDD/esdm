@@ -65,6 +65,7 @@ void handle_stress_thread(double timeout_sec, int num_threads,
 		int socks[2];
 		int ret = socketpair(AF_UNIX, SOCK_SEQPACKET, 0, socks);
 		assert(ret == 0);
+		(void) ret;
 		sockets[i] = socks[0];
 
 		struct thread_arg *arg = malloc(sizeof(struct thread_arg));

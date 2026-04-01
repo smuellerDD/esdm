@@ -20,6 +20,8 @@
 #ifndef _MUTEX_PTHREAD_H
 #define _MUTEX_PTHREAD_H
 
+#define _GNU_SOURCE
+#include <assert.h>
 #include <errno.h>
 #include <pthread.h>
 
@@ -41,7 +43,9 @@ typedef pthread_rwlock_t mutex_t;
  */
 static inline void mutex_lock(mutex_t *mutex)
 {
-	pthread_rwlock_wrlock(mutex);
+	int ret = pthread_rwlock_wrlock(mutex);
+	assert(ret == 0);
+	(void) ret;
 }
 
 /**
@@ -50,7 +54,9 @@ static inline void mutex_lock(mutex_t *mutex)
  */
 static inline void mutex_unlock(mutex_t *mutex)
 {
-	pthread_rwlock_unlock(mutex);
+	int ret = pthread_rwlock_unlock(mutex);
+	assert(ret == 0);
+	(void) ret;
 }
 
 /**
@@ -76,7 +82,9 @@ static inline void mutex_init(mutex_t *mutex, int locked)
 
 static inline void mutex_destroy(mutex_t *mutex)
 {
-	pthread_rwlock_destroy(mutex);
+	int ret = pthread_rwlock_destroy(mutex);
+	assert(ret == 0);
+	(void) ret;
 }
 
 /**
@@ -90,7 +98,8 @@ static inline void mutex_reader_lock(mutex_t *mutex)
 
 	do {
 		ret = pthread_rwlock_rdlock(mutex);
-	} while (ret == EAGAIN);
+	} while (ret != 0 && (errno == EAGAIN || errno == EBUSY));
+	assert(ret == 0);
 }
 
 /**
@@ -99,7 +108,9 @@ static inline void mutex_reader_lock(mutex_t *mutex)
  */
 static inline void mutex_reader_unlock(mutex_t *mutex)
 {
-	pthread_rwlock_unlock(mutex);
+	int ret = pthread_rwlock_unlock(mutex);
+	assert(ret == 0);
+	(void) ret;
 }
 
 #endif /* _MUTEX_PTHREAD_H */
