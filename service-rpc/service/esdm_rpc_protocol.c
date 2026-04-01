@@ -61,12 +61,15 @@ void esdm_rpc_free(void *allocator_data, void *data)
 	return;
 }
 
-void set_fd_nonblocking(int fd)
+int set_fd_nonblocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL);
 
-	if (flags >= 0)
-		fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	if (flags < 0)
+		return -errno;
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+		return -errno;
+	return 0;
 }
 
 int esdm_rpc_proto_get_descriptor(const ProtobufCService *service,

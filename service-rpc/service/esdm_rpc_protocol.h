@@ -71,7 +71,7 @@ typedef enum {
 	PROTOBUF_C_RPC_STATUS_CODE_TOO_MANY_PENDING
 } ProtobufC_RPC_Status_Code;
 
-void set_fd_nonblocking(int fd);
+int set_fd_nonblocking(int fd);
 
 int esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
 				  const struct esdm_rpc_proto_cs *received_data,

@@ -21,6 +21,7 @@
 #include <selinux/restorecon.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "esdm_logger.h"
 #include "ret_checkers.h"

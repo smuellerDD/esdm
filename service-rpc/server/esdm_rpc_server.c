@@ -226,8 +226,15 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 		}
 	} while (ret < 0);
 
+	/*
+	 * SOCK_SEQPACKET guarantees atomic messages - a short write is a
+	 * protocol violation, not a partial transfer to be retried.
+	 */
 	if (ret != (ssize_t)len) {
-		len = 0;
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Partial write on SEQPACKET socket: %zd of %zu bytes on fd %d\n",
+			    ret, len, rpc_conn->child_fd);
+		return -EIO;
 	}
 
 	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
@@ -267,6 +274,13 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 
 	data_buf_size = ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length +
 				sizeof(uint64_t) - 1;
+
+	if (data_buf_size > sizeof(rpc_conn->buf)) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Message too large for connection buffer: %zu > %zu\n",
+			    data_buf_size, sizeof(rpc_conn->buf));
+		return -EOVERFLOW;
+	}
 
 	data_buf = rpc_conn->buf;
 	tmp.dst_buf = (data_buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ);
@@ -506,8 +520,8 @@ static int esdm_rpcs_handler(void *args)
 	struct esdm_rpc_thread *thread = args;
 	struct esdm_rpcs_connection *tmp1;
 	struct esdm_rpcs_connection *tmp2;
-	const size_t max_events = 512;
-	struct epoll_event events[max_events];
+#define ESDM_RPCS_MAX_EVENTS 512
+	struct epoll_event events[ESDM_RPCS_MAX_EVENTS];
 	const size_t max_connections = 1024;
 	size_t num_connections = 0;
 	int epfd = -1;
@@ -570,13 +584,20 @@ static int esdm_rpcs_handler(void *args)
 	}
 
 	/* eventfd for fast termination */
-	epoll_ctl(epfd, EPOLL_CTL_ADD, thread->eventfd, &(struct epoll_event){
-		.events = EPOLLIN,
-		.data.u64 = 2 /* no ptr will have this value */
-	});
+	if (epoll_ctl(epfd, EPOLL_CTL_ADD, thread->eventfd,
+				&(struct epoll_event){
+					.events = EPOLLIN,
+					.data.u64 = 2 /* no ptr will have this value */
+				}) < 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+				"Unable to add event FD %d to epoll\n",
+				thread->eventfd);
+		ret = -errno;
+		goto out;
+	}
 
 	while (atomic_read(&server_exit) == 0) {
-		int nfds = epoll_wait(epfd, events, (int)max_events, -1);
+		int nfds = epoll_wait(epfd, events, ESDM_RPCS_MAX_EVENTS, -1);
 		/* signal? */
 		if (nfds < 0 && errno == EINTR) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,

@@ -248,8 +248,15 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 		}
 	} while (ret < 0);
 
+	/*
+	 * SOCK_SEQPACKET guarantees atomic messages - a short write is a
+	 * protocol violation, not a partial transfer to be retried.
+	 */
 	if (ret != (ssize_t)len) {
-		len = 0;
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Partial write on SEQPACKET socket: %zd of %zu bytes on fd %d\n",
+			    ret, len, rpc_conn->fd);
+		return -EIO;
 	}
 	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 

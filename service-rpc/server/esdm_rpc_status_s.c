@@ -40,15 +40,16 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		return;
 	}
 
-	status = malloc(ESDM_RPC_MAX_MSG_SIZE);
+	size_t alloc_size = min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE);
+
+	status = malloc(alloc_size);
 	if (!status) {
 		response.ret = -ENOMEM;
 		closure(&response, closure_data);
 		return;
 	}
 
-	esdm_status(status,
-		    min_uint32(request->maxlen, ESDM_RPC_MAX_MSG_SIZE));
+	esdm_status(status, alloc_size);
 	response.ret = 0;
 	response.buffer = status;
 	closure(&response, closure_data);
