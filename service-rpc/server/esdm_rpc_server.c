@@ -80,17 +80,12 @@ struct esdm_rpcs {
 struct esdm_rpcs_connection {
 	struct esdm_rpcs *proto;
 	int child_fd;
-	ProtobufCAllocator *rpc_allocator;
 	uint32_t method_index;
 	uint32_t request_id;
 	struct timespec last_used;
 
 	/* per request data */
-	struct esdm_rpc_proto_cs *received_data;
 	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(struct esdm_rpc_proto_cs)];
-	size_t total_received;
-	uint32_t data_to_fetch;
-	uint8_t *buf_p;
 
 	/* list handling for cleanup */
 	TAILQ_ENTRY(esdm_rpcs_connection) tailq;
@@ -176,7 +171,6 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 				const uint8_t *data, size_t len)
 {
 	const int TIMEOUT_MS = 5;
-	size_t written = 0;
 	ssize_t ret;
 
 	if (rpc_conn->child_fd < 0)
@@ -230,13 +224,9 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 
 			return -errsv;
 		}
+	} while (ret != len);
 
-		written += (size_t)ret;
-		data += (size_t)ret;
-		len -= (size_t)ret;
-	} while (len > 0);
-
-	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", written);
+	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
 	return 0;
 }
@@ -255,12 +245,12 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 
 	size_t message_length;
 	int ret;
-	uint8_t *data_buf_alloc = NULL;
 	uint8_t *data_buf;
 	struct esdm_rpc_proto_sc_header *sc_header;
 	struct esdm_rpc_write_data_buf tmp = {
 		.dst_written = 0,
 	};
+	size_t data_buf_size = 0;
 
 	tmp.base.append = esdm_rpc_append_data;
 
@@ -271,11 +261,10 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		return -EFAULT;
 	}
 
-	data_buf_alloc = malloc(ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length +
-				sizeof(uint64_t) - 1);
-	CKNULL(data_buf_alloc, -ENOMEM);
+	data_buf_size = ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length +
+				sizeof(uint64_t) - 1;
 
-	data_buf = ALIGN_PTR_8(data_buf_alloc, sizeof(uint64_t));
+	data_buf = rpc_conn->buf;
 	tmp.dst_buf = (data_buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ);
 
 	sc_header = (struct esdm_rpc_proto_sc_header *)data_buf;
@@ -305,12 +294,13 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 
 out:
 	/*
-	 * Zeroization not needed, as data will go out through unprotected
-	 * channel anyway. If the data is not already protected, there is a
-	 * bigger problem.
+	 * Zeroization only here is not sufficient.
+	 * Make sure to enable zeroize on alloc and free in your Linux kernel
+	 * and clear data from ESDM in your application or patch
+	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	if (data_buf_alloc)
-		free(data_buf_alloc);
+	memset_secure(rpc_conn->buf, 0, data_buf_size);
+
 	return ret;
 }
 
@@ -381,7 +371,7 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 	int ret = 0;
 
 	CKINT(esdm_rpc_proto_get_descriptor(service, received_data, &desc));
-	message = protobuf_c_message_unpack(desc, rpc_conn->rpc_allocator,
+	message = protobuf_c_message_unpack(desc, NULL,
 					    header->message_length,
 					    received_data->data);
 
@@ -397,7 +387,7 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 out:
 	if (message)
 		protobuf_c_message_free_unpacked(message,
-						 rpc_conn->rpc_allocator);
+						 NULL);
 
 	/* Pick up the error from esdm_rpcs_write_data */
 	if (rpc_conn->child_fd == -1)
@@ -415,100 +405,54 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	if (rpc_conn->child_fd < 0)
 		return -EINVAL;
 
-	/* (re-)set per-request data */
-	if (rpc_conn->received_data == NULL) {
-		/* The cast is appropriate as the buffer is aligned to 64 bits. */
-		rpc_conn->received_data = (struct esdm_rpc_proto_cs *)rpc_conn->buf;
-		rpc_conn->total_received = 0;
-		rpc_conn->data_to_fetch = 0;
-		rpc_conn->buf_p = rpc_conn->buf;
-	}
-
-	received = read(rpc_conn->child_fd, rpc_conn->buf_p,
-			sizeof(rpc_conn->buf) - rpc_conn->total_received);
+	received = read(rpc_conn->child_fd, rpc_conn->buf,
+			sizeof(rpc_conn->buf));
 	if (received < 0) {
 		ret = -errno;
-		if (errno != EAGAIN) {
-			goto out_clear;
-		} else {
-			goto out;
-		}
-	}
-
-	/* Received EOF */
-	if (received == 0) {
-		ret = -EOF;
-		goto out_clear;
+		goto out;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			"Read %zd bytes, already consumed %zu bytes\n",
-			received, rpc_conn->total_received);
-
-	rpc_conn->total_received += (size_t)received;
-	rpc_conn->buf_p += (size_t)received;
+			"Read %zd bytes\n",
+			received);
 
 	/* We insist on having at least a header received. */
-	if (rpc_conn->total_received < sizeof(*rpc_conn->received_data)) {
+	if (received < sizeof(struct esdm_rpc_proto_cs_header)) {
 		ret = -EINVAL;
-		goto out_clear;
+		goto out;
 	}
 
 	/* Header is received, analyze it. */
-	if (!rpc_conn->data_to_fetch) {
-		struct esdm_rpc_proto_cs_header *header =
-			&rpc_conn->received_data->header;
+	struct esdm_rpc_proto_cs_header *header = (struct esdm_rpc_proto_cs_header *)rpc_conn->buf;
 
-		/* Convert incoming data to LE */
-		header->message_length =
-			le_bswap32(header->message_length);
-		header->method_index = le_bswap32(header->method_index);
-		header->request_id = le_bswap32(header->request_id);
+	/* Convert incoming data to LE */
+	header->message_length =
+		le_bswap32(header->message_length);
+	header->method_index = le_bswap32(header->method_index);
+	header->request_id = le_bswap32(header->request_id);
 
-		esdm_logger(
-			LOGGER_DEBUG, LOGGER_C_RPC,
-			"Server received: message length %u, message index %u, request ID %u\n",
-			header->message_length, header->method_index,
-			header->request_id);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_RPC,
+		"Server received: message length %u, message index %u, request ID %u\n",
+		header->message_length, header->method_index,
+		header->request_id);
 
-		/*
-		* Fail, if the buffer length the client specified
-		* contains too much buffer data. As the client also
-		* checks this, it is a clear failure.
-		*/
-		if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
-			ret = -EINVAL;
-			goto out_clear;
-		}
-
-		/* How much data are we expecting to fetch? */
-		rpc_conn->data_to_fetch = header->message_length;
-
-		/*
-		* To allow comparison with total_received, let us
-		* add the header length to the data to fetch value.
-		*/
-		if (rpc_conn->data_to_fetch >
-		    UINT32_MAX - (uint32_t)sizeof(*rpc_conn->received_data)) {
-			ret = -EOVERFLOW;
-			goto out_clear;
-		}
-		rpc_conn->data_to_fetch += sizeof(*rpc_conn->received_data);
-	}
-
-	/* Now, we need to receive more and can skip deserialization */
-	if (rpc_conn->total_received < rpc_conn->data_to_fetch) {
-		ret = -EAGAIN;
-		goto out_clear;
-	}
-
-	/* If we have received insufficient data, bail out now. */
-	if (rpc_conn->total_received < sizeof(*rpc_conn->received_data) ||
-	    rpc_conn->total_received < rpc_conn->data_to_fetch) {
+	/*
+	* Fail, if the buffer length the client specified
+	* contains too much buffer data. As the client also
+	* checks this, it is a clear failure.
+	*/
+	if (header->message_length > ESDM_RPC_MAX_MSG_SIZE) {
 		ret = -EINVAL;
-		goto out_clear;
+		goto out;
+	}
+
+	/* Is data received to small? */
+	if (received < sizeof(struct esdm_rpc_proto_cs_header) + header->message_length) {
+		ret = -EINVAL;
+		goto out;
 	}
 
 	/*
@@ -516,15 +460,12 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	 * as much data as the header defined. We also start the
 	 * processing of data and the subsequent submission of the answer here.
 	 */
-	CKINT(esdm_rpcs_unpack(rpc_conn, rpc_conn->received_data));
-
-out_clear:
-	/* Clear the memory after processing one request. */
-	memset_secure(rpc_conn->buf, 0, rpc_conn->total_received);
-	rpc_conn->received_data = NULL;
-	rpc_conn->buf_p = NULL;
+	CKINT(esdm_rpcs_unpack(rpc_conn, (struct esdm_rpc_proto_cs*)rpc_conn->buf));
 
 out:
+	if (received > 0) {
+		memset_secure(rpc_conn->buf, 0, received);
+	}
 	return ret;
 }
 
@@ -537,10 +478,7 @@ static void esdm_rpcs_release_conn(struct esdm_rpcs_connection *rpc_conn)
 		close(rpc_conn->child_fd);
 		rpc_conn->child_fd = -1;
 	}
-	if (rpc_conn->received_data) {
-		memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
-		rpc_conn->received_data = NULL;
-	}
+	memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
 	free(rpc_conn);
 }
 

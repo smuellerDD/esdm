@@ -21,6 +21,7 @@
 #define ESDM_RPC_CLIENT_INTERNAL_H
 
 #include "esdm_rpc_client.h"
+#include "esdm_rpc_service.h"
 
 #include "atomic.h"
 #include "mutex_w.h"
@@ -54,6 +55,9 @@ struct esdm_rpc_client_connection {
 	mutex_w_t lock;
 	mutex_w_t ref_cnt;
 	atomic_t state;
+
+	/* per request data */
+	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(struct esdm_rpc_proto_cs)];
 
 	/*
 	 * Used to track successfull reads from esdm-server.
