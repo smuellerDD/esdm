@@ -187,7 +187,6 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 					 const uint8_t *data, size_t len)
 {
 	static const int CLIENT_TX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
-	size_t written = 0;
 	int pret = -1;
 	ssize_t ret;
 
@@ -234,7 +233,6 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 					"Connection to server needs to be re-established\n");
 
 				reset_conn_socket(rpc_conn);
-
 				int rc = esdm_connect_proto_service(rpc_conn);
 				if (rc)
 					return rc;
@@ -248,15 +246,9 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 
 			return -errsv;
 		}
+	} while (ret != len);
 
-		written += (size_t)ret;
-
-		/* Cover short writes, e.g. due to timeouts */
-		data += (size_t)ret;
-		len -= (size_t)ret;
-	} while (len > 0);
-
-	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", written);
+	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
 
 	return 0;
 }
@@ -276,13 +268,10 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 
 	size_t message_length;
 	int ret;
-	uint8_t *data_buf_alloc = NULL;
-	uint8_t *data_buf;
 	struct esdm_rpc_proto_cs_header *cs_header;
 	struct esdm_rpc_write_data_buf tmp = {
 		.dst_written = 0,
 	};
-	size_t buf_alloc_size;
 
 	tmp.base.append = esdm_rpc_append_data;
 
@@ -293,15 +282,9 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 		return -EFAULT;
 	}
 
-	buf_alloc_size = ESDM_RPCC_BUF_WRITE_HEADER_SZ + message_length +
-			 sizeof(uint64_t) - 1;
-	data_buf_alloc = malloc(buf_alloc_size);
-	CKNULL(data_buf_alloc, -ENOMEM);
+	tmp.dst_buf = rpc_conn->buf + ESDM_RPCC_BUF_WRITE_HEADER_SZ;
 
-	data_buf = ALIGN_PTR_8(data_buf_alloc, sizeof(uint64_t));
-	tmp.dst_buf = (data_buf + ESDM_RPCC_BUF_WRITE_HEADER_SZ);
-
-	cs_header = (struct esdm_rpc_proto_cs_header *)data_buf;
+	cs_header = (struct esdm_rpc_proto_cs_header *)rpc_conn->buf;
 	cs_header->method_index = le_bswap32(method_index);
 	cs_header->message_length = le_bswap32(message_length);
 	cs_header->request_id = le_bswap32(0);
@@ -320,7 +303,7 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 		goto out;
 	}
 
-	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, data_buf,
+	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, rpc_conn->buf,
 						ESDM_RPCC_BUF_WRITE_HEADER_SZ +
 							message_length),
 		  "Submission of message data failed with error %d\n", ret);
@@ -332,11 +315,7 @@ out:
 	 * and clear data from ESDM in your application or patch
 	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	if (data_buf_alloc) {
-		memset_secure(data_buf_alloc, 0, buf_alloc_size);
-		free(data_buf_alloc);
-		data_buf_alloc = NULL;
-	}
+	memset_secure(rpc_conn->buf, 0, message_length + ESDM_RPCC_BUF_WRITE_HEADER_SZ);
 	return ret;
 }
 
@@ -348,26 +327,22 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	static const int CLIENT_RX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE + sizeof(*received_data)] __aligned(
-		sizeof(uint64_t));
-	size_t total_received = 0;
 	ssize_t received;
 	uint32_t data_to_fetch = 0;
 	int ret = 0;
 	int pret;
-	uint8_t *buf_p = buf;
 	bool interrupted = false;
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
 
 	/* The cast is appropriate as the buffer is aligned to 64 bits. */
-	received_data = (struct esdm_rpc_proto_sc *)buf;
+	received_data = (struct esdm_rpc_proto_sc *)rpc_conn->buf;
 
 	/* Read the data into the local buffer storage */
 	do {
 		received =
-			read(rpc_conn->fd, buf_p, sizeof(buf) - total_received);
+			read(rpc_conn->fd, rpc_conn->buf, sizeof(rpc_conn->buf));
 
 		pret = 0;
 		if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -405,16 +380,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			break;
 		}
 
-		/* Received EOF */
-		if (received == 0) {
-			ret = 0;
-			break;
-		}
-
-		total_received += (size_t)received;
-		buf_p += (size_t)received;
-
-		if (total_received < sizeof(*received_data))
+		if (received < sizeof(*received_data))
 			continue;
 
 		if (!data_to_fetch) {
@@ -446,22 +412,13 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			/* How much data are we expecting to fetch? */
 			data_to_fetch = header->message_length;
 
-			/* If we are not expecting anything, simply stop now */
-			if (!data_to_fetch)
+			if (received < sizeof(struct esdm_rpc_proto_sc_header) + header->message_length) {
+				ret = -EPROTO;
 				break;
+			}
 
-			/*
-			 * To allow comparison with total_received, let us
-			 * add the header length to the data to fetch value.
-			 */
-			data_to_fetch += sizeof(*received_data);
 		}
-
-		/* Now, we received enough and can stop the reading */
-		if (total_received >= data_to_fetch)
-			break;
-
-	} while (total_received < sizeof(buf));
+	} while (received <= 0);
 
 	if (header &&
 	    header->status_code == PROTOBUF_C_RPC_STATUS_CODE_SUCCESS) {
@@ -505,7 +462,9 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	}
 
 out:
-	memset_secure(buf, 0, total_received);
+	if (received > 0) {
+		memset_secure(rpc_conn->buf, 0, received);
+	}
 	return ret;
 }
 
@@ -568,6 +527,7 @@ static void esdm_client_destroy(ProtobufCService *service)
 	if (rpc_conn->fd >= 0) {
 		reset_conn_socket(rpc_conn);
 	}
+	memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
 	mutex_w_unlock(&rpc_conn->lock);
 }
 
@@ -585,6 +545,8 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	strncpy(rpc_conn->socketname, socketname, sizeof(rpc_conn->socketname));
 	rpc_conn->socketname[sizeof(rpc_conn->socketname) - 1] = '\0';
 	rpc_conn->interrupt_func = interrupt_func;
+
+	memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
 
 	service->descriptor = descriptor;
 	service->invoke = esdm_client_invoke;
