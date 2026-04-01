@@ -21,7 +21,6 @@ PartOf=esdm-linux-compat.target
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-proc --relabel --syslog -f -o allow_other /proc/sys/kernel/random
-KillMode=mixed
 
 # Filesystem
 ProtectSystem=strict
@@ -50,8 +49,7 @@ LimitMEMLOCK=0
 
 # Syscall filtering
 SystemCallArchitectures=native
-SystemCallFilter=@system-service @mount
-SystemCallFilter=~@aio @clock @cpu-emulation @debug @keyring @module @obsolete @pkey @raw-io @reboot @sandbox @setuid @swap
+SystemCallFilter=@system-service @mount @setuid
 
 # Misc hardening
 RestrictNamespaces=mnt cgroup net
