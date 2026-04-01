@@ -334,7 +334,7 @@ static int esdm_jent_initialize(void)
 	/* Allow the init function to be called multiple times */
 	esdm_jent_finalize();
 
-	mutex_w_init(&esdm_jent_lock, 1, 1);
+	mutex_w_init(&esdm_jent_lock, 1, 0);
 
 	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() || esdm_ntg1_2024_compliant()) {
 		flags |= JENT_FORCE_FIPS;
