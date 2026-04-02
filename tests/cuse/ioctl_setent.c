@@ -63,11 +63,22 @@ static int setent_ioctl(int fd, int exp)
 		printf("RNDGETENTCNT IOCTL failed: with %d\n", errno);
 		return 1;
 	}
-	ret = ioctl(fd, RNDADDTOENTCNT, &bits);
-	if (ret != 0) {
-		printf("RNDADDTOENTCNT IOCTL failed: with %d\n", errno);
-		return 1;
+
+	/*
+	 * getent only returns data after all DRNGs are seeded, and new entropy
+	 * remains in the aux pool. Assume not more than 30 CPUs.
+	 *
+	 * TODO: replace 30 with the number of CPUs, may fail if more than
+	 * 30 CPUs are available.
+	 */
+	for (unsigned int i = 0; i < 30; i++) {
+		ret = ioctl(fd, RNDADDTOENTCNT, &bits);
+		if (ret != 0) {
+			printf("RNDADDTOENTCNT IOCTL failed: with %d\n", errno);
+			return 1;
+		}
 	}
+
 	ret = ioctl(fd, RNDGETENTCNT, &ent_count_bits2);
 	if (ret != 0) {
 		printf("RNDGETENTCNT IOCTL failed: with %d\n", errno);

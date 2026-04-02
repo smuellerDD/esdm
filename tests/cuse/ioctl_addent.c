@@ -87,12 +87,23 @@ static int addent_ioctl(int fd, int exp)
 		ret = 1;
 		goto out;
 	}
-	ret = ioctl(fd, RNDADDENTROPY, rpi);
-	if (ret != 0) {
-		printf("RNDADDENTROPY IOCTL failed: with %d\n", errno);
-		ret = 1;
-		goto out;
+
+	/*
+	 * getent only returns data after all DRNGs are seeded, and new entropy
+	 * remains in the aux pool. Assume not more than 30 CPUs.
+	 *
+	 * TODO: replace 30 with the number of CPUs, may fail if more than
+	 * 30 CPUs are available.
+	 */
+	for (unsigned int i = 0; i < 30; i++) {
+		ret = ioctl(fd, RNDADDENTROPY, rpi);
+		if (ret != 0) {
+			printf("RNDADDENTROPY IOCTL failed: with %d\n", errno);
+			ret = 1;
+			goto out;
+		}
 	}
+
 	ret = ioctl(fd, RNDGETENTCNT, &ent_count_bits2);
 	if (ret != 0) {
 		printf("RNDGETENTCNT IOCTL failed: with %d\n", errno);

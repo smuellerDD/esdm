@@ -50,6 +50,22 @@ static int test_poll_write(const char *path)
 		return -ret;
 	}
 
+	/*
+	 * write poll only sleeps after all DRNGs are seeded, and new entropy
+	 * is in the aux pool.
+	 *
+	 * TODO: replace 30 with the number of CPUs, may fail if more than
+	 * 30 CPUs are available.
+	 */
+	for (unsigned int i = 0; i < 30; i++) {
+		/* Ensure we are fully seeded - no write poll should be needed */
+		ret = ioctl(fd, RNDADDTOENTCNT, &bits, sizeof(bits));
+		if (ret != 0) {
+			printf("RNDADDTOENTCNT IOCTL failed: with %d\n", errno);
+			ret = 1;
+			goto out;
+		}
+	}
 	/* Ensure we are fully seeded - no write poll should be needed */
 	ret = ioctl(fd, RNDADDTOENTCNT, &bits, sizeof(bits));
 	if (ret != 0) {

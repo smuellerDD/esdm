@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 {
 	uint64_t buf[512 / sizeof(uint64_t)];
 	uint64_t buf2;
-	uint64_t size;
+	uint64_t size = 0;
 	int ret;
 	ssize_t rc;
 

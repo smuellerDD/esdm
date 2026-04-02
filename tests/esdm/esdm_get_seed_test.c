@@ -101,6 +101,11 @@ int main(int argc, char *argv[])
 		if (rc != -EAGAIN)
 			break;
 	}
+
+	/*
+	 * Now that we guaranteed that all DRNGs are initialized, get the seed
+	 */
+	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
