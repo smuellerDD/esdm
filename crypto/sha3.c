@@ -253,7 +253,8 @@ static void cshake_256_init(struct esdm_hash_state *ctx)
 	ctx->padding = 0x04;
 }
 
-static inline void sha3_fill_state(struct esdm_hash_state *ctx, const uint8_t *in)
+static inline void sha3_fill_state(struct esdm_hash_state *ctx,
+				   const uint8_t *in)
 {
 	unsigned int i;
 

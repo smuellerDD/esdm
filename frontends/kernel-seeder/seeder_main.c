@@ -47,7 +47,8 @@
 
 static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
 static int notify_fd = -1; /* event fd used to notify in case of termination */
-static bool force_pr = false; /* force seeding kernel from pr instance of esdm */
+static bool force_pr =
+	false; /* force seeding kernel from pr instance of esdm */
 static bool had_one_sucessful_seed = false; /* used for ready notification */
 
 static int64_t parse_int64_arg(const char *str, const char *name)
@@ -73,7 +74,8 @@ static int64_t parse_int64_arg(const char *str, const char *name)
  */
 #define ESDM_SERVER_LINUX_ENTROPY_BYTES (2 * 32)
 
-static bool pr_mode() {
+static bool pr_mode()
+{
 #if defined(ESDM_AIS2031_NTG1_SEEDING_STRATEGY) || defined(ESDM_JENT_NTG1)
 	return true;
 #else
@@ -81,7 +83,8 @@ static bool pr_mode() {
 #endif
 }
 
-static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force_crng_reseed)
+static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi,
+					  bool force_crng_reseed)
 {
 	struct stat statfs;
 	unsigned long esdm_rpcs_linux_ioctl = RNDADDENTROPY;
@@ -171,11 +174,13 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi, bool force
 		errsv = ioctl(esdm_rpcs_linux_fd, esdm_rpcs_linux_ioctl);
 		if (errsv != 0) {
 			errsv = errno;
-			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
-					"Error during forced Linux kernel CRNG reseed: %s\n", strerror(errno));
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_SEEDER,
+				"Error during forced Linux kernel CRNG reseed: %s\n",
+				strerror(errno));
 		} else {
 			esdm_logger(LOGGER_DEBUG, LOGGER_C_SEEDER,
-					"Linux kernel CRNG forcefully reseeded\n");
+				    "Linux kernel CRNG forcefully reseeded\n");
 		}
 	}
 
@@ -191,9 +196,9 @@ static void usage(void)
 
 static int handle_reseeding(int64_t seeding_interval_secs)
 {
-	uint8_t rpi_buf[sizeof(struct rand_pool_info) +
-			ESDM_SERVER_LINUX_ENTROPY_BYTES]
-			__aligned(sizeof(uint32_t));
+	uint8_t rpi_buf
+		[sizeof(struct rand_pool_info) +
+		 ESDM_SERVER_LINUX_ENTROPY_BYTES] __aligned(sizeof(uint32_t));
 	struct rand_pool_info *rpi = (struct rand_pool_info *)rpi_buf;
 
 	struct timespec ts;
@@ -207,14 +212,10 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 	while (atomic_bool_read(&should_run)) {
 		if (pr_mode()) {
 			ret = esdm_rpcc_get_random_bytes_pr(
-				(uint8_t *)rpi->buf,
-				(size_t)rpi->buf_size
-			);
+				(uint8_t *)rpi->buf, (size_t)rpi->buf_size);
 		} else {
 			ret = esdm_rpcc_get_random_bytes_full(
-				(uint8_t *)rpi->buf,
-				(size_t)rpi->buf_size
-			);
+				(uint8_t *)rpi->buf, (size_t)rpi->buf_size);
 		}
 
 		if (ret < 0) {
@@ -234,7 +235,8 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 				 */
 				ret = esdm_rpcs_linux_insert_entropy(rpi, true);
 			} else {
-				ret = esdm_rpcs_linux_insert_entropy(rpi, false);
+				ret = esdm_rpcs_linux_insert_entropy(rpi,
+								     false);
 			}
 		}
 
@@ -255,13 +257,13 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 		ts.tv_sec = had_one_sucessful_seed ? seeding_interval_secs : 2;
 		ts.tv_nsec = 0;
 
-		pret = ppoll(&pfd, 1,&ts, NULL);
+		pret = ppoll(&pfd, 1, &ts, NULL);
 
 		/* error */
 		if (pret == -1 && errno != EINTR) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-					"ppoll returned with error %s\n",
-					strerror(errno));
+				    "ppoll returned with error %s\n",
+				    strerror(errno));
 			goto out;
 		}
 
@@ -272,7 +274,7 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 
 			/* make compiler happy */
 			read_ret = read(notify_fd, &event, sizeof(event));
-			(void) read_ret;
+			(void)read_ret;
 			fn_ret = EXIT_FAILURE;
 			goto out;
 		}
@@ -305,7 +307,7 @@ static void sig_term(int sig)
 
 		/* make compiler happy */
 		write_ret = write(notify_fd, &event_inc, sizeof(event_inc));
-		(void) write_ret;
+		(void)write_ret;
 	}
 }
 
@@ -336,12 +338,11 @@ int main(int argc, char **argv)
 
 	while (1) {
 		int opt_index = 0;
-		static struct option opts[] = { { "interval", 1, 0, 0 },
-						{ "help", 0, 0, 0 },
-						{ "verbosity", 0, 0, 0 },
-						{ "syslog", 0, 0, 0 },
-						{ "force-pr", 0, 0, 0 },
-						{ 0, 0, 0, 0 } };
+		static struct option opts[] = {
+			{ "interval", 1, 0, 0 },  { "help", 0, 0, 0 },
+			{ "verbosity", 0, 0, 0 }, { "syslog", 0, 0, 0 },
+			{ "force-pr", 0, 0, 0 },  { 0, 0, 0, 0 }
+		};
 		c = getopt_long(argc, argv, "i:hvsp", opts, &opt_index);
 		if (-1 == c)
 			break;
@@ -372,7 +373,8 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'i':
-			seeding_interval_secs = parse_int64_arg(optarg, "interval");
+			seeding_interval_secs =
+				parse_int64_arg(optarg, "interval");
 			break;
 		case 'h':
 			help = true;
@@ -410,8 +412,9 @@ int main(int argc, char **argv)
 	notify_fd = eventfd(0, EFD_CLOEXEC);
 	if (notify_fd < 0) {
 		esdm_logger_inc_verbosity();
-		esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
-			    "Unable to create event fd for termination notification!\n");
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_SEEDER,
+			"Unable to create event fd for termination notification!\n");
 		tool_ret = EXIT_FAILURE;
 		goto out;
 	}
@@ -428,8 +431,9 @@ int main(int argc, char **argv)
 		    "Start kernel (re-)seeding with %li s interval!\n",
 		    seeding_interval_secs);
 	if (pr_mode()) {
-		esdm_logger(LOGGER_STATUS, LOGGER_C_SEEDER,
-		    "Using prediction resistant mode to seed kernel!\n");
+		esdm_logger(
+			LOGGER_STATUS, LOGGER_C_SEEDER,
+			"Using prediction resistant mode to seed kernel!\n");
 	}
 
 	systemd_notify_status("Waiting for initial kernel seed operation");

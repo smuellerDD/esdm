@@ -70,8 +70,7 @@ struct esdm_drng {
 	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
 	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
 	.last_seeded = { 0 }, .fully_seeded = false, .force_reseed = true,     \
-	.initiated = false,                                                    \
-	.hash_lock = MUTEX_UNLOCKED
+	.initiated = false, .hash_lock = MUTEX_UNLOCKED
 
 struct esdm_drng *esdm_drng_init_instance(void);
 struct esdm_drng *esdm_drng_node_instance(void);

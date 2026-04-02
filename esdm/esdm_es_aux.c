@@ -350,7 +350,8 @@ static int esdm_aux_switch_hash_pool(struct esdm_pool *pool,
 	 * considered no issue and even good as we have some more
 	 * uncertainty here.
 	 */
-	CKINT(new_cb->hash_update(nhash_state, digest_state, sizeof(digest_state)));
+	CKINT(new_cb->hash_update(nhash_state, digest_state,
+				  sizeof(digest_state)));
 	CKINT(new_cb->hash_update(nhash_out, digest_out, sizeof(digest_out)));
 
 	/* Switch the hash state */
@@ -414,7 +415,8 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	if (inbuflen > (UINT32_MAX >> 3))
 		entropy_bits = min_uint32(entropy_bits, UINT32_MAX);
 	else
-		entropy_bits = min_uint32(entropy_bits, (uint32_t)(inbuflen << 3));
+		entropy_bits =
+			min_uint32(entropy_bits, (uint32_t)(inbuflen << 3));
 
 	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
@@ -500,9 +502,8 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 	 */
 	if (!entropy_bits) {
 		for (i = 0; i < ESDM_NUM_AUX_POOLS; ++i) {
-			CKINT(esdm_pool_insert_aux_unlocked(&esdm_pools[i],
-							    inbuf, inbuflen,
-							    entropy_bits));
+			CKINT(esdm_pool_insert_aux_unlocked(
+				&esdm_pools[i], inbuf, inbuflen, entropy_bits));
 		}
 
 		/*
@@ -553,9 +554,10 @@ int esdm_pool_insert_aux(const uint8_t *inbuf, size_t inbuflen,
 			break;
 	}
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-		    "Aux Pool %zu selected to insert %zu bytes of data with %u bits of entropy\n",
-		    pool_with_max_entropy_capacity, inbuflen, entropy_bits);
+	esdm_logger(
+		LOGGER_DEBUG, LOGGER_C_ES,
+		"Aux Pool %zu selected to insert %zu bytes of data with %u bits of entropy\n",
+		pool_with_max_entropy_capacity, inbuflen, entropy_bits);
 
 	/* Insert the buffer with the entropy into the selected entropy pool. */
 	CKINT(esdm_pool_insert_aux_unlocked(
@@ -658,13 +660,11 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 	 */
 	if (hash_cb->hash_final(shash, aux_state) ||
 	    hash_cb->hash_final(ohash, aux_output) ||
-	    hash_cb->hash_init(shash) ||
-	    hash_cb->hash_init(ohash) ||
+	    hash_cb->hash_init(shash) || hash_cb->hash_init(ohash) ||
 	    hash_cb->hash_update(shash, (uint8_t *)"STATE0", 6) ||
 	    hash_cb->hash_update(ohash, (uint8_t *)"OUTPUT", 6) ||
 	    hash_cb->hash_update(shash, aux_state, ESDM_MAX_DIGESTSIZE) ||
-	    hash_cb->hash_update(ohash, aux_state, ESDM_MAX_DIGESTSIZE)
-	) {
+	    hash_cb->hash_update(ohash, aux_state, ESDM_MAX_DIGESTSIZE)) {
 		returned_ent_bits = 0;
 	} else {
 		/*

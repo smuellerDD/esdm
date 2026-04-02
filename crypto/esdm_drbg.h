@@ -55,7 +55,7 @@ enum esdm_drbg_prefixes {
 };
 
 static inline void esdm_drbg_string_fill(struct esdm_drbg_string *string,
-				       const uint8_t *buf, size_t len)
+					 const uint8_t *buf, size_t len)
 {
 	string->buf = buf;
 	string->len = len;
@@ -97,7 +97,7 @@ struct esdm_drbg_state {
 	unsigned int seeded : 1;
 };
 
-#define _ESDM_DRBG_SET_CTX(name, seeder, generator, zeroer)                      \
+#define _ESDM_DRBG_SET_CTX(name, seeder, generator, zeroer)                    \
 	name->drbg_int_seed = seeder;                                          \
 	name->drbg_int_generate = generator;                                   \
 	name->drbg_int_zero = zeroer;                                          \
@@ -117,7 +117,7 @@ struct esdm_drbg_state {
  * @return 0 on success, negative error value otherwise
  */
 int esdm_drbg_seed(struct esdm_drbg_state *drbg, const uint8_t *seedbuf,
-		 size_t seedlen, const uint8_t *persbuf, size_t perslen);
+		   size_t seedlen, const uint8_t *persbuf, size_t perslen);
 
 /**
  * @brief DRBG generate function as required by SP800-90A - this function
@@ -134,8 +134,8 @@ int esdm_drbg_seed(struct esdm_drbg_state *drbg, const uint8_t *seedbuf,
  * @return generated number of bytes on success, negative error value otherwise
  */
 ssize_t esdm_drbg_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
-			 size_t buflen, const uint8_t *addtlbuf,
-			 size_t addtllen);
+			   size_t buflen, const uint8_t *addtlbuf,
+			   size_t addtllen);
 
 /**
  * @brief DRBG uninstantiate function as required by SP800-90A - this function

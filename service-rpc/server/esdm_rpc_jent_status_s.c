@@ -29,7 +29,8 @@
 
 void esdm_rpc_jent_status(UnprivAccess_Service *service,
 			  const JentStatusRequest *request,
-			  JentStatusResponse_Closure closure, void *closure_data)
+			  JentStatusResponse_Closure closure,
+			  void *closure_data)
 {
 	JentStatusResponse response = JENT_STATUS_RESPONSE__INIT;
 	char *status;

@@ -144,8 +144,8 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	 * the full message. Short reads will therefore not happen on the server
 	 * side.
 	 */
-	rpc_conn->fd =
-		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+	rpc_conn->fd = socket(addr.sun_family,
+			      SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
@@ -174,7 +174,8 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 			errsv = 0;
 		}
 	} while (attempts < (ESDM_CLIENT_RECONNECT_ATTEMPTS) &&
-		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR || errsv == EINPROGRESS));
+		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR ||
+		  errsv == EINPROGRESS));
 
 	if (errsv || attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -192,7 +193,8 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 					 const uint8_t *data, size_t len)
 {
-	static const int CLIENT_TX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
+	static const int CLIENT_TX_TIMEOUT_MS =
+		(1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	unsigned int retries = 0;
 	int pret = -1;
 	ssize_t ret;
@@ -204,7 +206,8 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 		retries++;
 		ret = write(rpc_conn->fd, data, len);
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			struct pollfd pfd = { .fd = rpc_conn->fd, .events = POLLOUT };
+			struct pollfd pfd = { .fd = rpc_conn->fd,
+					      .events = POLLOUT };
 
 			pret = poll(&pfd, 1, CLIENT_TX_TIMEOUT_MS);
 			/* data available before timeout? */
@@ -259,9 +262,10 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 	 * protocol violation, not a partial transfer to be retried.
 	 */
 	if (ret != (ssize_t)len) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Partial write on SEQPACKET socket: %zd of %zu bytes on fd %d\n",
-			    ret, len, rpc_conn->fd);
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_RPC,
+			"Partial write on SEQPACKET socket: %zd of %zu bytes on fd %d\n",
+			ret, len, rpc_conn->fd);
 		return -EIO;
 	}
 	esdm_logger(LOGGER_DEBUG2, LOGGER_C_ANY, "%zu bytes written\n", len);
@@ -331,7 +335,8 @@ out:
 	 * and clear data from ESDM in your application or patch
 	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	memset_secure(rpc_conn->buf, 0, message_length + ESDM_RPCC_BUF_WRITE_HEADER_SZ);
+	memset_secure(rpc_conn->buf, 0,
+		      message_length + ESDM_RPCC_BUF_WRITE_HEADER_SZ);
 	return ret;
 }
 
@@ -340,7 +345,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			     const ProtobufCMessageDescriptor *message_desc,
 			     ProtobufCClosure closure, void *closure_data)
 {
-	static const int CLIENT_RX_TIMEOUT_MS = (1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
+	static const int CLIENT_RX_TIMEOUT_MS =
+		(1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
 	ssize_t received;
@@ -364,12 +370,13 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * full message is submitted in one send operation. Therefore,
 		 * short-reads cannot occur here and can be ignored.
 		 */
-		received =
-			read(rpc_conn->fd, rpc_conn->buf, sizeof(rpc_conn->buf));
+		received = read(rpc_conn->fd, rpc_conn->buf,
+				sizeof(rpc_conn->buf));
 
 		pret = 0;
 		if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			struct pollfd pfd = { .fd = rpc_conn->fd, .events = POLLIN };
+			struct pollfd pfd = { .fd = rpc_conn->fd,
+					      .events = POLLIN };
 
 			pret = poll(&pfd, 1, CLIENT_RX_TIMEOUT_MS);
 			/* data available before timeout? */
@@ -410,8 +417,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 		/* Convert incoming data to LE */
 		header->status_code = le_bswap32(header->status_code);
-		header->message_length =
-			le_bswap32(header->message_length);
+		header->message_length = le_bswap32(header->message_length);
 		header->method_index = le_bswap32(header->method_index);
 		header->request_id = le_bswap32(header->request_id);
 
@@ -431,7 +437,9 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			break;
 		}
 
-		if (received < (ssize_t)(sizeof(struct esdm_rpc_proto_sc_header) + header->message_length)) {
+		if (received <
+		    (ssize_t)(sizeof(struct esdm_rpc_proto_sc_header) +
+			      header->message_length)) {
 			ret = -EPROTO;
 			break;
 		}
@@ -444,13 +452,13 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * as much data as the header defined. We also start the
 		 * processing of data which returns it to the caller.
 		 */
-		ProtobufCMessage *msg = protobuf_c_message_unpack(
-			message_desc, NULL,
-			header->message_length, received_data->data);
+		ProtobufCMessage *msg =
+			protobuf_c_message_unpack(message_desc, NULL,
+						  header->message_length,
+						  received_data->data);
 		if (msg) {
 			closure(msg, closure_data);
-			protobuf_c_message_free_unpacked(
-				msg, NULL);
+			protobuf_c_message_free_unpacked(msg, NULL);
 			esdm_logger(
 				LOGGER_DEBUG, LOGGER_C_RPC,
 				"Data with length %u send to client closure handler\n",

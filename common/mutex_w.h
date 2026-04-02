@@ -95,7 +95,8 @@ static inline int mutex_w_init(mutex_w_t *mutex, int locked, int robust)
 	mutex->ma_used = 1;
 
 	if (robust) {
-		CKINT(pthread_mutexattr_setrobust(&mutex->ma, PTHREAD_MUTEX_ROBUST));
+		CKINT(pthread_mutexattr_setrobust(&mutex->ma,
+						  PTHREAD_MUTEX_ROBUST));
 		mutex->robust = 1;
 	}
 
@@ -145,7 +146,8 @@ extern int pthread_mutex_clocklock(pthread_mutex_t *mutex, clockid_t clockid,
 static inline int mutex_w_timedlock(mutex_w_t *mutex,
 				    const struct timespec *abstime)
 {
-	int ret = pthread_mutex_clocklock(&mutex->lock, CLOCK_MONOTONIC, abstime);
+	int ret =
+		pthread_mutex_clocklock(&mutex->lock, CLOCK_MONOTONIC, abstime);
 	assert(ret == 0 || ret == ETIMEDOUT);
 	(void)ret;
 	return ret;

@@ -47,11 +47,11 @@ struct thread_wait_queue {
 #define thread_wait_no_event(queue)                                            \
 	do {                                                                   \
 		int __mret __attribute__((unused));                            \
-		                                                               \
+                                                                               \
 		__mret = pthread_mutex_lock(&(queue)->thread_wait_lock);       \
 		assert(__mret == 0);                                           \
 		__mret = pthread_cond_wait(&(queue)->thread_wait_cv,           \
-				  &(queue)->thread_wait_lock);                 \
+					   &(queue)->thread_wait_lock);        \
 		assert(__mret == 0);                                           \
 		__mret = pthread_mutex_unlock(&(queue)->thread_wait_lock);     \
 		assert(__mret == 0);                                           \
@@ -112,7 +112,7 @@ static inline bool thread_queue_sleeper(struct thread_wait_queue *queue)
 
 #define thread_wake_all(queue)                                                 \
 	do {                                                                   \
-		int __cret __attribute__((unused));                                                    \
+		int __cret __attribute__((unused));                            \
 		__cret = pthread_cond_broadcast(&(queue)->thread_wait_cv);     \
 		assert(__cret == 0);                                           \
 	} while (0);

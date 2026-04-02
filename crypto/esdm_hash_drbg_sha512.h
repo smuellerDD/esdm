@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#if defined(ESDM_DRBG_HASH_STATELEN) || defined(ESDM_DRBG_HASH_BLOCKLEN) ||        \
+#if defined(ESDM_DRBG_HASH_STATELEN) || defined(ESDM_DRBG_HASH_BLOCKLEN) ||    \
 	defined(ESDM_DRBG_HASH_CORE)
 #error "You have included more than one DRBG header file!"
 #endif

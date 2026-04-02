@@ -74,14 +74,14 @@ static bool esdm_time_after(struct timespec *curr, struct timespec *timeout)
 	return false;
 }
 
-static int int_connection_after_timeout(void* time)
+static int int_connection_after_timeout(void *time)
 {
-    struct timespec *timeout = (struct timespec *) time;
-    struct timespec cur_time;
+	struct timespec *timeout = (struct timespec *)time;
+	struct timespec cur_time;
 
-    clock_gettime(CLOCK_MONOTONIC, &cur_time);
+	clock_gettime(CLOCK_MONOTONIC, &cur_time);
 
-    return esdm_time_after(&cur_time, timeout);
+	return esdm_time_after(&cur_time, timeout);
 }
 
 DSO_PUBLIC
@@ -89,8 +89,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 						    struct timespec *ts,
 						    void *int_data)
 {
-	GetRandomBytesFullRequest msg =
-		GET_RANDOM_BYTES_FULL_REQUEST__INIT;
+	GetRandomBytesFullRequest msg = GET_RANDOM_BYTES_FULL_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_random_bytes_full_timeout_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
