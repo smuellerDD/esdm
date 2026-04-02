@@ -136,16 +136,8 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 		if (buffer.ret < -255) {
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
-		} else if (buffer.ret == -EAGAIN || buffer.ret == -ETIMEDOUT) {
+		} else if (buffer.ret == -EAGAIN) {
 			struct timespec curr;
-
-			CKINT(clock_gettime(CLOCK_MONOTONIC, &curr));
-
-			/* Terminate the endless loop if the timeout hits */
-			if (esdm_time_after(&curr, &timeout)) {
-				ret = -ETIMEDOUT;
-				break;
-			}
 
 			nanosleep(&esdm_client_poll_ts, NULL);
 			continue;
