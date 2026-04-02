@@ -99,24 +99,22 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 
 	CKNULL(ts, -EINVAL);
 
-	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
-
-	/* register default timeout handler if no one is already set */
-	if (int_data == NULL) {
-		old_interrupt_func = rpc_conn->interrupt_func;
-		rpc_conn->interrupt_func = &int_connection_after_timeout;
-		int_data = ts;
-		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
-	} else {
-		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
-	}
-
 	CKINT(clock_gettime(CLOCK_MONOTONIC, &timeout));
 	timeout.tv_sec += ts->tv_sec;
 	timeout.tv_nsec += ts->tv_nsec;
 	if (timeout.tv_nsec > 1000000000) {
 		timeout.tv_sec += timeout.tv_nsec / 1000000000;
 		timeout.tv_nsec = timeout.tv_nsec % 1000000000;
+	}
+
+	/* register default timeout handler if no one is already set */
+	if (int_data == NULL) {
+		int_data = &timeout;
+		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
+		old_interrupt_func = rpc_conn->interrupt_func;
+		rpc_conn->interrupt_func = int_connection_after_timeout;
+	} else {
+		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 	}
 
 	while (buflen) {
