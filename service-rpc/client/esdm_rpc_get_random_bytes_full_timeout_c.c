@@ -38,7 +38,7 @@ struct esdm_get_random_bytes_full_timeout_buf {
 };
 
 static void esdm_rpcc_get_random_bytes_full_timeout_cb(
-	const GetRandomBytesFullTimeoutResponse *response, void *closure_data)
+	const GetRandomBytesFullResponse *response, void *closure_data)
 {
 	struct esdm_get_random_bytes_full_timeout_buf *buffer =
 		(struct esdm_get_random_bytes_full_timeout_buf *)closure_data;
@@ -89,8 +89,8 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 						    struct timespec *ts,
 						    void *int_data)
 {
-	GetRandomBytesFullTimeoutRequest msg =
-		GET_RANDOM_BYTES_FULL_TIMEOUT_REQUEST__INIT;
+	GetRandomBytesFullRequest msg =
+		GET_RANDOM_BYTES_FULL_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_random_bytes_full_timeout_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
@@ -128,10 +128,8 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 		/* only perform short waits in server,
 		 * as they are blocking termination */
 		msg.len = min_size(maxbuflen, buflen);
-		msg.tv_sec = 0;
-		msg.tv_nsec = min_uint32(10000000, (uint32_t)ts->tv_nsec);
 
-		unpriv_access__rpc_get_random_bytes_full_timeout(
+		unpriv_access__rpc_get_random_bytes_full(
 			&rpc_conn->service, &msg,
 			esdm_rpcc_get_random_bytes_full_timeout_cb, &buffer);
 
