@@ -412,7 +412,7 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 	clock_gettime(CLOCK_MONOTONIC, &before);
 
 	ssize_t ret = 0;
-	for (size_t i = 0; i < num_iterations; ++i) {
+	for (size_t i = 0; i < num_iterations;) {
 		if (pr) {
 			esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer,
 								  buffer_size));
@@ -426,6 +426,8 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 			free(buffer);
 			buffer = NULL;
 			return EXIT_FAILURE;
+		} else {
+			++i;
 		}
 	}
 
