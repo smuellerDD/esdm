@@ -176,7 +176,8 @@ static void handle_jent_status(void)
 	char status_buffer[ESDM_RPC_MAX_DATA];
 	memset(&status_buffer[0], 0, ESDM_RPC_MAX_DATA);
 	int ret;
-	esdm_invoke(esdm_rpcc_jent_status(&status_buffer[0], ESDM_RPC_MAX_DATA));
+	esdm_invoke(
+		esdm_rpcc_jent_status(&status_buffer[0], ESDM_RPC_MAX_DATA));
 	if (ret != 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Fetching ESDM jitterentropy status failed!\n");
@@ -421,8 +422,9 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 				buffer, buffer_size));
 		}
 		if (ret != (ssize_t)buffer_size) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-				    "Failed to get bytes from ESDM, exiting!\n");
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_TOOL,
+				"Failed to get bytes from ESDM, exiting!\n");
 			free(buffer);
 			buffer = NULL;
 			return EXIT_FAILURE;
@@ -621,14 +623,16 @@ static int handle_stress_fork(void)
 		for (i = 0; i < 200; ++i) {
 			esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer,
 								    buf_len));
-			if (ret == -EINTR || ret == -EPROTO || ret == -ECONNRESET || ret == -ETIMEDOUT)
+			if (ret == -EINTR || ret == -EPROTO ||
+			    ret == -ECONNRESET || ret == -ETIMEDOUT)
 				continue;
 
-			if ((size_t) ret != buf_len) {
-				printf("error in fork test: %s\n", strerror((int)-ret));
+			if ((size_t)ret != buf_len) {
+				printf("error in fork test: %s\n",
+				       strerror((int)-ret));
 			}
 
-			assert((size_t) ret == buf_len);
+			assert((size_t)ret == buf_len);
 		}
 		/* don't care. Just check in all processes involved, that we can get random bytes */
 		pid_t p = fork();
@@ -965,11 +969,14 @@ int main(int argc, char **argv)
 				/* get-random */
 				get_random = true;
 				{
-					long val = parse_long_arg(optarg, "bytes");
+					long val =
+						parse_long_arg(optarg, "bytes");
 
 					if (val < 0) {
-						esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-							    "bytes must be non-negative\n");
+						esdm_logger(
+							LOGGER_ERR,
+							LOGGER_C_TOOL,
+							"bytes must be non-negative\n");
 						exit(EXIT_FAILURE);
 					}
 					num_rand_bytes = (size_t)val;
@@ -986,7 +993,8 @@ int main(int argc, char **argv)
 			case 6:
 				/* wait-until-seeded */
 				wait_until_seeded = true;
-				seed_test_tries = parse_long_arg(optarg, "seed tries");
+				seed_test_tries =
+					parse_long_arg(optarg, "seed tries");
 				break;
 			case 7:
 				/* write-to-aux-pool */
@@ -1003,11 +1011,15 @@ int main(int argc, char **argv)
 			case 8:
 				/* write-entropy-bits */
 				{
-					long val = parse_long_arg(optarg, "entropy bits");
+					long val = parse_long_arg(
+						optarg, "entropy bits");
 
-					if (val < 0 || (unsigned long)val > UINT32_MAX) {
-						esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-							    "entropy bits out of range\n");
+					if (val < 0 ||
+					    (unsigned long)val > UINT32_MAX) {
+						esdm_logger(
+							LOGGER_ERR,
+							LOGGER_C_TOOL,
+							"entropy bits out of range\n");
 						exit(EXIT_FAILURE);
 					}
 					write_entropy_bits = (uint32_t)val;
@@ -1031,8 +1043,8 @@ int main(int argc, char **argv)
 				break;
 			case 13:
 				/* stress-duration */
-				stress_duration_sec = parse_long_arg(optarg,
-								     "stress-duration");
+				stress_duration_sec = parse_long_arg(
+					optarg, "stress-duration");
 				break;
 			case 14:
 				/* clear-pool */
@@ -1064,8 +1076,8 @@ int main(int argc, char **argv)
 				break;
 			case 21:
 				/* reseed-delay-ms */
-				reseed_delay_ms = parse_long_arg(optarg,
-								 "reseed-delay-ms");
+				reseed_delay_ms = parse_long_arg(
+					optarg, "reseed-delay-ms");
 				break;
 			case 22:
 				/* seed-via-os */
@@ -1073,8 +1085,8 @@ int main(int argc, char **argv)
 				break;
 			case 23:
 				/* timeout-msec */
-				timeout_msec = parse_long_arg(optarg,
-							     "timeout-msec");
+				timeout_msec =
+					parse_long_arg(optarg, "timeout-msec");
 				getrandom_mode = RAND_MODE_FULL_TIMEOUT;
 				break;
 			case 24:
@@ -1105,12 +1117,15 @@ int main(int argc, char **argv)
 			case 30:
 				/* stress-request-size */
 				{
-					long val = parse_long_arg(optarg,
-								 "stress-request-size");
+					long val = parse_long_arg(
+						optarg, "stress-request-size");
 
-					if (val < 0 || (unsigned long)val > UINT32_MAX) {
-						esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-							    "stress-request-size out of range\n");
+					if (val < 0 ||
+					    (unsigned long)val > UINT32_MAX) {
+						esdm_logger(
+							LOGGER_ERR,
+							LOGGER_C_TOOL,
+							"stress-request-size out of range\n");
 						exit(EXIT_FAILURE);
 					}
 					stress_request_size = (uint32_t)val;
@@ -1157,8 +1172,9 @@ int main(int argc, char **argv)
 				long val = parse_long_arg(optarg, "bytes");
 
 				if (val < 0) {
-					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-						    "bytes must be non-negative\n");
+					esdm_logger(
+						LOGGER_ERR, LOGGER_C_TOOL,
+						"bytes must be non-negative\n");
 					exit(EXIT_FAILURE);
 				}
 				num_rand_bytes = (size_t)val;
@@ -1185,18 +1201,16 @@ int main(int argc, char **argv)
 				exit(EXIT_FAILURE);
 			}
 			break;
-		case 'B':
-			{
-				long val = parse_long_arg(optarg, "entropy bits");
+		case 'B': {
+			long val = parse_long_arg(optarg, "entropy bits");
 
-				if (val < 0 || (unsigned long)val > UINT32_MAX) {
-					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-						    "entropy bits out of range\n");
-					exit(EXIT_FAILURE);
-				}
-				write_entropy_bits = (uint32_t)val;
+			if (val < 0 || (unsigned long)val > UINT32_MAX) {
+				esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+					    "entropy bits out of range\n");
+				exit(EXIT_FAILURE);
 			}
-			break;
+			write_entropy_bits = (uint32_t)val;
+		} break;
 		case 'b':
 			benchmark = true;
 			break;
@@ -1235,8 +1249,9 @@ int main(int argc, char **argv)
 		esdm_logger_enable_syslog("esdm-tool");
 
 	/* check for privileged commands */
-	if (geteuid() && (write_to_aux_pool || clear_pool || reseed_crng ||
-			  reseed_via_os || seed_via_os || endless_stress || cleanup_server)) {
+	if (geteuid() &&
+	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os ||
+	     seed_via_os || endless_stress || cleanup_server)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -1256,18 +1271,20 @@ int main(int argc, char **argv)
 #ifdef ESDM_FIPS140
 	} else if (fips_target_file && fips_check_file) {
 		if (fips_create_checkfile(fips_check_file, fips_target_file)) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_TOOL,
 				"failed to create FIPS check file \"%s\" for \"%s\". Already existing?\n",
 				fips_check_file, fips_target_file);
 			return_val = EXIT_FAILURE;
 		}
 #else
 	} else if (fips_target_file && fips_check_file) {
-		(void) fips_check_file;
-		(void) fips_target_file;
-		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-			    "failed to create FIPS check file \"%s\" for \"%s\". FIPS disabled.\n",
-			    fips_check_file, fips_target_file);
+		(void)fips_check_file;
+		(void)fips_target_file;
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_TOOL,
+			"failed to create FIPS check file \"%s\" for \"%s\". FIPS disabled.\n",
+			fips_check_file, fips_target_file);
 		return_val = EXIT_FAILURE;
 #endif
 	} else if (status) {

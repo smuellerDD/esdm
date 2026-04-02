@@ -92,7 +92,7 @@ int linux_isolate_namespace(void)
 int linux_personalization_string(char **ptr, size_t *length)
 {
 	FILE *f = fopen("/sys/class/dmi/id/product_uuid", "r");
-	char buf[128] = {0};
+	char buf[128] = { 0 };
 	int ret;
 
 	assert(*ptr == NULL);

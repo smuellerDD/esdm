@@ -73,7 +73,8 @@ uint64_t xoshiro_generate(struct xoshiro_state *state)
 {
 	assert(state != NULL);
 
-	const uint64_t result = rol64(state->s[0] + state->s[3], 23) + state->s[0];
+	const uint64_t result =
+		rol64(state->s[0] + state->s[3], 23) + state->s[0];
 
 	const uint64_t t = state->s[1] << 17;
 

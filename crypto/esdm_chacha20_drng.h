@@ -33,14 +33,15 @@ struct esdm_chacha20_drng_ctx {
 };
 
 #define ESDM_CC20_DRNG_STATE_SIZE (ESDM_SYM_STATE_SIZE(esdm_chacha20))
-#define ESDM_CC20_DRNG_CTX_SIZE                                                  \
+#define ESDM_CC20_DRNG_CTX_SIZE                                                \
 	(ESDM_CC20_DRNG_STATE_SIZE + sizeof(struct esdm_chacha20_drng_ctx))
 
-#define _ESDM_CC20_DRNG_SET_CTX(name, ctx, offset)                               \
+#define _ESDM_CC20_DRNG_SET_CTX(name, ctx, offset)                             \
 	_ESDM_SYM_SET_CTX((&name->cc20), esdm_chacha20, ctx, offset)
 
-#define ESDM_CC20_DRNG_SET_CTX(name)                                             \
-	_ESDM_CC20_DRNG_SET_CTX(name, name, sizeof(struct esdm_chacha20_drng_ctx))
+#define ESDM_CC20_DRNG_SET_CTX(name)                                           \
+	_ESDM_CC20_DRNG_SET_CTX(name, name,                                    \
+				sizeof(struct esdm_chacha20_drng_ctx))
 
 /**
  * @brief Zeroize Hash context allocated with either ESDM_HASH_CTX_ON_STACK or
@@ -52,7 +53,8 @@ static inline void esdm_cc20_drng_zero(struct esdm_chacha20_drng_ctx *cc20_ctx)
 {
 	struct esdm_sym_ctx *sym_ctx = &cc20_ctx->cc20;
 
-	memset_secure((uint8_t *)cc20_ctx + sizeof(struct esdm_chacha20_drng_ctx),
+	memset_secure((uint8_t *)cc20_ctx +
+			      sizeof(struct esdm_chacha20_drng_ctx),
 		      0, ESDM_CC20_DRNG_STATE_SIZE);
 	esdm_sym_init(sym_ctx);
 }
@@ -62,12 +64,12 @@ static inline void esdm_cc20_drng_zero(struct esdm_chacha20_drng_ctx *cc20_ctx)
  *
  * @param [in] name Name of the stack variable
  */
-#define ESDM_CC20_DRNG_CTX_ON_STACK(name)                                        \
-	ESDM_ALIGNED_SYM_BUFFER(name##_ctx_buf, esdm_chacha20,                     \
-			      ESDM_CC20_DRNG_CTX_SIZE, uint64_t);                \
-	struct esdm_chacha20_drng_ctx *name =                                    \
-		(struct esdm_chacha20_drng_ctx *)name##_ctx_buf;                 \
-	ESDM_CC20_DRNG_SET_CTX(name);                                            \
+#define ESDM_CC20_DRNG_CTX_ON_STACK(name)                                      \
+	ESDM_ALIGNED_SYM_BUFFER(name##_ctx_buf, esdm_chacha20,                 \
+				ESDM_CC20_DRNG_CTX_SIZE, uint64_t);            \
+	struct esdm_chacha20_drng_ctx *name =                                  \
+		(struct esdm_chacha20_drng_ctx *)name##_ctx_buf;               \
+	ESDM_CC20_DRNG_SET_CTX(name);                                          \
 	esdm_cc20_drng_zero(name)
 
 /**
@@ -118,7 +120,7 @@ void esdm_cc20_drng_zero_free(struct esdm_chacha20_drng_ctx *cc20_ctx);
  * @return 0 upon success; < 0 on error
  */
 void esdm_cc20_drng_generate(struct esdm_chacha20_drng_ctx *cc20_ctx,
-			   uint8_t *outbuf, size_t outbuflen);
+			     uint8_t *outbuf, size_t outbuflen);
 
 /**
  * @brief Reseed the ChaCha20 DRNG
@@ -134,7 +136,7 @@ void esdm_cc20_drng_generate(struct esdm_chacha20_drng_ctx *cc20_ctx,
  * @return 0 upon succes; < 0 on error
  */
 void esdm_cc20_drng_seed(struct esdm_chacha20_drng_ctx *cc20_ctx,
-		       const uint8_t *inbuf, size_t inbuflen);
+			 const uint8_t *inbuf, size_t inbuflen);
 
 #ifdef __cplusplus
 }

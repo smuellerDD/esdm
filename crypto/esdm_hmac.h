@@ -44,19 +44,20 @@ struct esdm_hmac_ctx {
 	struct esdm_hash_ctx hash_ctx;
 };
 
-#define ESDM_HMAC_STATE_SIZE(x)                                                  \
+#define ESDM_HMAC_STATE_SIZE(x)                                                \
 	(ESDM_HASH_STATE_SIZE(x) + 2 * ESDM_SHA_MAX_SIZE_BLOCK)
-#define ESDM_HMAC_CTX_SIZE(x) (ESDM_HMAC_STATE_SIZE(x) + sizeof(struct esdm_hmac_ctx))
+#define ESDM_HMAC_CTX_SIZE(x)                                                  \
+	(ESDM_HMAC_STATE_SIZE(x) + sizeof(struct esdm_hmac_ctx))
 
-#define _ESDM_HMAC_SET_CTX(name, hashname, ctx, offset)                          \
-	_ESDM_HASH_SET_CTX((&name->hash_ctx), hashname, ctx, offset);            \
+#define _ESDM_HMAC_SET_CTX(name, hashname, ctx, offset)                        \
+	_ESDM_HASH_SET_CTX((&name->hash_ctx), hashname, ctx, offset);          \
 	name->k_opad = (uint8_t *)((uint8_t *)ctx + offset +                   \
-				   ESDM_HASH_STATE_SIZE(hashname));              \
+				   ESDM_HASH_STATE_SIZE(hashname));            \
 	name->k_ipad = (uint8_t *)((uint8_t *)ctx + offset +                   \
-				   ESDM_HASH_STATE_SIZE(hashname) +              \
+				   ESDM_HASH_STATE_SIZE(hashname) +            \
 				   ESDM_SHA_MAX_SIZE_BLOCK)
 
-#define ESDM_HMAC_SET_CTX(name, hashname)                                        \
+#define ESDM_HMAC_SET_CTX(name, hashname)                                      \
 	_ESDM_HMAC_SET_CTX(name, hashname, name, sizeof(struct esdm_hmac_ctx))
 
 /**
@@ -71,7 +72,7 @@ struct esdm_hmac_ctx {
  * using HMAC_CTX_ON_STACK or by using hmac_alloc.
  */
 void esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
-		  size_t keylen);
+		    size_t keylen);
 
 /**
  * @brief Re-initialize HMAC context after a hmac_final operation
@@ -93,7 +94,7 @@ void esdm_hmac_reinit(struct esdm_hmac_ctx *hmac_ctx);
  * @param [in] inlen Length of the input buffer
  */
 void esdm_hmac_update(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *in,
-		    size_t inlen);
+		      size_t inlen);
 
 /**
  * @brief Calculate HMAC mac
@@ -117,7 +118,8 @@ void esdm_hmac_final(struct esdm_hmac_ctx *hmac_ctx, uint8_t *mac);
  *
  * @return 0 on success, < 0 on error
  */
-int esdm_hmac_alloc(const struct esdm_hash *hash, struct esdm_hmac_ctx **hmac_ctx);
+int esdm_hmac_alloc(const struct esdm_hash *hash,
+		    struct esdm_hmac_ctx **hmac_ctx);
 
 /**
  * @brief Zeroize and free HMAC context
@@ -148,11 +150,11 @@ static inline void esdm_hmac_zero(struct esdm_hmac_ctx *hmac_ctx)
  * @param [in] hashname Pointer of type struct hash referencing the hash
  *			 implementation to be used
  */
-#define ESDM_HMAC_CTX_ON_STACK(name, hashname)                                   \
-	ESDM_ALIGNED_BUFFER(name##_ctx_buf, ESDM_HMAC_CTX_SIZE(hashname),          \
-			  uint64_t);                                           \
-	struct esdm_hmac_ctx *name = (struct esdm_hmac_ctx *)name##_ctx_buf;       \
-	ESDM_HMAC_SET_CTX(name, hashname);                                       \
+#define ESDM_HMAC_CTX_ON_STACK(name, hashname)                                 \
+	ESDM_ALIGNED_BUFFER(name##_ctx_buf, ESDM_HMAC_CTX_SIZE(hashname),      \
+			    uint64_t);                                         \
+	struct esdm_hmac_ctx *name = (struct esdm_hmac_ctx *)name##_ctx_buf;   \
+	ESDM_HMAC_SET_CTX(name, hashname);                                     \
 	esdm_hmac_zero(name)
 
 /**
@@ -183,8 +185,8 @@ static inline size_t esdm_hmac_macsize(struct esdm_hmac_ctx *hmac_ctx)
  * The HMAC calculation operates entirely on the stack.
  */
 static inline void esdm_hmac(const struct esdm_hash *hash, const uint8_t *key,
-			   size_t keylen, const uint8_t *in, size_t inlen,
-			   uint8_t *mac)
+			     size_t keylen, const uint8_t *in, size_t inlen,
+			     uint8_t *mac)
 {
 	ESDM_HMAC_CTX_ON_STACK(hmac_ctx, hash);
 

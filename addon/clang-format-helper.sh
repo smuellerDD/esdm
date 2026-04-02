@@ -9,6 +9,8 @@
 # Make sure the file is provided with the exact string as the find command below
 # will report it!
 EXCLUDE="./internal/api/assembler_support.h"
+EXCLUDE="$EXCLUDE $(find ./ -name *.pb-c.c)"
+EXCLUDE="$EXCLUDE $(find ./ -name *.pb-c.h)"
 
 # Clang-format tool
 CLANGFORMAT="clang-format"

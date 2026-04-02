@@ -44,8 +44,7 @@ MODULE_PARM_DESC(
 #endif
 
 /* Per-CPU array holding concatenated IRQ entropy events */
-static DEFINE_PER_CPU(u64 *, esdm_irq_array)
-	__aligned(ESDM_KCAPI_ALIGN);
+static DEFINE_PER_CPU(u64 *, esdm_irq_array) __aligned(ESDM_KCAPI_ALIGN);
 /* prev. timestamp for delta calculation */
 static DEFINE_PER_CPU(u64, esdm_irq_last_timestamp) = 0;
 /* ring buffer read ptr */
@@ -135,7 +134,8 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 	}
 
 	if (esdm_sp80090c_compliant()) {
-		return esdm_reduce_by_osr(esdm_data_to_entropy(events, esdm_irq_entropy_bits));
+		return esdm_reduce_by_osr(
+			esdm_data_to_entropy(events, esdm_irq_entropy_bits));
 	} else {
 		return esdm_data_to_entropy(events, esdm_irq_entropy_bits);
 	}
@@ -166,11 +166,13 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 	 * bytes with DRBG, if advised by partial_len */
 	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
 	if (!esdm_drbg_cb->drbg_is_initialized(esdm_irq_drbg_state)) {
-		requested_events = esdm_entropy_to_data(
-		requested_bits + esdm_init_osr(), esdm_irq_entropy_bits);
+		requested_events =
+			esdm_entropy_to_data(requested_bits + esdm_init_osr(),
+					     esdm_irq_entropy_bits);
 	} else {
 		requested_events = esdm_entropy_to_data(
-		requested_bits + esdm_compress_osr(), esdm_irq_entropy_bits);
+			requested_bits + esdm_compress_osr(),
+			esdm_irq_entropy_bits);
 	}
 
 	for_each_online_cpu (cpu) {
@@ -220,10 +222,11 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 			list_add_tail(&seed_string_0->list, &seedlist);
 
 			if (used_at_end < used_events) {
-				drbg_string_fill(
-					seed_string_1,
-					(u8 *)*per_cpu_ptr(&esdm_irq_array, cpu),
-					(used_events - used_at_end) * sizeof(u64));
+				drbg_string_fill(seed_string_1,
+						 (u8 *)*per_cpu_ptr(
+							 &esdm_irq_array, cpu),
+						 (used_events - used_at_end) *
+							 sizeof(u64));
 				list_add_tail(&seed_string_1->list, &seedlist);
 			}
 		}
@@ -305,7 +308,8 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 {
 	const u32 esdm_security_strength =
 		esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
-	const u32 full_blocks = esdm_full_blocks(requested_bits, esdm_security_strength);
+	const u32 full_blocks =
+		esdm_full_blocks(requested_bits, esdm_security_strength);
 	u32 done;
 
 	/* only set entropy, when generate was successful */
@@ -321,7 +325,9 @@ static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 	 * default case (no initialize with additional 64 Bit) is already counted in esdm_irq_avail_entropy()
 	 * add additional 64 bit in order to match 128 extra bit on full init
 	 */
-	if (esdm_irq_avail_entropy(0) < full_blocks * esdm_security_strength + full_blocks * esdm_compress_osr()) {
+	if (esdm_irq_avail_entropy(0) <
+	    full_blocks * esdm_security_strength +
+		    full_blocks * esdm_compress_osr()) {
 		return;
 	}
 
@@ -488,9 +494,11 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 		goto err;
 	}
 
-	for_each_possible_cpu (cpu) {
-		u64** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
-		*irq_array_cpu = kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u64), GFP_KERNEL);
+	for_each_possible_cpu(cpu)
+	{
+		u64 **irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
+		*irq_array_cpu =
+			kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u64), GFP_KERNEL);
 		if (!(*irq_array_cpu))
 			goto free_arrays;
 	}
@@ -506,8 +514,9 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	return;
 
 free_arrays:
-	for_each_possible_cpu (cpu) {
-		u64** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
+	for_each_possible_cpu(cpu)
+	{
+		u64 **irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
 		kfree_sensitive(*irq_array_cpu);
 		*irq_array_cpu = NULL;
 	}
@@ -572,8 +581,9 @@ void esdm_es_irq_module_exit(void)
 
 	esdm_irq_reset();
 
-	for_each_possible_cpu (cpu) {
-		u64** irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
+	for_each_possible_cpu(cpu)
+	{
+		u64 **irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
 		kfree_sensitive(*irq_array_cpu);
 		*irq_array_cpu = NULL;
 	}

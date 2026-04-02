@@ -331,8 +331,7 @@ static struct esdm_testing esdm_irq_perf = {
 
 bool esdm_irq_perf_time(u64 start)
 {
-	return esdm_testing_store(&esdm_irq_perf,
-				  random_get_entropy() - start,
+	return esdm_testing_store(&esdm_irq_perf, random_get_entropy() - start,
 				  &boot_irq_perf);
 }
 
@@ -343,7 +342,7 @@ static int esdm_irq_perf_reader(u8 *outbuf, u32 outbuflen)
 }
 
 static ssize_t esdm_irq_perf_read(struct file *file, char __user *to,
-				    size_t count, loff_t *ppos)
+				  size_t count, loff_t *ppos)
 {
 	return esdm_testing_extract_user(file, to, count, ppos,
 					 esdm_irq_perf_reader);

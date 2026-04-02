@@ -138,8 +138,7 @@ esdm_rand_reseed(void *ctx __unused, int prediction_resistance __unused,
 
 static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
 			      unsigned int strength __unused,
-			      size_t min_noncelen,
-			      size_t max_noncelen __unused)
+			      size_t min_noncelen, size_t max_noncelen __unused)
 {
 	ssize_t ret;
 

@@ -87,7 +87,9 @@ static inline u32 esdm_init_osr(void)
 	 * adjusted by 1 bit too reach full entropy in internal state after HMAC
 	 * update
 	 */
-	return esdm_sp80090c_compliant() ? (ESDM_SEED_BUFFER_INIT_ADD_BITS + 1) : 0;
+	return esdm_sp80090c_compliant() ?
+		       (ESDM_SEED_BUFFER_INIT_ADD_BITS + 1) :
+		       0;
 }
 
 static inline u32 esdm_reduce_by_osr(u32 entropy_bits)

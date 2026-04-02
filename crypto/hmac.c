@@ -35,12 +35,13 @@ void esdm_hmac_reinit(struct esdm_hmac_ctx *hmac_ctx)
 	struct esdm_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
 
 	esdm_hash_init(hash_ctx);
-	esdm_hash_update(hash_ctx, hmac_ctx->k_ipad, esdm_hash_blocksize(hash_ctx));
+	esdm_hash_update(hash_ctx, hmac_ctx->k_ipad,
+			 esdm_hash_blocksize(hash_ctx));
 }
 
 DSO_PUBLIC
 void esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
-		  size_t keylen)
+		    size_t keylen)
 {
 	struct esdm_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
 	const struct esdm_hash *hash = hash_ctx->hash;
@@ -79,7 +80,7 @@ void esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
 
 DSO_PUBLIC
 void esdm_hmac_update(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *in,
-		    size_t inlen)
+		      size_t inlen)
 {
 	struct esdm_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
 
@@ -101,7 +102,8 @@ void esdm_hmac_final(struct esdm_hmac_ctx *hmac_ctx, uint8_t *mac)
 }
 
 DSO_PUBLIC
-int esdm_hmac_alloc(const struct esdm_hash *hash, struct esdm_hmac_ctx **hmac_ctx)
+int esdm_hmac_alloc(const struct esdm_hash *hash,
+		    struct esdm_hmac_ctx **hmac_ctx)
 {
 	struct esdm_hmac_ctx *out_ctx;
 	int ret = posix_memalign((void *)&out_ctx, sizeof(uint64_t),
