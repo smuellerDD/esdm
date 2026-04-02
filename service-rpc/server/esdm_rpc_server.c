@@ -1146,6 +1146,8 @@ static int esdm_rpcs_interfaces_init(const char *username,
 	/* Server handing privileged interface in current thread */
 	CKINT(esdm_rpcs_workerloop(&priv_proto));
 
+	thread_wait();
+
 	return 0;
 
 out:
@@ -1220,11 +1222,8 @@ void esdm_rpc_server_fini(void)
 	atomic_set(&server_exit, 1);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 
-	thread_send_signal(ESDM_THREAD_RPC_UNPRIV_GROUP, SIGUSR1);
-	thread_send_signal(ESDM_THREAD_CUSE_POLL_GROUP, SIGUSR1);
+	thread_release(false, false);
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
-
-	thread_release(false, false);
 }
