@@ -181,6 +181,8 @@ static int esdm_sched_initialize(void)
 
 	esdm_sched_entropy_fd = fd;
 
+	esdm_es_add_entropy();
+
 	return 0;
 }
 

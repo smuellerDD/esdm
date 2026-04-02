@@ -192,6 +192,8 @@ static int esdm_jent_async_monitor(void)
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG block filling completed\n");
 
+	esdm_es_add_entropy();
+
 	return 0;
 }
 
