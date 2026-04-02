@@ -27,7 +27,7 @@
 #ifdef ESDM_ES_JENT
 
 DSO_PUBLIC
-int esdm_jent_status(char *buf, size_t buf_length);
+int esdm_jent_status(char* buf, size_t buf_length);
 
 DSO_PUBLIC
 bool esdm_jent_ntg1(void);
@@ -36,18 +36,17 @@ extern struct esdm_es_cb esdm_es_jent;
 
 #else /* ESDM_ES_JENT */
 
-static inline int esdm_jent_status(char *buf, size_t buf_length)
-{
+static inline int esdm_jent_status(char* buf, size_t buf_length) {
 	(void)buf;
 	(void)buf_length;
 
 	return -ENOENT;
 }
 
-static inline bool esdm_jent_ntg1(void)
-{
+static inline bool esdm_jent_ntg1(void) {
 	return false;
 }
+
 
 #endif /* ESDM_ES_JENT */
 

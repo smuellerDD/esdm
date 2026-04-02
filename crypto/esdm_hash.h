@@ -51,15 +51,13 @@ struct esdm_hash_ctx {
 
 #define ESDM_SHA_MAX_SIZE_DIGEST 64
 #define ESDM_HASH_STATE_SIZE(x) (x->statesize)
-#define ESDM_HASH_CTX_SIZE(x)                                                  \
-	(sizeof(struct esdm_hash_ctx) + ESDM_HASH_STATE_SIZE(x))
+#define ESDM_HASH_CTX_SIZE(x) (sizeof(struct esdm_hash_ctx) + ESDM_HASH_STATE_SIZE(x))
 
-#define _ESDM_HASH_SET_CTX(name, hashname, ctx, offset)                        \
-	name->hash_state =                                                     \
-		(struct esdm_hash_state *)((uint8_t *)ctx + offset);           \
+#define _ESDM_HASH_SET_CTX(name, hashname, ctx, offset)                          \
+	name->hash_state = (struct esdm_hash_state *)((uint8_t *)ctx + offset);  \
 	name->hash = hashname
 
-#define ESDM_HASH_SET_CTX(name, hashname)                                      \
+#define ESDM_HASH_SET_CTX(name, hashname)                                        \
 	_ESDM_HASH_SET_CTX(name, hashname, name, sizeof(struct esdm_hash_ctx))
 
 /**
@@ -87,7 +85,7 @@ static inline void esdm_hash_init(struct esdm_hash_ctx *hash_ctx)
  * @param [in] inlen Length of the input buffer
  */
 static inline void esdm_hash_update(struct esdm_hash_ctx *hash_ctx,
-				    const uint8_t *in, size_t inlen)
+				  const uint8_t *in, size_t inlen)
 {
 	const struct esdm_hash *hash = hash_ctx->hash;
 
@@ -124,8 +122,7 @@ static inline void esdm_hash_update(struct esdm_hash_ctx *hash_ctx,
  *			perform hash calculation with.
  * @param [out] digest Buffer with at least the size of the message digest.
  */
-static inline void esdm_hash_final(struct esdm_hash_ctx *hash_ctx,
-				   uint8_t *digest)
+static inline void esdm_hash_final(struct esdm_hash_ctx *hash_ctx, uint8_t *digest)
 {
 	const struct esdm_hash *hash = hash_ctx->hash;
 
@@ -140,7 +137,7 @@ static inline void esdm_hash_final(struct esdm_hash_ctx *hash_ctx,
  * @param [in] digestsize Size of the requested digest.
  */
 static inline void esdm_hash_set_digestsize(struct esdm_hash_ctx *hash_ctx,
-					    size_t digestsize)
+					  size_t digestsize)
 {
 	const struct esdm_hash *hash = hash_ctx->hash;
 
@@ -190,11 +187,11 @@ static inline void esdm_hash_zero(struct esdm_hash_ctx *hash_ctx)
  * @param [in] hashname Pointer of type struct hash referencing the hash
  *			 implementation to be used
  */
-#define ESDM_HASH_CTX_ON_STACK(name, hashname)                                 \
-	ESDM_ALIGNED_BUFFER(name##_ctx_buf, ESDM_HASH_CTX_SIZE(hashname),      \
-			    uint64_t);                                         \
-	struct esdm_hash_ctx *name = (struct esdm_hash_ctx *)name##_ctx_buf;   \
-	ESDM_HASH_SET_CTX(name, hashname);                                     \
+#define ESDM_HASH_CTX_ON_STACK(name, hashname)                                   \
+	ESDM_ALIGNED_BUFFER(name##_ctx_buf, ESDM_HASH_CTX_SIZE(hashname),          \
+			  uint64_t);                                           \
+	struct esdm_hash_ctx *name = (struct esdm_hash_ctx *)name##_ctx_buf;       \
+	ESDM_HASH_SET_CTX(name, hashname);                                       \
 	esdm_hash_zero(name)
 
 /**

@@ -79,7 +79,7 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd,
 			ssize_t written =
 				write(sock_fd, &msg, sizeof(struct test_msg));
 			assert(written == sizeof(struct test_msg));
-			(void)written;
+			(void) written;
 		}
 
 		mean_duration =
@@ -104,7 +104,7 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd,
 
 	ssize_t written = write(sock_fd, &msg, sizeof(struct test_msg));
 	assert(written == sizeof(struct test_msg));
-	(void)written;
+	(void) written;
 
 	free(rnd_buffer);
 

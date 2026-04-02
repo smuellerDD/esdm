@@ -45,7 +45,7 @@ static inline void mutex_lock(mutex_t *mutex)
 {
 	int ret = pthread_rwlock_wrlock(mutex);
 	assert(ret == 0);
-	(void)ret;
+	(void) ret;
 }
 
 /**
@@ -56,7 +56,7 @@ static inline void mutex_unlock(mutex_t *mutex)
 {
 	int ret = pthread_rwlock_unlock(mutex);
 	assert(ret == 0);
-	(void)ret;
+	(void) ret;
 }
 
 /**
@@ -84,7 +84,7 @@ static inline void mutex_destroy(mutex_t *mutex)
 {
 	int ret = pthread_rwlock_destroy(mutex);
 	assert(ret == 0);
-	(void)ret;
+	(void) ret;
 }
 
 /**
@@ -110,7 +110,7 @@ static inline void mutex_reader_unlock(mutex_t *mutex)
 {
 	int ret = pthread_rwlock_unlock(mutex);
 	assert(ret == 0);
-	(void)ret;
+	(void) ret;
 }
 
 #endif /* _MUTEX_PTHREAD_H */

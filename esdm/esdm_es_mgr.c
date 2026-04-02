@@ -589,7 +589,8 @@ void esdm_init_ops(struct entropy_buf *eb)
 		return;
 	}
 
-	if (esdm_fully_seeded(!state->all_online_nodes_seeded, seed_bits, eb)) {
+	if (esdm_fully_seeded(!state->all_online_nodes_seeded, seed_bits,
+			     eb)) {
 		state->esdm_fully_seeded = true;
 		esdm_set_operational();
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
@@ -683,16 +684,13 @@ int esdm_es_mgr_initialize(void)
 
 	/* insert machine specific personalization string, if available */
 	if (linux_personalization_string(&pers_string, &pers_length)) {
-		esdm_logger(
-			LOGGER_WARN, LOGGER_C_SERVER,
-			"Unable to fetch personalization string for insertion into all aux pools\n");
+		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
+			    "Unable to fetch personalization string for insertion into all aux pools\n");
 	} else {
-		esdm_logger(
-			LOGGER_DEBUG, LOGGER_C_SERVER,
-			"Insert personalization string \"%s\" into all aux pools\n",
-			pers_string);
-		CKINT(esdm_pool_insert_aux((uint8_t *)pers_string, pers_length,
-					   0));
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
+			    "Insert personalization string \"%s\" into all aux pools\n",
+			    pers_string);
+		CKINT(esdm_pool_insert_aux((uint8_t *)pers_string, pers_length, 0));
 	}
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
@@ -773,7 +771,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	/* always reseed the DRNG with the current time stamp */
 	ret = clock_gettime(CLOCK_MONOTONIC, &eb->now);
 	assert(ret == 0);
-	(void)ret;
+	(void) ret;
 
 	/*
 	 * Require at least 128 bits of entropy for any reseed. If the ESDM is

@@ -30,7 +30,7 @@
  *************************************************************************/
 DSO_PUBLIC
 int esdm_drbg_seed(struct esdm_drbg_state *drbg, const uint8_t *seedbuf,
-		   size_t seedlen, const uint8_t *persbuf, size_t perslen)
+		 size_t seedlen, const uint8_t *persbuf, size_t perslen)
 {
 	struct esdm_drbg_string seed;
 	struct esdm_drbg_string pers;
@@ -61,8 +61,8 @@ int esdm_drbg_seed(struct esdm_drbg_state *drbg, const uint8_t *seedbuf,
 
 DSO_PUBLIC
 ssize_t esdm_drbg_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
-			   size_t buflen, const uint8_t *addtlbuf,
-			   size_t addtllen)
+			 size_t buflen, const uint8_t *addtlbuf,
+			 size_t addtllen)
 {
 	struct esdm_drbg_string addtl_data;
 	struct esdm_drbg_string *addtl = NULL;

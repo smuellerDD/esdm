@@ -86,8 +86,7 @@ static void esdm_sha512_hash_desc_zero(void *hash)
 	esdm_hash_zero(hash_ctx);
 }
 
-static int esdm_sha512_hash_alloc_common(const struct esdm_hash *hash,
-					 void **ctx)
+static int esdm_sha512_hash_alloc_common(const struct esdm_hash *hash, void **ctx)
 {
 	struct esdm_hash_ctx *ctx512;
 	int ret;

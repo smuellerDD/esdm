@@ -240,7 +240,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 			goto out;
 
 		esdm_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
-			       sizeof(fipscheck_hmackey) - 1);
+			     sizeof(fipscheck_hmackey) - 1);
 		esdm_hmac_update(hmac_ctx, memblock, size);
 		esdm_hmac_final(hmac_ctx, calculated);
 
@@ -278,28 +278,28 @@ out:
 	return ret;
 }
 
-static FILE *fopen_if_not_exists(const char *filename, const char *mode)
-{
-	if (mode[0] != 'w' && mode[0] != 'a') {
-		errno = EINVAL; // only creation modes make sense
-		return NULL;
-	}
+static
+FILE *fopen_if_not_exists(const char *filename, const char *mode) {
+    if (mode[0] != 'w' && mode[0] != 'a') {
+        errno = EINVAL;  // only creation modes make sense
+        return NULL;
+    }
 
-	int flags = O_CREAT | O_EXCL | O_WRONLY;
-	int fd = open(filename, flags, 0644);
-	if (fd == -1) {
-		// file exists or other error
-		return NULL;
-	}
+    int flags = O_CREAT | O_EXCL | O_WRONLY;
+    int fd = open(filename, flags, 0644);
+    if (fd == -1) {
+        // file exists or other error
+        return NULL;
+    }
 
-	// Now convert to FILE*
-	FILE *fp = fdopen(fd, mode);
-	if (!fp) {
-		close(fd);
-		return NULL;
-	}
+    // Now convert to FILE*
+    FILE *fp = fdopen(fd, mode);
+    if (!fp) {
+        close(fd);
+        return NULL;
+    }
 
-	return fp;
+    return fp;
 }
 
 int fips_create_checkfile(const char *checkfile, const char *targetfile)
@@ -314,8 +314,7 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 	uint8_t calculated[ESDM_SHA_MAX_SIZE_DIGEST];
 	size_t written;
 
-	file = strcmp(checkfile, "-") ? fopen_if_not_exists(checkfile, "w") :
-					stdin;
+	file = strcmp(checkfile, "-") ? fopen_if_not_exists(checkfile, "w") : stdin;
 	if (!file) {
 		ret = -EEXIST;
 		goto out;
@@ -326,12 +325,12 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 		goto out;
 
 	esdm_hmac_init(hmac_ctx, (uint8_t *)fipscheck_hmackey,
-		       sizeof(fipscheck_hmackey) - 1);
+		     sizeof(fipscheck_hmackey) - 1);
 	esdm_hmac_update(hmac_ctx, memblock, size);
 	esdm_hmac_final(hmac_ctx, calculated);
 
-	ret = bin2hex_alloc(calculated, esdm_hmac_macsize(hmac_ctx), &hexhash,
-			    &hexhashlen);
+	ret = bin2hex_alloc(calculated, esdm_hmac_macsize(hmac_ctx),
+			    &hexhash, &hexhashlen);
 	esdm_hmac_zero(hmac_ctx);
 	if (ret)
 		goto out;

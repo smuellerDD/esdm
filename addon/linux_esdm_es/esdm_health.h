@@ -66,6 +66,7 @@ config ESDM_RCT_CUTOFF_PERMANENT
 #define CONFIG_ESDM_RCT_CUTOFF 30
 #define CONFIG_ESDM_RCT_CUTOFF_PERMANENT 60
 
+
 /*
  * See the SP 800-90B comment #10b for the corrected cutoff for the SP 800-90B
  * APT.

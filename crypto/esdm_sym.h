@@ -47,8 +47,7 @@ struct esdm_sym_ctx {
 };
 
 #define ESDM_SYM_STATE_SIZE(x) (x->statesize)
-#define ESDM_SYM_CTX_SIZE(x)                                                   \
-	(sizeof(struct esdm_sym_ctx) + ESDM_SYM_STATE_SIZE(x))
+#define ESDM_SYM_CTX_SIZE(x) (sizeof(struct esdm_sym_ctx) + ESDM_SYM_STATE_SIZE(x))
 
 /*
  * Align the esdm_sym_state structure to 8 bytes boundary irrespective where
@@ -65,14 +64,11 @@ struct esdm_sym_ctx {
 
 #define ESDM_ALIGN_APPLY(x, mask) (((x) + (mask)) & ~(mask))
 #define ESDM_ALIGN(x, a) ESDM_ALIGN_APPLY((x), (unsigned long)(a))
-#define ESDM_ALIGN_PTR_64(p, a)                                                \
-	((uint64_t *)ESDM_ALIGN((unsigned long)(p), (a)))
-#define ESDM_ALIGN_PTR_32(p, a)                                                \
-	((uint32_t *)ESDM_ALIGN((unsigned long)(p), (a)))
-#define ESDM_ALIGN_PTR_16(p, a)                                                \
-	((uint16_t *)ESDM_ALIGN((unsigned long)(p), (a)))
+#define ESDM_ALIGN_PTR_64(p, a) ((uint64_t *)ESDM_ALIGN((unsigned long)(p), (a)))
+#define ESDM_ALIGN_PTR_32(p, a) ((uint32_t *)ESDM_ALIGN((unsigned long)(p), (a)))
+#define ESDM_ALIGN_PTR_16(p, a) ((uint16_t *)ESDM_ALIGN((unsigned long)(p), (a)))
 #define ESDM_ALIGN_PTR_8(p, a) ((uint8_t *)ESDM_ALIGN((unsigned long)(p), (a)))
-#define ESDM_ALIGN_SYM_MASK(p, symname)                                        \
+#define ESDM_ALIGN_SYM_MASK(p, symname)                                          \
 	ESDM_ALIGN_PTR_64(p, ESDM_SYM_ALIGNMASK(symname))
 
 /**
@@ -80,16 +76,16 @@ struct esdm_sym_ctx {
  * ensure that the underlying symmetric algorithm implementation buffer is
  * aligned to proper size.
  */
-#define ESDM_ALIGNED_SYM_BUFFER(name, symname, size, type)                     \
-	type name[(size + ESDM_SYM_ALIGNMASK(symname) + sizeof(type) - 1) /    \
+#define ESDM_ALIGNED_SYM_BUFFER(name, symname, size, type)                       \
+	type name[(size + ESDM_SYM_ALIGNMASK(symname) + sizeof(type) - 1) /      \
 		  sizeof(type)] __attribute__((aligned(sizeof(type))))
 
-#define _ESDM_SYM_SET_CTX(name, symname, ctx, offset)                          \
-	name->sym_state = (struct esdm_sym_state *)ESDM_ALIGN_SYM_MASK(        \
+#define _ESDM_SYM_SET_CTX(name, symname, ctx, offset)                            \
+	name->sym_state = (struct esdm_sym_state *)ESDM_ALIGN_SYM_MASK(            \
 		((uint8_t *)(ctx)) + (offset), symname);                       \
 	name->sym = symname
 
-#define ESDM_SYM_SET_CTX(name, symname)                                        \
+#define ESDM_SYM_SET_CTX(name, symname)                                          \
 	_ESDM_SYM_SET_CTX(name, symname, name, sizeof(struct esdm_sym_ctx))
 
 /**
@@ -109,7 +105,7 @@ static inline void esdm_sym_init(struct esdm_sym_ctx *ctx)
 }
 
 static inline int esdm_sym_setkey(struct esdm_sym_ctx *ctx, uint8_t *key,
-				  size_t keylen)
+				size_t keylen)
 {
 	const struct esdm_sym *sym = ctx->sym;
 
@@ -117,7 +113,7 @@ static inline int esdm_sym_setkey(struct esdm_sym_ctx *ctx, uint8_t *key,
 }
 
 static inline int esdm_sym_setiv(struct esdm_sym_ctx *ctx, uint8_t *iv,
-				 size_t ivlen)
+			       size_t ivlen)
 {
 	const struct esdm_sym *sym = ctx->sym;
 
@@ -125,7 +121,7 @@ static inline int esdm_sym_setiv(struct esdm_sym_ctx *ctx, uint8_t *iv,
 }
 
 static inline void esdm_sym_encrypt(struct esdm_sym_ctx *ctx, uint8_t *in,
-				    uint8_t *out, size_t len)
+				  uint8_t *out, size_t len)
 {
 	const struct esdm_sym *sym = ctx->sym;
 
@@ -133,7 +129,7 @@ static inline void esdm_sym_encrypt(struct esdm_sym_ctx *ctx, uint8_t *in,
 }
 
 static inline void esdm_sym_decrypt(struct esdm_sym_ctx *ctx, uint8_t *in,
-				    uint8_t *out, size_t len)
+				  uint8_t *out, size_t len)
 {
 	const struct esdm_sym *sym = ctx->sym;
 
@@ -161,11 +157,11 @@ static inline void esdm_sym_zero(struct esdm_sym_ctx *ctx)
  * @param [in] symname Pointer of type struct sym referencing the sym
  *			 implementation to be used
  */
-#define ESDM_SYM_CTX_ON_STACK(name, symname)                                   \
-	ESDM_ALIGNED_SYM_BUFFER(name##_ctx_buf, symname,                       \
-				ESDM_SYM_CTX_SIZE(symname), uint64_t);         \
-	struct esdm_sym_ctx *name = (struct esdm_sym_ctx *)name##_ctx_buf;     \
-	ESDM_SYM_SET_CTX(name, symname);                                       \
+#define ESDM_SYM_CTX_ON_STACK(name, symname)                                     \
+	ESDM_ALIGNED_SYM_BUFFER(name##_ctx_buf, symname,                         \
+			      ESDM_SYM_CTX_SIZE(symname), uint64_t);             \
+	struct esdm_sym_ctx *name = (struct esdm_sym_ctx *)name##_ctx_buf;         \
+	ESDM_SYM_SET_CTX(name, symname);                                         \
 	esdm_sym_zero(name)
 
 #ifdef __cplusplus

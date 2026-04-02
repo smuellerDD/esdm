@@ -45,8 +45,8 @@ int drop_privileges_permanent(const char *user, const char *group)
 	if (group != NULL) {
 		grp = getgrnam(group);
 		if (!grp) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-				    "Group %s unknown\n", group);
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "Group %s unknown\n",
+				    group);
 			return -ENOENT;
 		}
 	} else {
@@ -71,8 +71,8 @@ int drop_privileges_permanent(const char *user, const char *group)
 		if (setgroups(1, &grp->gr_gid) == -1) {
 			ret = -errno;
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-				    "Cannot set supplemental groups: %s\n",
-				    strerror(errno));
+				"Cannot set supplemental groups: %s\n",
+				strerror(errno));
 			return ret;
 		}
 	} else {
@@ -80,8 +80,8 @@ int drop_privileges_permanent(const char *user, const char *group)
 		if (setgroups(0, NULL) == -1) {
 			ret = -errno;
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-				    "Cannot clear supplemental groups: %s\n",
-				    strerror(errno));
+				"Cannot clear supplemental groups: %s\n",
+				strerror(errno));
 			return ret;
 		}
 	}

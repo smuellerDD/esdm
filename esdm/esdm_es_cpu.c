@@ -265,7 +265,9 @@ static void esdm_cpu_es_state(char *buf, size_t buflen)
 		 " Entropy Rate per 256 data bits: %u\n",
 		 (multiplier <= 1) ? "N/A" :
 				     esdm_drng_init->hash_cb->hash_name(),
-		 esdm_cpu_poolsize(), multiplier, esdm_cpu_entropylevel(256));
+		 esdm_cpu_poolsize(), multiplier,
+		 esdm_cpu_entropylevel(256)
+		);
 }
 
 static bool esdm_cpu_active(void)

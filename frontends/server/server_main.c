@@ -307,7 +307,8 @@ static void create_pid_file(const char *pid_file)
 	 * another instance is running. If the file is stale (left
 	 * from a crash), the lock will succeed and we can reuse it.
 	 */
-	pidfile_fd = open(pid_file, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	pidfile_fd =
+		open(pid_file, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (pidfile_fd == -1) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot open pid file\n");
@@ -316,9 +317,8 @@ static void create_pid_file(const char *pid_file)
 
 	if (lockf(pidfile_fd, F_TLOCK, 0) == -1) {
 		if (errno == EAGAIN || errno == EACCES) {
-			esdm_logger(
-				LOGGER_ERR, LOGGER_C_SERVER,
-				"PID file already locked, another instance running\n");
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "PID file already locked, another instance running\n");
 			exit(1);
 		} else {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,

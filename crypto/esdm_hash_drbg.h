@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#if !defined(ESDM_DRBG_HASH_STATELEN) || !defined(ESDM_DRBG_HASH_BLOCKLEN) ||  \
+#if !defined(ESDM_DRBG_HASH_STATELEN) || !defined(ESDM_DRBG_HASH_BLOCKLEN) ||      \
 	!defined(ESDM_DRBG_HASH_CORE)
 #error "Do not include this header file directly! Use esdm_hash_drbg_<hashtype>.h"
 #endif
@@ -42,35 +42,32 @@ struct esdm_drbg_hash_state {
 	size_t reseed_ctr;
 };
 
-#define ESDM_DRBG_HASH_STATE_SIZE(x)                                           \
-	(3 * ESDM_DRBG_HASH_STATELEN + ESDM_DRBG_HASH_BLOCKLEN +               \
+#define ESDM_DRBG_HASH_STATE_SIZE(x)                                             \
+	(3 * ESDM_DRBG_HASH_STATELEN + ESDM_DRBG_HASH_BLOCKLEN +                   \
 	 ESDM_HASH_STATE_SIZE(x))
-#define ESDM_DRBG_HASH_CTX_SIZE(x)                                             \
+#define ESDM_DRBG_HASH_CTX_SIZE(x)                                               \
 	(ESDM_DRBG_HASH_STATE_SIZE(x) + sizeof(struct esdm_drbg_hash_state))
 
-void esdm_drbg_hash_seed(struct esdm_drbg_state *drbg,
-			 struct esdm_drbg_string *seed);
+void esdm_drbg_hash_seed(struct esdm_drbg_state *drbg, struct esdm_drbg_string *seed);
 size_t esdm_drbg_hash_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
-			       size_t buflen, struct esdm_drbg_string *addtl);
+			     size_t buflen, struct esdm_drbg_string *addtl);
 void esdm_drbg_hash_zero(struct esdm_drbg_state *drbg);
 
-#define _ESDM_DRBG_HASH_SET_CTX(name, ctx, offset)                             \
-	_ESDM_DRBG_SET_CTX((&name->drbg), esdm_drbg_hash_seed,                 \
-			   esdm_drbg_hash_generate, esdm_drbg_hash_zero);      \
-	_ESDM_HASH_SET_CTX((&name->hash_ctx), ESDM_DRBG_HASH_CORE, ctx,        \
-			   offset);                                            \
+#define _ESDM_DRBG_HASH_SET_CTX(name, ctx, offset)                               \
+	_ESDM_DRBG_SET_CTX((&name->drbg), esdm_drbg_hash_seed,                     \
+			 esdm_drbg_hash_generate, esdm_drbg_hash_zero);            \
+	_ESDM_HASH_SET_CTX((&name->hash_ctx), ESDM_DRBG_HASH_CORE, ctx, offset);   \
 	name->V = (uint8_t *)((uint8_t *)ctx + offset +                        \
-			      ESDM_HASH_STATE_SIZE(ESDM_DRBG_HASH_CORE));      \
+			      ESDM_HASH_STATE_SIZE(ESDM_DRBG_HASH_CORE));          \
 	name->C = (uint8_t *)((uint8_t *)ctx + offset +                        \
-			      ESDM_HASH_STATE_SIZE(ESDM_DRBG_HASH_CORE) +      \
-			      ESDM_DRBG_HASH_STATELEN);                        \
-	name->scratchpad =                                                     \
-		(uint8_t *)((uint8_t *)ctx + offset +                          \
-			    ESDM_HASH_STATE_SIZE(ESDM_DRBG_HASH_CORE) +        \
-			    2 * ESDM_DRBG_HASH_STATELEN);                      \
+			      ESDM_HASH_STATE_SIZE(ESDM_DRBG_HASH_CORE) +          \
+			      ESDM_DRBG_HASH_STATELEN);                          \
+	name->scratchpad = (uint8_t *)((uint8_t *)ctx + offset +               \
+				       ESDM_HASH_STATE_SIZE(ESDM_DRBG_HASH_CORE) + \
+				       2 * ESDM_DRBG_HASH_STATELEN);             \
 	name->reseed_ctr = 0
 
-#define ESDM_DRBG_HASH_SET_CTX(name)                                           \
+#define ESDM_DRBG_HASH_SET_CTX(name)                                             \
 	_ESDM_DRBG_HASH_SET_CTX(name, name, sizeof(struct esdm_drbg_hash_state))
 
 /**
@@ -78,14 +75,13 @@ void esdm_drbg_hash_zero(struct esdm_drbg_state *drbg);
  *
  * @param [in] name Name of the stack variable
  */
-#define ESDM_DRBG_HASH_CTX_ON_STACK(name)                                      \
-	ESDM_ALIGNED_BUFFER(name##_ctx_buf,                                    \
-			    ESDM_DRBG_HASH_CTX_SIZE(ESDM_DRBG_HASH_CORE),      \
-			    uint64_t);                                         \
-	struct esdm_drbg_hash_state *name##_hash =                             \
-		(struct esdm_drbg_hash_state *)name##_ctx_buf;                 \
-	ESDM_DRBG_HASH_SET_CTX(name##_hash);                                   \
-	struct esdm_drbg_state *name = (struct esdm_drbg_state *)name##_hash;  \
+#define ESDM_DRBG_HASH_CTX_ON_STACK(name)                                        \
+	ESDM_ALIGNED_BUFFER(name##_ctx_buf,                                      \
+			  ESDM_DRBG_HASH_CTX_SIZE(ESDM_DRBG_HASH_CORE), uint64_t); \
+	struct esdm_drbg_hash_state *name##_hash =                               \
+		(struct esdm_drbg_hash_state *)name##_ctx_buf;                   \
+	ESDM_DRBG_HASH_SET_CTX(name##_hash);                                     \
+	struct esdm_drbg_state *name = (struct esdm_drbg_state *)name##_hash;      \
 	esdm_drbg_hash_zero(name)
 
 /**

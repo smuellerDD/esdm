@@ -99,7 +99,7 @@ void handle_stress_process(double timeout_sec, uint32_t request_size,
 		int socks[2];
 		int ret = socketpair(AF_UNIX, SOCK_SEQPACKET, 0, socks);
 		assert(ret == 0);
-		(void)ret;
+		(void) ret;
 		sockets[i] = socks[0];
 
 		pid_t pid = fork();

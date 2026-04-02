@@ -104,7 +104,8 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		memset(buf, 0, sizeof(buf));
 
 		/* Serialize command header as big-endian into buf */
-		be16_to_ptr(buf + offsetof(struct TPM2CommandHeader, tag),
+		be16_to_ptr(buf + offsetof(struct TPM2CommandHeader,
+					   tag),
 			    cmd->tag);
 		be32_to_ptr(buf + offsetof(struct TPM2CommandHeader,
 					   commandSize),
@@ -112,15 +113,16 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		be32_to_ptr(buf + offsetof(struct TPM2CommandHeader,
 					   commandCode),
 			    cmd->commandCode);
-		memcpy(buf + sizeof(struct TPM2CommandHeader), cmd_buffer,
-		       cmd_buffer_len);
+		memcpy(buf + sizeof(struct TPM2CommandHeader),
+			cmd_buffer,
+			cmd_buffer_len);
 
 		safe_ret = esdm_safe_write(tpm2_fd, buf,
-					   sizeof(struct TPM2CommandHeader) +
-						   cmd_buffer_len);
+				    sizeof(struct TPM2CommandHeader) +
+					    cmd_buffer_len);
 
 		if (safe_ret != (ssize_t)(sizeof(struct TPM2CommandHeader) +
-					  cmd_buffer_len)) {
+					    cmd_buffer_len)) {
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 				    "TPM 2.0 command write failed\n");
 			close(tpm2_fd);
@@ -129,21 +131,19 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		}
 
 		safe_ret = esdm_safe_read(tpm2_fd, buf,
-					  sizeof(struct TPM2ResponseHeader) +
-						  rsp_buffer_len);
+				   sizeof(struct TPM2ResponseHeader) +
+					   rsp_buffer_len);
 
 		/* TPM 2.0 may return less than requested data. Skip. */
-		if (safe_ret &&
-		    safe_ret < (ssize_t)sizeof(struct TPM2ResponseHeader)) {
+		if (safe_ret && safe_ret < (ssize_t)sizeof(struct TPM2ResponseHeader)) {
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 				    "TPM 2.0 response read failed: %i\n", ret);
 			close(tpm2_fd);
 			tpm2_fd = -1;
 			goto out;
 		}
-		if (safe_ret > 0 &&
-		    safe_ret != (ssize_t)(sizeof(struct TPM2ResponseHeader) +
-					  rsp_buffer_len)) {
+		if (safe_ret > 0 && safe_ret != (ssize_t)(sizeof(struct TPM2ResponseHeader) +
+					   rsp_buffer_len)) {
 			continue;
 		}
 
@@ -159,8 +159,7 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		if (rsp_buffer && rsp_buffer_len > 0) {
 			size_t payload_len = 0;
 
-			if (rsp->responseSize >
-			    sizeof(struct TPM2ResponseHeader))
+			if (rsp->responseSize > sizeof(struct TPM2ResponseHeader))
 				payload_len = rsp->responseSize -
 					      sizeof(struct TPM2ResponseHeader);
 			memcpy(rsp_buffer,
@@ -314,14 +313,15 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 	be16_to_ptr(stir_buf, stir_data_len);
 
 	/* inject real and monotonic time as additional input without entropy */
-	(void)clock_gettime(CLOCK_REALTIME, &stir_clock_real);
-	(void)clock_gettime(CLOCK_MONOTONIC, &stir_clock_monotonic);
+	(void) clock_gettime(CLOCK_REALTIME, &stir_clock_real);
+	(void) clock_gettime(CLOCK_MONOTONIC, &stir_clock_monotonic);
 	memcpy(stir_buf + sizeof(uint16_t), &stir_clock_real,
 	       sizeof(stir_clock_real));
 	memcpy(stir_buf + sizeof(uint16_t) + sizeof(stir_clock_real),
 	       &stir_clock_monotonic, sizeof(stir_clock_monotonic));
 
-	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf, sizeof(stir_buf),
+	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf,
+				    sizeof(stir_buf),
 				    &stirrandom_rsp, NULL, 0)) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 			    "TPM 2.0 stir random failed\n");
@@ -341,8 +341,8 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 		return -1;
 	}
 
-	if (getrandom_rsp.responseSize !=
-	    sizeof(struct TPM2ResponseHeader) + sizeof(uint16_t) + len) {
+	if (getrandom_rsp.responseSize != sizeof(struct TPM2ResponseHeader) +
+					  sizeof(uint16_t) + len) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 			    "TPM 2.0 unexpected response size: %u\n",
 			    getrandom_rsp.responseSize);
@@ -382,8 +382,9 @@ static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		goto err;
 
 	while (done_bits < requested_bits) {
-		uint32_t chunk_bits = min_uint32(tpm2_max_chunk_bytes << 3,
-						 requested_bits - done_bits);
+		uint32_t chunk_bits =
+			min_uint32(tpm2_max_chunk_bytes << 3,
+				   requested_bits - done_bits);
 		uint32_t chunk_bytes = chunk_bits >> 3;
 
 		if (esdm_es_tpm2_get_internal(buffer, tpm2_max_chunk_bytes))

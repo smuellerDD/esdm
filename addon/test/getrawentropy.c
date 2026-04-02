@@ -88,9 +88,7 @@ static int getrawentropy(struct opts *opts)
 
 		requested -= (uint32_t)ret;
 
-		fprintf(stderr, "Fetched %lu events, still %lu to do\n",
-			(uint32_t)ret / sizeof(uint64_t),
-			requested / sizeof(uint64_t));
+		fprintf(stderr, "Fetched %lu events, still %lu to do\n", (uint32_t)ret / sizeof(uint64_t), requested  / sizeof(uint64_t));
 	}
 
 	ret = 0;
@@ -105,10 +103,8 @@ out:
 	return (int)ret;
 }
 
-static void usage(void)
-{
-	fprintf(stderr,
-		"Usage: getrawentropy [--samples NUM] [--debugfs-file FILE] [--outfile FILE] [--help]\n");
+static void usage(void) {
+	fprintf(stderr, "Usage: getrawentropy [--samples NUM] [--debugfs-file FILE] [--outfile FILE] [--help]\n");
 }
 
 int main(int argc, char *argv[])

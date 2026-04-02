@@ -219,14 +219,14 @@ void handle_messages(int *sockets, size_t num_sockets, bool show_cpu_usage)
 
 		ret = select(max_fd + 1, &rfds, NULL, NULL, NULL);
 		assert(ret > 0);
-		(void)ret;
+		(void) ret;
 
 		if (FD_ISSET(util_timer_fd, &rfds)) {
 			uint64_t ticks;
 			ssize_t r =
 				read(util_timer_fd, &ticks, sizeof(uint64_t));
 			assert(r == sizeof(uint64_t));
-			(void)r;
+			(void) r;
 			if (show_cpu_usage) {
 				get_cpu_utilization(&start);
 			}

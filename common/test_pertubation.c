@@ -133,10 +133,8 @@ static int esdm_test_shm_status_create_shm(void)
 		}
 		if (esdm_test_shmid < 0) {
 			errsv = errno;
-			esdm_logger(
-				LOGGER_ERR, LOGGER_C_ANY,
-				"ESDM test shared memory segment creation failed: %s\n",
-				strerror(errsv));
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				    "ESDM test shared memory segment creation failed: %s\n", strerror(errsv));
 			ret = -errsv;
 			goto out;
 		}

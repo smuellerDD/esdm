@@ -68,8 +68,7 @@ static volatile enum esdm_jent_async_state
 static struct rand_data *esdm_jent_state_thread = NULL;
 #endif
 
-int esdm_jent_status(char *buf, size_t buf_length)
-{
+int esdm_jent_status(char* buf, size_t buf_length) {
 	int ret = -ENOENT;
 
 #if JENT_VERSION >= 3070000
@@ -87,15 +86,14 @@ int esdm_jent_status(char *buf, size_t buf_length)
 	return ret;
 }
 
-bool esdm_jent_ntg1(void)
-{
+bool esdm_jent_ntg1(void) {
 #if JENT_VERSION >= 3070000
 	const bool jent_secure_memory = jent_secure_memory_supported();
-#ifdef ESDM_JENT_NTG1
+# ifdef ESDM_JENT_NTG1
 	const bool jent_ntg1 = true;
-#else
+# else
 	const bool jent_ntg1 = false;
-#endif
+# endif
 #else
 	const bool jent_secure_memory = false;
 	const bool jent_ntg1 = false;
@@ -133,7 +131,9 @@ static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
 	if (!atomic_read(&esdm_jent_initialized))
 		goto err;
 
-	ret = jent_read_entropy_safe(ec, (char *)eb_es->e, requested_bits >> 3);
+
+	ret = jent_read_entropy_safe(ec, (char *)eb_es->e,
+				     requested_bits >> 3);
 
 	if (ret < 0) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
@@ -180,8 +180,7 @@ static int esdm_jent_async_monitor(void)
 			      requested_bits, false);
 
 		__sync_synchronize();
-		__sync_lock_test_and_set(&esdm_jent_async_set[i],
-					 buffer_filled);
+		__sync_lock_test_and_set(&esdm_jent_async_set[i], buffer_filled);
 
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_ES,
@@ -298,8 +297,8 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 
 static inline int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
-	(void)osr;
-	(void)flags;
+	(void) osr;
+	(void) flags;
 
 	return 0;
 }
@@ -337,8 +336,7 @@ static int esdm_jent_initialize(void)
 
 	mutex_w_init(&esdm_jent_lock, 1, 0);
 
-	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() ||
-	    esdm_ntg1_2024_compliant()) {
+	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() || esdm_ntg1_2024_compliant()) {
 		flags |= JENT_FORCE_FIPS;
 	}
 
@@ -474,13 +472,15 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 " Standards compliance: %s%s\n"
 		 " Entropy Rate per 256 data bits: %u\n"
 		 " Oversampling Rate: %u\n",
-		 esdm_jent_poolsize(), jent_version(),
-		 (esdm_sp80090c_compliant() || esdm_config_fips_enabled() ||
-		  esdm_ntg1_2024_compliant() || esdm_jent_ntg1()) ?
-			 "SP800-90B " :
-			 "",
+		 esdm_jent_poolsize(),
+		 jent_version(),
+		 (esdm_sp80090c_compliant() ||
+		  esdm_config_fips_enabled() ||
+		  esdm_ntg1_2024_compliant() ||
+		  esdm_jent_ntg1()) ? "SP800-90B " : "",
 		 esdm_jent_ntg1() ? "NTG.1(2024)" : "",
-		 esdm_jent_entropylevel(256), ESDM_JENT_OSR);
+		 esdm_jent_entropylevel(256),
+		ESDM_JENT_OSR);
 }
 
 static bool esdm_jent_active(void)

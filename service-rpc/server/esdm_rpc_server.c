@@ -65,9 +65,10 @@
 #include "threading_support.h"
 
 #ifndef TAILQ_FOREACH_SAFE
-#define TAILQ_FOREACH_SAFE(var, head, field, tvar)                             \
-	for ((var) = TAILQ_FIRST((head));                                      \
-	     (var) && ((tvar) = TAILQ_NEXT((var), field), 1); (var) = (tvar))
+#define TAILQ_FOREACH_SAFE(var, head, field, tvar)          \
+    for ((var) = TAILQ_FIRST((head));                       \
+         (var) && ((tvar) = TAILQ_NEXT((var), field), 1);   \
+         (var) = (tvar))
 #endif
 
 struct esdm_rpcs {
@@ -182,8 +183,10 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 		/* we use non-blocking sockets */
 		if (ret < 0 && errno == EAGAIN) {
 			/* Wait a short moment for writeability, but not forever */
-			struct pollfd pfd = { .fd = rpc_conn->child_fd,
-					      .events = POLLOUT };
+			struct pollfd pfd = {
+				.fd = rpc_conn->child_fd,
+				.events = POLLOUT
+			};
 			int poll_ret = poll(&pfd, 1, TIMEOUT_MS);
 
 			/* early check for writeable */
@@ -230,10 +233,9 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 	 * protocol violation, not a partial transfer to be retried.
 	 */
 	if (ret != (ssize_t)len) {
-		esdm_logger(
-			LOGGER_ERR, LOGGER_C_RPC,
-			"Partial write on SEQPACKET socket: %zd of %zu bytes on fd %d\n",
-			ret, len, rpc_conn->child_fd);
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Partial write on SEQPACKET socket: %zd of %zu bytes on fd %d\n",
+			    ret, len, rpc_conn->child_fd);
 		return -EIO;
 	}
 
@@ -266,18 +268,14 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 	message_length = protobuf_c_message_get_packed_size(message);
 	if (message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			    "Unexpected message length: %zu > %zu\n",
-			    message_length, ESDM_RPC_MAX_INTERNAL_MSG_SIZE);
+			    "Unexpected message length: %zu > %zu\n", message_length, ESDM_RPC_MAX_INTERNAL_MSG_SIZE);
 		return -EFAULT;
 	}
 
-	if (message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ >
-	    sizeof(rpc_conn->buf)) {
-		esdm_logger(
-			LOGGER_ERR, LOGGER_C_RPC,
-			"Message too large for connection buffer: %zu > %zu\n",
-			message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ,
-			sizeof(rpc_conn->buf));
+	if (message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ > sizeof(rpc_conn->buf)) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Message too large for connection buffer: %zu > %zu\n",
+			    message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ, sizeof(rpc_conn->buf));
 		return -EOVERFLOW;
 	}
 
@@ -304,13 +302,10 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 	}
 
 	/* this message is also printed when the client closed early, don't spam logs */
-	ret = esdm_rpcs_write_data(rpc_conn, rpc_conn->buf,
-				   ESDM_RPCS_BUF_WRITE_HEADER_SZ +
-					   message_length);
+	ret = esdm_rpcs_write_data(rpc_conn, rpc_conn->buf, ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length);
 	if (ret != 0) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-			    "Submission of message data failed with error %d\n",
-			    ret);
+			    "Submission of message data failed with error %d\n", ret);
 		ret = -EFAULT;
 		goto out;
 	}
@@ -322,8 +317,7 @@ out:
 	 * and clear data from ESDM in your application or patch
 	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	memset_secure(rpc_conn->buf, 0,
-		      ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length);
+	memset_secure(rpc_conn->buf, 0, ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length);
 
 	return ret;
 }
@@ -379,7 +373,7 @@ static void esdm_rpcs_response_closure(const ProtobufCMessage *message,
 
 	if (ret) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			    "Failed to serialize response: %d\n", ret);
+		    "Failed to serialize response: %d\n", ret);
 	}
 
 out:
@@ -399,7 +393,8 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 	int ret = 0;
 
 	CKINT(esdm_rpc_proto_get_descriptor(service, received_data, &desc));
-	message = protobuf_c_message_unpack(desc, NULL, header->message_length,
+	message = protobuf_c_message_unpack(desc, NULL,
+					    header->message_length,
 					    received_data->data);
 
 	CKNULL(message, -ENOMEM);
@@ -413,7 +408,8 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 
 out:
 	if (message)
-		protobuf_c_message_free_unpacked(message, NULL);
+		protobuf_c_message_free_unpacked(message,
+						 NULL);
 
 	/* Pick up the error from esdm_rpcs_write_data */
 	if (rpc_conn->child_fd == -1)
@@ -436,8 +432,8 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	 * full message is submitted in one send operation. Therefore,
 	 * short-reads cannot occur here and can be ignored.
 	 */
-	received =
-		read(rpc_conn->child_fd, rpc_conn->buf, sizeof(rpc_conn->buf));
+	received = read(rpc_conn->child_fd, rpc_conn->buf,
+			sizeof(rpc_conn->buf));
 	if (received < 0) {
 		ret = -errno;
 		goto out;
@@ -445,7 +441,9 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "Read %zd bytes\n", received);
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			"Read %zd bytes\n",
+			received);
 
 	/* We insist on having at least a header received. */
 	if (received < (ssize_t)sizeof(struct esdm_rpc_proto_cs_header)) {
@@ -454,11 +452,11 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	}
 
 	/* Header is received, analyze it. */
-	struct esdm_rpc_proto_cs_header *header =
-		(struct esdm_rpc_proto_cs_header *)rpc_conn->buf;
+	struct esdm_rpc_proto_cs_header *header = (struct esdm_rpc_proto_cs_header *)rpc_conn->buf;
 
 	/* Convert incoming data to LE */
-	header->message_length = le_bswap32(header->message_length);
+	header->message_length =
+		le_bswap32(header->message_length);
 	header->method_index = le_bswap32(header->method_index);
 	header->request_id = le_bswap32(header->request_id);
 
@@ -479,8 +477,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	}
 
 	/* Is data received to small? */
-	if (received < (ssize_t)(sizeof(struct esdm_rpc_proto_cs_header) +
-				 header->message_length)) {
+	if (received < (ssize_t)(sizeof(struct esdm_rpc_proto_cs_header) + header->message_length)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -490,8 +487,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	 * as much data as the header defined. We also start the
 	 * processing of data and the subsequent submission of the answer here.
 	 */
-	CKINT(esdm_rpcs_unpack(rpc_conn,
-			       (struct esdm_rpc_proto_cs *)rpc_conn->buf));
+	CKINT(esdm_rpcs_unpack(rpc_conn, (struct esdm_rpc_proto_cs*)rpc_conn->buf));
 
 out:
 	if (received > 0) {
@@ -548,9 +544,7 @@ static int esdm_rpcs_handler(void *args)
 
 	TAILQ_INIT(&rpc_conn_list);
 
-	thread_set_name(thread->proto->privileged ? rpc_handler_priv :
-						    rpc_handler_unpriv,
-			thread->id);
+	thread_set_name(thread->proto->privileged ? rpc_handler_priv : rpc_handler_unpriv, thread->id);
 
 	epfd = epoll_create1(EPOLL_CLOEXEC);
 	if (epfd < 0) {
@@ -560,13 +554,13 @@ static int esdm_rpcs_handler(void *args)
 
 	/* server socket */
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, thread->proto->server_listening_fd,
-		      &(struct epoll_event){
-			      .events = EPOLLIN,
-			      .data.ptr = NULL,
-		      }) < 0) {
+				&(struct epoll_event) {
+					.events = EPOLLIN,
+					.data.ptr = NULL,
+				}) < 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Unable to add server FD %d to epoll\n",
-			    thread->proto->server_listening_fd);
+				"Unable to add server FD %d to epoll\n",
+				thread->proto->server_listening_fd);
 		ret = -errno;
 		goto out;
 	}
@@ -587,25 +581,26 @@ static int esdm_rpcs_handler(void *args)
 
 	/* timerfd for cleanup */
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, tfd,
-		      &(struct epoll_event){
-			      .events = EPOLLIN,
-			      .data.u64 = 1 /* no ptr will have this value */
-		      }) < 0) {
+				&(struct epoll_event) {
+					.events = EPOLLIN,
+					.data.u64 = 1 /* no ptr will have this value */
+				}) < 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Unable to add timer FD %d to epoll\n", tfd);
+				"Unable to add timer FD %d to epoll\n",
+				tfd);
 		ret = -errno;
 		goto out;
 	}
 
 	/* eventfd for fast termination */
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, thread->eventfd,
-		      &(struct epoll_event){
-			      .events = EPOLLIN,
-			      .data.u64 = 2 /* no ptr will have this value */
-		      }) < 0) {
+				&(struct epoll_event){
+					.events = EPOLLIN,
+					.data.u64 = 2 /* no ptr will have this value */
+				}) < 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-			    "Unable to add event FD %d to epoll\n",
-			    thread->eventfd);
+				"Unable to add event FD %d to epoll\n",
+				thread->eventfd);
 		ret = -errno;
 		goto out;
 	}
@@ -636,29 +631,26 @@ static int esdm_rpcs_handler(void *args)
 			/* timer fired */
 			if (events[i].data.u64 == 1) {
 				uint64_t expirations;
-				ssize_t v = read(tfd, &expirations,
-						 sizeof(expirations));
+				ssize_t v = read(tfd, &expirations, sizeof(expirations));
 				do_cleanup = true;
-				(void)v;
+				(void) v;
 				continue;
 			}
 
 			/* event fired */
 			if (events[i].data.u64 == 2) {
 				uint64_t event_val;
-				ssize_t v = read(thread->eventfd, &event_val,
-						 sizeof(event_val));
-				(void)v;
+				ssize_t v = read(thread->eventfd, &event_val, sizeof(event_val));
+				(void) v;
 				esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-					    "termination event triggered\n");
+				    	    "termination event triggered\n");
 				break;
 			}
 
 			rpc_conn = events[i].data.ptr;
 
 			/* new connection? */
-			if (events[i].events & EPOLLIN && rpc_conn == NULL &&
-			    num_connections < max_connections) {
+			if (events[i].events & EPOLLIN && rpc_conn == NULL && num_connections < max_connections) {
 				accepted_fd = accept4(
 					thread->proto->server_listening_fd,
 					NULL, NULL,
@@ -666,23 +658,23 @@ static int esdm_rpcs_handler(void *args)
 				if (accepted_fd < 0) {
 					continue;
 				}
-				rpc_conn = calloc(
-					1, sizeof(struct esdm_rpcs_connection));
+				rpc_conn = calloc(1, sizeof(struct esdm_rpcs_connection));
 				if (rpc_conn == NULL) {
 					esdm_logger(
-						LOGGER_ERR, LOGGER_C_RPC,
+						LOGGER_ERR,
+						LOGGER_C_RPC,
 						"Unable to alloc client conn\n");
 					ret = -ENOMEM;
 					goto out;
 				}
-				rpc_conn->child_fd = accepted_fd;
+				rpc_conn->child_fd =
+					accepted_fd;
 				rpc_conn->proto = thread->proto;
 				struct epoll_event ev = {
 					.events = EPOLLIN | EPOLLRDHUP,
 					.data.ptr = rpc_conn
 				};
-				TAILQ_INSERT_TAIL(&rpc_conn_list, rpc_conn,
-						  tailq);
+				TAILQ_INSERT_TAIL(&rpc_conn_list, rpc_conn, tailq);
 
 				if (epoll_ctl(epfd, EPOLL_CTL_ADD, accepted_fd,
 					      &ev) < 0) {
@@ -700,31 +692,25 @@ static int esdm_rpcs_handler(void *args)
 					rpc_conn->child_fd);
 
 				++num_connections;
-				esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-					    "num connections: %lu\n",
-					    num_connections);
+				esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "num connections: %lu\n", num_connections);
 			}
 
-			if (events[i].events &
-			    (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+			if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
 				has_error = true;
 			}
 
 			if (rpc_conn != NULL) {
 				if (has_error) {
 					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-						    "Closing client FD %d\n",
-						    rpc_conn->child_fd);
+						"Closing client FD %d\n",
+						rpc_conn->child_fd);
 					epoll_ctl(epfd, EPOLL_CTL_DEL,
-						  rpc_conn->child_fd, NULL);
-					TAILQ_REMOVE(&rpc_conn_list, rpc_conn,
-						     tailq);
+							rpc_conn->child_fd, NULL);
+					TAILQ_REMOVE(&rpc_conn_list, rpc_conn, tailq);
 					esdm_rpcs_release_conn(rpc_conn);
 					rpc_conn = NULL;
 					--num_connections;
-					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-						    "num connections: %lu\n",
-						    num_connections);
+					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "num connections: %lu\n", num_connections);
 					continue;
 				}
 
@@ -734,16 +720,13 @@ static int esdm_rpcs_handler(void *args)
 						LOGGER_DEBUG, LOGGER_C_RPC,
 						"Closing incoming connection for FD %d\n",
 						rpc_conn->child_fd);
-					epoll_ctl(epfd, EPOLL_CTL_DEL,
-						  rpc_conn->child_fd, NULL);
-					TAILQ_REMOVE(&rpc_conn_list, rpc_conn,
-						     tailq);
+					epoll_ctl(epfd, EPOLL_CTL_DEL, rpc_conn->child_fd,
+						  NULL);
+					TAILQ_REMOVE(&rpc_conn_list, rpc_conn, tailq);
 					esdm_rpcs_release_conn(rpc_conn);
 					rpc_conn = NULL;
 					--num_connections;
-					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-						    "num connections: %lu\n",
-						    num_connections);
+					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "num connections: %lu\n", num_connections);
 				}
 			}
 		}
@@ -751,26 +734,20 @@ static int esdm_rpcs_handler(void *args)
 		if (do_cleanup) {
 			struct timespec timeout_threshold;
 			clock_gettime(CLOCK_MONOTONIC, &timeout_threshold);
-			timeout_threshold.tv_sec -=
-				ESDM_RPC_IDLE_TIMEOUT_USEC / 1000000;
+			timeout_threshold.tv_sec -= ESDM_RPC_IDLE_TIMEOUT_USEC / 1000000;
 
-			TAILQ_FOREACH_SAFE(tmp1, &rpc_conn_list, tailq, tmp2)
-			{
-				if (esdm_time_after(&timeout_threshold,
-						    &tmp1->last_used)) {
-					TAILQ_REMOVE(&rpc_conn_list, tmp1,
-						     tailq);
+			TAILQ_FOREACH_SAFE(tmp1, &rpc_conn_list, tailq, tmp2) {
+				if (esdm_time_after(&timeout_threshold, &tmp1->last_used)) {
+					TAILQ_REMOVE(&rpc_conn_list, tmp1, tailq);
 					esdm_logger(
 						LOGGER_DEBUG, LOGGER_C_RPC,
 						"Closing incoming connection for FD %d after timeout\n",
 						tmp1->child_fd);
-					epoll_ctl(epfd, EPOLL_CTL_DEL,
-						  tmp1->child_fd, NULL);
+					epoll_ctl(epfd, EPOLL_CTL_DEL, tmp1->child_fd,
+						  NULL);
 					esdm_rpcs_release_conn(tmp1);
 					--num_connections;
-					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-						    "num connections: %lu\n",
-						    num_connections);
+					esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "num connections: %lu\n", num_connections);
 				}
 			}
 		}
@@ -779,12 +756,12 @@ static int esdm_rpcs_handler(void *args)
 out:
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "Exiting worker thread\n");
 
-	TAILQ_FOREACH_SAFE(tmp1, &rpc_conn_list, tailq, tmp2)
-	{
+	TAILQ_FOREACH_SAFE(tmp1, &rpc_conn_list, tailq, tmp2) {
 		TAILQ_REMOVE(&rpc_conn_list, tmp1, tailq);
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
-			    "Closing incoming connection for FD %d at exit\n",
-			    tmp1->child_fd);
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_RPC,
+			"Closing incoming connection for FD %d at exit\n",
+			tmp1->child_fd);
 		epoll_ctl(epfd, EPOLL_CTL_DEL, tmp1->child_fd, NULL);
 		esdm_rpcs_release_conn(tmp1);
 	}
@@ -815,8 +792,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	if (proto->privileged) {
 		num_threads = 1;
 	} else {
-		num_threads = min_size(esdm_config_online_nodes(),
-				       THREADING_MAX_WORKER_THREADS);
+		num_threads = min_size(esdm_config_online_nodes(), THREADING_MAX_WORKER_THREADS);
 	}
 
 	threads = calloc(num_threads, sizeof(struct esdm_rpc_thread));
@@ -826,13 +802,11 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	}
 
 	esdm_logger(LOGGER_STATUS, LOGGER_C_RPC,
-		    "Using %zu %sprivileged RPC worker threads\n", num_threads,
-		    proto->privileged ? "" : "un");
+		    "Using %zu %sprivileged RPC worker threads\n", num_threads, proto->privileged ? "" : "un");
 
 	for (t = 0; t < num_threads; ++t) {
 		esdm_logger(LOGGER_STATUS, LOGGER_C_RPC,
-			    "Starting %sprivileged RPC worker thread %u\n",
-			    proto->privileged ? "" : "un", t);
+			    "Starting %sprivileged RPC worker thread %u\n", proto->privileged ? "" : "un", t);
 		threads[t].proto = proto;
 		threads[t].id = t;
 		threads[t].eventfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -849,7 +823,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	for (t = 0; t < num_threads; ++t) {
 		uint64_t val = 1;
 		ssize_t v = write(threads[t].eventfd, &val, sizeof(val));
-		(void)v;
+		(void) v;
 	}
 
 	ret = thread_wait();
@@ -864,9 +838,7 @@ out:
 		free(threads);
 		threads = NULL;
 	}
-	esdm_logger(LOGGER_STATUS, LOGGER_C_RPC,
-		    "Exiting %sprivileged RPC worker loop\n",
-		    proto->privileged ? "" : "un");
+	esdm_logger(LOGGER_STATUS, LOGGER_C_RPC, "Exiting %sprivileged RPC worker loop\n", proto->privileged ? "" : "un");
 	return ret;
 }
 
@@ -883,8 +855,7 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	if (unix_socket) {
 		protocol_family = PF_UNIX;
 		addr_un.sun_family = AF_UNIX;
-		snprintf(addr_un.sun_path, sizeof(addr_un.sun_path), "%s",
-			 unix_socket);
+		snprintf(addr_un.sun_path, sizeof(addr_un.sun_path), "%s", unix_socket);
 		address_len = sizeof(addr_un);
 		address = (struct sockaddr *)(&addr_un);
 
@@ -907,7 +878,8 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 	 * side.
 	 */
 	fd = socket(protocol_family,
-		    SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+		    SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC,
+		    0);
 	if (fd < 0) {
 		errsv = errno;
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
@@ -1080,8 +1052,7 @@ out:
  *	* The current thread processes the privileged RPC interface.
  *	* A newly started thread processes the unprivileged RPC interface.
  */
-static int esdm_rpcs_interfaces_init(const char *username,
-				     const char *groupname)
+static int esdm_rpcs_interfaces_init(const char *username, const char *groupname)
 {
 	struct esdm_rpcs priv_proto;
 	ProtobufCService *priv_service =
@@ -1130,8 +1101,7 @@ static int esdm_rpcs_interfaces_init(const char *username,
 			   esdm_rpcs_state_unpriv_init));
 
 	/* Permanently drop all privileges */
-	CKINT(drop_privileges_permanent(username ? username : "nobody",
-					groupname ? groupname : NULL));
+	CKINT(drop_privileges_permanent(username ? username : "nobody", groupname ? groupname : NULL));
 
 	/* Notify all unpriv handler threads that they can become active */
 	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_perm_dropped);
@@ -1193,9 +1163,9 @@ int esdm_rpc_server_init(const char *username, const char *groupname)
 
 	/* Create thread for entropy source monitor */
 	if (thread_start(esdm_rpc_server_es_monitor, NULL,
-			 ESDM_THREAD_ES_MONITOR, NULL)) {
+				ESDM_THREAD_ES_MONITOR, NULL)) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_RPC,
-			    "Starting ES monitor thread failed\n");
+				"Starting ES monitor thread failed\n");
 	}
 
 	if (atomic_read(&server_exit) != 0) {
@@ -1204,8 +1174,8 @@ int esdm_rpc_server_init(const char *username, const char *groupname)
 
 	/* Wait for the privileged initialization to complete. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
-			  (atomic_read(&esdm_rpc_init_state) ==
-			   esdm_rpcs_state_priv_init_complete));
+				(atomic_read(&esdm_rpc_init_state) ==
+				esdm_rpcs_state_priv_init_complete));
 
 	esdm_logger(LOGGER_WARN, LOGGER_C_RPC, "RPC server started\n");
 

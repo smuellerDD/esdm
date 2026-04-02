@@ -483,7 +483,8 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 	 * them up.
 	 */
 	while (read_bytes < size) {
-		size_t todo = min_size(ESDM_RPC_MAX_DATA, size - read_bytes);
+		size_t todo =
+			min_size(ESDM_RPC_MAX_DATA, size - read_bytes);
 
 		esdm_cuse_unpriv_call_start();
 		esdm_invoke(get(tmpbuf_p + read_bytes, todo, req));
@@ -816,7 +817,8 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			return;
 		}
 		esdm_cuse_raise_privilege_transient(req);
-		if (backend_fd >= 0 && ioctl(backend_fd, RNDRESEEDCRNG) == -1)
+		if (backend_fd >= 0 &&
+			ioctl(backend_fd, RNDRESEEDCRNG) == -1)
 			ret = -errno;
 		else
 			ret = 0;

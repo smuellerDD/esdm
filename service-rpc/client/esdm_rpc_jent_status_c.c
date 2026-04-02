@@ -35,7 +35,7 @@ struct esdm_get_jent_status_buf {
 };
 
 static void esdm_rpcc_jent_status_cb(const JentStatusResponse *response,
-				     void *closure_data)
+				void *closure_data)
 {
 	struct esdm_get_jent_status_buf *buffer =
 		(struct esdm_get_jent_status_buf *)closure_data;
@@ -67,8 +67,8 @@ int esdm_rpcc_jent_status_int(char *buf, size_t buflen, void *int_data)
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
 	msg.maxlen = ESDM_RPC_MAX_DATA;
-	unpriv_access__rpc_jent_status(&rpc_conn->service, &msg,
-				       esdm_rpcc_jent_status_cb, &buffer);
+	unpriv_access__rpc_jent_status(&rpc_conn->service, &msg, esdm_rpcc_jent_status_cb,
+				       &buffer);
 
 	ret = buffer.ret;
 

@@ -359,8 +359,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 		xoshiro_init(&prng_state);
 		prng_initialized = 1;
 	}
-	rand_offset =
-		(unsigned int)xoshiro_generate(&prng_state) % num_elements;
+	rand_offset = (unsigned int)xoshiro_generate(&prng_state) % num_elements;
 	for (k = 0; k < num_elements; ++k) {
 		if (atomic_bool_read(&threads_in_cancel))
 			return -ESHUTDOWN;

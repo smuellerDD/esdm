@@ -184,8 +184,7 @@ void esdm_rpc_set_min_reseed_secs(PrivAccess_Service *service,
 /* entropy source specific implementations */
 void esdm_rpc_jent_status(UnprivAccess_Service *service,
 			  const JentStatusRequest *request,
-			  JentStatusResponse_Closure closure,
-			  void *closure_data);
+			  JentStatusResponse_Closure closure, void *closure_data);
 
 /******************************************************************************
  * Definition of Protobuf-C service
@@ -207,8 +206,7 @@ extern PrivAccess_Service priv_access_service;
 #define ESDM_RPC_MAX_MSG_SIZE 65536
 #define ESDM_RPC_MAX_RPC_HEADER_SIZE sizeof(struct esdm_rpc_proto_sc_header)
 #define ESDM_RPC_MAX_INTERNAL_MSG_HEADER_SIZE sizeof(uint64_t)
-#define ESDM_RPC_MAX_INTERNAL_MSG_SIZE                                         \
-	(ESDM_RPC_MAX_MSG_SIZE - ESDM_RPC_MAX_RPC_HEADER_SIZE)
+#define ESDM_RPC_MAX_INTERNAL_MSG_SIZE (ESDM_RPC_MAX_MSG_SIZE - ESDM_RPC_MAX_RPC_HEADER_SIZE)
 #define ESDM_RPC_MAX_DATA                                                      \
 	(ESDM_RPC_MAX_INTERNAL_MSG_SIZE - ESDM_RPC_MAX_INTERNAL_MSG_HEADER_SIZE)
 

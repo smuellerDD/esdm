@@ -80,8 +80,7 @@ static int esdm_hwrand_init(void)
 	/* Check the presence of RNG-providers */
 	fd = open(ESDM_ES_HWRAND_AVAIL, O_RDONLY);
 	if (fd >= 0) {
-		if (esdm_safe_read(fd, (uint8_t *)buf, buflen) !=
-			    (ssize_t)buflen &&
+		if (esdm_safe_read(fd, (uint8_t *)buf, buflen) != (ssize_t)buflen &&
 		    buf[0] == '\n') {
 			esdm_logger(
 				LOGGER_WARN, LOGGER_C_ES,
@@ -151,12 +150,11 @@ static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 		goto err;
 
 	do {
-		uint32_t chunk_size_bits = min_uint32(
-			hwrng_chunk_len * 8, requested_bits - done_bits);
+		uint32_t chunk_size_bits = min_uint32(hwrng_chunk_len * 8,
+						      requested_bits - done_bits);
 		uint32_t chunk_size_bytes = chunk_size_bits >> 3;
 
-		if (esdm_safe_read(esdm_hwrand_fd, buffer, hwrng_chunk_len) !=
-		    (ssize_t)hwrng_chunk_len) {
+		if (esdm_safe_read(esdm_hwrand_fd, buffer, hwrng_chunk_len) != (ssize_t)hwrng_chunk_len) {
 			close(esdm_hwrand_fd);
 			esdm_hwrand_fd = -1;
 			goto err;

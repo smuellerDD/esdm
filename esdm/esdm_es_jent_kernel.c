@@ -135,8 +135,7 @@ static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 	uint32_t poolsize, entropy_rate;
 
 	mutex_reader_lock(&jent_rng_mutex);
-	poolsize =
-		esdm_jent_kernel_entropylevel_locked(esdm_security_strength());
+	poolsize = esdm_jent_kernel_entropylevel_locked(esdm_security_strength());
 	entropy_rate = esdm_jent_kernel_entropylevel_locked(256);
 	mutex_reader_unlock(&jent_rng_mutex);
 

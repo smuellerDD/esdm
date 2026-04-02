@@ -59,14 +59,8 @@ static inline int systemd_notify(const char *message)
 	return 0;
 }
 
-static inline int systemd_notify_ready(void)
-{
-	return 0;
-}
-static inline int systemd_notify_stopping(void)
-{
-	return 0;
-}
+static inline int systemd_notify_ready(void) { return 0; }
+static inline int systemd_notify_stopping(void) { return 0; }
 static inline int systemd_notify_mainpid(pid_t pid)
 {
 	(void)pid;
@@ -85,14 +79,8 @@ static inline int systemd_notify_status(char *msg)
 	return 0;
 }
 
-static inline int systemd_listen_pid(void)
-{
-	return 0;
-}
-static inline int systemd_listen_fds(void)
-{
-	return 0;
-}
+static inline int systemd_listen_pid(void) { return 0; }
+static inline int systemd_listen_fds(void) { return 0; }
 static inline int systemd_listen_fd_for_name(const char *name)
 {
 	(void)name;

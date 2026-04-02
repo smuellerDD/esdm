@@ -264,7 +264,7 @@ static size_t drbg_hash_generate_internal(struct esdm_drbg_hash_state *drbg,
 
 DSO_PUBLIC
 size_t esdm_drbg_hash_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
-			       size_t buflen, struct esdm_drbg_string *addtl)
+			     size_t buflen, struct esdm_drbg_string *addtl)
 {
 	struct esdm_drbg_hash_state *drbg_hash =
 		(struct esdm_drbg_hash_state *)drbg;
@@ -273,8 +273,7 @@ size_t esdm_drbg_hash_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
 }
 
 DSO_PUBLIC
-void esdm_drbg_hash_seed(struct esdm_drbg_state *drbg,
-			 struct esdm_drbg_string *seed)
+void esdm_drbg_hash_seed(struct esdm_drbg_state *drbg, struct esdm_drbg_string *seed)
 {
 	struct esdm_drbg_hash_state *drbg_hash =
 		(struct esdm_drbg_hash_state *)drbg;
@@ -298,8 +297,7 @@ void esdm_drbg_hash_zero(struct esdm_drbg_state *drbg)
 	const struct esdm_hash *hash = hash_ctx->hash;
 
 	drbg_hash->reseed_ctr = 0;
-	memset_secure((uint8_t *)drbg_hash +
-			      sizeof(struct esdm_drbg_hash_state),
+	memset_secure((uint8_t *)drbg_hash + sizeof(struct esdm_drbg_hash_state),
 		      0, ESDM_DRBG_HASH_STATE_SIZE(hash));
 }
 

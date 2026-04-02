@@ -422,8 +422,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
  *
  * The caller must hold the DRNG lock.
  */
-static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
-					 const char *drng_type)
+static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng, const char *drng_type)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 		collected_seedbuf;
@@ -457,9 +456,9 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 				drng_type);
 		}
 
-		esdm_fill_seed_buffer(&seedbuf,
-				      esdm_get_seed_entropy_osr(do_full_init),
-				      forced && do_full_init);
+		esdm_fill_seed_buffer(
+			&seedbuf, esdm_get_seed_entropy_osr(do_full_init),
+			forced && do_full_init);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
@@ -482,7 +481,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 */
 		esdm_init_ops(&collected_seedbuf);
 
-		/*
+	/*
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for
@@ -639,8 +638,7 @@ void esdm_drng_force_reseed(void)
 	if (!esdm_drng || esdm_drng_check_disable_threshold(&esdm_drng_init)) {
 		esdm_drng_init.force_reseed = esdm_drng_init.fully_seeded;
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-			    "force reseed of initial DRNG = %i\n",
-			    esdm_drng_init.force_reseed);
+			    "force reseed of initial DRNG = %i\n", esdm_drng_init.force_reseed);
 		goto out;
 	}
 
@@ -652,8 +650,7 @@ void esdm_drng_force_reseed(void)
 
 		drng->force_reseed = drng->fully_seeded;
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-			    "force reseed of DRNG on CPU %u = %i\n", node,
-			    drng->force_reseed);
+			    "force reseed of DRNG on CPU %u = %i\n", node, drng->force_reseed);
 	}
 
 out:
@@ -838,8 +835,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		if (pr) {
 			/* Force the async reseed for PR DRNG */
 			esdm_unset_fully_seeded(drng);
-			if (outbuflen &&
-			    iterations++ % pr_yield_iterations == 0)
+			if (outbuflen && iterations++ % pr_yield_iterations == 0)
 				sched_yield();
 		}
 	}
@@ -1053,8 +1049,8 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	for (;;) {
 		esdm_fill_seed_buffer(
 			eb,
-			esdm_get_seed_entropy_osr(
-				!(flags & ESDM_GET_SEED_FULLY_SEEDED)),
+			esdm_get_seed_entropy_osr(!(flags &
+						  ESDM_GET_SEED_FULLY_SEEDED)),
 			false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 

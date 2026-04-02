@@ -100,7 +100,8 @@ bool fips_enabled(void)
 		 * Without secure_getenv, only trust the environment
 		 * if not running with elevated privileges.
 		 */
-		if (getuid() == geteuid() && getgid() == getegid() &&
+		if (getuid() == geteuid() &&
+		    getgid() == getegid() &&
 		    getenv("ESDM_SERVER_FORCE_FIPS")) {
 #endif
 			fipsflag[0] = '1';

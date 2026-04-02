@@ -39,6 +39,7 @@ extern "C" {
 		_a > _b ? _a : _b;                                             \
 	})
 
+
 static inline uint32_t min_uint32(uint32_t a, uint32_t b)
 {
 	return min(a, b);
