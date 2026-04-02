@@ -88,8 +88,12 @@ static uint32_t esdm_aux_avail_entropy_pool(struct esdm_pool *pool)
 		min_uint32(esdm_get_digestsize(),
 			   atomic_read_u32(&pool->aux_entropy_bits));
 
+#ifdef ESDM_AUX_INPUT_HAS_FULL_ENTROPY
+	return avail_bits;
+#else
 	/* Consider oversampling rate due to aux pool conditioning */
 	return esdm_reduce_by_osr(avail_bits);
+#endif
 }
 
 static uint32_t esdm_aux_avail_entropy(uint32_t __unused u)
