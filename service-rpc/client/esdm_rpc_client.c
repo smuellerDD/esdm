@@ -138,6 +138,12 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	memset(addr.sun_path, 0, sizeof(addr.sun_path));
 	memcpy(addr.sun_path, socketname, strlen(socketname));
 
+	/*
+	 * The use of SOCK_SEQPACKET is intended to guarantee that the entire
+	 * message is sent and that the receiving server will only receive
+	 * the full message. Short reads will therefore not happen on the server
+	 * side.
+	 */
 	rpc_conn->fd =
 		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 	if (rpc_conn->fd < 0) {
@@ -215,8 +221,6 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 
 			/*
 			 * EPIPE is due to the server was restarted -> reconnect
-			 * EAGAIN/EWOULDBLOCK is due to the socket
-			 * timeout -> call write again
 			 */
 			if (pret == 0) {
 				/* Does the caller wants us to interrupt? */
@@ -354,6 +358,12 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	/* Read the data into the local buffer storage */
 	do {
 		retries++;
+
+		/*
+		 * The server uses SOCK_SEQPACKET which ensures that always the
+		 * full message is submitted in one send operation. Therefore,
+		 * short-reads cannot occur here and can be ignored.
+		 */
 		received =
 			read(rpc_conn->fd, rpc_conn->buf, sizeof(rpc_conn->buf));
 

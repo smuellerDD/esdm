@@ -417,6 +417,11 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	if (rpc_conn->child_fd < 0)
 		return -EINVAL;
 
+	/*
+	 * The client uses SOCK_SEQPACKET which ensures that always the
+	 * full message is submitted in one send operation. Therefore,
+	 * short-reads cannot occur here and can be ignored.
+	 */
 	received = read(rpc_conn->child_fd, rpc_conn->buf,
 			sizeof(rpc_conn->buf));
 	if (received < 0) {
@@ -856,6 +861,12 @@ static int esdm_rpcs_start(const char *unix_socket, uint16_t tcp_port,
 		return -EINVAL;
 	}
 
+	/*
+	 * The use of SOCK_SEQPACKET is intended to guarantee that the entire
+	 * message is sent and that the receiving client will only receive
+	 * the full message. Short reads will therefore not happen on the client
+	 * side.
+	 */
 	fd = socket(protocol_family,
 		    SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC,
 		    0);
