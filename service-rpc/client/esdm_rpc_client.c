@@ -203,6 +203,13 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 		return -EINVAL;
 
 	do {
+		/* Does the caller wants us to interrupt? */
+		if (rpc_conn->interrupt_func &&
+			rpc_conn->interrupt_func(
+				rpc_conn->interrupt_data)) {
+			return -EAGAIN;
+		}
+
 		retries++;
 		ret = write(rpc_conn->fd, data, len);
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -226,13 +233,6 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 			 * EPIPE is due to the server was restarted -> reconnect
 			 */
 			if (pret == 0) {
-				/* Does the caller wants us to interrupt? */
-				if (rpc_conn->interrupt_func &&
-				    rpc_conn->interrupt_func(
-					    rpc_conn->interrupt_data)) {
-					return -EAGAIN;
-				}
-
 				continue;
 			}
 
@@ -363,6 +363,14 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 	/* Read the data into the local buffer storage */
 	do {
+		/* Does the caller wants us to interrupt? */
+		if (rpc_conn->interrupt_func &&
+			rpc_conn->interrupt_func(
+				rpc_conn->interrupt_data)) {
+			interrupted = true;
+			break;
+		}
+
 		retries++;
 
 		/*
@@ -391,16 +399,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		/* Handle a read timeout */
 		if (received < 0) {
 			if (pret == 0) {
-				/* Does the caller wants us to interrupt? */
-				if (rpc_conn->interrupt_func &&
-				    rpc_conn->interrupt_func(
-					    rpc_conn->interrupt_data)) {
-					interrupted = true;
-					break;
-				}
-
 				/* Trigger the re-submission of the request */
-				ret = EAGAIN;
+				ret = -EAGAIN;
 				goto out;
 			}
 
@@ -445,7 +445,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		}
 	} while (received <= 0 && retries <= ESDM_MAX_RX_TX_RETRIES);
 
-	if (header &&
+	if (!interrupted && header &&
 	    header->status_code == PROTOBUF_C_RPC_STATUS_CODE_SUCCESS) {
 		/*
 		 * We now have a filled buffer that has a header and received
@@ -538,7 +538,7 @@ static void esdm_client_invoke(ProtobufCService *service,
 		CKINT_LOG(esdm_rpc_client_read_handler(rpc_conn, method->output,
 						       closure, closure_data),
 			  "Receiving of data failed: %d\n", ret);
-	} while (ret == EAGAIN);
+	} while (ret == -EAGAIN);
 
 out:
 	mutex_w_unlock(&rpc_conn->lock);
