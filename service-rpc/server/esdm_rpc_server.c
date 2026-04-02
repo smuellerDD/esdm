@@ -632,7 +632,7 @@ static int esdm_rpcs_handler(void *args)
 				uint64_t event_val;
 				ssize_t v = read(thread->eventfd, &event_val, sizeof(event_val));
 				(void) v;
-				esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+				esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
 				    	    "termination event triggered\n");
 				break;
 			}
