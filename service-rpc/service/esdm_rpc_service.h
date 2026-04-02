@@ -120,11 +120,6 @@ void esdm_rpc_get_random_bytes_full(UnprivAccess_Service *service,
 				    GetRandomBytesFullResponse_Closure closure,
 				    void *closure_data);
 
-void esdm_rpc_get_random_bytes_full_timeout(
-	UnprivAccess_Service *service,
-	const GetRandomBytesFullTimeoutRequest *request,
-	GetRandomBytesFullTimeoutResponse_Closure closure, void *closure_data);
-
 void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
 				  const GetRandomBytesPrRequest *request,
 				  GetRandomBytesPrResponse_Closure closure,

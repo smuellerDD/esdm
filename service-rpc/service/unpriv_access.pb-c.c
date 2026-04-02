@@ -457,96 +457,6 @@ void   get_random_bytes_full_response__free_unpacked
   assert(message->base.descriptor == &get_random_bytes_full_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-void   get_random_bytes_full_timeout_request__init
-                     (GetRandomBytesFullTimeoutRequest         *message)
-{
-  static const GetRandomBytesFullTimeoutRequest init_value = GET_RANDOM_BYTES_FULL_TIMEOUT_REQUEST__INIT;
-  *message = init_value;
-}
-size_t get_random_bytes_full_timeout_request__get_packed_size
-                     (const GetRandomBytesFullTimeoutRequest *message)
-{
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_request__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t get_random_bytes_full_timeout_request__pack
-                     (const GetRandomBytesFullTimeoutRequest *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_request__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t get_random_bytes_full_timeout_request__pack_to_buffer
-                     (const GetRandomBytesFullTimeoutRequest *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_request__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-GetRandomBytesFullTimeoutRequest *
-       get_random_bytes_full_timeout_request__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (GetRandomBytesFullTimeoutRequest *)
-     protobuf_c_message_unpack (&get_random_bytes_full_timeout_request__descriptor,
-                                allocator, len, data);
-}
-void   get_random_bytes_full_timeout_request__free_unpacked
-                     (GetRandomBytesFullTimeoutRequest *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_request__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   get_random_bytes_full_timeout_response__init
-                     (GetRandomBytesFullTimeoutResponse         *message)
-{
-  static const GetRandomBytesFullTimeoutResponse init_value = GET_RANDOM_BYTES_FULL_TIMEOUT_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t get_random_bytes_full_timeout_response__get_packed_size
-                     (const GetRandomBytesFullTimeoutResponse *message)
-{
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t get_random_bytes_full_timeout_response__pack
-                     (const GetRandomBytesFullTimeoutResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t get_random_bytes_full_timeout_response__pack_to_buffer
-                     (const GetRandomBytesFullTimeoutResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-GetRandomBytesFullTimeoutResponse *
-       get_random_bytes_full_timeout_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (GetRandomBytesFullTimeoutResponse *)
-     protobuf_c_message_unpack (&get_random_bytes_full_timeout_response__descriptor,
-                                allocator, len, data);
-}
-void   get_random_bytes_full_timeout_response__free_unpacked
-                     (GetRandomBytesFullTimeoutResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &get_random_bytes_full_timeout_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
 void   get_random_bytes_pr_request__init
                      (GetRandomBytesPrRequest         *message)
 {
@@ -1672,121 +1582,6 @@ const ProtobufCMessageDescriptor get_random_bytes_full_response__descriptor =
   (ProtobufCMessageInit) get_random_bytes_full_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor get_random_bytes_full_timeout_request__field_descriptors[3] =
-{
-  {
-    "len",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_UINT64,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesFullTimeoutRequest, len),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "tv_sec",
-    2,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_UINT64,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesFullTimeoutRequest, tv_sec),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "tv_nsec",
-    3,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_UINT32,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesFullTimeoutRequest, tv_nsec),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned get_random_bytes_full_timeout_request__field_indices_by_name[] = {
-  0,   /* field[0] = len */
-  2,   /* field[2] = tv_nsec */
-  1,   /* field[1] = tv_sec */
-};
-static const ProtobufCIntRange get_random_bytes_full_timeout_request__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 3 }
-};
-const ProtobufCMessageDescriptor get_random_bytes_full_timeout_request__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "GetRandomBytesFullTimeoutRequest",
-  "GetRandomBytesFullTimeoutRequest",
-  "GetRandomBytesFullTimeoutRequest",
-  "",
-  sizeof(GetRandomBytesFullTimeoutRequest),
-  3,
-  get_random_bytes_full_timeout_request__field_descriptors,
-  get_random_bytes_full_timeout_request__field_indices_by_name,
-  1,  get_random_bytes_full_timeout_request__number_ranges,
-  (ProtobufCMessageInit) get_random_bytes_full_timeout_request__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor get_random_bytes_full_timeout_response__field_descriptors[2] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT64,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesFullTimeoutResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-  {
-    "randval",
-    2,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_BYTES,
-    0,   /* quantifier_offset */
-    offsetof(GetRandomBytesFullTimeoutResponse, randval),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned get_random_bytes_full_timeout_response__field_indices_by_name[] = {
-  1,   /* field[1] = randval */
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange get_random_bytes_full_timeout_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 2 }
-};
-const ProtobufCMessageDescriptor get_random_bytes_full_timeout_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "GetRandomBytesFullTimeoutResponse",
-  "GetRandomBytesFullTimeoutResponse",
-  "GetRandomBytesFullTimeoutResponse",
-  "",
-  sizeof(GetRandomBytesFullTimeoutResponse),
-  2,
-  get_random_bytes_full_timeout_response__field_descriptors,
-  get_random_bytes_full_timeout_response__field_indices_by_name,
-  1,  get_random_bytes_full_timeout_response__number_ranges,
-  (ProtobufCMessageInit) get_random_bytes_full_timeout_response__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
 static const ProtobufCFieldDescriptor get_random_bytes_pr_request__field_descriptors[1] =
 {
   {
@@ -2419,13 +2214,12 @@ const ProtobufCMessageDescriptor get_min_reseed_secs_response__descriptor =
   (ProtobufCMessageInit) get_min_reseed_secs_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[14] =
+static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[13] =
 {
   { "RpcStatus", &status_request__descriptor, &status_response__descriptor },
   { "RpcGetEntLvl", &get_ent_lvl_request__descriptor, &get_ent_lvl_response__descriptor },
   { "RpcIsFullySeeded", &is_fully_seeded_request__descriptor, &is_fully_seeded_response__descriptor },
   { "RpcGetRandomBytesFull", &get_random_bytes_full_request__descriptor, &get_random_bytes_full_response__descriptor },
-  { "RpcGetRandomBytesFullTimeout", &get_random_bytes_full_timeout_request__descriptor, &get_random_bytes_full_timeout_response__descriptor },
   { "RpcGetRandomBytesPr", &get_random_bytes_pr_request__descriptor, &get_random_bytes_pr_response__descriptor },
   { "RpcGetRandomBytes", &get_random_bytes_request__descriptor, &get_random_bytes_response__descriptor },
   { "RpcGetSeed", &get_seed_request__descriptor, &get_seed_response__descriptor },
@@ -2438,19 +2232,18 @@ static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[14] =
 };
 const unsigned unpriv_access__method_indices_by_name[] = {
   1,        /* RpcGetEntLvl */
-  12,        /* RpcGetMinReseedSecs */
-  10,        /* RpcGetPoolsize */
-  6,        /* RpcGetRandomBytes */
+  11,        /* RpcGetMinReseedSecs */
+  9,        /* RpcGetPoolsize */
+  5,        /* RpcGetRandomBytes */
   3,        /* RpcGetRandomBytesFull */
-  4,        /* RpcGetRandomBytesFullTimeout */
-  5,        /* RpcGetRandomBytesPr */
-  7,        /* RpcGetSeed */
-  11,        /* RpcGetWriteWakeupThresh */
+  4,        /* RpcGetRandomBytesPr */
+  6,        /* RpcGetSeed */
+  10,        /* RpcGetWriteWakeupThresh */
   2,        /* RpcIsFullySeeded */
-  13,        /* RpcJentStatus */
-  9,        /* RpcRndGetEntCnt */
+  12,        /* RpcJentStatus */
+  8,        /* RpcRndGetEntCnt */
   0,        /* RpcStatus */
-  8         /* RpcWriteData */
+  7         /* RpcWriteData */
 };
 const ProtobufCServiceDescriptor unpriv_access__descriptor =
 {
@@ -2459,7 +2252,7 @@ const ProtobufCServiceDescriptor unpriv_access__descriptor =
   "UnprivAccess",
   "UnprivAccess",
   "",
-  14,
+  13,
   unpriv_access__method_descriptors,
   unpriv_access__method_indices_by_name
 };
@@ -2495,21 +2288,13 @@ void unpriv_access__rpc_get_random_bytes_full(ProtobufCService *service,
   assert(service->descriptor == &unpriv_access__descriptor);
   service->invoke(service, 3, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
-void unpriv_access__rpc_get_random_bytes_full_timeout(ProtobufCService *service,
-                                                      const GetRandomBytesFullTimeoutRequest *input,
-                                                      GetRandomBytesFullTimeoutResponse_Closure closure,
-                                                      void *closure_data)
-{
-  assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 4, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
-}
 void unpriv_access__rpc_get_random_bytes_pr(ProtobufCService *service,
                                             const GetRandomBytesPrRequest *input,
                                             GetRandomBytesPrResponse_Closure closure,
                                             void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 5, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 4, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_get_random_bytes(ProtobufCService *service,
                                          const GetRandomBytesRequest *input,
@@ -2517,7 +2302,7 @@ void unpriv_access__rpc_get_random_bytes(ProtobufCService *service,
                                          void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 6, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 5, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_get_seed(ProtobufCService *service,
                                  const GetSeedRequest *input,
@@ -2525,7 +2310,7 @@ void unpriv_access__rpc_get_seed(ProtobufCService *service,
                                  void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 7, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 6, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_write_data(ProtobufCService *service,
                                    const WriteDataRequest *input,
@@ -2533,7 +2318,7 @@ void unpriv_access__rpc_write_data(ProtobufCService *service,
                                    void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 8, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 7, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_rnd_get_ent_cnt(ProtobufCService *service,
                                         const RndGetEntCntRequest *input,
@@ -2541,7 +2326,7 @@ void unpriv_access__rpc_rnd_get_ent_cnt(ProtobufCService *service,
                                         void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 9, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 8, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_get_poolsize(ProtobufCService *service,
                                      const GetPoolsizeRequest *input,
@@ -2549,7 +2334,7 @@ void unpriv_access__rpc_get_poolsize(ProtobufCService *service,
                                      void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 10, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 9, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_get_write_wakeup_thresh(ProtobufCService *service,
                                                 const GetWriteWakeupThreshRequest *input,
@@ -2557,7 +2342,7 @@ void unpriv_access__rpc_get_write_wakeup_thresh(ProtobufCService *service,
                                                 void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 11, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 10, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_get_min_reseed_secs(ProtobufCService *service,
                                             const GetMinReseedSecsRequest *input,
@@ -2565,7 +2350,7 @@ void unpriv_access__rpc_get_min_reseed_secs(ProtobufCService *service,
                                             void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 12, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 11, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__rpc_jent_status(ProtobufCService *service,
                                     const JentStatusRequest *input,
@@ -2573,7 +2358,7 @@ void unpriv_access__rpc_jent_status(ProtobufCService *service,
                                     void *closure_data)
 {
   assert(service->descriptor == &unpriv_access__descriptor);
-  service->invoke(service, 13, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+  service->invoke(service, 12, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__init (UnprivAccess_Service *service,
                           UnprivAccess_ServiceDestroy destroy)

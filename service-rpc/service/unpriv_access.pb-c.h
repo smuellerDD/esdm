@@ -25,8 +25,6 @@ typedef struct IsFullySeededRequest IsFullySeededRequest;
 typedef struct IsFullySeededResponse IsFullySeededResponse;
 typedef struct GetRandomBytesFullRequest GetRandomBytesFullRequest;
 typedef struct GetRandomBytesFullResponse GetRandomBytesFullResponse;
-typedef struct GetRandomBytesFullTimeoutRequest GetRandomBytesFullTimeoutRequest;
-typedef struct GetRandomBytesFullTimeoutResponse GetRandomBytesFullTimeoutResponse;
 typedef struct GetRandomBytesPrRequest GetRandomBytesPrRequest;
 typedef struct GetRandomBytesPrResponse GetRandomBytesPrResponse;
 typedef struct GetSeedRequest GetSeedRequest;
@@ -211,43 +209,6 @@ struct  GetRandomBytesFullResponse
 };
 #define GET_RANDOM_BYTES_FULL_RESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_full_response__descriptor) \
-, 0, {0,NULL} }
-
-
-/*
- **
- * @brief Request to get random bytes from fully seeded DRNG
- * @param len number of random bytes that are requested
- */
-struct  GetRandomBytesFullTimeoutRequest
-{
-  ProtobufCMessage base;
-  uint64_t len;
-  uint64_t tv_sec;
-  uint32_t tv_nsec;
-};
-#define GET_RANDOM_BYTES_FULL_TIMEOUT_REQUEST__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_full_timeout_request__descriptor) \
-, 0, 0, 0 }
-
-
-/*
- **
- * @brief Response providing random bytes from fully seeded DRNG
- * @param ret Return code of generation request (> 0 on success with the value
- *	      indicating the generated number of random bytes,
- *	      < -255 indicating the maximum number of bytes that can be
- *	      transferred in one request, < 0 on error)
- * @param randval Random bytes
- */
-struct  GetRandomBytesFullTimeoutResponse
-{
-  ProtobufCMessage base;
-  int64_t ret;
-  ProtobufCBinaryData randval;
-};
-#define GET_RANDOM_BYTES_FULL_TIMEOUT_RESPONSE__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&get_random_bytes_full_timeout_response__descriptor) \
 , 0, {0,NULL} }
 
 
@@ -701,44 +662,6 @@ GetRandomBytesFullResponse *
 void   get_random_bytes_full_response__free_unpacked
                      (GetRandomBytesFullResponse *message,
                       ProtobufCAllocator *allocator);
-/* GetRandomBytesFullTimeoutRequest methods */
-void   get_random_bytes_full_timeout_request__init
-                     (GetRandomBytesFullTimeoutRequest         *message);
-size_t get_random_bytes_full_timeout_request__get_packed_size
-                     (const GetRandomBytesFullTimeoutRequest   *message);
-size_t get_random_bytes_full_timeout_request__pack
-                     (const GetRandomBytesFullTimeoutRequest   *message,
-                      uint8_t             *out);
-size_t get_random_bytes_full_timeout_request__pack_to_buffer
-                     (const GetRandomBytesFullTimeoutRequest   *message,
-                      ProtobufCBuffer     *buffer);
-GetRandomBytesFullTimeoutRequest *
-       get_random_bytes_full_timeout_request__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   get_random_bytes_full_timeout_request__free_unpacked
-                     (GetRandomBytesFullTimeoutRequest *message,
-                      ProtobufCAllocator *allocator);
-/* GetRandomBytesFullTimeoutResponse methods */
-void   get_random_bytes_full_timeout_response__init
-                     (GetRandomBytesFullTimeoutResponse         *message);
-size_t get_random_bytes_full_timeout_response__get_packed_size
-                     (const GetRandomBytesFullTimeoutResponse   *message);
-size_t get_random_bytes_full_timeout_response__pack
-                     (const GetRandomBytesFullTimeoutResponse   *message,
-                      uint8_t             *out);
-size_t get_random_bytes_full_timeout_response__pack_to_buffer
-                     (const GetRandomBytesFullTimeoutResponse   *message,
-                      ProtobufCBuffer     *buffer);
-GetRandomBytesFullTimeoutResponse *
-       get_random_bytes_full_timeout_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   get_random_bytes_full_timeout_response__free_unpacked
-                     (GetRandomBytesFullTimeoutResponse *message,
-                      ProtobufCAllocator *allocator);
 /* GetRandomBytesPrRequest methods */
 void   get_random_bytes_pr_request__init
                      (GetRandomBytesPrRequest         *message);
@@ -1075,12 +998,6 @@ typedef void (*GetRandomBytesFullRequest_Closure)
 typedef void (*GetRandomBytesFullResponse_Closure)
                  (const GetRandomBytesFullResponse *message,
                   void *closure_data);
-typedef void (*GetRandomBytesFullTimeoutRequest_Closure)
-                 (const GetRandomBytesFullTimeoutRequest *message,
-                  void *closure_data);
-typedef void (*GetRandomBytesFullTimeoutResponse_Closure)
-                 (const GetRandomBytesFullTimeoutResponse *message,
-                  void *closure_data);
 typedef void (*GetRandomBytesPrRequest_Closure)
                  (const GetRandomBytesPrRequest *message,
                   void *closure_data);
@@ -1152,10 +1069,6 @@ struct UnprivAccess_Service
                                     const GetRandomBytesFullRequest *input,
                                     GetRandomBytesFullResponse_Closure closure,
                                     void *closure_data);
-  void (*rpc_get_random_bytes_full_timeout)(UnprivAccess_Service *service,
-                                            const GetRandomBytesFullTimeoutRequest *input,
-                                            GetRandomBytesFullTimeoutResponse_Closure closure,
-                                            void *closure_data);
   void (*rpc_get_random_bytes_pr)(UnprivAccess_Service *service,
                                   const GetRandomBytesPrRequest *input,
                                   GetRandomBytesPrResponse_Closure closure,
@@ -1204,7 +1117,6 @@ void unpriv_access__init (UnprivAccess_Service *service,
       function_prefix__ ## rpc_get_ent_lvl,\
       function_prefix__ ## rpc_is_fully_seeded,\
       function_prefix__ ## rpc_get_random_bytes_full,\
-      function_prefix__ ## rpc_get_random_bytes_full_timeout,\
       function_prefix__ ## rpc_get_random_bytes_pr,\
       function_prefix__ ## rpc_get_random_bytes,\
       function_prefix__ ## rpc_get_seed,\
@@ -1230,10 +1142,6 @@ void unpriv_access__rpc_get_random_bytes_full(ProtobufCService *service,
                                               const GetRandomBytesFullRequest *input,
                                               GetRandomBytesFullResponse_Closure closure,
                                               void *closure_data);
-void unpriv_access__rpc_get_random_bytes_full_timeout(ProtobufCService *service,
-                                                      const GetRandomBytesFullTimeoutRequest *input,
-                                                      GetRandomBytesFullTimeoutResponse_Closure closure,
-                                                      void *closure_data);
 void unpriv_access__rpc_get_random_bytes_pr(ProtobufCService *service,
                                             const GetRandomBytesPrRequest *input,
                                             GetRandomBytesPrResponse_Closure closure,
@@ -1283,8 +1191,6 @@ extern const ProtobufCMessageDescriptor is_fully_seeded_request__descriptor;
 extern const ProtobufCMessageDescriptor is_fully_seeded_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_full_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_full_response__descriptor;
-extern const ProtobufCMessageDescriptor get_random_bytes_full_timeout_request__descriptor;
-extern const ProtobufCMessageDescriptor get_random_bytes_full_timeout_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_pr_request__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_pr_response__descriptor;
 extern const ProtobufCMessageDescriptor get_seed_request__descriptor;
