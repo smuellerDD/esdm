@@ -134,8 +134,6 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
 		} else if (buffer.ret == -EAGAIN) {
-			struct timespec curr;
-
 			nanosleep(&esdm_client_poll_ts, NULL);
 			continue;
 		} else if (buffer.ret < 0) {

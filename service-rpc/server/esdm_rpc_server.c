@@ -382,7 +382,6 @@ static void esdm_rpcs_response_closure(const ProtobufCMessage *message,
 			    "Failed to serialize response: %d\n", ret);
 	}
 
-out:
 	return;
 }
 
