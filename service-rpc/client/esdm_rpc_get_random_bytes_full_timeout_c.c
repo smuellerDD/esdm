@@ -74,6 +74,16 @@ static bool esdm_time_after(struct timespec *curr, struct timespec *timeout)
 	return false;
 }
 
+static int int_connection_after_timeout(void* time)
+{
+    struct timespec *timeout = (struct timespec *) time;
+    struct timespec cur_time;
+
+    clock_gettime(CLOCK_MONOTONIC, &cur_time);
+
+    return esdm_time_after(&cur_time, timeout);
+}
+
 DSO_PUBLIC
 ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 						    struct timespec *ts,
@@ -86,10 +96,21 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 	size_t maxbuflen = buflen, orig_buflen = buflen;
 	struct timespec timeout;
 	ssize_t ret = 0;
+	esdm_rpcc_interrupt_func_t old_interrupt_func = NULL;
 
 	CKNULL(ts, -EINVAL);
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
+
+	/* register default timeout handler if no one is already set */
+	if (int_data == NULL) {
+		old_interrupt_func = rpc_conn->interrupt_func;
+		rpc_conn->interrupt_func = &int_connection_after_timeout;
+		int_data = ts;
+		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
+	} else {
+		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
+	}
 
 	CKINT(clock_gettime(CLOCK_MONOTONIC, &timeout));
 	timeout.tv_sec += ts->tv_sec;
@@ -104,9 +125,11 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 		buffer.buf = buf;
 		buffer.buflen = buflen;
 
+		/* only perform short waits in server,
+		 * as they are blocking termination */
 		msg.len = min_size(maxbuflen, buflen);
-		msg.tv_sec = (uint64_t)ts->tv_sec;
-		msg.tv_nsec = (uint32_t)ts->tv_nsec;
+		msg.tv_sec = 0;
+		msg.tv_nsec = min_uint32(10000000, (uint32_t)ts->tv_nsec);
 
 		unpriv_access__rpc_get_random_bytes_full_timeout(
 			&rpc_conn->service, &msg,
@@ -115,14 +138,16 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 		if (buffer.ret < -255) {
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
-		} else if (buffer.ret == -EAGAIN) {
+		} else if (buffer.ret == -EAGAIN || buffer.ret == -ETIMEDOUT) {
 			struct timespec curr;
 
 			CKINT(clock_gettime(CLOCK_MONOTONIC, &curr));
 
 			/* Terminate the endless loop if the timeout hits */
-			if (esdm_time_after(&curr, &timeout))
+			if (esdm_time_after(&curr, &timeout)) {
+				ret = -ETIMEDOUT;
 				break;
+			}
 
 			nanosleep(&esdm_client_poll_ts, NULL);
 			continue;
@@ -137,6 +162,10 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 	}
 
 out:
+	if (old_interrupt_func) {
+		rpc_conn->interrupt_func = old_interrupt_func;
+	}
+
 	esdm_rpcc_put_unpriv_service(rpc_conn);
 	return (ret < 0) ? ret : (ssize_t)orig_buflen;
 }
