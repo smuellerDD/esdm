@@ -301,8 +301,14 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		goto out;
 	}
 
-	CKINT_LOG(esdm_rpcs_write_data(rpc_conn, rpc_conn->buf, ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length),
-		  "Submission of message data failed with error %d\n", ret);
+	/* this message is also printed when the client closed early, don't spam logs */
+	ret = esdm_rpcs_write_data(rpc_conn, rpc_conn->buf, ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length);
+	if (ret != 0) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+			    "Submission of message data failed with error %d\n", ret);
+		ret = -EFAULT;
+		goto out;
+	}
 
 out:
 	/*
@@ -363,8 +369,12 @@ static void esdm_rpcs_response_closure(const ProtobufCMessage *message,
 	struct esdm_rpcs_connection *rpc_conn = closure_data;
 	int ret;
 
-	CKINT_LOG(esdm_rpcs_pack(message, rpc_conn),
-		  "Failed to serialize response: %d\n", ret);
+	ret = esdm_rpcs_pack(message, rpc_conn);
+
+	if (ret) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+		    "Failed to serialize response: %d\n", ret);
+	}
 
 out:
 	return;
