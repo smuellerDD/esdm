@@ -270,8 +270,13 @@ static void dealloc(void)
  */
 static void sig_term(int sig)
 {
+	static int called = 0;
 	(void)sig;
-	esdm_rpc_server_fini();
+
+	if (!called) {
+		called = 1;
+		esdm_rpc_server_fini();
+	}
 }
 
 static void install_term(void)
