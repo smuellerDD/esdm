@@ -24,6 +24,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -41,6 +42,7 @@ static char *pidfile = NULL;
 static int pidfile_fd = -1;
 static const char *username = NULL;
 static const char *groupname = NULL;
+static unsigned int memlock = 0;
 
 /*******************************************************************
  * Forward Declarations
@@ -85,6 +87,8 @@ static void usage(void)
 		"\t-S --syslog\tLog to syslog instead of stdout/stderr\n");
 	fprintf(stderr,
 		"\t-P --raise_sched_priority\tRaise scheduling priority/nice level\n");
+	fprintf(stderr,
+		"\t-m --memlock\tLock all memory from being swapped out\n");
 	exit(1);
 }
 
@@ -107,10 +111,11 @@ static void parse_opts(int argc, char *argv[])
 			{ "jent_block_disable", 0, 0, 0 },
 			{ "syslog", 0, 0, 0 },
 			{ "raise_sched_priority", 0, 0, 0 },
-			{ "groupname", 0, 0, 0 },
+			{ "groupname", 1, 0, 0 },
+			{ "memlock", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "hvp:u:fisSPg:", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fisSPg:m", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -170,6 +175,10 @@ static void parse_opts(int argc, char *argv[])
 				/* groupname */
 				groupname = optarg;
 				break;
+			case 12:
+				/* memlock */
+				memlock = 1;
+				break;
 
 			default:
 				usage();
@@ -208,6 +217,10 @@ static void parse_opts(int argc, char *argv[])
 		case 's':
 			/* force_schedes */
 			esdm_config_es_sched_retry_set(1);
+			break;
+		case 'm':
+			/* memlock */
+			memlock = 1;
 			break;
 
 		default:
@@ -425,6 +438,28 @@ int main(int argc, char *argv[])
 	if (verbosity == 0 && !foreground)
 		daemonize();
 
+	if (memlock) {
+		/*
+		 * its hard to set a sane limit here, as we have a
+		 * variable amount of memory in jitterentropy entropy source
+		 * and a variable amount of worker threads
+		 */
+		struct rlimit rl = {
+			.rlim_cur = RLIM_INFINITY,
+			.rlim_max = RLIM_INFINITY,
+		};
+		if (setrlimit(RLIMIT_MEMLOCK, &rl) != 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot raise memlock limit\n");
+			exit(-1);
+		}
+		if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot use mlockall\n");
+			exit(-1);
+		}
+	}
+
 	if (pidfile && strlen(pidfile))
 		create_pid_file(pidfile);
 
@@ -438,5 +473,10 @@ int main(int argc, char *argv[])
 out:
 	daemon_release();
 	dealloc();
+
+	if (memlock) {
+		munlockall();
+	}
+
 	return (int)ret;
 }

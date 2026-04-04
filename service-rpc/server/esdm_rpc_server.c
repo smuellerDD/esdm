@@ -820,6 +820,8 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 
 	threads = calloc(num_threads, sizeof(struct esdm_rpc_thread));
 	if (threads == NULL) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Unable to allocate thread structures in memory\n");
 		ret = -errno;
 		goto out;
 	}
@@ -840,6 +842,9 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 			goto out;
 		}
 		thread_start(esdm_rpcs_handler, &threads[t], 0, NULL);
+		esdm_logger(LOGGER_STATUS, LOGGER_C_RPC,
+			    "Started %sprivileged RPC worker thread %u\n",
+			    proto->privileged ? "" : "un", t);
 	}
 
 	thread_wait_event(&esdm_rpc_thread_init_wait,
