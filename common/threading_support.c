@@ -110,10 +110,6 @@ static pthread_mutex_t thread_schedule_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t thread_wait_cv;
 static pthread_mutex_t thread_wait_lock = PTHREAD_MUTEX_INITIALIZER;
 
-/* PRNG handle for access randomization - thread-local to avoid data races */
-static _Thread_local struct xoshiro_state prng_state;
-static _Thread_local int prng_initialized = 0;
-
 static inline unsigned int thread_get_special_slot(unsigned int thread_group)
 {
 	if (thread_group <= THREADING_MAX_THREADS)
@@ -199,8 +195,6 @@ int thread_init(uint32_t groups)
 
 	threads_groups = groups;
 	threads_per_threadgroup = THREADING_MAX_THREADS / threads_groups;
-
-	xoshiro_init(&prng_state);
 
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
 		    "Initialized threading support for %u threads\n",
@@ -334,7 +328,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 	pthread_t self = pthread_self();
 	unsigned int lower, upper;
 	unsigned int special_slot = thread_get_special_slot(thread_group);
-	unsigned int rand_offset, num_elements, j, k;
+	unsigned int num_elements, j, k;
 
 	if (threads_groups < thread_group && !special_slot) {
 		esdm_logger(
@@ -354,18 +348,12 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 	}
 
 	num_elements = upper - lower;
-	/* searching with random offset increases thread utilization under high load */
-	if (!prng_initialized) {
-		xoshiro_init(&prng_state);
-		prng_initialized = 1;
-	}
-	rand_offset =
-		(unsigned int)xoshiro_generate(&prng_state) % num_elements;
+
 	for (k = 0; k < num_elements; ++k) {
 		if (atomic_bool_read(&threads_in_cancel))
 			return -ESHUTDOWN;
 
-		j = lower + (k + rand_offset) % num_elements;
+		j = lower + k % num_elements;
 
 		if (mutex_w_trylock(&threads[j].inuse) == 0) {
 			/*
