@@ -37,15 +37,15 @@ After=systemd-modules-load.service
 
 [Service]
 @SERVICE_TYPE@
-AmbientCapabilities=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL
-CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL CAP_SYS_RESOURCE
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL CAP_SYS_RESOURCE
 DeviceAllow=/dev/esdm r
 DeviceAllow=/dev/esdm_es r
 DeviceAllow=/dev/hwrng r
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/random r
 DevicePolicy=strict
-ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog -vvv
+ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock -vvv
 IPAddressDeny=any
 LimitMEMLOCK=infinity
 LockPersonality=yes
