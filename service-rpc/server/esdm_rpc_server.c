@@ -667,12 +667,15 @@ static int esdm_rpcs_handler(void *args)
 				}
 				rpc_conn = calloc(
 					1, sizeof(struct esdm_rpcs_connection));
+				/*
+				 * gracefully handle failing alloc after being initialized,
+				 * we may only arrive here under temporary memory pressure
+				 */
 				if (rpc_conn == NULL) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_RPC,
-						"Unable to alloc client conn\n");
-					ret = -ENOMEM;
-					goto out;
+					esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+						    "Unable to alloc client conn\n");
+					close(accepted_fd);
+					continue;
 				}
 				rpc_conn->child_fd = accepted_fd;
 				rpc_conn->proto = thread->proto;
@@ -680,24 +683,31 @@ static int esdm_rpcs_handler(void *args)
 					.events = EPOLLIN | EPOLLRDHUP,
 					.data.ptr = rpc_conn
 				};
-				TAILQ_INSERT_TAIL(&rpc_conn_list, rpc_conn,
-						  tailq);
-
 				if (epoll_ctl(epfd, EPOLL_CTL_ADD, accepted_fd,
 					      &ev) < 0) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_RPC,
-						"Unable to add client FD %d to epoll\n",
-						accepted_fd);
-					ret = -errno;
-					goto out;
+					switch (errno) {
+						case ENOMEM:
+						case ENOSPC:
+							/* resource limit — reject this connection, keep running */
+							esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+								    "Unable to add client FD %d to epoll: %s\n",
+								    accepted_fd, strerror(errno));
+							free(rpc_conn);
+							close(accepted_fd);
+							continue;
+						default:
+							esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+								    "Unable to add client FD %d to epoll, exiting worker\n",
+								    accepted_fd);
+							ret = -errno;
+							goto out;
+					}
 				}
-
+				TAILQ_INSERT_TAIL(&rpc_conn_list, rpc_conn, tailq);
 				esdm_logger(
 					LOGGER_DEBUG, LOGGER_C_RPC,
 					"Processing new incoming connection for FD %d\n",
 					rpc_conn->child_fd);
-
 				++num_connections;
 				esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
 					    "num connections: %lu\n",
