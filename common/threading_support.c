@@ -38,8 +38,6 @@
 #include "xoshiro_prng.h"
 #include "visibility.h"
 
-#ifdef CONFIG_ESDM_USE_PTHREAD
-
 /**
  * Threading Support
  * =================
@@ -423,7 +421,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 /*
  * Wait for all threads in spawned by calling thread and fetch the return code.
  */
-int thread_wait(void)
+int thread_wait(bool ignore_shutdown)
 {
 	unsigned int i;
 	pthread_t self = pthread_self();
@@ -435,7 +433,7 @@ int thread_wait(void)
 
 		/* Only wait for our children */
 		for (i = 0; i < THREADING_MAX_THREADS; i++) {
-			if (atomic_bool_read(&threads[i].shutdown))
+			if (!ignore_shutdown && atomic_bool_read(&threads[i].shutdown))
 				return -ESHUTDOWN;
 
 			/* Thread is not initialized, skip */
@@ -520,7 +518,8 @@ int thread_get_name(char *name, size_t len)
 }
 
 /* Wait for all threads */
-static int thread_wait_all(bool system_threads)
+DSO_PUBLIC
+int thread_wait_all(bool system_threads)
 {
 	unsigned int i, upper = system_threads ? THREADING_REALLY_ALL_THREADS :
 						 THREADING_MAX_THREADS;
@@ -556,6 +555,8 @@ static int thread_wait_all(bool system_threads)
 
 out:
 	mutex_w_unlock(&threads_cleanup);
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+		"Exiting thread_wait_all with status %i\n", ret);
 	return ret;
 }
 
@@ -639,50 +640,3 @@ int thread_release(bool force, bool system_threads)
 	pthread_attr_destroy(&pthread_attr);
 	return ret;
 }
-
-#else /* CONFIG_ESDM_USE_PTHREAD */
-
-int thread_init(uint32_t groups)
-{
-	(void)groups;
-	return 0;
-}
-
-DSO_PUBLIC
-int thread_release(bool force, bool system_threads)
-{
-	(void)force;
-	(void)system_threads;
-	return 0;
-}
-
-int thread_wait(void)
-{
-	return 0;
-}
-
-DSO_PUBLIC
-int thread_start(int (*start_routine)(void *), void *tdata,
-		 uint32_t thread_group, int *ret_ancestor)
-{
-	(void)thread_group;
-	(void)ret_ancestor;
-	return start_routine(tdata);
-}
-
-DSO_PUBLIC
-int thread_set_name(enum acvp_request_type type, uint32_t id)
-{
-	(void)type;
-	(void)id;
-	return 0;
-}
-
-DSO_PUBLIC
-int thread_get_name(char *name, size_t len)
-{
-	memset(name, 0, len);
-	return 0;
-}
-
-#endif /* CONFIG_ESDM_USE_PTHREAD */

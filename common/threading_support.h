@@ -103,9 +103,20 @@ int thread_release(bool force, bool system_threads);
 /**
  * @brief - Wait for currently executing threads
  *
+ * @param ignore_shutdown Ignore shutdown state during wait checks?
+ *
  * @return All return codes of all thread functions ORed together.
  */
-int thread_wait(void);
+int thread_wait(bool ignore_shutdown);
+
+/**
+ * @brief - Wait for all currently executing threads
+ *
+ * @param system_threads Shall the system threads also be waited for?
+ *
+ * @return All return codes of all thread functions ORed together.
+ */
+int thread_wait_all(bool system_threads);
 
 /**
  * @brief - Start a function in a separate thread
