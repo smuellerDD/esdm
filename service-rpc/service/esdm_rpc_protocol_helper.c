@@ -27,6 +27,10 @@
 static int esdm_rpc_write_data_to_buf(struct esdm_rpc_write_data_buf *write_buf,
 				      const uint8_t *data, size_t len)
 {
+	/* Guard against underflow if dst_written is corrupted */
+	if (write_buf->dst_written > ESDM_RPC_MAX_MSG_SIZE)
+		return -EOVERFLOW;
+
 	if (len > ESDM_RPC_MAX_MSG_SIZE - write_buf->dst_written)
 		return -EOVERFLOW;
 

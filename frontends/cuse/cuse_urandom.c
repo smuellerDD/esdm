@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 
 	/* Open the fallback of the kernel device before overlaying it */
 	do {
-		urandom_fd = open("/dev/urandom", O_RDWR);
+		urandom_fd = open("/dev/urandom", O_RDWR | O_CLOEXEC);
 		if (urandom_fd < 0)
 			errsv = errno;
 		umount("/dev/urandom");

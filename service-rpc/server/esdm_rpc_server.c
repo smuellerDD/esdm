@@ -582,7 +582,13 @@ static int esdm_rpcs_handler(void *args)
 			.tv_nsec = ESDM_RPC_IDLE_TIMEOUT_USEC % 1000000 * 1000,
 		},
 	};
-	timerfd_settime(tfd, 0, &its, NULL);
+	if (timerfd_settime(tfd, 0, &its, NULL) < 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Unable to arm cleanup timer: %s\n",
+			    strerror(errno));
+		ret = -errno;
+		goto out;
+	}
 
 	/* timerfd for cleanup */
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, tfd,

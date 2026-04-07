@@ -284,22 +284,17 @@ out:
 	return fn_ret;
 }
 
-/* terminate the daemon cleanly */
+/*
+ * Terminate the daemon cleanly.
+ *
+ * Only async-signal-safe operations here: atomic flag set, write to eventfd.
+ * Do NOT call esdm_logger() -- it uses vsnprintf/syslog which can deadlock.
+ */
 static void sig_term(int sig)
 {
 	static const uint64_t event_inc = 1;
 
 	(void)sig;
-	esdm_logger(LOGGER_STATUS, LOGGER_C_SEEDER, "Shutting down cleanly\n");
-
-	/* Prevent the kernel from interfering with the shutdown */
-	signal(SIGALRM, SIG_IGN);
-
-	/* If we got another termination signal, just get killed */
-	signal(SIGHUP, SIG_DFL);
-	signal(SIGINT, SIG_DFL);
-	signal(SIGQUIT, SIG_DFL);
-	signal(SIGTERM, SIG_DFL);
 
 	atomic_bool_set_false(&should_run);
 	if (notify_fd >= 0) {
@@ -313,12 +308,20 @@ static void sig_term(int sig)
 
 static void install_term(void)
 {
+	struct sigaction sa;
+
 	esdm_logger(LOGGER_STATUS, LOGGER_C_SEEDER,
 		    "Install termination signal handler\n");
-	signal(SIGHUP, sig_term);
-	signal(SIGINT, sig_term);
-	signal(SIGQUIT, sig_term);
-	signal(SIGTERM, sig_term);
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = sig_term;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	sigaction(SIGHUP, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
 }
 
 /*

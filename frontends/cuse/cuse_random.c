@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 
 	/* Open the fallback of the kernel device before overlaying it */
 	do {
-		random_fd = open("/dev/random", O_RDWR);
+		random_fd = open("/dev/random", O_RDWR | O_CLOEXEC);
 		if (random_fd < 0)
 			errsv = errno;
 		umount("/dev/random");

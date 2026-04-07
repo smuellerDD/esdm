@@ -78,11 +78,16 @@ static int esdm_hwrand_init(void)
 	}
 
 	/* Check the presence of RNG-providers */
-	fd = open(ESDM_ES_HWRAND_AVAIL, O_RDONLY);
+	fd = open(ESDM_ES_HWRAND_AVAIL, O_RDONLY | O_CLOEXEC);
 	if (fd >= 0) {
-		if (esdm_safe_read(fd, (uint8_t *)buf, buflen) !=
-			    (ssize_t)buflen &&
-		    buf[0] == '\n') {
+		ssize_t nread = esdm_safe_read(fd, (uint8_t *)buf, buflen);
+
+		/*
+		 * An empty rng_available file (just a newline) means no
+		 * backing device is present. Also disable on read failure.
+		 */
+		if (nread <= 0 ||
+		    (nread == (ssize_t)buflen && buf[0] == '\n')) {
 			esdm_logger(
 				LOGGER_WARN, LOGGER_C_ES,
 				"Disabling /dev/hwrng-based entropy source as it has no backing device\n");

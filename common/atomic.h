@@ -230,7 +230,8 @@ static inline int atomic_cmpxchg(atomic_t *v, int old, int newval)
  */
 static inline int atomic_xchg(atomic_t *v, int newval)
 {
-	return __atomic_exchange_n(&v->counter, newval, __ATOMIC_ACQUIRE);
+	/* Use SEQ_CST consistent with other atomic ops using __sync_* */
+	return __atomic_exchange_n(&v->counter, newval, __ATOMIC_SEQ_CST);
 }
 
 /**

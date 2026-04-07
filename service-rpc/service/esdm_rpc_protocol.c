@@ -28,18 +28,25 @@
 void *esdm_rpc_alloc(void *allocator_data, size_t size)
 {
 	struct buffer *tlh = allocator_data;
-	uint8_t *new = tlh->buf + tlh->consumed;
-	uint8_t *new_aligned = ALIGN_PTR_8(new, 8);
+	uint8_t *new, *new_aligned;
+	size_t alignment_offset;
+
+	/* Validate bounds before any pointer arithmetic */
+	if (tlh->consumed > tlh->len)
+		return NULL;
+
+	new = tlh->buf + tlh->consumed;
+	new_aligned = ALIGN_PTR_8(new, 8);
 
 	/* Add any potential alignment offset to the required size */
-	size_t alignment_offset = (size_t)(new_aligned - new);
+	alignment_offset = (size_t)(new_aligned - new);
 
 	if (size > SIZE_MAX - alignment_offset)
 		return NULL;
 	size += alignment_offset;
 
 	/* If the size request overflows the available memory, return nothing */
-	if (tlh->consumed > tlh->len || size > (tlh->len - tlh->consumed))
+	if (size > (tlh->len - tlh->consumed))
 		return NULL;
 
 	/* Adjust the consumed memory indicator */

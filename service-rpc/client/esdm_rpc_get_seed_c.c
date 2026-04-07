@@ -48,8 +48,9 @@ static void esdm_rpcc_get_seed_cb(const GetSeedResponse *response,
 	buffer->ret = response->ret;
 	buffer->buflen = min_size(response->randval.len, buffer->buflen);
 
-	/* only copy if data present */
-	if (response->ret > 0 && response->randval.data != NULL) {
+	/* only copy if data present and output buffer valid */
+	if (response->ret > 0 && response->randval.data != NULL &&
+	    buffer->buf != NULL) {
 		memcpy(buffer->buf, response->randval.data, buffer->buflen);
 	}
 

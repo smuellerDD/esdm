@@ -110,6 +110,8 @@ void esdm_drngs_node_alloc(void)
 		}
 
 		drng = calloc(1, sizeof(struct esdm_drng));
+		if (!drng)
+			goto err;
 
 		if (esdm_drng_alloc_common(drng, esdm_drng_init->drng_cb)) {
 			free(drng);

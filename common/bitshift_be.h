@@ -46,7 +46,7 @@ static inline uint64_t ptr_to_be64(const uint8_t *p)
 	return (uint64_t)ptr_to_be32(p) << 32 | (uint64_t)ptr_to_be32(p + 4);
 }
 
-static inline void be16_to_ptr(uint8_t *p, const uint32_t value)
+static inline void be16_to_ptr(uint8_t *p, const uint16_t value)
 {
 	p[0] = (uint8_t)(value >> 8);
 	p[1] = (uint8_t)(value);

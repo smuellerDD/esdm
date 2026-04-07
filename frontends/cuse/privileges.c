@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -34,12 +35,13 @@ int drop_privileges_transient(const char *user)
 	const struct passwd *pwd;
 	static uid_t uid = 0;
 	static gid_t gid = 0;
+	static bool initialized = false;
 	int ret = 0;
 
 	if (!user)
 		return -EINVAL;
 
-	if (gid == 0 || uid == 0) {
+	if (!initialized) {
 		pwd = getpwnam(user);
 		if (pwd == NULL) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
@@ -49,6 +51,7 @@ int drop_privileges_transient(const char *user)
 
 		uid = pwd->pw_uid;
 		gid = pwd->pw_gid;
+		initialized = true;
 
 		/* Drop all supplemental groups */
 		if (setgroups(0, NULL) == -1) {

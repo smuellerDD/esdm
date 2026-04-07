@@ -231,7 +231,8 @@ static inline long long atomic_cmpxchg_64(atomic_64_t *v, long long old,
  */
 static inline long long atomic_xchg_64(atomic_64_t *v, long long newval)
 {
-	return __atomic_exchange_n(&v->counter, newval, __ATOMIC_ACQUIRE);
+	/* Use SEQ_CST consistent with other atomic ops using __sync_* */
+	return __atomic_exchange_n(&v->counter, newval, __ATOMIC_SEQ_CST);
 }
 
 /**
