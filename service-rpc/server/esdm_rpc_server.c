@@ -872,7 +872,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 		(void)v;
 	}
 
-	ret = thread_wait();
+	ret = thread_wait(true);
 
 	for (t = 0; t < num_threads; ++t) {
 		close(threads[t].eventfd);
@@ -1167,8 +1167,6 @@ static int esdm_rpcs_interfaces_init(const char *username,
 	/* Server handing privileged interface in current thread */
 	CKINT(esdm_rpcs_workerloop(&priv_proto));
 
-	thread_wait();
-
 	return 0;
 
 out:
@@ -1238,12 +1236,21 @@ out:
 	return ret;
 }
 
-void esdm_rpc_server_fini(void)
+/*
+ * Async-signal-safe shutdown trigger. Only sets the exit flag and wakes
+ * waiting threads. Does NOT join threads, acquire mutexes, or free memory.
+ */
+void esdm_rpc_server_signal_exit(void)
 {
 	atomic_set(&server_exit, 1);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
+}
 
-	thread_release(false, false);
+void esdm_rpc_server_fini(void)
+{
+	esdm_rpc_server_signal_exit();
+
+	thread_wait_all(false);
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
