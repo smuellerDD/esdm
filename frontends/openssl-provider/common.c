@@ -107,7 +107,7 @@ static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 			      const unsigned char *addin __unused,
 			      size_t addin_len __unused)
 {
-	ssize_t ret;
+	ssize_t ret = -EFAULT;
 
 	if (!out)
 		goto err;
@@ -140,7 +140,7 @@ static size_t esdm_rand_nonce(void *ctx __unused, unsigned char *out,
 			      unsigned int strength __unused,
 			      size_t min_noncelen, size_t max_noncelen __unused)
 {
-	ssize_t ret;
+	ssize_t ret = -EFAULT;
 
 	if (out == NULL)
 		return min_noncelen;
@@ -364,7 +364,7 @@ static const OSSL_ITEM *esdm_get_reason_strings(void *provctx __unused)
 
 static int esdm_self_test(void *provctx __unused)
 {
-	int ret;
+	int ret = -EFAULT;
 	unsigned int ent_cnt;
 
 	/* ESDM does self tests itself, just check if the connection to ESDM is
@@ -407,7 +407,8 @@ DSO_PUBLIC int OSSL_provider_init(const OSSL_CORE_HANDLE *handle,
 	    NULL)
 		return 0;
 
-	esdm_rpcc_init_unpriv_service(NULL);
+	if (esdm_rpcc_init_unpriv_service(NULL) != 0)
+		goto err;
 
 	cprov->core = handle;
 	if ((cprov->libctx = OSSL_LIB_CTX_new_child(handle, in)) == NULL)

@@ -21,6 +21,7 @@
 #include "config.h"
 #include "esdm_logger.h"
 #include "math_helper.h"
+#include "memset_secure.h"
 #include "fips_integrity.h"
 
 #include <errno.h>
@@ -553,6 +554,7 @@ static int handle_get_seed(bool allow_not_fully_seeded, bool raw)
 	if (ret < 0) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Unable to fetch seed, exiting.\n");
+		memset_secure(buffer, 0, ESDM_RPC_MAX_DATA);
 		free(buffer);
 		return EXIT_FAILURE;
 	}
@@ -571,6 +573,7 @@ static int handle_get_seed(bool allow_not_fully_seeded, bool raw)
 		}
 	}
 
+	memset_secure(buffer, 0, ESDM_RPC_MAX_DATA);
 	free(buffer);
 	return EXIT_SUCCESS;
 }
@@ -753,7 +756,8 @@ static int handle_reseed_via_os(long reseed_delay_ms)
 		}
 
 		if (reseed_delay_ms > 0) {
-			ret = usleep((unsigned int)reseed_delay_ms * 1000);
+			ret = usleep((useconds_t)min_size(
+				(size_t)reseed_delay_ms * 1000, 999999));
 			if (ret != 0 && errno == EINVAL) {
 				esdm_logger(
 					LOGGER_ERR, LOGGER_C_TOOL,

@@ -119,7 +119,7 @@ static int check_filetype(int fd, struct stat *sb)
 	return 0;
 }
 
-static int mmap_file(const char *filename, uint8_t **memory, uint32_t *size)
+static int mmap_file(const char *filename, uint8_t **memory, size_t *size)
 {
 	int fd = -1;
 	int ret = 0;
@@ -139,11 +139,7 @@ static int mmap_file(const char *filename, uint8_t **memory, uint32_t *size)
 		goto out;
 
 	*memory = NULL;
-	if (sb.st_size < 0 || (unsigned long long)sb.st_size > UINT32_MAX) {
-		ret = -EOVERFLOW;
-		goto out;
-	}
-	*size = (uint32_t)sb.st_size;
+	*size = (size_t)sb.st_size;
 
 	if (sb.st_size) {
 		*memory = mmap(NULL, (size_t)sb.st_size, PROT_READ, MAP_SHARED,
@@ -166,7 +162,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 	ESDM_HMAC_CTX_ON_STACK(hmac_ctx, esdm_sha256);
 	FILE *file = NULL;
 	int ret = 0, checked_any = 0;
-	uint32_t size = 0;
+	size_t size = 0;
 	uint8_t *memblock = NULL;
 
 	/*
@@ -310,7 +306,7 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 	char *hexhash = NULL;
 	FILE *file = NULL;
 	int ret = 0;
-	uint32_t size = 0;
+	size_t size = 0;
 	uint8_t calculated[ESDM_SHA_MAX_SIZE_DIGEST];
 	size_t written;
 

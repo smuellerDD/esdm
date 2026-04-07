@@ -134,21 +134,35 @@ int systemd_notify_status(char *msg)
 int systemd_listen_pid(void)
 {
 	const char *listen_pid = getenv("LISTEN_PID");
+	char *endptr;
+	long val;
 
 	if (!listen_pid)
 		return -1;
 
-	return atoi(listen_pid);
+	errno = 0;
+	val = strtol(listen_pid, &endptr, 10);
+	if (errno || endptr == listen_pid || *endptr != '\0' || val <= 0)
+		return -1;
+
+	return (int)val;
 }
 
 int systemd_listen_fds(void)
 {
 	const char *listen_fds = getenv("LISTEN_FDS");
+	char *endptr;
+	long val;
 
 	if (!listen_fds)
 		return -1;
 
-	return atoi(listen_fds);
+	errno = 0;
+	val = strtol(listen_fds, &endptr, 10);
+	if (errno || endptr == listen_fds || *endptr != '\0' || val < 0)
+		return -1;
+
+	return (int)val;
 }
 
 static void freep(char **p)

@@ -120,7 +120,7 @@ static int check_filetype(int fd, struct stat *sb)
 	return 0;
 }
 
-static int mmap_file(const char *filename, uint8_t **memory, uint32_t *size)
+static int mmap_file(const char *filename, uint8_t **memory, size_t *size)
 {
 	int fd = -1;
 	int ret = 0;
@@ -140,7 +140,7 @@ static int mmap_file(const char *filename, uint8_t **memory, uint32_t *size)
 		goto out;
 
 	*memory = NULL;
-	*size = (uint32_t)sb.st_size;
+	*size = (size_t)sb.st_size;
 
 	if (sb.st_size) {
 		*memory = mmap(NULL, (size_t)sb.st_size, PROT_READ, MAP_SHARED,
@@ -163,7 +163,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 	LC_HMAC_CTX_ON_STACK(hmac_ctx, lc_sha256);
 	FILE *file = NULL;
 	int ret = 0, checked_any = 0;
-	uint32_t size = 0;
+	size_t size = 0;
 	uint8_t *memblock = NULL;
 	int create_checkfile = 0;
 
@@ -312,7 +312,7 @@ int fips_post_integrity(const char *pathname)
 	const char *selfname_p;
 	ssize_t selfnamesize = 0;
 
-	if (esdm_config_fips_enabled()) {
+	if (!esdm_config_fips_enabled()) {
 		ret = 0;
 		goto out;
 	}

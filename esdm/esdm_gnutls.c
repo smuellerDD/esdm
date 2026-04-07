@@ -27,6 +27,7 @@
 #include "esdm_crypto.h"
 #include "esdm_gnutls.h"
 #include "esdm_logger.h"
+#include "memset_secure.h"
 
 #define ESDM_GNUTLS_HASH GNUTLS_DIG_SHA512
 
@@ -107,14 +108,19 @@ static int esdm_gnutls_hash_selftest(void)
 		0x9f, 0x60, 0x0c, 0x79
 	};
 	uint8_t act[sizeof(exp_512)];
-	int ret = 0;
+	int ret;
 
-	esdm_gnutls_hash_alloc(&hd);
+	ret = esdm_gnutls_hash_alloc(&hd);
+	if (ret)
+		return ret;
+
 	esdm_gnutls_hash_update(hd, msg_512, 3);
 	esdm_gnutls_hash_final(hd, act);
 	esdm_gnutls_hash_dealloc(hd);
 	if (memcmp(act, exp_512, sizeof(exp_512)))
 		ret = -EFAULT;
+	else
+		ret = 0;
 
 	esdm_gnutls_hash_desc_zero(hd);
 	return ret;
@@ -289,6 +295,8 @@ static int esdm_gnutls_drbg_selftest(void)
 		ret = 0;
 
 out:
+	memset_secure(&drbg, 0, sizeof(drbg));
+	memset_secure(act, 0, sizeof(act));
 	return ret;
 }
 

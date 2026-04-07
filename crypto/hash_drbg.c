@@ -312,7 +312,7 @@ int esdm_drbg_hash_alloc(struct esdm_drbg_state **drbg)
 
 	if (ret)
 		return -ret;
-	memset(tmp, 0, ESDM_DRBG_HASH_CTX_SIZE(ESDM_DRBG_HASH_CORE));
+	memset_secure(tmp, 0, ESDM_DRBG_HASH_CTX_SIZE(ESDM_DRBG_HASH_CORE));
 
 	ESDM_DRBG_HASH_SET_CTX(tmp);
 

@@ -83,7 +83,7 @@ static int esdm_krng_init(void)
 	/* Re-invocation of init function is safe */
 
 #define DEVRANDOM "/dev/random"
-	fd = open(DEVRANDOM, O_RDONLY);
+	fd = open(DEVRANDOM, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		int errsv = errno;
 

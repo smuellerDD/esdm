@@ -110,6 +110,10 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 	if ((flags & (GRND_RANDOM | GRND_SEED)) == (GRND_RANDOM | GRND_SEED))
 		return -EINVAL;
 
+	/*
+	 * Cap to INT_MAX to match the kernel getrandom() behavior which
+	 * also limits the output to at most INT_MAX bytes per call.
+	 */
 	if (length > INT_MAX)
 		length = INT_MAX;
 

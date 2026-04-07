@@ -57,7 +57,10 @@ struct thread_wait_queue {
 		assert(__mret == 0);                                           \
 	} while (0)
 
-/* Timed wait on event, reltime is the relative time to wait */
+/*
+ * Timed wait on event, reltime is the relative time to wait.
+ * NOTE: Writes result into caller-supplied variable `ret` (must be int).
+ */
 #define thread_timedwait_no_event(queue, reltime)                              \
 	do {                                                                   \
 		struct timespec __ts;                                          \
@@ -81,12 +84,15 @@ struct thread_wait_queue {
 	} while (0)
 
 #define thread_wait_event(queue, condition)                                    \
-	while (!condition) {                                                   \
+	while (!(condition)) {                                                 \
 		thread_wait_no_event(queue);                                   \
 	}
 
+/*
+ * NOTE: Caller must have `int ret = 0;` in scope before using this macro.
+ */
 #define thread_timedwait_event(queue, condition, reltime)                      \
-	while (!condition && !ret) {                                           \
+	while (!(condition) && !ret) {                                         \
 		thread_timedwait_no_event(queue, reltime);                     \
 	}
 

@@ -336,7 +336,7 @@ static int esdm_proc_pre_init(void)
 	ssize_t rc;
 	int fd;
 
-	fd = open("/proc/sys/kernel/random/boot_id", O_RDONLY);
+	fd = open("/proc/sys/kernel/random/boot_id", O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_CUSE,

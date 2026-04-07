@@ -128,6 +128,11 @@ static void parse_opts(int argc, char *argv[])
 			case 1:
 				/* pid */
 				pidfile = strdup(optarg);
+				if (!pidfile) {
+					fprintf(stderr,
+						"Cannot allocate memory for PID file path\n");
+					exit(1);
+				}
 				break;
 			case 2:
 				/* help */
@@ -189,6 +194,11 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'p':
 			pidfile = strdup(optarg);
+			if (!pidfile) {
+				fprintf(stderr,
+					"Cannot allocate memory for PID file path\n");
+				exit(1);
+			}
 			break;
 		case 'h':
 			usage();
@@ -277,19 +287,16 @@ static void dealloc(void)
 /*
  * Signal handler: trigger server shutdown.
  *
- * Ideally we would only set a flag here, but esdm_rpc_server_fini() is
- * needed to unblock the server loop. It sets an atomic and wakes threads,
- * which is acceptable from signal context on Linux.
+ * Only perform async-signal-safe operations here.
+ * esdm_rpc_server_signal_exit() only sets an atomic flag and wakes threads,
+ * which is acceptable from signal context on Linux. The full cleanup
+ * (thread join, free) happens in esdm_rpc_server_fini() after the main
+ * loop exits.
  */
 static void sig_term(int sig)
 {
-	static int called = 0;
 	(void)sig;
-
-	if (!called) {
-		called = 1;
-		esdm_rpc_server_fini();
-	}
+	esdm_rpc_server_signal_exit();
 }
 
 static void install_term(void)

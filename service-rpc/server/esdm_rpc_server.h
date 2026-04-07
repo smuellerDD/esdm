@@ -44,6 +44,15 @@ bool esdm_rpc_client_is_privileged(void *closure_data);
 int esdm_rpc_server_init(const char *username, const char *groupname);
 void esdm_rpc_server_fini(void);
 
+/**
+ * @brief Async-signal-safe shutdown trigger
+ *
+ * Only sets the exit flag and wakes waiting threads via eventfd/condvar.
+ * Safe to call from a signal handler. Does NOT join threads or free memory;
+ * the main loop must call esdm_rpc_server_fini() after returning.
+ */
+void esdm_rpc_server_signal_exit(void);
+
 #ifdef __cplusplus
 }
 #endif

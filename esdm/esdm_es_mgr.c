@@ -28,6 +28,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "atomic_bool.h"
 #include "build_bug_on.h"
 #include "es_cpu/cpu_random.h"
 #include "esdm.h"
@@ -55,9 +56,14 @@
 #include "visibility.h"
 
 struct esdm_state {
-	bool esdm_operational; /* Is DRNG operational? */
-	bool esdm_fully_seeded; /* Is DRNG fully seeded? */
-	bool all_online_nodes_seeded; /* All DRNGs nodes seeded? */
+	/*
+	 * These booleans are read and written from multiple threads without
+	 * holding a common lock, so they must be atomic to avoid data races
+	 * (especially on weakly-ordered architectures like ARM/RISC-V).
+	 */
+	atomic_bool_t esdm_operational; /* Is DRNG operational? */
+	atomic_bool_t esdm_fully_seeded; /* Is DRNG fully seeded? */
+	atomic_bool_t all_online_nodes_seeded; /* All DRNGs nodes seeded? */
 
 	/*
 	 * To ensure that external entropy providers cannot dominate the
@@ -73,9 +79,9 @@ struct esdm_state {
 };
 
 static struct esdm_state esdm_state = {
-	false,
-	false,
-	false,
+	.esdm_operational = ATOMIC_BOOL_INIT(false),
+	.esdm_fully_seeded = ATOMIC_BOOL_INIT(false),
+	.all_online_nodes_seeded = ATOMIC_BOOL_INIT(false),
 	.boot_entropy_thresh = ATOMIC_INIT(ESDM_FULL_SEED_ENTROPY_BITS),
 	.reseed_in_progress = MUTEX_W_UNLOCKED,
 };
@@ -364,9 +370,9 @@ void esdm_reset_state(void)
 		if (esdm_es[i]->reset)
 			esdm_es[i]->reset();
 	}
-	esdm_state.esdm_operational = false;
-	esdm_state.esdm_fully_seeded = false;
-	esdm_state.all_online_nodes_seeded = false;
+	atomic_bool_set_false(&esdm_state.esdm_operational);
+	atomic_bool_set_false(&esdm_state.esdm_fully_seeded);
+	atomic_bool_set_false(&esdm_state.all_online_nodes_seeded);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
 	/* Start the entropy monitor */
@@ -376,28 +382,28 @@ void esdm_reset_state(void)
 /* Set flag that all DRNGs are fully seeded */
 void esdm_pool_all_nodes_seeded(bool set)
 {
-	esdm_state.all_online_nodes_seeded = set;
+	atomic_bool_set(&esdm_state.all_online_nodes_seeded, set);
 	if (set)
 		thread_wake_all(&esdm_init_wait);
 }
 
 bool esdm_pool_all_nodes_seeded_get(void)
 {
-	return esdm_state.all_online_nodes_seeded;
+	return atomic_bool_read(&esdm_state.all_online_nodes_seeded);
 }
 
 /* Return boolean whether ESDM reached fully seed level */
 DSO_PUBLIC
 int esdm_state_fully_seeded(void)
 {
-	return esdm_state.esdm_fully_seeded;
+	return atomic_bool_read(&esdm_state.esdm_fully_seeded);
 }
 
 /* Return boolean whether ESDM is considered fully operational */
 DSO_PUBLIC
 int esdm_state_operational(void)
 {
-	return esdm_state.esdm_operational;
+	return atomic_bool_read(&esdm_state.esdm_operational);
 }
 
 static void esdm_init_wakeup(void)
@@ -413,7 +419,8 @@ static uint32_t esdm_avail_entropy_thresh(void)
 	 * Apply oversampling during initialization according to SP800-90C as
 	 * we request a larger buffer from the ES.
 	 */
-	if (esdm_sp80090c_compliant() && !esdm_state.all_online_nodes_seeded)
+	if (esdm_sp80090c_compliant() &&
+	    !atomic_bool_read(&esdm_state.all_online_nodes_seeded))
 		ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
 
 	return ent_thresh;
@@ -470,8 +477,8 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 	if (drng == esdm_drng_init_instance() && esdm_state_operational()) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "ESDM set to non-operational\n");
-		esdm_state.esdm_operational = false;
-		esdm_state.esdm_fully_seeded = false;
+		atomic_bool_set_false(&esdm_state.esdm_operational);
+		atomic_bool_set_false(&esdm_state.esdm_fully_seeded);
 
 		esdm_shm_status_set_operational(false);
 	}
@@ -490,8 +497,8 @@ static void esdm_set_operational(void)
 	 * sufficient entropy, or the SP800-90B startup test completed for
 	 * the internal ES to supply also entropy data.
 	 */
-	if (esdm_state.esdm_fully_seeded) {
-		esdm_state.esdm_operational = true;
+	if (atomic_bool_read(&esdm_state.esdm_fully_seeded)) {
+		atomic_bool_set_true(&esdm_state.esdm_operational);
 		esdm_init_wakeup();
 		esdm_shm_status_set_operational(true);
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
@@ -567,11 +574,11 @@ void esdm_init_ops(struct entropy_buf *eb)
 	struct esdm_state *state = &esdm_state;
 	uint32_t i, requested_bits, seed_bits = 0;
 
-	if (state->esdm_operational)
+	if (atomic_bool_read(&state->esdm_operational))
 		return;
 
 	requested_bits =
-		esdm_init_entropy_level(state->all_online_nodes_seeded);
+		esdm_init_entropy_level(atomic_bool_read(&state->all_online_nodes_seeded));
 
 	if (eb) {
 		seed_bits = esdm_entropy_rate_eb(eb);
@@ -583,14 +590,15 @@ void esdm_init_ops(struct entropy_buf *eb)
 	}
 
 	/* DRNG is already seeded with full security strength */
-	if (state->esdm_fully_seeded) {
+	if (atomic_bool_read(&state->esdm_fully_seeded)) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
 		return;
 	}
 
-	if (esdm_fully_seeded(!state->all_online_nodes_seeded, seed_bits, eb)) {
-		state->esdm_fully_seeded = true;
+	if (esdm_fully_seeded(!atomic_bool_read(&state->all_online_nodes_seeded),
+			     seed_bits, eb)) {
+		atomic_bool_set_true(&state->esdm_fully_seeded);
 		esdm_set_operational();
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			    "ESDM fully seeded with %u bits of entropy\n",
@@ -732,7 +740,7 @@ bool esdm_es_reseed_wanted(void)
 	 * Once all DRNGs are fully seeded, the system-triggered arrival of
 	 * entropy will not cause any reseeding any more.
 	 */
-	if (esdm_state.all_online_nodes_seeded)
+	if (atomic_bool_read(&esdm_state.all_online_nodes_seeded))
 		return false;
 
 	/* Only trigger the DRNG reseed if we have collected entropy. */
@@ -780,7 +788,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
 	 */
-	if (!force && state->esdm_fully_seeded &&
+	if (!force && atomic_bool_read(&state->esdm_fully_seeded) &&
 	    (esdm_avail_entropy() < req_ent)) {
 		for_each_esdm_es (i)
 			eb->entropy_es[i].e_bits = 0;
@@ -791,7 +799,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {
 		esdm_es[i]->get_ent(&eb->entropy_es[i], requested_bits,
-				    state->esdm_fully_seeded);
+				    atomic_bool_read(&state->esdm_fully_seeded));
 	}
 
 wakeup:
