@@ -2,7 +2,7 @@
 /*
  * ESDM SP800-90A definitions
  *
- * Copyright (C) 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2025 - 2026, Stephan Mueller <smueller@chronox.de>
  */
 
 #ifndef _ESDM_DRBG_KCAPI_H

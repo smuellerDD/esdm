@@ -1,7 +1,7 @@
 /*
  * ESDM Slow Entropy Source: Scheduler-based
  *
- * Copyright (C) 2022 - 2025, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2022 - 2026, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
