@@ -1,4 +1,4 @@
-Changes 1.2.2-prerelease
+Changes 1.2.2
 * Add TPM 2.0 entropy source
 
 * Reworked threading concept towards multi-connection workers for less memory usage
