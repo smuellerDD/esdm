@@ -535,9 +535,11 @@ static void esdm_client_invoke(ProtobufCService *service,
 			  "Sending of data failed: %d\n", ret);
 
 		/* Receive data */
-		CKINT_LOG(esdm_rpc_client_read_handler(rpc_conn, method->output,
-						       closure, closure_data),
-			  "Receiving of data failed: %d\n", ret);
+		ret = esdm_rpc_client_read_handler(rpc_conn, method->output, closure, closure_data);
+		/* EAGAIN is ok here, since sockets are non-blocking now */
+		if (ret < 0 && ret != -EAGAIN) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "Receiving of data failed: %d\n", ret);
+		}
 	} while (ret == -EAGAIN);
 
 out:
