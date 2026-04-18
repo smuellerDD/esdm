@@ -1,3 +1,5 @@
+Changes 1.2.3-prerelease
+
 Changes 1.2.2
 * Add TPM 2.0 entropy source
 
