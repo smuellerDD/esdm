@@ -1,4 +1,8 @@
 Changes 1.2.3-prerelease
+* Fix handling of non-blocking server response
+
+* Reduce chunk size for the PR IPC interface to 32 bytes for more responsive
+server
 
 Changes 1.2.2
 * Add TPM 2.0 entropy source
