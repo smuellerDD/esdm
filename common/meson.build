@@ -153,6 +153,10 @@ conf_data.set('ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT', get_option('client-rx-tx-tim
 conf_data.set('ESDM_CLIENT_RECONNECT_ATTEMPTS', get_option('client-reconnect-attempts'))
 conf_data.set('ESDM_MAX_RX_TX_RETRIES', 5)
 
+# chunk pr requests, such that slow entropy sources return fast in server
+# and don't block the server longer than client read timeouts on average
+conf_data.set('ESDM_RPC_MAX_PR_REQUEST_SIZE', 32)
+
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
 
 if build_machine.system() == 'linux'
