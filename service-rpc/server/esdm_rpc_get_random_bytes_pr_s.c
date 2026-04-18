@@ -39,8 +39,8 @@ void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
 	uint8_t rndval[ESDM_RPC_MAX_DATA];
 	(void)service;
 
-	if (request == NULL || request->len > sizeof(rndval)) {
-		response.ret = -(int32_t)sizeof(rndval);
+	if (request == NULL || request->len > ESDM_RPC_MAX_PR_REQUEST_SIZE) {
+		response.ret = -ESDM_RPC_MAX_PR_REQUEST_SIZE;
 		closure(&response, closure_data);
 	} else {
 		response.ret = (int)esdm_get_random_bytes_pr_noblock(

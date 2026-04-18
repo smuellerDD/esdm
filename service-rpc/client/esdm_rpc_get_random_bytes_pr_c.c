@@ -78,7 +78,7 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 		buffer.buf = buf;
 		buffer.buflen = buflen;
 
-		msg.len = min_size(maxbuflen, buflen);
+		msg.len = min_size(ESDM_RPC_MAX_PR_REQUEST_SIZE, buflen);
 
 		unpriv_access__rpc_get_random_bytes_pr(
 			&rpc_conn->service, &msg,
