@@ -54,7 +54,12 @@
 
 static inline int rdseed_available(void)
 {
+	static int rdseed_avail = -1;
 	unsigned int eax, ebx, ecx, edx;
+
+	if (rdseed_avail > -1) {
+		return rdseed_avail;
+	}
 
 	/* Read the maximum leaf */
 	cpuid_eax(0, eax, ebx, ecx, edx);
@@ -64,14 +69,26 @@ static inline int rdseed_available(void)
 		/* read advanced features eax = 7, ecx = 0 */
 		cpuid_eax_ecx(7, 0, eax, ebx, ecx, edx);
 
-		return !!(ebx & EXT_FEAT_EBX_RDSEED);
+		rdseed_avail = !!(ebx & EXT_FEAT_EBX_RDSEED);
+	} else {
+		rdseed_avail = false;
 	}
-	return false;
+
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			"RDSEED support %sdetected\n",
+			rdseed_avail ? "" : "not ");
+
+	return rdseed_avail;
 }
 
 static inline int rdrand_available(void)
 {
+	static int rdrand_avail = -1;
 	unsigned int eax, ebx, ecx, edx;
+
+	if (rdrand_avail > -1) {
+		return rdrand_avail;
+	}
 
 	/* Read the maximum leaf */
 	cpuid_eax(0, eax, ebx, ecx, edx);
@@ -79,25 +96,24 @@ static inline int rdrand_available(void)
 	/* Only make call if the leaf is present */
 	if (eax >= 1) {
 		cpuid_eax(1, eax, ebx, ecx, edx);
-		return !!(ecx & ECX_RDRAND);
+		rdrand_avail = !!(ecx & ECX_RDRAND);
+	} else {
+		rdrand_avail = false;
 	}
 
-	return false;
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			"RDRAND support %sdetected\n",
+			rdrand_avail ? "" : "not ");
+
+	return rdrand_avail;
 }
 
 static inline bool cpu_es_x86_rdseed(unsigned long *buf)
 {
 	unsigned int retry = 0;
 	unsigned char ok;
-	static int rdseed_avail = -1;
 
-	if (rdseed_avail == -1) {
-		rdseed_avail = rdseed_available();
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			    "RDSEED support %sdetected\n",
-			    rdseed_avail ? "" : "not ");
-	}
-	if (!rdseed_avail)
+	if (!rdseed_available())
 		return false;
 
 	do {
@@ -112,15 +128,8 @@ static inline bool cpu_es_x86_rdseed(unsigned long *buf)
 static inline bool cpu_es_x86_rdrand(unsigned long *buf)
 {
 	int ok;
-	static int rdrand_avail = -1;
 
-	if (rdrand_avail == -1) {
-		rdrand_avail = rdrand_available();
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			    "RDRAND support %sdetected\n",
-			    rdrand_avail ? "" : "not ");
-	}
-	if (!rdrand_avail)
+	if (!rdrand_available())
 		return false;
 
 	__asm__ __volatile__("1: " RDRAND_LONG "\n\t"
@@ -135,11 +144,18 @@ static inline bool cpu_es_x86_rdrand(unsigned long *buf)
 
 static inline bool cpu_es_get(unsigned long *buf)
 {
-	bool ret = cpu_es_x86_rdseed(buf);
-
-	if (!ret)
+	/*
+	 * perform no fallback between both options,
+	 * as compression would be missing for rdrand,
+	 * when rdseed was initially detected
+	 */
+	if (rdseed_available()) {
+		return cpu_es_x86_rdseed(buf);
+	}
+	if (rdrand_available()) {
 		return cpu_es_x86_rdrand(buf);
-	return ret;
+	}
+	return false;
 }
 
 static inline unsigned int cpu_es_multiplier(void)
