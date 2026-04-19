@@ -190,25 +190,17 @@
 
         packages = {
           jitterentropy = pkgs.jitterentropy.overrideAttrs (
-            _: prevAttrs: {
+            _: {
               version = "3.7.0";
               src = pkgs.fetchFromGitHub {
                 owner = "smuellerDD";
                 repo = "jitterentropy-library";
-                rev = "e4ed627044c9215ba8b358df45a74e15bdce1cc0";
-                hash = "sha256-HvWZDdGb7zxdZUQITGtpvbivMvIVF90K06wPvT5rWzQ=";
+                rev = "3a8ef4b7ace53ad7dcbb1b30a0b5bf984f994fa2";
+                hash = "sha256-z2PJiHfeHXvSOu9i8oZNvz+5Zv9J0V2CyWORr/Pe4WA=";
               };
-              # for secure memory
-              propagatedBuildInputs = [
-                pkgs.openssl
-              ];
               patches = [ ];
-              # better find openssl
-              nativeBuildInputs = prevAttrs.nativeBuildInputs ++ [ pkgs.pkg-config ];
-              # enables secure memory mode
               cmakeFlags = [
                 "-DINTERNAL_TIMER=OFF"
-                "-DEXTERNAL_CRYPTO=OPENSSL"
                 "-DBUILD_SHARED_LIBS=ON"
               ];
             }
