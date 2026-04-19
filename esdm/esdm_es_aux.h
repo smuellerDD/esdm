@@ -24,6 +24,8 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_mgr_cb.h"
 
+#include <assert.h>
+
 extern struct esdm_es_cb esdm_es_aux;
 
 /****************************** Helper code ***********************************/
@@ -42,13 +44,21 @@ static inline uint32_t esdm_security_strength(void)
 	return min_uint32(ESDM_FULL_SEED_ENTROPY_BITS, esdm_get_digestsize());
 }
 
-static inline uint32_t esdm_get_seed_entropy_osr(bool do_full_init)
+static inline uint32_t esdm_get_seed_entropy_osr(bool do_full_init, bool full_entropy)
 {
 	uint32_t requested_bits = esdm_security_strength();
+
+	assert((!do_full_init && !full_entropy) || (do_full_init != full_entropy));
 
 	/* Apply oversampling during initialization according to SP800-90C */
 	if (esdm_sp80090c_compliant() && do_full_init)
 		requested_bits += ESDM_SEED_BUFFER_INIT_ADD_BITS;
+	/*
+	 * Apply oversampling when aiming for RBG3(RS) mode,
+	 * see SP800-90C sec. 6.5.1.2
+	 */
+	if (esdm_sp80090c_compliant() && full_entropy)
+		requested_bits += ESDM_OVERSAMPLE_ES_BITS;
 	return requested_bits;
 }
 
