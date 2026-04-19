@@ -78,12 +78,26 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 		buffer.buf = buf;
 		buffer.buflen = buflen;
 
-		msg.len = min_size(ESDM_RPC_MAX_PR_REQUEST_SIZE, buflen);
+		/*
+		 * truncate to a small size (ESDM_RPC_MAX_PR_REQUEST_SIZE),
+		 * typically 32 byte, for fast responses from server
+		 * even with slow entropy sources. This prevents running
+		 * into client timeouts for larger requests.
+		 */
+		msg.len = min_size(ESDM_RPC_MAX_PR_REQUEST_SIZE,
+				   min_size(maxbuflen,
+					    buflen));
 
 		unpriv_access__rpc_get_random_bytes_pr(
 			&rpc_conn->service, &msg,
 			esdm_rpcc_get_random_bytes_pr_cb, &buffer);
 
+		/*
+		 * maxbuflen is larger than ESDM_RPC_MAX_PR_REQUEST_SIZE in this case
+		 * and skipped in the check above. Keep this for compatibility with
+		 * server code or if ESDM_RPC_MAX_PR_REQUEST_SIZE is changed to a
+		 * larger value in the future.
+		 */
 		if (buffer.ret < -255) {
 			maxbuflen = (size_t)(-buffer.ret);
 			continue;
