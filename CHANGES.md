@@ -4,6 +4,10 @@ Changes 1.2.3-prerelease
 * Reduce chunk size for the PR IPC interface to 32 bytes for more responsive
 server
 
+* CPU ES: Fix RDSEED to RDRAND fallback
+
+* Allow PR DRNG to be used as RBG3(RS) in SP800-90C mode
+
 Changes 1.2.2
 * Add TPM 2.0 entropy source
 
