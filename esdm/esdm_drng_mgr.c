@@ -457,8 +457,14 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 				drng_type);
 		}
 
+		/*
+		 * The PR DRNG should be a RBG3(RS) if properly seeded, therefore
+		 * oversample ES by 64 bit, when seeding this DRNG instance.
+		 * See SP800-90C sec. 6.5.1.2.
+		 */
 		esdm_fill_seed_buffer(&seedbuf,
-				      esdm_get_seed_entropy_osr(do_full_init),
+				      esdm_get_seed_entropy_osr(do_full_init,
+				      !do_full_init && drng == &esdm_drng_pr),
 				      forced && do_full_init);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
@@ -1054,7 +1060,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		esdm_fill_seed_buffer(
 			eb,
 			esdm_get_seed_entropy_osr(
-				!(flags & ESDM_GET_SEED_FULLY_SEEDED)),
+				!(flags & ESDM_GET_SEED_FULLY_SEEDED), false),
 			false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 

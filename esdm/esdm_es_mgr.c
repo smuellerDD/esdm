@@ -447,7 +447,7 @@ bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 		return (result >= 2);
 	}
 
-	return (collected_entropy >= esdm_get_seed_entropy_osr(do_full_init));
+	return (collected_entropy >= esdm_get_seed_entropy_osr(do_full_init, false));
 }
 
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
@@ -554,7 +554,7 @@ static uint32_t esdm_init_entropy_level(bool fully_seeded)
 		       /* Approximation so that two ES should deliver 240 bits each */
 		       (2 * ESDM_AIS2031_NPTRNG_MIN_ENTROPY) :
 		       /* Apply SP800-90C oversampling if applicable */
-		       esdm_get_seed_entropy_osr(!fully_seeded);
+		       esdm_get_seed_entropy_osr(!fully_seeded, false);
 }
 
 /**
@@ -784,7 +784,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	(void)ret;
 
 	/*
-	 * Require at least 128 bits of entropy for any reseed. If the ESDM is
+	 * Require at least 256 bits of entropy for any reseed. If the ESDM is
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
 	 */
