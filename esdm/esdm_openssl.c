@@ -400,9 +400,9 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	CKNULL(state->drbg, -ENOMEM);
 	state->strength = EVP_RAND_get_strength(state->drbg);
 
-	params[0] = OSSL_PARAM_construct_int(OSSL_DRBG_PARAM_USE_DF, &df);
-	params[1] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER,
+	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER,
 						     "AES-256-CTR", 11);
+	params[1] = OSSL_PARAM_construct_int(OSSL_DRBG_PARAM_USE_DF, &df);
 	params[2] = OSSL_PARAM_construct_end();
 #endif
 
@@ -413,10 +413,9 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	CKNULL(state->drbg, -ENOMEM);
 	state->strength = EVP_RAND_get_strength(state->drbg);
 
-	params[0] = OSSL_PARAM_construct_int(OSSL_DRBG_PARAM_USE_DF, &df);
-	params[1] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
+	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
 						     "SHA512", 6);
-	params[2] = OSSL_PARAM_construct_end();
+	params[1] = OSSL_PARAM_construct_end();
 #endif
 
 #ifdef ESDM_OPENSSL_DRNG_HMAC
@@ -426,12 +425,11 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	CKNULL(state->drbg, -ENOMEM);
 	state->strength = EVP_RAND_get_strength(state->drbg);
 
-	params[0] = OSSL_PARAM_construct_int(OSSL_DRBG_PARAM_USE_DF, &df);
-	params[1] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
+	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
 						     "SHA512", 6);
-	params[2] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_MAC,
+	params[1] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_MAC,
 						     "HMAC", 4);
-	params[3] = OSSL_PARAM_construct_end();
+	params[2] = OSSL_PARAM_construct_end();
 #endif
 
 	if (!EVP_RAND_CTX_set_params(state->drbg, params)) {
