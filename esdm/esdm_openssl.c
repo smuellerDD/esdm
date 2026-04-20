@@ -172,23 +172,10 @@ struct esdm_openssl_drng_state {
 static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 					   size_t inbuflen, bool test_mode)
 {
-	OSSL_PARAM params[3] = { 0 };
 	struct esdm_openssl_drng_state *state = drng;
 	struct timespec current_time;
-	uint8_t *entropy_buf = NULL;
-	uint8_t *nonce_buf = NULL;
-	bool free_buffers = false;
+	OSSL_PARAM params[3] = { 0 };
 	int ret = 0;
-
-	entropy_buf = calloc(1, inbuflen);
-	if (entropy_buf == NULL) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-				"Failed to copy entropy buffer for DRBG\n");
-		ret = -EFAULT;
-		goto out;
-	}
-	memcpy(entropy_buf, inbuf, inbuflen);
-	free_buffers = true;
 
 	if (!state->seeded) {
 		/*
@@ -208,14 +195,6 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 				goto out;
 			}
 		}
-		nonce_buf = calloc(1, sizeof(current_time));
-		if (nonce_buf == NULL) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-				    "Failed to copy nonce buffer for DRBG\n");
-			ret = -EFAULT;
-			goto out;
-		}
-		memcpy(nonce_buf, &current_time, sizeof(current_time));
 
 		/*
 		 * TEST-RAND will return the full >= 384 of input entropy
@@ -225,10 +204,10 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		 * nonce, as TEST-RAND declares to deliver nonces.
 		 */
 		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)entropy_buf,
+			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf,
 			inbuflen);
 		params[1] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_NONCE, (void *)nonce_buf,
+			OSSL_RAND_PARAM_TEST_NONCE, (void *)&current_time,
 			sizeof(current_time));
 		params[2] = OSSL_PARAM_construct_end();
 
@@ -240,7 +219,6 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 			ret = -EFAULT;
 			goto out;
 		}
-		free_buffers = false;
 
 		if (!EVP_RAND_instantiate(state->drbg, state->strength, 0,
 					  (unsigned char *)"", 0, NULL)) {
@@ -254,7 +232,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		state->seeded = 1;
 	} else {
 		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)entropy_buf,
+			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf,
 			inbuflen);
 		params[1] = OSSL_PARAM_construct_end();
 
@@ -265,7 +243,6 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 			ret = -EFAULT;
 			goto out;
 		}
-		free_buffers = false;
 
 		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, NULL, 0)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
@@ -276,13 +253,6 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 	}
 
 out:
-	if (free_buffers) {
-		OPENSSL_free(entropy_buf);
-		entropy_buf = NULL;
-		OPENSSL_free(nonce_buf);
-		nonce_buf = NULL;
-	}
-
 	return ret;
 }
 
@@ -310,9 +280,9 @@ static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
 static void
 esdm_openssl_drbg_dealloc_internal(struct esdm_openssl_drng_state *state)
 {
-	if (!state)
+	if (!state) {
 		return;
-
+	}
 	if (state->drbg) {
 		EVP_RAND_uninstantiate(state->drbg);
 		EVP_RAND_CTX_free(state->drbg);
