@@ -8,6 +8,8 @@ server
 
 * Allow PR DRNG to be used as RBG3(RS) in SP800-90C mode
 
+* Fix SP800-90C instantiate for OpenSSL backend
+
 Changes 1.2.2
 * Add TPM 2.0 entropy source
 
