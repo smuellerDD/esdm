@@ -304,7 +304,7 @@ static ssize_t esdm_botan_drbg_generate(void *drng, uint8_t *outbuf,
 	}
 
 	/* always use additional data in order to perform additional mixing steps
-	 * inside HMAC-DRBG (recommended by BSI AIS 20/31 V3.0, Sec. 5.3.2 Par. 1079)*/
+	 * inside HMAC-DRBG (recommended by BSI AIS 20/31 V3.0, Sec. 5.3.2 Par. 1079) */
 	return esdm_botan_drbg_generate_w_additional_data(
 		drng, outbuf, outbuflen, reinterpret_cast<const uint8_t *>(&ts),
 		sizeof(ts));
