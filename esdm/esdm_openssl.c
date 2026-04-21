@@ -262,19 +262,44 @@ static int esdm_openssl_drbg_seed(void *drng, const uint8_t *inbuf,
 	return esdm_openssl_drbg_seed_internal(drng, inbuf, inbuflen, false);
 }
 
-static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
-					  size_t outbuflen)
+static ssize_t esdm_openssl_drbg_generate_w_additional_data(void *drng,
+							    uint8_t *outbuf,
+							    size_t outbuflen,
+							    uint8_t *addbuf,
+							    size_t addbuflen)
 {
 	struct esdm_openssl_drng_state *state = drng;
 
 	if (!EVP_RAND_generate(state->drbg, outbuf, outbuflen, state->strength,
-			       0, NULL, 0)) {
+			       0, addbuf, addbuflen)) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 			    "Failed to generate random numbers\n");
 		return -EFAULT;
 	}
 
 	return (ssize_t)outbuflen;
+}
+
+static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
+					  size_t outbuflen)
+{
+	uint8_t *addbuf = NULL;
+	size_t addbuflen = 0;
+
+#ifdef ESDM_OPENSSL_DRNG_HMAC
+	struct timespec ts;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &ts)) {
+		return -errno;
+	}
+
+	/* always use additional data in order to perform additional mixing steps
+	 * inside HMAC-DRBG (recommended by BSI AIS 20/31 V3.0, Sec. 5.3.2 Par. 1079) */
+	addbuf = (uint8_t *)&ts;
+	addbuflen = sizeof(ts);
+#endif
+
+	return esdm_openssl_drbg_generate_w_additional_data(drng, outbuf, outbuflen, addbuf, addbuflen);
 }
 
 static void
@@ -496,12 +521,12 @@ static int esdm_openssl_drbg_selftest(void)
 	CKINT(esdm_openssl_drbg_alloc(&drng, 256));
 	CKINT(esdm_openssl_drbg_seed_internal(drng, ent_nonce, sizeof(ent_nonce), true));
 	CKINT(esdm_openssl_drbg_seed_internal(drng, reseed, sizeof(reseed), true));
-	if (esdm_openssl_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
+	if (esdm_openssl_drbg_generate_w_additional_data(drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
 		ret = -EFAULT;
 		goto out;
 	}
 
-	if (esdm_openssl_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
+	if (esdm_openssl_drbg_generate_w_additional_data(drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
 		ret = -EFAULT;
 		goto out;
 	}
