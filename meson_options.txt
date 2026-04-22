@@ -653,3 +653,6 @@ This option enables various test configurations for functional verification
 testing.
 
 WARNING: DO NOT ENABLE FOR PRODUCTION MODE!''')
+
+option('memory-debug', type: 'feature', value: 'disabled',
+       description: 'Check and annotate memory allocations for debugging purposes.')

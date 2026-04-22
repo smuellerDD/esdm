@@ -32,6 +32,7 @@
 #include "esdm_config.h"
 #include "esdm_rpc_server.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "ret_checkers.h"
 #include "systemd_support.h"
 
@@ -430,6 +431,8 @@ static void daemonize(void)
 int main(int argc, char *argv[])
 {
 	ssize_t ret;
+
+	may_enable_memory_debugging();
 
 	parse_opts(argc, argv);
 

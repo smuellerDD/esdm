@@ -17,7 +17,14 @@
  * DAMAGE.
  */
 
+#include "config.h"
+
 #include "arch.h"
+
+#ifdef ESDM_MEMORY_DEBUG
+#include <malloc.h>
+#include <mcheck.h>
+#endif
 
 #include <errno.h>
 #include <stdio.h>
@@ -25,7 +32,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "config.h"
 #include "math_helper.h"
 
 uint32_t esdm_online_nodes(void)
@@ -111,4 +117,26 @@ ssize_t esdm_safe_write(int fd, uint8_t *buf, size_t buflen)
 
 out:
 	return bytes_written;
+}
+
+void may_enable_memory_debugging()
+{
+#ifdef ESDM_MEMORY_DEBUG
+	/* perform consistency checks */
+	mcheck_pedantic(NULL);
+
+	/* release memory fast, in order to
+	 * check total consumption externally */
+	mallopt(M_TRIM_THRESHOLD, 0);
+	mallopt(M_MMAP_THRESHOLD, 0);
+	mallopt(M_MMAP_MAX, -1);
+
+	/* set newly allocated and freed memory
+	 * to this value */
+	mallopt(M_PERTURB, 0xff);
+
+	/* memory options should be called very early,
+	 * logger is typically not set up*/
+	fprintf(stderr, "WARNING: Memory debugging enabled. Don't use in production.\n");
+#endif
 }

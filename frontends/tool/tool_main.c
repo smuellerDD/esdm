@@ -20,6 +20,7 @@
 #include "tool.h"
 #include "config.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "math_helper.h"
 #include "memset_secure.h"
 #include "fips_integrity.h"
@@ -904,6 +905,8 @@ int main(int argc, char **argv)
 	char *fips_check_file = NULL;
 	bool cleanup_server = false;
 	int i;
+
+	may_enable_memory_debugging();
 
 	/*
 	 * parse CLI arguments

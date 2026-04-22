@@ -47,6 +47,7 @@ uint32_t esdm_online_nodes(void);
 uint32_t esdm_curr_node(void);
 ssize_t esdm_safe_read(int fd, uint8_t *buf, size_t buflen);
 ssize_t esdm_safe_write(int fd, uint8_t *buf, size_t buflen);
+void may_enable_memory_debugging(void);
 
 #ifdef __cplusplus
 }
