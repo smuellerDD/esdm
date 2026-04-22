@@ -167,7 +167,7 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 	if (entropy_bits <= 0) {
 		goto err;
 	}
-	buf_len = (size_t)entropy_bits / 8;
+	buf_len = ((size_t)entropy_bits + 7) / 8;
 
 	if (buf_len < min_len)
 		goto err;

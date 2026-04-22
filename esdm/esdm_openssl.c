@@ -227,6 +227,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 				    "Failed to instantiate DRBG: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
+			EVP_RAND_uninstantiate(state->seed_source);
 			ret = -EFAULT;
 			goto out;
 		}
