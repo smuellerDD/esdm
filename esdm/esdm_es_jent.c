@@ -23,6 +23,7 @@
 #include <stdio.h>
 
 #include "atomic.h"
+#include "atomic_bool.h"
 #include "build_bug_on.h"
 #include "config.h"
 #include "esdm_config.h"
@@ -45,6 +46,7 @@
 static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
 
 static atomic_t esdm_jent_initialized = ATOMIC_INIT(0);
+static atomic_bool_t esdm_jent_monitor_initialized = ATOMIC_BOOL_INIT(false);
 static struct rand_data *esdm_jent_state = NULL;
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
@@ -162,6 +164,13 @@ static int esdm_jent_async_monitor(void)
 
 	if (!esdm_config_es_jent_async_enabled())
 		return 0;
+
+	/* skip first run to be responsive on RPC interface
+	 * fast on ESDM startup */
+	if (!atomic_bool_read(&esdm_jent_monitor_initialized)) {
+		atomic_bool_set_true(&esdm_jent_monitor_initialized);
+		return 0;
+	}
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG block filling started\n");
@@ -286,6 +295,8 @@ static void esdm_jent_async_fini(void)
 
 	/* Reset state */
 	memset_secure(esdm_jent_async, 0, sizeof(esdm_jent_async));
+
+	atomic_bool_set_false(&esdm_jent_monitor_initialized);
 }
 
 #else

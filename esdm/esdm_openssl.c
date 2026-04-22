@@ -295,6 +295,7 @@ static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
 
 #ifdef ESDM_OPENSSL_DRNG_HMAC
 	struct timespec ts;
+	ssize_t genret;
 
 	if (clock_gettime(CLOCK_MONOTONIC, &ts)) {
 		return -errno;
@@ -304,9 +305,13 @@ static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
 	 * inside HMAC-DRBG (recommended by BSI AIS 20/31 V3.0, Sec. 5.3.2 Par. 1079) */
 	addbuf = (uint8_t *)&ts;
 	addbuflen = sizeof(ts);
-#endif
 
+	genret = esdm_openssl_drbg_generate_w_additional_data(drng, outbuf, outbuflen, addbuf, addbuflen);
+	memset_secure(&ts, 0, sizeof(ts));
+	return genret;
+#else
 	return esdm_openssl_drbg_generate_w_additional_data(drng, outbuf, outbuflen, addbuf, addbuflen);
+#endif
 }
 
 static void
@@ -367,7 +372,6 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	CKNULL(rand, -ENOMEM);
 	state->drbg = EVP_RAND_CTX_new(rand, state->seed_source);
 	CKNULL(state->drbg, -ENOMEM);
-	state->strength = EVP_RAND_get_strength(state->drbg);
 
 	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_CIPHER,
 						     "AES-256-CTR", 11);
@@ -385,7 +389,6 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	CKNULL(rand, -ENOMEM);
 	state->drbg = EVP_RAND_CTX_new(rand, state->seed_source);
 	CKNULL(state->drbg, -ENOMEM);
-	state->strength = EVP_RAND_get_strength(state->drbg);
 
 	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
 						     "SHA512", 6);
@@ -400,7 +403,6 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	CKNULL(rand, -ENOMEM);
 	state->drbg = EVP_RAND_CTX_new(rand, state->seed_source);
 	CKNULL(state->drbg, -ENOMEM);
-	state->strength = EVP_RAND_get_strength(state->drbg);
 
 	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
 						     "SHA512", 6);
@@ -414,6 +416,16 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 #endif
 
 	if (!EVP_RAND_CTX_set_params(state->drbg, params)) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	/* Read strength after set_params so it reflects the configured
+	 * cipher/digest rather than OpenSSL's pre-configuration default. */
+	state->strength = EVP_RAND_get_strength(state->drbg);
+	if (!state->strength) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "DRBG reports zero strength after configuration\n");
 		ret = -EFAULT;
 		goto out;
 	}
@@ -435,6 +447,9 @@ out:
 static void esdm_openssl_drbg_dealloc(void *drng)
 {
 	struct esdm_openssl_drng_state *state = drng;
+
+	if (!state)
+		return;
 
 	esdm_openssl_drbg_dealloc_internal(state);
 
