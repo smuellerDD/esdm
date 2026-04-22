@@ -105,37 +105,42 @@ static bool test_instantiate(bool prediction_resistance)
 
 static bool performTest(char *test, char *type)
 {
-	if (strncmp(type, "rng", strlen("rng"))) {
-		OSSL_PROVIDER *prov_esdm =
-			OSSL_PROVIDER_load(NULL, "libesdm-rng-provider");
+	OSSL_PROVIDER *prov_esdm = NULL;
+	OSSL_PROVIDER *prov_default = NULL;
+	bool result = false;
+
+	if (strncmp(type, "rng", strlen("rng")) == 0) {
+		prov_esdm = OSSL_PROVIDER_load(NULL, "libesdm-rng-provider");
 		if (prov_esdm == NULL)
 			return false;
-		OSSL_PROVIDER *prov_default =
-			OSSL_PROVIDER_load(NULL, "default");
+		prov_default = OSSL_PROVIDER_load(NULL, "default");
 		if (prov_default == NULL)
-			return false;
+			goto out;
 	}
 
-	if (strncmp(type, "seed-src", strlen("seed-src"))) {
-		OSSL_PROVIDER *prov_esdm =
-			OSSL_PROVIDER_load(NULL, "libesdm-seed-src-provider");
+	if (strncmp(type, "seed-src", strlen("seed-src")) == 0) {
+		prov_esdm = OSSL_PROVIDER_load(NULL,
+						"libesdm-seed-src-provider");
 		if (prov_esdm == NULL)
 			return false;
-		OSSL_PROVIDER *prov_default =
-			OSSL_PROVIDER_load(NULL, "default");
+		prov_default = OSSL_PROVIDER_load(NULL, "default");
 		if (prov_default == NULL)
-			return false;
+			goto out;
 	}
 
 	if (strncmp(test, "random", strlen("random")) == 0)
-		return test_random();
-	if (strncmp(test, "instantiate_pr", strlen("instantiate_pr")) == 0)
-		return test_instantiate(true);
-	if (strncmp(test, "instantiate_full", strlen("instantiate_full")) == 0)
-		return test_instantiate(false);
+		result = test_random();
+	else if (strncmp(test, "instantiate_pr", strlen("instantiate_pr")) == 0)
+		result = test_instantiate(true);
+	else if (strncmp(test, "instantiate_full", strlen("instantiate_full")) == 0)
+		result = test_instantiate(false);
 
-	/* invalid/unimplemented test given */
-	return false;
+out:
+	if (prov_default)
+		OSSL_PROVIDER_unload(prov_default);
+	if (prov_esdm)
+		OSSL_PROVIDER_unload(prov_esdm);
+	return result;
 }
 
 int main(int argc, char **argv)
