@@ -281,6 +281,8 @@ int esdm_drng_mgr_initialize(void)
 
 out:
 	if (ret) {
+		esdm_drng_dealloc_common(esdm_drng_init_instance());
+		esdm_drng_dealloc_common(&esdm_drng_pr);
 		atomic_set(&esdm_avail, 0);
 	}
 	return ret;

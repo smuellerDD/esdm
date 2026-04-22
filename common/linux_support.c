@@ -28,6 +28,7 @@
 
 #include "esdm_logger.h"
 #include "linux_support.h"
+#include "memset_secure.h"
 
 int linux_isolate_namespace_prefork(void)
 {
@@ -141,5 +142,6 @@ int linux_personalization_string(char **ptr, size_t *length)
 out_close:
 	fclose(f);
 out:
+	memset_secure(buf, 0, sizeof(buf));
 	return ret;
 }

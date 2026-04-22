@@ -116,6 +116,7 @@ static int esdm_gnutls_hash_selftest(void)
 
 	esdm_gnutls_hash_update(hd, msg_512, 3);
 	esdm_gnutls_hash_final(hd, act);
+	esdm_gnutls_hash_desc_zero(hd);
 	esdm_gnutls_hash_dealloc(hd);
 	if (memcmp(act, exp_512, sizeof(exp_512)))
 		ret = -EFAULT;
