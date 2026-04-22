@@ -18,6 +18,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -173,7 +174,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 					   size_t inbuflen, bool test_mode)
 {
 	struct esdm_openssl_drng_state *state = drng;
-	struct timespec current_time;
+	struct timespec current_time = { 0 };
 	OSSL_PARAM params[3] = { 0 };
 	int ret = 0;
 
@@ -184,9 +185,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		 * Use CLOCK_REALTIME here, as CLOCK_MONOTONIC is already used
 		 * to construct the seed buffer.
 		 */
-		if (test_mode) {
-			memset(&current_time, 0, sizeof(current_time));
-		} else {
+		if (!test_mode) {
 			ret = clock_gettime(CLOCK_REALTIME, &current_time);
 			if (ret) {
 				esdm_logger(LOGGER_ERR, LOGGER_C_MD,
@@ -202,6 +201,9 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		 * not used to comply with the SP800-90C security argumentation,
 		 * just to satisfy OpenSSL's API, which expects a non-zero
 		 * nonce, as TEST-RAND declares to deliver nonces.
+		 *
+		 * Note: const is cast away due to OpenSSL's OSSL_PARAM API
+		 * requiring void*. The buffer is not modified by OpenSSL.
 		 */
 		params[0] = OSSL_PARAM_construct_octet_string(
 			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf,
@@ -253,6 +255,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 	}
 
 out:
+	memset_secure(&current_time, 0, sizeof(current_time));
 	return ret;
 }
 
@@ -269,6 +272,9 @@ static ssize_t esdm_openssl_drbg_generate_w_additional_data(void *drng,
 							    size_t addbuflen)
 {
 	struct esdm_openssl_drng_state *state = drng;
+
+	if (outbuflen > SSIZE_MAX)
+		return -EINVAL;
 
 	if (!EVP_RAND_generate(state->drbg, outbuf, outbuflen, state->strength,
 			       0, addbuf, addbuflen)) {
@@ -417,8 +423,10 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 out:
 	if (rand)
 		EVP_RAND_free(rand);
-	if (ret)
+	if (ret) {
 		esdm_openssl_drbg_dealloc_internal(state);
+		free(state);
+	}
 
 	return ret;
 }
@@ -429,10 +437,11 @@ static void esdm_openssl_drbg_dealloc(void *drng)
 
 	esdm_openssl_drbg_dealloc_internal(state);
 
+	memset_secure(state, 0, sizeof(*state));
+	free(state);
+
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 		    "DRBG core zeroized and freed\n");
-
-	free(state);
 }
 
 static const char *esdm_openssl_drbg_name(void)
