@@ -1076,7 +1076,13 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		    (flags & ESDM_GET_SEED_NONBLOCK))
 			break;
 
+		/*
+		 * Release pool lock while sleeping to avoid starving DRNG
+		 * reseeding operations that need the pool lock.
+		 */
+		esdm_pool_unlock();
 		nanosleep(&poll_ts, NULL);
+		esdm_pool_lock();
 	}
 
 	esdm_pool_unlock();
