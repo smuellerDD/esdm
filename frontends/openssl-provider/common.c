@@ -162,6 +162,8 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 	size_t buf_len = 0;
 	ssize_t ret = 0;
 
+	*buffer = NULL;
+
 	if (entropy_bits <= 0) {
 		goto err;
 	}
@@ -378,6 +380,7 @@ static void esdm_teardown(void *provctx)
 {
 	struct esdm_provider_ctx *cprov = provctx;
 
+	OSSL_LIB_CTX_free(cprov->libctx);
 	OPENSSL_secure_clear_free(cprov, sizeof(struct esdm_provider_ctx));
 	esdm_rpcc_fini_unpriv_service();
 }
