@@ -181,4 +181,6 @@ conf_data.set('ESDM_HAS_AUX_CLIENT', get_option('esdm-aux-client').enabled())
 conf_data.set('ESDM_NUM_AUX_POOLS', get_option('num-aux-pools'))
 conf_data.set('ESDM_AUX_INPUT_HAS_FULL_ENTROPY', get_option('aux-has-full-entropy').enabled())
 
+conf_data.set('ESDM_MEMORY_DEBUG', get_option('memory-debug').enabled())
+
 configure_file(output: 'config.h', configuration : conf_data)
