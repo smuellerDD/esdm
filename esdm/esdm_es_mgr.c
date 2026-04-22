@@ -53,6 +53,7 @@
 #include "queue.h"
 #include "ret_checkers.h"
 #include "test_pertubation.h"
+#include "threading_support.h"
 #include "visibility.h"
 
 struct esdm_state {
@@ -131,6 +132,11 @@ struct esdm_es_cb *esdm_es[] = {
 };
 
 /******************************** ES monitor **********************************/
+
+bool esdm_es_mgr_running(void)
+{
+	return atomic_read(&esdm_es_mgr_terminate) == 0;
+}
 
 /* Restart the ES monitor if it is sleeping */
 void esdm_es_mgr_monitor_wakeup(void)
@@ -723,6 +729,9 @@ void esdm_es_mgr_finalize(void)
 
 	atomic_set(&esdm_es_mgr_terminate, 1);
 	esdm_es_mgr_monitor_wakeup();
+
+	/* wait for monitor thread */
+	thread_wait_all(true);
 
 	for_each_esdm_es (i) {
 		if (esdm_es[i]->fini)

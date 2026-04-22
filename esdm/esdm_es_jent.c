@@ -175,7 +175,7 @@ static int esdm_jent_async_monitor(void)
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG block filling started\n");
 
-	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++) {
+	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS && esdm_es_mgr_running(); i++) {
 		if (__sync_val_compare_and_swap(&esdm_jent_async_set[i],
 						buffer_empty,
 						buffer_filling) != buffer_empty)
