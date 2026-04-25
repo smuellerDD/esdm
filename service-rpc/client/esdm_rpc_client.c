@@ -205,8 +205,7 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 	do {
 		/* Does the caller wants us to interrupt? */
 		if (rpc_conn->interrupt_func &&
-			rpc_conn->interrupt_func(
-				rpc_conn->interrupt_data)) {
+		    rpc_conn->interrupt_func(rpc_conn->interrupt_data)) {
 			return -EAGAIN;
 		}
 
@@ -365,8 +364,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	do {
 		/* Does the caller wants us to interrupt? */
 		if (rpc_conn->interrupt_func &&
-			rpc_conn->interrupt_func(
-				rpc_conn->interrupt_data)) {
+		    rpc_conn->interrupt_func(rpc_conn->interrupt_data)) {
 			interrupted = true;
 			break;
 		}
@@ -535,10 +533,12 @@ static void esdm_client_invoke(ProtobufCService *service,
 			  "Sending of data failed: %d\n", ret);
 
 		/* Receive data */
-		ret = esdm_rpc_client_read_handler(rpc_conn, method->output, closure, closure_data);
+		ret = esdm_rpc_client_read_handler(rpc_conn, method->output,
+						   closure, closure_data);
 		/* EAGAIN is ok here, since sockets are non-blocking now */
 		if (ret < 0 && ret != -EAGAIN) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "Receiving of data failed: %d\n", ret);
+			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+				    "Receiving of data failed: %d\n", ret);
 		}
 	} while (ret == -EAGAIN);
 

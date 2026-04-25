@@ -137,6 +137,7 @@ void may_enable_memory_debugging()
 
 	/* memory options should be called very early,
 	 * logger is typically not set up*/
-	fprintf(stderr, "WARNING: Memory debugging enabled. Don't use in production.\n");
+	fprintf(stderr,
+		"WARNING: Memory debugging enabled. Don't use in production.\n");
 #endif
 }

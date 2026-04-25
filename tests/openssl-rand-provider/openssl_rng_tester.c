@@ -119,8 +119,8 @@ static bool performTest(char *test, char *type)
 	}
 
 	if (strncmp(type, "seed-src", strlen("seed-src")) == 0) {
-		prov_esdm = OSSL_PROVIDER_load(NULL,
-						"libesdm-seed-src-provider");
+		prov_esdm =
+			OSSL_PROVIDER_load(NULL, "libesdm-seed-src-provider");
 		if (prov_esdm == NULL)
 			return false;
 		prov_default = OSSL_PROVIDER_load(NULL, "default");
@@ -132,7 +132,8 @@ static bool performTest(char *test, char *type)
 		result = test_random();
 	else if (strncmp(test, "instantiate_pr", strlen("instantiate_pr")) == 0)
 		result = test_instantiate(true);
-	else if (strncmp(test, "instantiate_full", strlen("instantiate_full")) == 0)
+	else if (strncmp(test, "instantiate_full",
+			 strlen("instantiate_full")) == 0)
 		result = test_instantiate(false);
 
 out:

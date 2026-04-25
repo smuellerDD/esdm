@@ -465,8 +465,10 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 * See SP800-90C sec. 6.5.1.2.
 		 */
 		esdm_fill_seed_buffer(&seedbuf,
-				      esdm_get_seed_entropy_osr(do_full_init,
-				      !do_full_init && drng == &esdm_drng_pr),
+				      esdm_get_seed_entropy_osr(
+					      do_full_init,
+					      !do_full_init &&
+						      drng == &esdm_drng_pr),
 				      forced && do_full_init);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
@@ -490,7 +492,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 */
 		esdm_init_ops(&collected_seedbuf);
 
-	/*
+		/*
 	 * Emergency reseeding: If we reached the min seed threshold now
 	 * multiple times but never reached fully seeded level and we collect
 	 * entropy, keep doing it until we reached fully seeded level for

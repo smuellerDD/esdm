@@ -188,8 +188,9 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		if (!test_mode) {
 			ret = clock_gettime(CLOCK_REALTIME, &current_time);
 			if (ret) {
-				esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-					    "Failed to get current time for DRBG nonce\n");
+				esdm_logger(
+					LOGGER_ERR, LOGGER_C_MD,
+					"Failed to get current time for DRBG nonce\n");
 				ret = -EFAULT;
 				goto out;
 			}
@@ -206,8 +207,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		 * requiring void*. The buffer is not modified by OpenSSL.
 		 */
 		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf,
-			inbuflen);
+			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
 		params[1] = OSSL_PARAM_construct_octet_string(
 			OSSL_RAND_PARAM_TEST_NONCE, (void *)&current_time,
 			sizeof(current_time));
@@ -235,8 +235,7 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		state->seeded = 1;
 	} else {
 		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf,
-			inbuflen);
+			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
 		params[1] = OSSL_PARAM_construct_end();
 
 		if (!EVP_RAND_CTX_set_params(state->seed_source, params)) {
@@ -306,11 +305,13 @@ static ssize_t esdm_openssl_drbg_generate(void *drng, uint8_t *outbuf,
 	addbuf = (uint8_t *)&ts;
 	addbuflen = sizeof(ts);
 
-	genret = esdm_openssl_drbg_generate_w_additional_data(drng, outbuf, outbuflen, addbuf, addbuflen);
+	genret = esdm_openssl_drbg_generate_w_additional_data(
+		drng, outbuf, outbuflen, addbuf, addbuflen);
 	memset_secure(&ts, 0, sizeof(ts));
 	return genret;
 #else
-	return esdm_openssl_drbg_generate_w_additional_data(drng, outbuf, outbuflen, addbuf, addbuflen);
+	return esdm_openssl_drbg_generate_w_additional_data(
+		drng, outbuf, outbuflen, addbuf, addbuflen);
 #endif
 }
 
@@ -341,7 +342,7 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	/* disable count-based auto reseed */
 	unsigned int reseed_requests = 0;
 	/* disable time-based auto reseed  */
-	time_t reseed_time     = 0;
+	time_t reseed_time = 0;
 	int ret = 0;
 
 	(void)sec_strength;
@@ -378,8 +379,8 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	params[1] = OSSL_PARAM_construct_int(OSSL_DRBG_PARAM_USE_DF, &df);
 	params[2] = OSSL_PARAM_construct_uint(OSSL_DRBG_PARAM_RESEED_REQUESTS,
 					      &reseed_requests);
-	params[3] = OSSL_PARAM_construct_time_t(OSSL_DRBG_PARAM_RESEED_TIME_INTERVAL,
-					        &reseed_time);
+	params[3] = OSSL_PARAM_construct_time_t(
+		OSSL_DRBG_PARAM_RESEED_TIME_INTERVAL, &reseed_time);
 	params[4] = OSSL_PARAM_construct_end();
 #endif
 
@@ -392,8 +393,10 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 
 	params[0] = OSSL_PARAM_construct_utf8_string(OSSL_DRBG_PARAM_DIGEST,
 						     "SHA512", 6);
-	params[1] = OSSL_PARAM_construct_uint(OSSL_DRBG_PARAM_RESEED_REQUESTS, &reseed_requests);
-	params[2] = OSSL_PARAM_construct_time_t(OSSL_DRBG_PARAM_RESEED_TIME_INTERVAL, &reseed_time);
+	params[1] = OSSL_PARAM_construct_uint(OSSL_DRBG_PARAM_RESEED_REQUESTS,
+					      &reseed_requests);
+	params[2] = OSSL_PARAM_construct_time_t(
+		OSSL_DRBG_PARAM_RESEED_TIME_INTERVAL, &reseed_time);
 	params[3] = OSSL_PARAM_construct_end();
 #endif
 
@@ -410,8 +413,8 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 						     "HMAC", 4);
 	params[2] = OSSL_PARAM_construct_uint(OSSL_DRBG_PARAM_RESEED_REQUESTS,
 					      &reseed_requests);
-	params[3] = OSSL_PARAM_construct_time_t(OSSL_DRBG_PARAM_RESEED_TIME_INTERVAL,
-					        &reseed_time);
+	params[3] = OSSL_PARAM_construct_time_t(
+		OSSL_DRBG_PARAM_RESEED_TIME_INTERVAL, &reseed_time);
 	params[4] = OSSL_PARAM_construct_end();
 #endif
 
@@ -544,14 +547,18 @@ static int esdm_openssl_drbg_selftest(void)
 	int ret;
 
 	CKINT(esdm_openssl_drbg_alloc(&drng, 256));
-	CKINT(esdm_openssl_drbg_seed_internal(drng, ent_nonce, sizeof(ent_nonce), true));
-	CKINT(esdm_openssl_drbg_seed_internal(drng, reseed, sizeof(reseed), true));
-	if (esdm_openssl_drbg_generate_w_additional_data(drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
+	CKINT(esdm_openssl_drbg_seed_internal(drng, ent_nonce,
+					      sizeof(ent_nonce), true));
+	CKINT(esdm_openssl_drbg_seed_internal(drng, reseed, sizeof(reseed),
+					      true));
+	if (esdm_openssl_drbg_generate_w_additional_data(
+		    drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
 		ret = -EFAULT;
 		goto out;
 	}
 
-	if (esdm_openssl_drbg_generate_w_additional_data(drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
+	if (esdm_openssl_drbg_generate_w_additional_data(
+		    drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
 		ret = -EFAULT;
 		goto out;
 	}

@@ -85,8 +85,7 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 		 * into client timeouts for larger requests.
 		 */
 		msg.len = min_size(ESDM_RPC_MAX_PR_REQUEST_SIZE,
-				   min_size(maxbuflen,
-					    buflen));
+				   min_size(maxbuflen, buflen));
 
 		unpriv_access__rpc_get_random_bytes_pr(
 			&rpc_conn->service, &msg,

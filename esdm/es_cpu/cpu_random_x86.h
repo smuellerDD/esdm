@@ -74,9 +74,8 @@ static inline int rdseed_available(void)
 		rdseed_avail = false;
 	}
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			"RDSEED support %sdetected\n",
-			rdseed_avail ? "" : "not ");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "RDSEED support %sdetected\n",
+		    rdseed_avail ? "" : "not ");
 
 	return rdseed_avail;
 }
@@ -101,9 +100,8 @@ static inline int rdrand_available(void)
 		rdrand_avail = false;
 	}
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			"RDRAND support %sdetected\n",
-			rdrand_avail ? "" : "not ");
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "RDRAND support %sdetected\n",
+		    rdrand_avail ? "" : "not ");
 
 	return rdrand_avail;
 }

@@ -160,7 +160,8 @@ err:
 
 static int esdm_jent_async_monitor(void)
 {
-	unsigned int i, requested_bits = esdm_get_seed_entropy_osr(false, false);
+	unsigned int i,
+		requested_bits = esdm_get_seed_entropy_osr(false, false);
 
 	if (!esdm_config_es_jent_async_enabled())
 		return 0;
@@ -175,7 +176,8 @@ static int esdm_jent_async_monitor(void)
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG block filling started\n");
 
-	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS && esdm_es_mgr_running(); i++) {
+	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS && esdm_es_mgr_running();
+	     i++) {
 		if (__sync_val_compare_and_swap(&esdm_jent_async_set[i],
 						buffer_empty,
 						buffer_filling) != buffer_empty)

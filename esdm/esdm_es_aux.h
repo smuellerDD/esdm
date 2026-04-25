@@ -44,11 +44,13 @@ static inline uint32_t esdm_security_strength(void)
 	return min_uint32(ESDM_FULL_SEED_ENTROPY_BITS, esdm_get_digestsize());
 }
 
-static inline uint32_t esdm_get_seed_entropy_osr(bool do_full_init, bool full_entropy)
+static inline uint32_t esdm_get_seed_entropy_osr(bool do_full_init,
+						 bool full_entropy)
 {
 	uint32_t requested_bits = esdm_security_strength();
 
-	assert((!do_full_init && !full_entropy) || (do_full_init != full_entropy));
+	assert((!do_full_init && !full_entropy) ||
+	       (do_full_init != full_entropy));
 
 	/* Apply oversampling during initialization according to SP800-90C */
 	if (esdm_sp80090c_compliant() && do_full_init)

@@ -433,7 +433,8 @@ int thread_wait(bool ignore_shutdown)
 
 		/* Only wait for our children */
 		for (i = 0; i < THREADING_MAX_THREADS; i++) {
-			if (!ignore_shutdown && atomic_bool_read(&threads[i].shutdown))
+			if (!ignore_shutdown &&
+			    atomic_bool_read(&threads[i].shutdown))
 				return -ESHUTDOWN;
 
 			/* Thread is not initialized, skip */
@@ -556,7 +557,7 @@ int thread_wait_all(bool system_threads)
 out:
 	mutex_w_unlock(&threads_cleanup);
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-		"Exiting thread_wait_all with status %i\n", ret);
+		    "Exiting thread_wait_all with status %i\n", ret);
 	return ret;
 }
 

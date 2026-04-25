@@ -453,7 +453,8 @@ bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 		return (result >= 2);
 	}
 
-	return (collected_entropy >= esdm_get_seed_entropy_osr(do_full_init, false));
+	return (collected_entropy >=
+		esdm_get_seed_entropy_osr(do_full_init, false));
 }
 
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
@@ -583,8 +584,8 @@ void esdm_init_ops(struct entropy_buf *eb)
 	if (atomic_bool_read(&state->esdm_operational))
 		return;
 
-	requested_bits =
-		esdm_init_entropy_level(atomic_bool_read(&state->all_online_nodes_seeded));
+	requested_bits = esdm_init_entropy_level(
+		atomic_bool_read(&state->all_online_nodes_seeded));
 
 	if (eb) {
 		seed_bits = esdm_entropy_rate_eb(eb);
@@ -603,7 +604,7 @@ void esdm_init_ops(struct entropy_buf *eb)
 	}
 
 	if (esdm_fully_seeded(!atomic_bool_read(&state->all_online_nodes_seeded),
-			     seed_bits, eb)) {
+			      seed_bits, eb)) {
 		atomic_bool_set_true(&state->esdm_fully_seeded);
 		esdm_set_operational();
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
@@ -807,8 +808,9 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {
-		esdm_es[i]->get_ent(&eb->entropy_es[i], requested_bits,
-				    atomic_bool_read(&state->esdm_fully_seeded));
+		esdm_es[i]->get_ent(
+			&eb->entropy_es[i], requested_bits,
+			atomic_bool_read(&state->esdm_fully_seeded));
 	}
 
 wakeup:
