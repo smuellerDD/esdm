@@ -259,7 +259,7 @@ static int esdm_irq_seed_monitor(void)
 #if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
 		if (irq_buf_alloced) {
 			uint32_t requested_bits =
-				esdm_get_seed_entropy_osr(false, false);
+				esdm_get_seed_entropy_osr(false, true);
 
 			esdm_es_buf_monitor(&irq_buf, requested_bits,
 					    esdm_irq_buf_fill, NULL);
@@ -330,7 +330,7 @@ static void esdm_irq_buf_fill(struct entropy_es *eb_es,
 static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			 bool __unused unused)
 {
-	if (requested_bits == esdm_get_seed_entropy_osr(false, false) &&
+	if (requested_bits <= esdm_get_seed_entropy_osr(false, true) &&
 	    esdm_es_buf_try_get(&irq_buf, eb_es))
 		return;
 
