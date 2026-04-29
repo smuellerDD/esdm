@@ -23,12 +23,11 @@
 #include <stdio.h>
 
 #include "atomic.h"
-#include "atomic_bool.h"
-#include "build_bug_on.h"
 #include "config.h"
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_buf.h"
 #include "esdm_es_jent.h"
 #include "esdm_es_mgr.h"
 #include "helper.h"
@@ -46,27 +45,10 @@
 static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
 
 static atomic_t esdm_jent_initialized = ATOMIC_INIT(0);
-static atomic_bool_t esdm_jent_monitor_initialized = ATOMIC_BOOL_INIT(false);
 static struct rand_data *esdm_jent_state = NULL;
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-#define ESDM_IS_POWER_OF_2(n) (BUILD_BUG_ON((n & (n - 1)) != 0))
-
-/* Entropy buffer filled by Jitter RNG thread - must be power of 2 */
-#define ESDM_JENT_ENTROPY_BLOCKS_MASK (ESDM_JENT_ENTROPY_BLOCKS - 1)
-
-static struct entropy_es
-	esdm_jent_async[ESDM_JENT_ENTROPY_BLOCKS] __aligned(sizeof(uint64_t));
-
-enum esdm_jent_async_state {
-	buffer_empty,
-	buffer_filling,
-	buffer_filled,
-	buffer_reading,
-};
-static volatile enum esdm_jent_async_state
-	esdm_jent_async_set[ESDM_JENT_ENTROPY_BLOCKS];
-
+static struct esdm_es_buf esdm_jent_buf;
 static struct rand_data *esdm_jent_state_thread = NULL;
 #endif
 
@@ -158,107 +140,38 @@ err:
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
 
+static void esdm_jent_buf_fill(struct entropy_es *eb_es,
+			       uint32_t requested_bits, void *ctx)
+{
+	(void)ctx;
+	esdm_jent_get(&esdm_jent_state_thread, eb_es, requested_bits, false);
+}
+
 static int esdm_jent_async_monitor(void)
 {
-	unsigned int i,
-		requested_bits = esdm_get_seed_entropy_osr(false, false);
+	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, false);
 
 	if (!esdm_config_es_jent_async_enabled())
 		return 0;
 
-	/* skip first run to be responsive on RPC interface
-	 * fast on ESDM startup */
-	if (!atomic_bool_read(&esdm_jent_monitor_initialized)) {
-		atomic_bool_set_true(&esdm_jent_monitor_initialized);
-		return 0;
-	}
-
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-		    "Jitter RNG block filling started\n");
-
-	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS && esdm_es_mgr_running();
-	     i++) {
-		if (__sync_val_compare_and_swap(&esdm_jent_async_set[i],
-						buffer_empty,
-						buffer_filling) != buffer_empty)
-			continue;
-
-		/*
-		 * Always gather entropy data excluding
-		 * potential oversampling factor.
-		 */
-		esdm_jent_get(&esdm_jent_state_thread, &esdm_jent_async[i],
-			      requested_bits, false);
-
-		__sync_synchronize();
-		__sync_lock_test_and_set(&esdm_jent_async_set[i],
-					 buffer_filled);
-
-		esdm_logger(
-			LOGGER_DEBUG, LOGGER_C_ES,
-			"Jitter RNG ES monitor: filled slot %u with %u bits of entropy\n",
-			i, requested_bits);
-	}
-
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-		    "Jitter RNG block filling completed\n");
-
-	esdm_es_add_entropy();
-
-	return 0;
+	return esdm_es_buf_monitor(&esdm_jent_buf, requested_bits,
+				   esdm_jent_buf_fill, NULL);
 }
 
 static void esdm_jent_async_get(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
-	static atomic_t idx = ATOMIC_INIT(-1);
-	unsigned int slot;
-
-	(void)requested_bits;
-
 	if (!atomic_read(&esdm_jent_initialized)) {
 		eb_es->e_bits = 0;
 		return;
 	}
 
-	/* ESDM_JENT_ENTROPY_BLOCKS must be a power of 2 */
-	ESDM_IS_POWER_OF_2(ESDM_JENT_ENTROPY_BLOCKS);
-	slot = ((unsigned int)atomic_inc(&idx)) & ESDM_JENT_ENTROPY_BLOCKS_MASK;
-
-	if (__sync_val_compare_and_swap(&esdm_jent_async_set[slot],
-					buffer_filled,
-					buffer_reading) != buffer_filled) {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-			    "Jitter RNG ES monitor: buffer slot %u exhausted\n",
-			    slot);
-
-		mutex_w_lock(&esdm_jent_lock);
-		esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
-		mutex_w_unlock(&esdm_jent_lock);
-
-		esdm_es_mgr_monitor_wakeup();
+	if (esdm_es_buf_try_get(&esdm_jent_buf, eb_es))
 		return;
-	}
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
-		    "Jitter RNG ES monitor: used slot %u\n", slot);
-
-	memcpy(eb_es->e, esdm_jent_async[slot].e,
-	       ESDM_DRNG_INIT_SEED_SIZE_BYTES);
-	eb_es->e_bits = esdm_jent_async[slot].e_bits;
-
-	esdm_logger(
-		LOGGER_DEBUG, LOGGER_C_ES,
-		"obtained %u bits of entropy from Jitter RNG noise source\n",
-		eb_es->e_bits);
-
-	memset_secure(&esdm_jent_async[slot], 0, sizeof(struct entropy_es));
-
-	__sync_synchronize();
-	__sync_lock_test_and_set(&esdm_jent_async_set[slot], buffer_empty);
-
-	if (!(slot % (ESDM_JENT_ENTROPY_BLOCKS / 4)) && slot)
-		esdm_es_mgr_monitor_wakeup();
+	mutex_w_lock(&esdm_jent_lock);
+	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
+	mutex_w_unlock(&esdm_jent_lock);
 }
 
 static void esdm_jent_get_check(struct entropy_es *eb_es,
@@ -277,11 +190,10 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 
 static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
-	unsigned int i;
 	int ret = 0;
 
-	for (i = 0; i < ESDM_JENT_ENTROPY_BLOCKS; i++)
-		esdm_jent_async_set[i] = buffer_empty;
+	CKINT(esdm_es_buf_alloc(&esdm_jent_buf, ESDM_JENT_ENTROPY_BLOCKS,
+				"JitterRNG"));
 
 	esdm_jent_state_thread = jent_entropy_collector_alloc(osr, flags);
 	CKNULL(esdm_jent_state_thread, -EFAULT);
@@ -295,10 +207,7 @@ static void esdm_jent_async_fini(void)
 	jent_entropy_collector_free(esdm_jent_state_thread);
 	esdm_jent_state_thread = NULL;
 
-	/* Reset state */
-	memset_secure(esdm_jent_async, 0, sizeof(esdm_jent_async));
-
-	atomic_bool_set_false(&esdm_jent_monitor_initialized);
+	esdm_es_buf_free(&esdm_jent_buf);
 }
 
 #else
