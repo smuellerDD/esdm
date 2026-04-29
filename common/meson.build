@@ -178,6 +178,12 @@ endif
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))
+if get_option('es_jent_kernel_entropy_blocks') >= 4
+	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS',
+		      get_option('es_jent_kernel_entropy_blocks'))
+else
+	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS', 0)
+endif
 
 if (get_option('es_irq_entropy_rate') > 0) and get_option('es_sched_entropy_rate') > 0
 	error('It is not permissible to award both, the interrupt and scheduler-based entropy sources, an entropy rate greater than zero. Adjust es_irq_entropy_rate or es_sched_entropy_rate to zero.')
