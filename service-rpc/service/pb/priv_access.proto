@@ -137,6 +137,52 @@ message SetMinReseedSecsResponse {
 }
 
 /******************************************************************************
+ * Configure the PKCS#11 entropy source (token label and/or user PIN)
+ ******************************************************************************/
+
+/**
+ * @brief Request to update the runtime configuration of the PKCS#11 entropy
+ *	  source.
+ *
+ * Each field is only applied when its corresponding `set_*` flag is true,
+ * which lets callers update only the PIN, only the label, or both atomically.
+ *
+ * Update order on the server: the token label is applied first (it re-opens
+ * the PKCS#11 module against the new label), then the PIN is installed and
+ * a login is attempted on the freshly opened slot if the token requires it.
+ * If the label update fails, the PIN is not applied.
+ *
+ * Passing the empty string for `pin` or `token_label` (with the matching
+ * `set_*` flag set) clears the runtime override and falls back to the
+ * compile-time default.
+ *
+ * The settings are in-memory only and are not persisted across server
+ * restarts.
+ *
+ * @param set_token_label Apply `token_label` if true.
+ * @param token_label PKCS#11 token label to select.
+ * @param set_pin Apply `pin` if true.
+ * @param pin User PIN to authenticate with the PKCS#11 token (CKU_USER).
+ */
+message SetPkcs11ConfigRequest {
+	bool set_token_label = 1;
+	string token_label = 2;
+	bool set_pin = 3;
+	string pin = 4;
+}
+
+/**
+ * @brief Response of a PKCS#11 entropy source configuration update.
+ *
+ * @param ret Return code (0 on success, < 0 on error; in particular -ENOENT
+ *	      if the PKCS#11 entropy source is not compiled in or no matching
+ *	      token was found).
+ */
+message SetPkcs11ConfigResponse {
+	int32 ret = 1;
+}
+
+/******************************************************************************
  * Protocol handler
  ******************************************************************************/
 service PrivAccess {
@@ -154,4 +200,8 @@ service PrivAccess {
 				    (SetWriteWakeupThreshResponse);
 	rpc RpcSetMinReseedSecs (SetMinReseedSecsRequest) returns
 				(SetMinReseedSecsResponse);
+
+	/* entropy source configuration */
+	rpc RpcSetPkcs11Config (SetPkcs11ConfigRequest) returns
+			       (SetPkcs11ConfigResponse);
 }

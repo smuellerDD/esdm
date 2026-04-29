@@ -547,6 +547,96 @@ void   set_min_reseed_secs_response__free_unpacked
   assert(message->base.descriptor == &set_min_reseed_secs_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   set_pkcs11_config_request__init
+                     (SetPkcs11ConfigRequest         *message)
+{
+  static const SetPkcs11ConfigRequest init_value = SET_PKCS11_CONFIG_REQUEST__INIT;
+  *message = init_value;
+}
+size_t set_pkcs11_config_request__get_packed_size
+                     (const SetPkcs11ConfigRequest *message)
+{
+  assert(message->base.descriptor == &set_pkcs11_config_request__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t set_pkcs11_config_request__pack
+                     (const SetPkcs11ConfigRequest *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &set_pkcs11_config_request__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t set_pkcs11_config_request__pack_to_buffer
+                     (const SetPkcs11ConfigRequest *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &set_pkcs11_config_request__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+SetPkcs11ConfigRequest *
+       set_pkcs11_config_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (SetPkcs11ConfigRequest *)
+     protobuf_c_message_unpack (&set_pkcs11_config_request__descriptor,
+                                allocator, len, data);
+}
+void   set_pkcs11_config_request__free_unpacked
+                     (SetPkcs11ConfigRequest *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &set_pkcs11_config_request__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
+void   set_pkcs11_config_response__init
+                     (SetPkcs11ConfigResponse         *message)
+{
+  static const SetPkcs11ConfigResponse init_value = SET_PKCS11_CONFIG_RESPONSE__INIT;
+  *message = init_value;
+}
+size_t set_pkcs11_config_response__get_packed_size
+                     (const SetPkcs11ConfigResponse *message)
+{
+  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t set_pkcs11_config_response__pack
+                     (const SetPkcs11ConfigResponse *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t set_pkcs11_config_response__pack_to_buffer
+                     (const SetPkcs11ConfigResponse *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+SetPkcs11ConfigResponse *
+       set_pkcs11_config_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (SetPkcs11ConfigResponse *)
+     protobuf_c_message_unpack (&set_pkcs11_config_response__descriptor,
+                                allocator, len, data);
+}
+void   set_pkcs11_config_response__free_unpacked
+                     (SetPkcs11ConfigResponse *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 static const ProtobufCFieldDescriptor rnd_add_to_ent_cnt_request__field_descriptors[1] =
 {
   {
@@ -976,7 +1066,122 @@ const ProtobufCMessageDescriptor set_min_reseed_secs_response__descriptor =
   (ProtobufCMessageInit) set_min_reseed_secs_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor priv_access__method_descriptors[6] =
+static const ProtobufCFieldDescriptor set_pkcs11_config_request__field_descriptors[4] =
+{
+  {
+    "set_token_label",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(SetPkcs11ConfigRequest, set_token_label),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "token_label",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(SetPkcs11ConfigRequest, token_label),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "set_pin",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(SetPkcs11ConfigRequest, set_pin),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "pin",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(SetPkcs11ConfigRequest, pin),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned set_pkcs11_config_request__field_indices_by_name[] = {
+  3,   /* field[3] = pin */
+  2,   /* field[2] = set_pin */
+  0,   /* field[0] = set_token_label */
+  1,   /* field[1] = token_label */
+};
+static const ProtobufCIntRange set_pkcs11_config_request__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 4 }
+};
+const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "SetPkcs11ConfigRequest",
+  "SetPkcs11ConfigRequest",
+  "SetPkcs11ConfigRequest",
+  "",
+  sizeof(SetPkcs11ConfigRequest),
+  4,
+  set_pkcs11_config_request__field_descriptors,
+  set_pkcs11_config_request__field_indices_by_name,
+  1,  set_pkcs11_config_request__number_ranges,
+  (ProtobufCMessageInit) set_pkcs11_config_request__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor set_pkcs11_config_response__field_descriptors[1] =
+{
+  {
+    "ret",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(SetPkcs11ConfigResponse, ret),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned set_pkcs11_config_response__field_indices_by_name[] = {
+  0,   /* field[0] = ret */
+};
+static const ProtobufCIntRange set_pkcs11_config_response__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor set_pkcs11_config_response__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "SetPkcs11ConfigResponse",
+  "SetPkcs11ConfigResponse",
+  "SetPkcs11ConfigResponse",
+  "",
+  sizeof(SetPkcs11ConfigResponse),
+  1,
+  set_pkcs11_config_response__field_descriptors,
+  set_pkcs11_config_response__field_indices_by_name,
+  1,  set_pkcs11_config_response__number_ranges,
+  (ProtobufCMessageInit) set_pkcs11_config_response__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCMethodDescriptor priv_access__method_descriptors[7] =
 {
   { "RpcRndAddToEntCnt", &rnd_add_to_ent_cnt_request__descriptor, &rnd_add_to_ent_cnt_response__descriptor },
   { "RpcRndAddEntropy", &rnd_add_entropy_request__descriptor, &rnd_add_entropy_response__descriptor },
@@ -984,6 +1189,7 @@ static const ProtobufCMethodDescriptor priv_access__method_descriptors[6] =
   { "RpcRndReseedCRNG", &rnd_reseed_crngrequest__descriptor, &rnd_reseed_crngresponse__descriptor },
   { "RpcSetWriteWakeupThresh", &set_write_wakeup_thresh_request__descriptor, &set_write_wakeup_thresh_response__descriptor },
   { "RpcSetMinReseedSecs", &set_min_reseed_secs_request__descriptor, &set_min_reseed_secs_response__descriptor },
+  { "RpcSetPkcs11Config", &set_pkcs11_config_request__descriptor, &set_pkcs11_config_response__descriptor },
 };
 const unsigned priv_access__method_indices_by_name[] = {
   1,        /* RpcRndAddEntropy */
@@ -991,6 +1197,7 @@ const unsigned priv_access__method_indices_by_name[] = {
   2,        /* RpcRndClearPool */
   3,        /* RpcRndReseedCRNG */
   5,        /* RpcSetMinReseedSecs */
+  6,        /* RpcSetPkcs11Config */
   4         /* RpcSetWriteWakeupThresh */
 };
 const ProtobufCServiceDescriptor priv_access__descriptor =
@@ -1000,7 +1207,7 @@ const ProtobufCServiceDescriptor priv_access__descriptor =
   "PrivAccess",
   "PrivAccess",
   "",
-  6,
+  7,
   priv_access__method_descriptors,
   priv_access__method_indices_by_name
 };
@@ -1051,6 +1258,14 @@ void priv_access__rpc_set_min_reseed_secs(ProtobufCService *service,
 {
   assert(service->descriptor == &priv_access__descriptor);
   service->invoke(service, 5, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void priv_access__rpc_set_pkcs11_config(ProtobufCService *service,
+                                        const SetPkcs11ConfigRequest *input,
+                                        SetPkcs11ConfigResponse_Closure closure,
+                                        void *closure_data)
+{
+  assert(service->descriptor == &priv_access__descriptor);
+  service->invoke(service, 6, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void priv_access__init (PrivAccess_Service *service,
                         PrivAccess_ServiceDestroy destroy)

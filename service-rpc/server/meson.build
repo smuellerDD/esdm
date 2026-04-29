@@ -18,6 +18,7 @@ server_rpc_src = files([
 	'esdm_rpc_server.c',
 	'esdm_rpc_service.c',
 	'esdm_rpc_set_min_reseed_secs_s.c',
+	'esdm_rpc_set_pkcs11_config_s.c',
 	'esdm_rpc_set_write_wakeup_thresh_s.c',
 	'esdm_rpc_status_s.c',
 	'esdm_rpc_write_data_s.c',

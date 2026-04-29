@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <libp11.h>
@@ -33,7 +34,9 @@
 #include "esdm_es_mgr.h"
 #include "esdm_es_pkcs11.h"
 #include "helper.h"
+#include "memset_secure.h"
 #include "mutex.h"
+#include "visibility.h"
 
 /*
  * Per call we ask the token for at most this many bytes. C_GenerateRandom is
@@ -47,7 +50,49 @@ static unsigned int pkcs11_nslots = 0;
 static PKCS11_SLOT *pkcs11_slot = NULL;
 static bool pkcs11_logged_in = false;
 static bool pkcs11_module_loaded = false;
+/*
+ * Optional runtime override for the user PIN. NULL means "use the compile-time
+ * default ESDM_PKCS11_PIN". Owned by this module: allocated with strdup and
+ * scrubbed with memset_secure before free.
+ */
+static char *pkcs11_runtime_pin = NULL;
+/*
+ * Optional runtime override for the token label. NULL means "use the
+ * compile-time default ESDM_PKCS11_TOKEN_LABEL". Owned by this module.
+ */
+static char *pkcs11_runtime_token_label = NULL;
 static DEFINE_MUTEX_UNLOCKED(pkcs11_mutex);
+
+/* Caller must hold pkcs11_mutex (write lock). */
+static const char *esdm_es_pkcs11_pin_locked(void)
+{
+	return pkcs11_runtime_pin ? pkcs11_runtime_pin : ESDM_PKCS11_PIN;
+}
+
+/* Caller must hold pkcs11_mutex (write lock). */
+static const char *esdm_es_pkcs11_token_label_locked(void)
+{
+	return pkcs11_runtime_token_label ? pkcs11_runtime_token_label :
+					    ESDM_PKCS11_TOKEN_LABEL;
+}
+
+/* Caller must hold pkcs11_mutex (write lock). */
+static void esdm_es_pkcs11_clear_runtime_pin_locked(void)
+{
+	if (!pkcs11_runtime_pin)
+		return;
+
+	memset_secure(pkcs11_runtime_pin, 0, strlen(pkcs11_runtime_pin));
+	free(pkcs11_runtime_pin);
+	pkcs11_runtime_pin = NULL;
+}
+
+/* Caller must hold pkcs11_mutex (write lock). */
+static void esdm_es_pkcs11_clear_runtime_token_label_locked(void)
+{
+	free(pkcs11_runtime_token_label);
+	pkcs11_runtime_token_label = NULL;
+}
 
 #if (ESDM_PKCS11_ENTROPY_BLOCKS != 0)
 static struct esdm_es_buf pkcs11_buf;
@@ -84,6 +129,8 @@ static void esdm_es_pkcs11_finalize(void)
 {
 	mutex_lock(&pkcs11_mutex);
 	esdm_es_pkcs11_finalize_locked();
+	esdm_es_pkcs11_clear_runtime_pin_locked();
+	esdm_es_pkcs11_clear_runtime_token_label_locked();
 	mutex_unlock(&pkcs11_mutex);
 
 #if (ESDM_PKCS11_ENTROPY_BLOCKS != 0)
@@ -97,7 +144,7 @@ static void esdm_es_pkcs11_finalize(void)
 /* Caller must hold pkcs11_mutex (write lock). */
 static PKCS11_SLOT *esdm_es_pkcs11_pick_slot(void)
 {
-	const char *want_label = ESDM_PKCS11_TOKEN_LABEL;
+	const char *want_label = esdm_es_pkcs11_token_label_locked();
 	PKCS11_SLOT *slot;
 	unsigned int i;
 
@@ -119,22 +166,28 @@ static PKCS11_SLOT *esdm_es_pkcs11_pick_slot(void)
 	return NULL;
 }
 
-static int esdm_es_pkcs11_init(void)
+/*
+ * Open the PKCS#11 module and select a usable slot. Caller must hold
+ * pkcs11_mutex (write lock). Any previously held module/slot state is torn
+ * down first.
+ *
+ * Returns 0 on success. Negative errno otherwise: -ENODEV when the module
+ * cannot be loaded, -ENOENT when no matching token is found, -EACCES when
+ * login fails.
+ */
+static int esdm_es_pkcs11_open_module_locked(void)
 {
 	const char *module_path = ESDM_PKCS11_MODULE_PATH;
-	const char *pin = ESDM_PKCS11_PIN;
+	const char *pin = esdm_es_pkcs11_pin_locked();
 	int logged_in = 0;
 
-	mutex_lock(&pkcs11_mutex);
-
-	/* Allow init to be called multiple times. */
 	esdm_es_pkcs11_finalize_locked();
 
 	if (module_path[0] == '\0') {
 		esdm_logger(
 			LOGGER_WARN, LOGGER_C_ES,
 			"Disabling PKCS#11 entropy source: no module path configured\n");
-		goto out;
+		return -ENODEV;
 	}
 
 	pkcs11_ctx = PKCS11_CTX_new();
@@ -142,7 +195,7 @@ static int esdm_es_pkcs11_init(void)
 		esdm_logger(
 			LOGGER_WARN, LOGGER_C_ES,
 			"Disabling PKCS#11 entropy source: PKCS11_CTX_new failed\n");
-		goto out;
+		return -ENOMEM;
 	}
 
 	if (PKCS11_CTX_load(pkcs11_ctx, module_path) != 0) {
@@ -152,7 +205,7 @@ static int esdm_es_pkcs11_init(void)
 			module_path);
 		PKCS11_CTX_free(pkcs11_ctx);
 		pkcs11_ctx = NULL;
-		goto out;
+		return -ENODEV;
 	}
 	pkcs11_module_loaded = true;
 
@@ -164,7 +217,7 @@ static int esdm_es_pkcs11_init(void)
 		pkcs11_slots = NULL;
 		pkcs11_nslots = 0;
 		esdm_es_pkcs11_finalize_locked();
-		goto out;
+		return -EIO;
 	}
 
 	pkcs11_slot = esdm_es_pkcs11_pick_slot();
@@ -173,7 +226,7 @@ static int esdm_es_pkcs11_init(void)
 			LOGGER_WARN, LOGGER_C_ES,
 			"Disabling PKCS#11 entropy source: no usable token with RNG found\n");
 		esdm_es_pkcs11_finalize_locked();
-		goto out;
+		return -ENOENT;
 	}
 
 	if (pin[0] != '\0' && pkcs11_slot->token->loginRequired) {
@@ -187,7 +240,7 @@ static int esdm_es_pkcs11_init(void)
 						pkcs11_slot->token->label :
 						"(no label)");
 				esdm_es_pkcs11_finalize_locked();
-				goto out;
+				return -EACCES;
 			}
 			pkcs11_logged_in = true;
 		}
@@ -199,7 +252,13 @@ static int esdm_es_pkcs11_init(void)
 						"(no label)",
 		    module_path);
 
-out:
+	return 0;
+}
+
+static int esdm_es_pkcs11_init(void)
+{
+	mutex_lock(&pkcs11_mutex);
+	(void)esdm_es_pkcs11_open_module_locked();
 	mutex_unlock(&pkcs11_mutex);
 
 #if (ESDM_PKCS11_ENTROPY_BLOCKS != 0)
@@ -387,3 +446,96 @@ struct esdm_es_cb esdm_es_pkcs11 = {
 	.active = esdm_es_pkcs11_active,
 	.switch_hash = NULL,
 };
+
+DSO_PUBLIC
+int esdm_es_pkcs11_set_pin(const char *pin)
+{
+	char *new_copy = NULL;
+	char *old;
+	int ret = 0;
+
+	if (!pin)
+		return -EINVAL;
+
+	if (pin[0] != '\0') {
+		new_copy = strdup(pin);
+		if (!new_copy)
+			return -ENOMEM;
+	}
+
+	mutex_lock(&pkcs11_mutex);
+
+	old = pkcs11_runtime_pin;
+	pkcs11_runtime_pin = new_copy;
+
+	/*
+	 * If the module is already initialized, the token requires login, and
+	 * we have not logged in yet, log in now using the new PIN. If the new
+	 * PIN is empty, do not attempt a login (this is a "clear PIN"
+	 * request).
+	 */
+	if (new_copy && pkcs11_slot && pkcs11_slot->token &&
+	    pkcs11_slot->token->loginRequired && !pkcs11_logged_in) {
+		int logged_in = 0;
+
+		if (PKCS11_is_logged_in(pkcs11_slot, 0, &logged_in) == 0 &&
+		    !logged_in) {
+			if (PKCS11_login(pkcs11_slot, 0, new_copy) == 0) {
+				pkcs11_logged_in = true;
+				esdm_logger(
+					LOGGER_VERBOSE, LOGGER_C_ES,
+					"PKCS#11 entropy source: login with runtime PIN succeeded\n");
+			} else {
+				esdm_logger(
+					LOGGER_WARN, LOGGER_C_ES,
+					"PKCS#11 entropy source: login with runtime PIN failed\n");
+				ret = -EACCES;
+			}
+		}
+	}
+
+	mutex_unlock(&pkcs11_mutex);
+
+	if (old) {
+		memset_secure(old, 0, strlen(old));
+		free(old);
+	}
+
+	return ret;
+}
+
+DSO_PUBLIC
+int esdm_es_pkcs11_set_token_label(const char *label)
+{
+	char *new_copy = NULL;
+	char *old;
+	int ret;
+
+	if (!label)
+		return -EINVAL;
+
+	if (label[0] != '\0') {
+		new_copy = strdup(label);
+		if (!new_copy)
+			return -ENOMEM;
+	}
+
+	mutex_lock(&pkcs11_mutex);
+
+	old = pkcs11_runtime_token_label;
+	pkcs11_runtime_token_label = new_copy;
+
+	/* Re-open the module so the new label is honored immediately. */
+	ret = esdm_es_pkcs11_open_module_locked();
+
+	mutex_unlock(&pkcs11_mutex);
+
+#if (ESDM_PKCS11_ENTROPY_BLOCKS != 0)
+	if (pkcs11_buf_alloced)
+		esdm_es_buf_reset(&pkcs11_buf);
+#endif
+
+	free(old);
+
+	return ret;
+}
