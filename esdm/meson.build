@@ -3,6 +3,7 @@ esdm_src = files([
 	'esdm_config.c',
 	'esdm_drng_mgr.c',
 	'esdm_es_aux.c',
+	'esdm_es_buf.c',
 	'esdm_es_mgr.c',
 	'esdm_info.c',
 	'esdm_interface_dev_common.c',

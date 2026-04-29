@@ -275,6 +275,18 @@ When configuring this value to 0, the CPU entropy source will provide
 256 bits of data without being credited to contain entropy.
 ''')
 
+# Option for: ESDM_HWRAND_ENTROPY_BLOCKS
+option('es_hwrand_entropy_blocks', type: 'integer', value: 64,
+       description:'''/dev/hwrng entropy buffer size
+
+The hwrng entropy source can use an asynchronous block cache that is filled
+by a separate thread. This ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a power
+of two and at least 4. When set to zero, the cache is disabled and the source
+delivers data synchronously.
+''')
+
 ################################################################################
 # TPM 2.0 Entropy Source configuration options
 ################################################################################
@@ -311,6 +323,18 @@ enforces the limit that this value must be in the range between 0 and 256.
 
 When configuring this value to 0, the TPM 2.0 entropy source will provide
 256 bits of data without being credited to contain entropy.
+''')
+
+# Option for: ESDM_TPM2_ENTROPY_BLOCKS
+option('es_tpm2_entropy_blocks', type: 'integer', value: 64,
+       description:'''TPM 2.0 entropy buffer size
+
+The TPM 2.0 entropy source can use an asynchronous block cache that is filled
+by a separate thread. This ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a power
+of two and at least 4. When set to zero, the cache is disabled and the source
+delivers data synchronously.
 ''')
 
 option('es_tpm2_rm_path', type: 'string', value: '/dev/tpmrm0',
