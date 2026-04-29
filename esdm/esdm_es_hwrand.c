@@ -222,7 +222,7 @@ static void esdm_hwrand_buf_fill(struct entropy_es *eb_es,
 
 static int esdm_hwrand_monitor(void)
 {
-	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, false);
+	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
 
 	if (!esdm_hwrand_active())
 		return 0;
@@ -234,7 +234,7 @@ static int esdm_hwrand_monitor(void)
 static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			    bool __unused unsused)
 {
-	if (requested_bits == esdm_get_seed_entropy_osr(false, false) &&
+	if (requested_bits <= esdm_get_seed_entropy_osr(false, true) &&
 	    esdm_es_buf_try_get(&hwrand_buf, eb_es))
 		return;
 

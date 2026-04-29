@@ -365,7 +365,7 @@ static void esdm_es_pkcs11_buf_fill(struct entropy_es *eb_es,
 
 static int esdm_es_pkcs11_monitor(void)
 {
-	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, false);
+	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
 
 	if (!esdm_es_pkcs11_active())
 		return 0;
@@ -378,7 +378,7 @@ static void esdm_es_pkcs11_get(struct entropy_es *eb_es,
 			       uint32_t requested_bits,
 			       bool __unused unused)
 {
-	if (requested_bits == esdm_get_seed_entropy_osr(false, false) &&
+	if (requested_bits <= esdm_get_seed_entropy_osr(false, true) &&
 	    esdm_es_buf_try_get(&pkcs11_buf, eb_es))
 		return;
 
