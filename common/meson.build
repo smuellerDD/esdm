@@ -160,6 +160,21 @@ else
 	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS', 0)
 endif
 
+conf_data.set('ESDM_ES_PKCS11', get_option('es_pkcs11').enabled())
+conf_data.set('ESDM_PKCS11_ENTROPY_RATE',
+	      get_option('es_pkcs11_entropy_rate'))
+conf_data.set_quoted('ESDM_PKCS11_MODULE_PATH',
+		     get_option('es_pkcs11_module_path'))
+conf_data.set_quoted('ESDM_PKCS11_TOKEN_LABEL',
+		     get_option('es_pkcs11_token_label'))
+conf_data.set_quoted('ESDM_PKCS11_PIN', get_option('es_pkcs11_pin'))
+if get_option('es_pkcs11_entropy_blocks') >= 4
+	conf_data.set('ESDM_PKCS11_ENTROPY_BLOCKS',
+		      get_option('es_pkcs11_entropy_blocks'))
+else
+	conf_data.set('ESDM_PKCS11_ENTROPY_BLOCKS', 0)
+endif
+
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))

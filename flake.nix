@@ -286,20 +286,21 @@
         devShells = {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
+	      libp11
               botan3
               fuse3
               gnutls
-              self.packages.${system}.jitterentropy
               libkcapi
               libselinux
               openssl
               protobufc
+              self.packages.${system}.jitterentropy
             ];
             nativeBuildInputs = with pkgs; [
-              pkg-config
+              cmake
               meson
               ninja
-              cmake
+              pkg-config
             ];
           };
         };

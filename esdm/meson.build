@@ -42,6 +42,11 @@ if get_option('es_tpm2').enabled()
 	esdm_src += files('esdm_es_tpm2.c')
 endif
 
+if get_option('es_pkcs11').enabled()
+	dependencies_esdm_lib += dependency('libp11', required: true)
+	esdm_src += files('esdm_es_pkcs11.c')
+endif
+
 if get_option('es_jent_kernel').enabled()
 	dependencies_esdm_lib += cc.find_library('kcapi')
 	esdm_src += files('esdm_es_jent_kernel.c')

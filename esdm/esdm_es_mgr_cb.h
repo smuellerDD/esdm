@@ -59,6 +59,9 @@ enum esdm_external_es {
 #ifdef ESDM_ES_TPM2
 	esdm_ext_es_tpm2, /* Linux TPM 2.0 */
 #endif
+#ifdef ESDM_ES_PKCS11
+	esdm_ext_es_pkcs11, /* PKCS#11 token via libp11 */
+#endif
 #ifdef ESDM_ES_JENT_KERNEL
 	esdm_ext_es_jent_kernel, /* Linux jitterentropy in kernel */
 #endif
