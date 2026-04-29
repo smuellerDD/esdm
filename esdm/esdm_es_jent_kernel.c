@@ -27,12 +27,20 @@
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_buf.h"
 #include "esdm_es_jent_kernel.h"
 #include "helper.h"
 #include "mutex.h"
 
 static struct kcapi_handle *jent_rng = NULL;
 static DEFINE_MUTEX_UNLOCKED(jent_rng_mutex);
+
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+static struct esdm_es_buf jent_kernel_buf;
+static bool jent_kernel_buf_alloced = false;
+#endif
+
+static bool esdm_jent_kernel_active(void);
 
 static void esdm_jent_kernel_finalize_locked(void)
 {
@@ -48,6 +56,13 @@ static void esdm_jent_kernel_finalize(void)
 	mutex_lock(&jent_rng_mutex);
 	esdm_jent_kernel_finalize_locked();
 	mutex_unlock(&jent_rng_mutex);
+
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+	if (jent_kernel_buf_alloced) {
+		esdm_es_buf_free(&jent_kernel_buf);
+		jent_kernel_buf_alloced = false;
+	}
+#endif
 }
 
 static int esdm_jent_kernel_init(void)
@@ -68,6 +83,16 @@ static int esdm_jent_kernel_init(void)
 	}
 
 	mutex_unlock(&jent_rng_mutex);
+
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+	if (jent_kernel_buf_alloced) {
+		esdm_es_buf_reset(&jent_kernel_buf);
+	} else if (esdm_es_buf_alloc(&jent_kernel_buf,
+				     ESDM_JENT_KERNEL_ENTROPY_BLOCKS,
+				     "KernelJitterRNG") == 0) {
+		jent_kernel_buf_alloced = true;
+	}
+#endif
 
 	return 0;
 }
@@ -104,8 +129,8 @@ static uint32_t esdm_jent_kernel_poolsize(void)
 	return ret;
 }
 
-static void esdm_jent_kernel_get(struct entropy_es *eb_es,
-				 uint32_t requested_bits, bool __unused unsused)
+static void esdm_jent_kernel_get_sync(struct entropy_es *eb_es,
+				      uint32_t requested_bits)
 {
 	mutex_reader_lock(&jent_rng_mutex);
 
@@ -129,6 +154,46 @@ err:
 	mutex_reader_unlock(&jent_rng_mutex);
 	eb_es->e_bits = 0;
 }
+
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+
+static void esdm_jent_kernel_buf_fill(struct entropy_es *eb_es,
+				      uint32_t requested_bits, void *ctx)
+{
+	(void)ctx;
+	esdm_jent_kernel_get_sync(eb_es, requested_bits);
+}
+
+static int esdm_jent_kernel_monitor(void)
+{
+	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
+
+	if (!esdm_jent_kernel_active())
+		return 0;
+
+	return esdm_es_buf_monitor(&jent_kernel_buf, requested_bits,
+				   esdm_jent_kernel_buf_fill, NULL);
+}
+
+static void esdm_jent_kernel_get(struct entropy_es *eb_es,
+				 uint32_t requested_bits, bool __unused unused)
+{
+	if (requested_bits <= esdm_get_seed_entropy_osr(false, true) &&
+	    esdm_es_buf_try_get(&jent_kernel_buf, eb_es))
+		return;
+
+	esdm_jent_kernel_get_sync(eb_es, requested_bits);
+}
+
+#else /* ESDM_JENT_KERNEL_ENTROPY_BLOCKS == 0 */
+
+static void esdm_jent_kernel_get(struct entropy_es *eb_es,
+				 uint32_t requested_bits, bool __unused unused)
+{
+	esdm_jent_kernel_get_sync(eb_es, requested_bits);
+}
+
+#endif
 
 static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 {
@@ -161,7 +226,11 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.name = "KernelJitterRNG",
 	.init = esdm_jent_kernel_init,
 	.fini = esdm_jent_kernel_finalize,
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+	.monitor_es = esdm_jent_kernel_monitor,
+#else
 	.monitor_es = NULL,
+#endif
 	.get_ent = esdm_jent_kernel_get,
 	.curr_entropy = esdm_jent_kernel_entropylevel,
 	.max_entropy = esdm_jent_kernel_poolsize,

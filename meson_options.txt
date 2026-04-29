@@ -458,6 +458,24 @@ When configuring this value to 0, the kernel jitter entropy source will provide
 256 bits of data without being credited to contain entropy.
 ''')
 
+# Option for: ESDM_JENT_KERNEL_ENTROPY_BLOCKS
+option('es_jent_kernel_entropy_blocks', type: 'integer', value: 64,
+       description:'''kernel-based jitter entropy source entropy buffer size
+
+The kernel-based jitter entropy source has an entropy buffer that is filled
+in the background by the ES manager monitor. This ensures that data from the
+kernel jitter RNG is readily available when needed by the ESDM, without having
+to perform a synchronous kernel call on the consumer path.
+
+This option sets the size of the buffer in terms of entropy blocks.
+
+This value must be a power of 2 and at least 4.
+
+When set to a value smaller than 4, the kernel jitter entropy buffer is not
+compiled which implies a synchronous generation of data from the kernel jitter
+entropy source.
+''')
+
 ################################################################################
 # Common Options
 ################################################################################
