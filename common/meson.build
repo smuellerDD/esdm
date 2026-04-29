@@ -117,6 +117,12 @@ conf_data.set('ESDM_CPU_FULL_ENT_MULTIPLIER',
 conf_data.set('ESDM_ES_IRQ', get_option('es_irq').enabled())
 conf_data.set('ESDM_IRQ_ENTROPY_RATE',
 	      get_option('es_irq_entropy_rate'))
+if get_option('es_irq_entropy_blocks') >= 4
+	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS',
+		      get_option('es_irq_entropy_blocks'))
+else
+	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_KERNEL_RNG', get_option('es_kernel').enabled())
 conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
@@ -125,6 +131,12 @@ conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
 conf_data.set('ESDM_ES_SCHED', get_option('es_sched').enabled())
 conf_data.set('ESDM_SCHED_ENTROPY_RATE',
 	      get_option('es_sched_entropy_rate'))
+if get_option('es_sched_entropy_blocks') >= 4
+	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS',
+		      get_option('es_sched_entropy_blocks'))
+else
+	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
 conf_data.set('ESDM_HWRAND_ENTROPY_RATE',

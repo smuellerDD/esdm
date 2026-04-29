@@ -27,6 +27,7 @@
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_buf.h"
 #include "esdm_es_sched.h"
 #include "esdm_es_mgr.h"
 #include "helper.h"
@@ -38,11 +39,26 @@ static int esdm_sched_entropy_fd = -1;
 static uint32_t esdm_sched_requested_bits_set = 0;
 static enum esdm_es_data_size esdm_sched_data_size = esdm_es_data_equal;
 
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+static struct esdm_es_buf sched_buf;
+static bool sched_buf_alloced = false;
+
+static void esdm_sched_buf_fill(struct entropy_es *eb_es,
+				uint32_t requested_bits, void *ctx);
+#endif
+
 static void esdm_sched_finalize(void)
 {
 	if (esdm_sched_entropy_fd >= 0)
 		close(esdm_sched_entropy_fd);
 	esdm_sched_entropy_fd = -1;
+
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+	if (sched_buf_alloced) {
+		esdm_es_buf_free(&sched_buf);
+		sched_buf_alloced = false;
+	}
+#endif
 }
 
 bool esdm_sched_enabled(void)
@@ -181,6 +197,15 @@ static int esdm_sched_initialize(void)
 
 	esdm_sched_entropy_fd = fd;
 
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+	if (sched_buf_alloced) {
+		esdm_es_buf_reset(&sched_buf);
+	} else if (esdm_es_buf_alloc(&sched_buf, ESDM_SCHED_ENTROPY_BLOCKS,
+				     "Scheduler") == 0) {
+		sched_buf_alloced = true;
+	}
+#endif
+
 	esdm_es_add_entropy();
 
 	return 0;
@@ -225,7 +250,19 @@ static int esdm_sched_seed_monitor(void)
 	if (ent >= esdm_config_es_sched_entropy_rate()) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Full entropy of scheduler ES detected\n");
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+		if (sched_buf_alloced) {
+			uint32_t requested_bits =
+				esdm_get_seed_entropy_osr(false, false);
+
+			esdm_es_buf_monitor(&sched_buf, requested_bits,
+					    esdm_sched_buf_fill, NULL);
+		} else {
+			esdm_es_add_entropy();
+		}
+#else
 		esdm_es_add_entropy();
+#endif
 		esdm_test_seed_entropy(ent);
 	}
 
@@ -243,8 +280,8 @@ static uint32_t esdm_sched_poolsize(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			   bool __unused unused)
+static void esdm_sched_get_sync(struct entropy_es *eb_es,
+				uint32_t requested_bits)
 {
 	unsigned int ioctl_cmd;
 
@@ -275,6 +312,35 @@ static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 err:
 	eb_es->e_bits = 0;
 }
+
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+
+static void esdm_sched_buf_fill(struct entropy_es *eb_es,
+				uint32_t requested_bits, void *ctx)
+{
+	(void)ctx;
+	esdm_sched_get_sync(eb_es, requested_bits);
+}
+
+static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
+			   bool __unused unused)
+{
+	if (requested_bits == esdm_get_seed_entropy_osr(false, false) &&
+	    esdm_es_buf_try_get(&sched_buf, eb_es))
+		return;
+
+	esdm_sched_get_sync(eb_es, requested_bits);
+}
+
+#else /* ESDM_SCHED_ENTROPY_BLOCKS == 0 */
+
+static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
+			   bool __unused unused)
+{
+	esdm_sched_get_sync(eb_es, requested_bits);
+}
+
+#endif
 
 static void esdm_sched_es_state(char *buf, size_t buflen)
 {
