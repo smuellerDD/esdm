@@ -196,6 +196,19 @@ both have some dependencies. Thus it is not permissible to award both
 entropy sources an entropy rate greater than zero.
 ''')
 
+# Option for: ESDM_IRQ_ENTROPY_BLOCKS
+option('es_irq_entropy_blocks', type: 'integer', value: 64,
+       description:'''Interrupt entropy buffer size
+
+The interrupt entropy source can use an asynchronous block cache that is
+filled by a separate thread once the kernel reports enough entropy. This
+ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a
+power of two and at least 4. When set to zero, the cache is disabled and
+the source delivers data synchronously.
+''')
+
 ################################################################################
 # Scheduler-based entropy source configuration
 ################################################################################
@@ -245,6 +258,19 @@ Note, this value caps the scheduler ES kernel module value!
 Note 2: The events for the interrupt-baased and scheduler-based ES
 both have some dependencies. Thus it is not permissible to award both
 entropy sources an entropy rate greater than zero.
+''')
+
+# Option for: ESDM_SCHED_ENTROPY_BLOCKS
+option('es_sched_entropy_blocks', type: 'integer', value: 64,
+       description:'''Scheduler entropy buffer size
+
+The scheduler entropy source can use an asynchronous block cache that is
+filled by a separate thread once the kernel reports enough entropy. This
+ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a
+power of two and at least 4. When set to zero, the cache is disabled and
+the source delivers data synchronously.
 ''')
 
 ################################################################################

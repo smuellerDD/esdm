@@ -27,6 +27,7 @@
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_buf.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
 #include "helper.h"
@@ -38,11 +39,26 @@ static int esdm_irq_entropy_fd = -1;
 static uint32_t esdm_irq_requested_bits_set = 0;
 static enum esdm_es_data_size esdm_irq_data_size = esdm_es_data_equal;
 
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+static struct esdm_es_buf irq_buf;
+static bool irq_buf_alloced = false;
+
+static void esdm_irq_buf_fill(struct entropy_es *eb_es,
+			      uint32_t requested_bits, void *ctx);
+#endif
+
 static void esdm_irq_finalize(void)
 {
 	if (esdm_irq_entropy_fd >= 0)
 		close(esdm_irq_entropy_fd);
 	esdm_irq_entropy_fd = -1;
+
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+	if (irq_buf_alloced) {
+		esdm_es_buf_free(&irq_buf);
+		irq_buf_alloced = false;
+	}
+#endif
 }
 
 bool esdm_irq_enabled(void)
@@ -187,6 +203,15 @@ static int esdm_irq_initialize(void)
 	esdm_config_es_krng_entropy_rate_set(
 		ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY);
 
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+	if (irq_buf_alloced) {
+		esdm_es_buf_reset(&irq_buf);
+	} else if (esdm_es_buf_alloc(&irq_buf, ESDM_IRQ_ENTROPY_BLOCKS,
+				     "Interrupt") == 0) {
+		irq_buf_alloced = true;
+	}
+#endif
+
 	esdm_es_add_entropy();
 
 	return 0;
@@ -231,7 +256,19 @@ static int esdm_irq_seed_monitor(void)
 	if (ent >= esdm_config_es_irq_entropy_rate()) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Full entropy of interrupt ES detected\n");
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+		if (irq_buf_alloced) {
+			uint32_t requested_bits =
+				esdm_get_seed_entropy_osr(false, false);
+
+			esdm_es_buf_monitor(&irq_buf, requested_bits,
+					    esdm_irq_buf_fill, NULL);
+		} else {
+			esdm_es_add_entropy();
+		}
+#else
 		esdm_es_add_entropy();
+#endif
 		esdm_test_seed_entropy(ent);
 	}
 
@@ -249,8 +286,7 @@ static uint32_t esdm_irq_poolsize(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool __unused unused)
+static void esdm_irq_get_sync(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	unsigned int ioctl_cmd;
 
@@ -281,6 +317,35 @@ static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 err:
 	eb_es->e_bits = 0;
 }
+
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+
+static void esdm_irq_buf_fill(struct entropy_es *eb_es,
+			      uint32_t requested_bits, void *ctx)
+{
+	(void)ctx;
+	esdm_irq_get_sync(eb_es, requested_bits);
+}
+
+static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
+			 bool __unused unused)
+{
+	if (requested_bits == esdm_get_seed_entropy_osr(false, false) &&
+	    esdm_es_buf_try_get(&irq_buf, eb_es))
+		return;
+
+	esdm_irq_get_sync(eb_es, requested_bits);
+}
+
+#else /* ESDM_IRQ_ENTROPY_BLOCKS == 0 */
+
+static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
+			 bool __unused unused)
+{
+	esdm_irq_get_sync(eb_es, requested_bits);
+}
+
+#endif
 
 static void esdm_irq_es_state(char *buf, size_t buflen)
 {
