@@ -639,6 +639,47 @@ int esdm_rpcc_set_min_reseed_secs_int(unsigned int seconds, void *int_data);
  ******************************************************************************/
 
 /**
+ * @brief Update the runtime configuration of the PKCS#11 entropy source.
+ *
+ * This call uses the privileged RPC endpoint of the ESDM server. It therefore
+ * can only be used by a user that can open the privileged Unix domain socket.
+ *
+ * Each parameter is independently optional: pass NULL to leave the
+ * corresponding setting untouched. Pass an empty string to clear the runtime
+ * override and fall back to the compile-time default.
+ *
+ * If both arguments are non-NULL, the server applies the token label first
+ * (which re-opens the PKCS#11 module against the new label) and then
+ * installs the PIN, attempting a CKU_USER login on the freshly opened slot if
+ * the token requires it. The label update failing aborts the call before the
+ * PIN is touched.
+ *
+ * Both settings are held in process memory only and are not persisted across
+ * server restarts.
+ *
+ * @param [in] token_label NUL-terminated token label, or NULL to leave the
+ *			   token label unchanged.
+ * @param [in] pin NUL-terminated user PIN, or NULL to leave the PIN
+ *		   unchanged.
+ *
+ * @return: 0 on success, -EINVAL if both arguments are NULL, < 0 on error
+ *	    (-EINTR means the connection was interrupted and the caller may
+ *	    try again; -ENOENT if the PKCS#11 entropy source is not compiled
+ *	    in or no matching token was found).
+ */
+int esdm_rpcc_set_pkcs11_config(const char *token_label, const char *pin);
+
+/**
+ * @brief See esdm_rpcc_set_pkcs11_config
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_set_pkcs11_config_int(const char *token_label, const char *pin,
+				    void *int_data);
+
+/**
  * @brief RPC-version of esdm_jent_status
  *
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore

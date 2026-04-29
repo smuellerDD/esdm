@@ -186,6 +186,10 @@ void esdm_rpc_jent_status(UnprivAccess_Service *service,
 			  const JentStatusRequest *request,
 			  JentStatusResponse_Closure closure,
 			  void *closure_data);
+void esdm_rpc_set_pkcs11_config(PrivAccess_Service *service,
+				const SetPkcs11ConfigRequest *request,
+				SetPkcs11ConfigResponse_Closure closure,
+				void *closure_data);
 
 /******************************************************************************
  * Definition of Protobuf-C service
