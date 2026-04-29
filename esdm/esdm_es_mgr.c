@@ -42,6 +42,7 @@
 #include "esdm_es_jent_kernel.h"
 #include "esdm_es_krng.h"
 #include "esdm_es_mgr.h"
+#include "esdm_es_pkcs11.h"
 #include "esdm_es_sched.h"
 #include "esdm_interface_dev_common.h"
 #include "esdm_shm_status.h"
@@ -124,6 +125,9 @@ struct esdm_es_cb *esdm_es[] = {
 #endif
 #ifdef ESDM_ES_TPM2
 	&esdm_es_tpm2,
+#endif
+#ifdef ESDM_ES_PKCS11
+	&esdm_es_pkcs11,
 #endif
 #ifdef ESDM_ES_JENT_KERNEL
 	&esdm_es_jent_kernel,

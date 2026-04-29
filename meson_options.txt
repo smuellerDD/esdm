@@ -375,6 +375,69 @@ at a different location.
 ''')
 
 ################################################################################
+# PKCS#11 Entropy Source configuration options
+################################################################################
+
+option('es_pkcs11', type: 'feature', value: 'disabled',
+       description: '''Enable support for a PKCS#11-based entropy source.
+
+The ESDM may use a PKCS#11 token (e.g. a smart card or HSM) as entropy source
+via the libp11 wrapper around the underlying PKCS#11 module. The token must
+expose a hardware random number generator (CKF_RNG / C_GenerateRandom).
+
+Note, if this option is enabled and no usable PKCS#11 token is found at
+runtime, the ESDM will automatically detect this and ignore the source.
+''')
+
+# Option for: ESDM_PKCS11_ENTROPY_RATE
+option('es_pkcs11_entropy_rate', type: 'integer', min: 0, max: 256, value: 128,
+       description:'''PKCS#11 entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256
+bits of data obtained from the PKCS#11 entropy source. The ESDM
+enforces the limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the PKCS#11 entropy source will provide
+256 bits of data without being credited to contain entropy.
+''')
+
+# Option for: ESDM_PKCS11_ENTROPY_BLOCKS
+option('es_pkcs11_entropy_blocks', type: 'integer', value: 64,
+       description:'''PKCS#11 entropy buffer size
+
+The PKCS#11 entropy source can use an asynchronous block cache that is filled
+by a separate thread. This ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a power
+of two and at least 4. When set to zero, the cache is disabled and the source
+delivers data synchronously.
+''')
+
+option('es_pkcs11_module_path', type: 'string', value: '',
+       description: '''PKCS#11 module path used by the PKCS#11 entropy source.
+
+Path of the PKCS#11 module shared library to load (e.g.
+/usr/lib/softhsm/libsofthsm2.so or /usr/lib/pkcs11/opensc-pkcs11.so).
+
+When left empty, the PKCS#11 entropy source is disabled at runtime even if it
+was compiled in.
+''')
+
+option('es_pkcs11_token_label', type: 'string', value: '',
+       description: '''Optional PKCS#11 token label for the PKCS#11 entropy source.
+
+If set, only a token whose label matches this value will be used. Otherwise the
+first slot with a present token that exposes an RNG is selected.
+''')
+
+option('es_pkcs11_pin', type: 'string', value: '',
+       description: '''Optional PKCS#11 user PIN for the PKCS#11 entropy source.
+
+C_GenerateRandom usually does not require a login. Set this only for tokens
+that require an authenticated session before random data can be obtained.
+''')
+
+################################################################################
 # Linux-kernel jitterentropy Entropy Source
 ################################################################################
 
