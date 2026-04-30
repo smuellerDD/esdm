@@ -33,11 +33,19 @@
 #include "helper.h"
 #include "esdm_logger.h"
 #include "memset_secure.h"
+#include "mutex.h"
 #include "test_pertubation.h"
 
 static int esdm_irq_entropy_fd = -1;
 static uint32_t esdm_irq_requested_bits_set = 0;
 static enum esdm_es_data_size esdm_irq_data_size = esdm_es_data_equal;
+/*
+ * Serialises access to the kernel /dev/esdm_es fd and its per-fd state
+ * (esdm_irq_requested_bits_set, esdm_irq_data_size). Held during the
+ * configure-then-read pair in esdm_irq_get_sync so the async monitor cannot
+ * race a consumer fallback.
+ */
+static DEFINE_MUTEX_UNLOCKED(irq_mutex);
 
 #if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
 static struct esdm_es_buf irq_buf;
@@ -47,11 +55,19 @@ static void esdm_irq_buf_fill(struct entropy_es *eb_es,
 			      uint32_t requested_bits, void *ctx);
 #endif
 
-static void esdm_irq_finalize(void)
+/* Caller must hold irq_mutex (write lock). */
+static void esdm_irq_finalize_locked(void)
 {
 	if (esdm_irq_entropy_fd >= 0)
 		close(esdm_irq_entropy_fd);
 	esdm_irq_entropy_fd = -1;
+}
+
+static void esdm_irq_finalize(void)
+{
+	mutex_lock(&irq_mutex);
+	esdm_irq_finalize_locked();
+	mutex_unlock(&irq_mutex);
 
 #if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
 	if (irq_buf_alloced) {
@@ -63,19 +79,25 @@ static void esdm_irq_finalize(void)
 
 bool esdm_irq_enabled(void)
 {
-	return (esdm_irq_entropy_fd != -1) && esdm_config_es_irq_entropy_rate();
+	bool ret;
+
+	mutex_reader_lock(&irq_mutex);
+	ret = (esdm_irq_entropy_fd != -1) && esdm_config_es_irq_entropy_rate();
+	mutex_reader_unlock(&irq_mutex);
+
+	return ret;
 }
 
-/* Only set requested bit size */
-static void esdm_irq_set_requested_bits(uint32_t requested_bits)
+/* Caller must hold irq_mutex. */
+static void esdm_irq_set_requested_bits_locked(uint32_t requested_bits)
 {
 	esdm_kernel_set_requested_bits(&esdm_irq_requested_bits_set,
 				       requested_bits, esdm_irq_entropy_fd,
 				       ESDM_IRQ_CONF);
 }
 
-/* Set requested bit size and entropy rate */
-static int esdm_irq_set_entropy_rate(uint32_t requested_bits)
+/* Caller must hold irq_mutex. Set requested bit size and entropy rate. */
+static int esdm_irq_set_entropy_rate_locked(uint32_t requested_bits)
 {
 	uint32_t entropy[2];
 	int ret;
@@ -106,7 +128,8 @@ static int esdm_irq_set_entropy_rate(uint32_t requested_bits)
 	return 0;
 }
 
-static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
+/* Caller must hold irq_mutex. */
+static uint32_t esdm_irq_entropylevel_locked(uint32_t requested_bits)
 {
 	uint32_t entropy;
 	int ret;
@@ -122,7 +145,7 @@ static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 		return 0;
 
 	/* Set current entropy rate */
-	if (esdm_irq_set_entropy_rate(esdm_irq_requested_bits_set) < 0)
+	if (esdm_irq_set_entropy_rate_locked(esdm_irq_requested_bits_set) < 0)
 		return 0;
 
 	/* Read entropy level */
@@ -133,19 +156,34 @@ static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
 	return entropy;
 }
 
+static uint32_t esdm_irq_entropylevel(uint32_t requested_bits)
+{
+	uint32_t ret;
+
+	mutex_lock(&irq_mutex);
+	ret = esdm_irq_entropylevel_locked(requested_bits);
+	mutex_unlock(&irq_mutex);
+
+	return ret;
+}
+
 static int esdm_irq_initialize(void)
 {
 	uint32_t status[2];
-	int ret, fd = esdm_irq_entropy_fd;
+	int ret, fd;
+
+	mutex_lock(&irq_mutex);
 
 	/*
 	 * We are not closing an available file descriptor as we may not have
 	 * the privileges any more to do so.
 	 */
+	fd = esdm_irq_entropy_fd;
 	if (fd < 0)
 		fd = open("/dev/esdm_es", O_RDONLY | O_CLOEXEC);
 
 	if (fd < 0) {
+		mutex_unlock(&irq_mutex);
 		esdm_logger(
 			esdm_config_es_irq_retry() ? LOGGER_VERBOSE :
 						     LOGGER_WARN,
@@ -156,21 +194,23 @@ static int esdm_irq_initialize(void)
 
 	ret = ioctl(fd, ESDM_IRQ_ENT_BUF_SIZE, &status);
 	if (ret < 0 && errno == ENOTTY) {
+		esdm_irq_entropy_fd = fd;
+		esdm_irq_finalize_locked();
+		mutex_unlock(&irq_mutex);
 		esdm_logger(
 			esdm_config_es_irq_retry() ? LOGGER_VERBOSE :
 						     LOGGER_WARN,
 			LOGGER_C_ES,
 			"Disabling interrupt-based entropy source which is not present in kernel\n");
-		esdm_irq_entropy_fd = fd;
-		esdm_irq_finalize();
 		return 0;
 	}
 	if (ret < 0) {
+		close(fd);
+		mutex_unlock(&irq_mutex);
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_ES,
 			"Failure to obtain interrupt entropy source status from kernel, errno: %i, error: %s\n",
 			errno, strerror(errno));
-		close(fd);
 		return -EAGAIN;
 	}
 
@@ -188,13 +228,16 @@ static int esdm_irq_initialize(void)
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			    "Kernel entropy buffer has larger size as ESDM\n");
 	} else {
+		close(fd);
+		mutex_unlock(&irq_mutex);
 		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
 			    "Kernel entropy buffer has different size\n");
-		close(fd);
 		return -EFAULT;
 	}
 
 	esdm_irq_entropy_fd = fd;
+
+	mutex_unlock(&irq_mutex);
 
 	/*
 	 * The presence of the interrupt entropy source implies that the main
@@ -220,20 +263,29 @@ static int esdm_irq_initialize(void)
 static int esdm_irq_seed_monitor(void)
 {
 	uint32_t ent;
+	bool fd_present;
 
 	if (esdm_pool_all_nodes_seeded_get())
 		return 0;
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "Interrupt ES monitor check\n");
 
-	if (esdm_config_es_irq_retry() && esdm_irq_entropy_fd < 0) {
+	mutex_reader_lock(&irq_mutex);
+	fd_present = esdm_irq_entropy_fd >= 0;
+	mutex_reader_unlock(&irq_mutex);
+
+	if (esdm_config_es_irq_retry() && !fd_present) {
 		int ret = esdm_irq_initialize();
 
 		/* Return error */
 		if (ret)
 			return ret;
 
-		if (esdm_irq_entropy_fd < 0) {
+		mutex_reader_lock(&irq_mutex);
+		fd_present = esdm_irq_entropy_fd >= 0;
+		mutex_reader_unlock(&irq_mutex);
+
+		if (!fd_present) {
 			if (getuid()) {
 				esdm_logger(
 					LOGGER_WARN, LOGGER_C_ES,
@@ -245,7 +297,7 @@ static int esdm_irq_seed_monitor(void)
 		}
 	}
 
-	if (esdm_irq_entropy_fd < 0)
+	if (!fd_present)
 		return 0;
 
 	ent = esdm_irq_entropylevel(esdm_security_strength());
@@ -285,10 +337,18 @@ static uint32_t esdm_irq_poolsize(void)
  *
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
+ *
+ * Use an exclusive lock around the configure-then-read pair: the per-fd
+ * requested-bits configuration written by esdm_irq_set_requested_bits_locked
+ * is consumed by the subsequent esdm_kernel_read ioctl. Without this lock the
+ * async monitor and a consumer fallback could interleave and read with the
+ * other thread's configuration in effect.
  */
 static void esdm_irq_get_sync(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	unsigned int ioctl_cmd;
+
+	mutex_lock(&irq_mutex);
 
 	if (esdm_irq_entropy_fd < 0)
 		goto err;
@@ -307,14 +367,16 @@ static void esdm_irq_get_sync(struct entropy_es *eb_es, uint32_t requested_bits)
 		goto err;
 	}
 
-	esdm_irq_set_requested_bits(requested_bits);
+	esdm_irq_set_requested_bits_locked(requested_bits);
 
 	esdm_kernel_read(eb_es, esdm_irq_entropy_fd, ioctl_cmd,
 			 esdm_irq_data_size, esdm_es_irq.name);
 
+	mutex_unlock(&irq_mutex);
 	return;
 
 err:
+	mutex_unlock(&irq_mutex);
 	eb_es->e_bits = 0;
 }
 
@@ -350,10 +412,12 @@ static void esdm_irq_es_state(char *buf, size_t buflen)
 {
 	char status[250], *status_p = (buflen < sizeof(status)) ? status : buf;
 
+	mutex_lock(&irq_mutex);
+
 	if (esdm_irq_entropy_fd >= 0) {
 		ssize_t ret;
 
-		esdm_irq_set_entropy_rate(esdm_irq_requested_bits_set);
+		esdm_irq_set_entropy_rate_locked(esdm_irq_requested_bits_set);
 
 		ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_STATUS, status_p);
 		if (ret < 0) {
@@ -368,6 +432,8 @@ static void esdm_irq_es_state(char *buf, size_t buflen)
 	} else {
 		snprintf(buf, buflen, " disabled - missing kernel support\n");
 	}
+
+	mutex_unlock(&irq_mutex);
 }
 
 static void esdm_irq_reset(void)
@@ -377,6 +443,7 @@ static void esdm_irq_reset(void)
 	reset[0] = ESDM_ES_MGR_RESET_BIT;
 	reset[1] = 0;
 
+	mutex_lock(&irq_mutex);
 	if (esdm_irq_entropy_fd >= 0) {
 		int ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_CONF, reset);
 
@@ -386,11 +453,18 @@ static void esdm_irq_reset(void)
 				"Reset of interrupt entropy source failed\n");
 		}
 	}
+	mutex_unlock(&irq_mutex);
 }
 
 static bool esdm_irq_active(void)
 {
-	return esdm_config_es_irq_retry() || (esdm_irq_entropy_fd != -1);
+	bool fd_present;
+
+	mutex_reader_lock(&irq_mutex);
+	fd_present = esdm_irq_entropy_fd != -1;
+	mutex_reader_unlock(&irq_mutex);
+
+	return esdm_config_es_irq_retry() || fd_present;
 }
 
 struct esdm_es_cb esdm_es_irq = {

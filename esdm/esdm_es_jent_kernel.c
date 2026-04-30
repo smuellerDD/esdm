@@ -129,10 +129,16 @@ static uint32_t esdm_jent_kernel_poolsize(void)
 	return ret;
 }
 
+/*
+ * Use an exclusive lock: the underlying kcapi handle wraps a single AF_ALG
+ * socket and is not safe for concurrent kcapi_rng_generate() calls. The async
+ * monitor and a synchronous consumer fallback must serialise through this
+ * lock.
+ */
 static void esdm_jent_kernel_get_sync(struct entropy_es *eb_es,
 				      uint32_t requested_bits)
 {
-	mutex_reader_lock(&jent_rng_mutex);
+	mutex_lock(&jent_rng_mutex);
 
 	if (jent_rng == NULL)
 		goto err;
@@ -146,12 +152,12 @@ static void esdm_jent_kernel_get_sync(struct entropy_es *eb_es,
 		"obtained %u bits of entropy from kernel-based jitter RNG entropy source\n",
 		eb_es->e_bits);
 
-	mutex_reader_unlock(&jent_rng_mutex);
+	mutex_unlock(&jent_rng_mutex);
 
 	return;
 
 err:
-	mutex_reader_unlock(&jent_rng_mutex);
+	mutex_unlock(&jent_rng_mutex);
 	eb_es->e_bits = 0;
 }
 
