@@ -234,12 +234,69 @@
                   ++ [
                     "-Des_jent_osr=4"
                     "-Des_pkcs11=enabled"
+                    "-Des_pkcs11_module_path=/home/mtheil/Code/mini-pkcs11-rand/result/lib/libp11rand.so"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
                 src = lib.cleanSource ./.;
                 dontStrip = debugEsdm;
               });
+
+          openssl-config =
+            let
+              esdm = self.packages.${system}.esdm;
+            in
+            pkgs.writeTextFile {
+              name = "openssl.cnf";
+              text = ''
+                HOME                    = .
+                RANDFILE                = $ENV::HOME/.rnd
+
+                openssl_conf = openssl_init
+
+                [openssl_init]
+                providers = provider_sect
+
+                [provider_sect]
+                esdm = esdm_sect
+                default = default_sect
+
+                [default_sect]
+                activate = 1
+
+                [esdm_sect]
+                activate = 1
+                module = ${esdm}/lib/libesdm-rng-provider.so
+              '';
+            };
+
+          openssl-config-pr =
+            let
+              esdm = self.packages.${system}.esdm;
+            in
+            pkgs.writeTextFile {
+              name = "openssl.cnf";
+              text = ''
+                HOME                    = .
+                RANDFILE                = $ENV::HOME/.rnd
+
+                openssl_conf = openssl_init
+
+                [openssl_init]
+                providers = provider_sect
+
+                [provider_sect]
+                esdm = esdm_sect
+                default = default_sect
+
+                [default_sect]
+                activate = 1
+
+                [esdm_sect]
+                activate = 1
+                module = ${esdm}/lib/libesdm-rng-provider-pr.so
+              '';
+            };
 
           # 6.6 is the first version currently supported by ESDM
           esdm_es_6_6 = pkgs.callPackage ./addon/linux_esdm_es {
