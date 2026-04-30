@@ -455,8 +455,7 @@ static int esdm_es_tpm2_monitor(void)
 static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			     bool __unused unsused)
 {
-	if (requested_bits <= esdm_get_seed_entropy_osr(false, true) &&
-	    esdm_es_buf_try_get(&tpm2_buf, eb_es))
+	if (esdm_es_buf_try_get(&tpm2_buf, eb_es, requested_bits))
 		return;
 
 	esdm_es_tpm2_get_sync(eb_es, requested_bits);

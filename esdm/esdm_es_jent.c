@@ -158,34 +158,21 @@ static int esdm_jent_async_monitor(void)
 				   esdm_jent_buf_fill, NULL);
 }
 
-static void esdm_jent_async_get(struct entropy_es *eb_es,
+static void esdm_jent_get_check(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
-	if (!atomic_read(&esdm_jent_initialized)) {
-		eb_es->e_bits = 0;
-		return;
-	}
-
-	if (esdm_es_buf_try_get(&esdm_jent_buf, eb_es))
+	/*
+	 * Serve small requests without initial oversampling from the async
+	 * cache; fall back to the synchronous Jitter RNG instance on miss or
+	 * when the request is too large for a single cached block.
+	 */
+	if (esdm_config_es_jent_async_enabled() &&
+	    esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits))
 		return;
 
 	mutex_w_lock(&esdm_jent_lock);
 	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
 	mutex_w_unlock(&esdm_jent_lock);
-}
-
-static void esdm_jent_get_check(struct entropy_es *eb_es,
-				uint32_t requested_bits, bool __unused unused)
-{
-	/* serve small requests without initial oversampling from async cache */
-	if (esdm_config_es_jent_async_enabled() &&
-	    (requested_bits <= esdm_get_seed_entropy_osr(false, true))) {
-		esdm_jent_async_get(eb_es, requested_bits, unused);
-	} else {
-		mutex_w_lock(&esdm_jent_lock);
-		esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
-		mutex_w_unlock(&esdm_jent_lock);
-	}
 }
 
 static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
