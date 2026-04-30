@@ -337,7 +337,7 @@ static int esdm_es_pkcs11_init(void)
 	if (pkcs11_buf_alloced) {
 		esdm_es_buf_reset(&pkcs11_buf);
 	} else if (esdm_es_buf_alloc(&pkcs11_buf, ESDM_PKCS11_ENTROPY_BLOCKS,
-				     "PKCS11") == 0) {
+				     "PKCS#11") == 0) {
 		pkcs11_buf_alloced = true;
 	}
 #endif
@@ -529,7 +529,7 @@ static bool esdm_es_pkcs11_active(void)
 }
 
 struct esdm_es_cb esdm_es_pkcs11 = {
-	.name = "PKCS11",
+	.name = "PKCS#11",
 	.init = esdm_es_pkcs11_init,
 	.fini = esdm_es_pkcs11_finalize,
 #if (ESDM_PKCS11_ENTROPY_BLOCKS != 0)
