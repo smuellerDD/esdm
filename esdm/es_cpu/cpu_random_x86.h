@@ -22,6 +22,9 @@
 
 #if defined(__x86_64__) || defined(__i386__)
 
+#include <cpuid.h>
+#include <immintrin.h>
+
 #include "bool.h"
 #include "esdm_logger.h"
 
@@ -29,28 +32,8 @@
 
 #define RDRAND_RETRY_LOOPS 10
 
-#define RDRAND_INT ".byte 0x0f,0xc7,0xf0"
-#define RDSEED_INT ".byte 0x0f,0xc7,0xf8"
-#ifdef __LP64__
-#define RDRAND_LONG ".byte 0x48,0x0f,0xc7,0xf0"
-#define RDSEED_LONG ".byte 0x48,0x0f,0xc7,0xf8"
-#else
-#define RDRAND_LONG RDRAND_INT
-#define RDSEED_LONG RDSEED_INT
-#endif
-
 #define ECX_RDRAND (1 << 30)
 #define EXT_FEAT_EBX_RDSEED (1 << 18)
-
-#define cpuid_eax(level, a, b, c, d)                                           \
-	__asm__ __volatile__("cpuid\n\t"                                       \
-			     : "=a"(a), "=b"(b), "=c"(c), "=d"(d)              \
-			     : "0"(level))
-
-#define cpuid_eax_ecx(level, count, a, b, c, d)                                \
-	__asm__ __volatile__("cpuid\n\t"                                       \
-			     : "=a"(a), "=b"(b), "=c"(c), "=d"(d)              \
-			     : "0"(level), "2"(count))
 
 static inline int rdseed_available(void)
 {
@@ -62,12 +45,12 @@ static inline int rdseed_available(void)
 	}
 
 	/* Read the maximum leaf */
-	cpuid_eax(0, eax, ebx, ecx, edx);
+	__cpuid(0, eax, ebx, ecx, edx);
 
 	/* Only make call if the leaf is present */
 	if (eax >= 7) {
 		/* read advanced features eax = 7, ecx = 0 */
-		cpuid_eax_ecx(7, 0, eax, ebx, ecx, edx);
+		__cpuid_count(7, 0, eax, ebx, ecx, edx);
 
 		rdseed_avail = !!(ebx & EXT_FEAT_EBX_RDSEED);
 	} else {
@@ -90,11 +73,11 @@ static inline int rdrand_available(void)
 	}
 
 	/* Read the maximum leaf */
-	cpuid_eax(0, eax, ebx, ecx, edx);
+	__cpuid(0, eax, ebx, ecx, edx);
 
 	/* Only make call if the leaf is present */
 	if (eax >= 1) {
-		cpuid_eax(1, eax, ebx, ecx, edx);
+		__cpuid(1, eax, ebx, ecx, edx);
 		rdrand_avail = !!(ecx & ECX_RDRAND);
 	} else {
 		rdrand_avail = false;
@@ -106,38 +89,60 @@ static inline int rdrand_available(void)
 	return rdrand_avail;
 }
 
+#ifdef __x86_64__
+__attribute__((target("rdseed"))) static inline int
+esdm_rdseed_step(unsigned long *buf)
+{
+	return _rdseed64_step((unsigned long long *)buf);
+}
+
+__attribute__((target("rdrnd"))) static inline int
+esdm_rdrand_step(unsigned long *buf)
+{
+	return _rdrand64_step((unsigned long long *)buf);
+}
+#else
+__attribute__((target("rdseed"))) static inline int
+esdm_rdseed_step(unsigned long *buf)
+{
+	return _rdseed32_step((unsigned int *)buf);
+}
+
+__attribute__((target("rdrnd"))) static inline int
+esdm_rdrand_step(unsigned long *buf)
+{
+	return _rdrand32_step((unsigned int *)buf);
+}
+#endif
+
 static inline bool cpu_es_x86_rdseed(unsigned long *buf)
 {
 	unsigned int retry = 0;
-	unsigned char ok;
 
 	if (!rdseed_available())
 		return false;
 
-	do {
-		__asm__ __volatile__(RDSEED_LONG "\n\t"
-						 "setc %0"
-				     : "=qm"(ok), "=a"(*buf));
-	} while (!ok && retry++ < RDRAND_RETRY_LOOPS);
+	while (!esdm_rdseed_step(buf)) {
+		if (retry++ >= RDRAND_RETRY_LOOPS)
+			return false;
+	}
 
-	return !!ok;
+	return true;
 }
 
 static inline bool cpu_es_x86_rdrand(unsigned long *buf)
 {
-	int ok;
+	unsigned int retry = 0;
 
 	if (!rdrand_available())
 		return false;
 
-	__asm__ __volatile__("1: " RDRAND_LONG "\n\t"
-			     "jc 2f\n\t"
-			     "decl %0\n\t"
-			     "jnz 1b\n\t"
-			     "2:"
-			     : "=r"(ok), "=a"(*buf)
-			     : "0"(RDRAND_RETRY_LOOPS));
-	return !!ok;
+	while (!esdm_rdrand_step(buf)) {
+		if (retry++ >= RDRAND_RETRY_LOOPS)
+			return false;
+	}
+
+	return true;
 }
 
 static inline bool cpu_es_get(unsigned long *buf)

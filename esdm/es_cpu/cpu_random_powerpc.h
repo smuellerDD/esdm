@@ -49,13 +49,15 @@ static inline bool cpu_es_get(unsigned long *buf)
 		return false;
 
 	/*
-	 * Using DARN with
-	 * L=0 - 32-bit conditioned random number
-	 * L=1 - 64-bit conditioned random number
-	 * L=2 - 64-bit unconditioned random number
-	 */
+	* Using DARN with
+	* L=0 - 32-bit conditioned random number
+	* L=1 - 64-bit conditioned random number
+	* L=2 - 64-bit unconditioned random number
+	*
+	* __builtin_darn() corresponds to L=1 (conditioned 64-bit).
+	*/
 	for (i = 0; i < 10; i++) {
-		__asm__ __volatile__("darn %0, 1" : "=r"(val));
+		val = __builtin_darn();
 
 		if (val != PPC_DARN_ERR) {
 			*buf = val;

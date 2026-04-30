@@ -44,6 +44,10 @@
 #include <stdlib.h>
 #include <time.h>
 
+#ifdef __x86_64__
+#include <cpuid.h>
+#endif
+
 struct opts {
 	uint64_t exectime;
 	size_t buflen;
@@ -54,10 +58,12 @@ struct opts {
  */
 static inline void cpusetup(void)
 {
-#ifdef __X8664___
-	asm volatile("cpuid" ::"a"(0), "c"(0) : "memory");
-	asm volatile("cpuid" ::"a"(0), "c"(0) : "memory");
-	asm volatile("cpuid" ::"a"(0), "c"(0) : "memory");
+#ifdef __x86_64__
+	volatile unsigned int a, b, c, d;
+
+	__cpuid_count(0, 0, a, b, c, d);
+	__cpuid_count(0, 0, a, b, c, d);
+	__cpuid_count(0, 0, a, b, c, d);
 #endif
 }
 
