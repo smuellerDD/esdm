@@ -148,10 +148,24 @@ void esdm_es_mgr_monitor_wakeup(void)
 	thread_wake_all(&esdm_monitor_wait);
 }
 
+struct esdm_es_monitor_thread_arg {
+	unsigned int es_idx;
+	int rc;
+};
+
+static int esdm_es_monitor_thread(void *data)
+{
+	struct esdm_es_monitor_thread_arg *arg = data;
+
+	arg->rc = esdm_es[arg->es_idx]->monitor_es();
+	return arg->rc;
+}
+
 /* ES monitor worker loop */
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 29 };
+	struct esdm_es_monitor_thread_arg args[esdm_ext_es_last];
 	unsigned int i, avail = 0;
 	bool priv_init_completed = false;
 
@@ -177,21 +191,47 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 		unsigned int j;
 		int ret = 0;
 		bool priv_init_complete = true;
+		bool spawned = false;
 
 		for_each_esdm_es (j) {
-			if (esdm_es[j]->monitor_es) {
-				int rc = esdm_es[j]->monitor_es();
+			args[j].es_idx = j;
+			args[j].rc = 0;
 
+			if (!esdm_es[j]->monitor_es)
+				continue;
+
+			if (thread_start(esdm_es_monitor_thread, &args[j], 0,
+					 NULL) == 0) {
+				spawned = true;
+			} else {
 				/*
-				 * If the caller returns -EAGAIN, it blocks
-				 * the initialization process as it requires
-				 * root privileges until completed.
+				 * Fall back to running the monitor in this
+				 * thread if no worker slot is available.
 				 */
-				if (rc == -EAGAIN)
-					priv_init_complete = false;
-
-				ret |= rc;
+				args[j].rc = esdm_es[j]->monitor_es();
 			}
+		}
+
+		if (spawned)
+			thread_wait(true);
+
+		for_each_esdm_es (j) {
+			int rc;
+
+			if (!esdm_es[j]->monitor_es)
+				continue;
+
+			rc = args[j].rc;
+
+			/*
+			 * If the caller returns -EAGAIN, it blocks
+			 * the initialization process as it requires
+			 * root privileges until completed.
+			 */
+			if (rc == -EAGAIN)
+				priv_init_complete = false;
+
+			ret |= rc;
 		}
 
 		if (!priv_init_completed && priv_init_complete &&
