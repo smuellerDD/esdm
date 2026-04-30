@@ -1121,11 +1121,24 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *buf, size_t nbytes)
 {
-	int ret = esdm_drng_sleep_while_nonoperational(1);
+	static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
+	ssize_t ret = esdm_drng_sleep_while_nonoperational(1);
 
 	if (ret)
 		return ret;
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+
+	/*
+	 * We only allow one call in flight which is a precaution that
+	 * a caller cannot flood the RPC lines with requests to the slow
+	 * PR DRNG and cause a denial of service to the others.
+	 */
+	if (mutex_w_trylock(&esdm_pr_lock) != 0) {
+		return -EAGAIN;
+	}
+	ret = esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+	mutex_w_unlock(&esdm_pr_lock);
+
+	return ret;
 }
 
 DSO_PUBLIC

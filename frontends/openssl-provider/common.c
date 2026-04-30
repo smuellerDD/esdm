@@ -112,11 +112,16 @@ static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 	if (!out)
 		goto err;
 
+#ifdef ESDM_OSSL_PROV_FORCE_PR
+	(void)prediction_resistance;
+	esdm_invoke(esdm_rpcc_get_random_bytes_pr(out, outlen));
+#else
 	if (prediction_resistance) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(out, outlen));
 	} else {
 		esdm_invoke(esdm_rpcc_get_random_bytes_full(out, outlen));
 	}
+#endif
 	if (ret != (ssize_t)outlen)
 		goto err;
 
@@ -177,11 +182,16 @@ static size_t esdm_rand_get_seed(void *ctx __unused, unsigned char **buffer,
 	*buffer = OPENSSL_secure_zalloc(buf_len);
 	if (*buffer == NULL)
 		goto err;
+#ifdef ESDM_OSSL_PROV_FORCE_PR
+	(void)prediction_resistance;
+	esdm_invoke(esdm_rpcc_get_random_bytes_pr(*buffer, buf_len));
+#else
 	if (prediction_resistance) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(*buffer, buf_len));
 	} else {
 		esdm_invoke(esdm_rpcc_get_random_bytes_full(*buffer, buf_len));
 	}
+#endif
 	if (ret <= 0)
 		goto err;
 

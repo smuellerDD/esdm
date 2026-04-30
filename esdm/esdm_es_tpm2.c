@@ -32,12 +32,21 @@
 #include "conv_be_le.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_buf.h"
+#include "esdm_es_mgr.h"
 #include "esdm_es_tpm2.h"
 #include "helper.h"
 #include "mutex.h"
 
 static int tpm2_fd = -1;
 static DEFINE_MUTEX_UNLOCKED(tpm2_mutex);
+
+#if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+static struct esdm_es_buf tpm2_buf;
+static bool tpm2_buf_alloced = false;
+#endif
+
+static bool esdm_es_tpm2_active(void);
 
 /* session type */
 typedef uint16_t TPM2_ST;
@@ -208,6 +217,13 @@ static void esdm_es_tpm2_finalize(void)
 	mutex_lock(&tpm2_mutex);
 	esdm_es_tpm2_finalize_locked();
 	mutex_unlock(&tpm2_mutex);
+
+#if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+	if (tpm2_buf_alloced) {
+		esdm_es_buf_free(&tpm2_buf);
+		tpm2_buf_alloced = false;
+	}
+#endif
 }
 
 static int esdm_es_tpm2_init(void)
@@ -230,6 +246,15 @@ static int esdm_es_tpm2_init(void)
 	}
 
 	mutex_unlock(&tpm2_mutex);
+
+#if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+	if (tpm2_buf_alloced) {
+		esdm_es_buf_reset(&tpm2_buf);
+	} else if (esdm_es_buf_alloc(&tpm2_buf, ESDM_TPM2_ENTROPY_BLOCKS,
+				     "TPM2.0") == 0) {
+		tpm2_buf_alloced = true;
+	}
+#endif
 
 	return 0;
 }
@@ -365,8 +390,8 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 	return 0;
 }
 
-static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			     bool __unused unsused)
+static void esdm_es_tpm2_get_sync(struct entropy_es *eb_es,
+				  uint32_t requested_bits)
 {
 	static const uint32_t tpm2_max_chunk_bytes = 32;
 	uint8_t buffer[32];
@@ -407,6 +432,45 @@ err:
 	eb_es->e_bits = 0;
 }
 
+#if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+
+static void esdm_es_tpm2_buf_fill(struct entropy_es *eb_es,
+				  uint32_t requested_bits, void *ctx)
+{
+	(void)ctx;
+	esdm_es_tpm2_get_sync(eb_es, requested_bits);
+}
+
+static int esdm_es_tpm2_monitor(void)
+{
+	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
+
+	if (!esdm_es_tpm2_active())
+		return 0;
+
+	return esdm_es_buf_monitor(&tpm2_buf, requested_bits,
+				   esdm_es_tpm2_buf_fill, NULL);
+}
+
+static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
+			     bool __unused unsused)
+{
+	if (esdm_es_buf_try_get(&tpm2_buf, eb_es, requested_bits))
+		return;
+
+	esdm_es_tpm2_get_sync(eb_es, requested_bits);
+}
+
+#else /* ESDM_TPM2_ENTROPY_BLOCKS == 0 */
+
+static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
+			     bool __unused unsused)
+{
+	esdm_es_tpm2_get_sync(eb_es, requested_bits);
+}
+
+#endif
+
 static void esdm_es_tpm2_es_state(char *buf, size_t buflen)
 {
 #ifdef ESDM_TPM2_STIR
@@ -444,7 +508,11 @@ struct esdm_es_cb esdm_es_tpm2 = {
 	.name = "TPM2.0",
 	.init = esdm_es_tpm2_init,
 	.fini = esdm_es_tpm2_finalize,
+#if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+	.monitor_es = esdm_es_tpm2_monitor,
+#else
 	.monitor_es = NULL,
+#endif
 	.get_ent = esdm_es_tpm2_get,
 	.curr_entropy = esdm_es_tpm2_entropylevel,
 	.max_entropy = esdm_es_tpm2_poolsize,

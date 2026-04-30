@@ -99,9 +99,15 @@ conf_data.set('ESDM_JENT_HASH_LOOP_COUNT',
 conf_data.set('ESDM_JENT_ALL_CACHES',
 	      get_option('es_jent_all_caches').enabled())
 
+# Async per-ES buffering (es_buf) is incompatible with SP800-90C oversampled
+# seeding by default. When sp80090c is set, zero out every ESDM_*_ENTROPY_BLOCKS
+# count so esdm_es_buf compiles out of all ES sources. The es_buf_force option
+# overrides this and keeps the per-ES counts honored.
+disable_es_buf = get_option('sp80090c') and not get_option('es_buf_force')
+
 # In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
 # need to result in a value larger than zero
-if get_option('es_jent_entropy_blocks') >= 4
+if get_option('es_jent_entropy_blocks') >= 4 and not disable_es_buf
 	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS',
 		      get_option('es_jent_entropy_blocks'))
 else
@@ -117,6 +123,12 @@ conf_data.set('ESDM_CPU_FULL_ENT_MULTIPLIER',
 conf_data.set('ESDM_ES_IRQ', get_option('es_irq').enabled())
 conf_data.set('ESDM_IRQ_ENTROPY_RATE',
 	      get_option('es_irq_entropy_rate'))
+if get_option('es_irq_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS',
+		      get_option('es_irq_entropy_blocks'))
+else
+	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_KERNEL_RNG', get_option('es_kernel').enabled())
 conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
@@ -125,20 +137,59 @@ conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
 conf_data.set('ESDM_ES_SCHED', get_option('es_sched').enabled())
 conf_data.set('ESDM_SCHED_ENTROPY_RATE',
 	      get_option('es_sched_entropy_rate'))
+if get_option('es_sched_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS',
+		      get_option('es_sched_entropy_blocks'))
+else
+	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
 conf_data.set('ESDM_HWRAND_ENTROPY_RATE',
 	      get_option('es_hwrand_entropy_rate'))
+if get_option('es_hwrand_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_HWRAND_ENTROPY_BLOCKS',
+		      get_option('es_hwrand_entropy_blocks'))
+else
+	conf_data.set('ESDM_HWRAND_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_TPM2', get_option('es_tpm2').enabled())
 conf_data.set('ESDM_TPM2_ENTROPY_RATE',
 	      get_option('es_tpm2_entropy_rate'))
 conf_data.set('ESDM_TPM2_STIR', get_option('es_tpm2_stir').enabled())
 conf_data.set_quoted('ESDM_TPM2_RM_PATH', get_option('es_tpm2_rm_path'))
+if get_option('es_tpm2_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS',
+		      get_option('es_tpm2_entropy_blocks'))
+else
+	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS', 0)
+endif
+
+conf_data.set('ESDM_ES_PKCS11', get_option('es_pkcs11').enabled())
+conf_data.set('ESDM_PKCS11_ENTROPY_RATE',
+	      get_option('es_pkcs11_entropy_rate'))
+conf_data.set_quoted('ESDM_PKCS11_MODULE_PATH',
+		     get_option('es_pkcs11_module_path'))
+conf_data.set_quoted('ESDM_PKCS11_TOKEN_LABEL',
+		     get_option('es_pkcs11_token_label'))
+conf_data.set_quoted('ESDM_PKCS11_PIN', get_option('es_pkcs11_pin'))
+if get_option('es_pkcs11_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_PKCS11_ENTROPY_BLOCKS',
+		      get_option('es_pkcs11_entropy_blocks'))
+else
+	conf_data.set('ESDM_PKCS11_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))
+if get_option('es_jent_kernel_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS',
+		      get_option('es_jent_kernel_entropy_blocks'))
+else
+	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS', 0)
+endif
 
 if (get_option('es_irq_entropy_rate') > 0) and get_option('es_sched_entropy_rate') > 0
 	error('It is not permissible to award both, the interrupt and scheduler-based entropy sources, an entropy rate greater than zero. Adjust es_irq_entropy_rate or es_sched_entropy_rate to zero.')

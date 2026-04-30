@@ -87,6 +87,20 @@ When set to zero, the Jitter RNG entropy buffer is not compiled which implies
 a synchronous generation of data from the Jitter RNG.
 ''')
 
+# Option for: ESDM_ES_BUF_FORCE
+option('es_buf_force', type: 'boolean', value: false,
+       description:'''Force-enable async entropy source buffering under SP800-90C
+
+By default the async per-entropy-source buffer (es_buf) is compiled out
+when the sp80090c option is enabled, regardless of the per-ES
+es_*_entropy_blocks settings. This avoids serving SP800-90C oversampled
+seed material from a pre-filled cache.
+
+Setting this option to true keeps the per-ES async buffer enabled even
+when sp80090c is set. The per-ES es_*_entropy_blocks values are honored
+as usual.
+''')
+
 ################################################################################
 # CPU-based Entropy Source configuration options
 ################################################################################
@@ -196,6 +210,19 @@ both have some dependencies. Thus it is not permissible to award both
 entropy sources an entropy rate greater than zero.
 ''')
 
+# Option for: ESDM_IRQ_ENTROPY_BLOCKS
+option('es_irq_entropy_blocks', type: 'integer', value: 64,
+       description:'''Interrupt entropy buffer size
+
+The interrupt entropy source can use an asynchronous block cache that is
+filled by a separate thread once the kernel reports enough entropy. This
+ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a
+power of two and at least 4. When set to zero, the cache is disabled and
+the source delivers data synchronously.
+''')
+
 ################################################################################
 # Scheduler-based entropy source configuration
 ################################################################################
@@ -247,6 +274,19 @@ both have some dependencies. Thus it is not permissible to award both
 entropy sources an entropy rate greater than zero.
 ''')
 
+# Option for: ESDM_SCHED_ENTROPY_BLOCKS
+option('es_sched_entropy_blocks', type: 'integer', value: 64,
+       description:'''Scheduler entropy buffer size
+
+The scheduler entropy source can use an asynchronous block cache that is
+filled by a separate thread once the kernel reports enough entropy. This
+ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a
+power of two and at least 4. When set to zero, the cache is disabled and
+the source delivers data synchronously.
+''')
+
 ################################################################################
 # /dev/hwrand-based Entropy Source configuration options
 ################################################################################
@@ -273,6 +313,18 @@ enforces the limit that this value must be in the range between 0 and 256.
 
 When configuring this value to 0, the CPU entropy source will provide
 256 bits of data without being credited to contain entropy.
+''')
+
+# Option for: ESDM_HWRAND_ENTROPY_BLOCKS
+option('es_hwrand_entropy_blocks', type: 'integer', value: 64,
+       description:'''/dev/hwrng entropy buffer size
+
+The hwrng entropy source can use an asynchronous block cache that is filled
+by a separate thread. This ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a power
+of two and at least 4. When set to zero, the cache is disabled and the source
+delivers data synchronously.
 ''')
 
 ################################################################################
@@ -313,6 +365,18 @@ When configuring this value to 0, the TPM 2.0 entropy source will provide
 256 bits of data without being credited to contain entropy.
 ''')
 
+# Option for: ESDM_TPM2_ENTROPY_BLOCKS
+option('es_tpm2_entropy_blocks', type: 'integer', value: 64,
+       description:'''TPM 2.0 entropy buffer size
+
+The TPM 2.0 entropy source can use an asynchronous block cache that is filled
+by a separate thread. This ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a power
+of two and at least 4. When set to zero, the cache is disabled and the source
+delivers data synchronously.
+''')
+
 option('es_tpm2_rm_path', type: 'string', value: '/dev/tpmrm0',
        description: '''TPM 2.0 resource manager device path.
 
@@ -322,6 +386,69 @@ used by the ESDM to access the TPM 2.0 chip. The default path is
 
 Adjust this path if your system provides the TPM 2.0 resource manager
 at a different location.
+''')
+
+################################################################################
+# PKCS#11 Entropy Source configuration options
+################################################################################
+
+option('es_pkcs11', type: 'feature', value: 'disabled',
+       description: '''Enable support for a PKCS#11-based entropy source.
+
+The ESDM may use a PKCS#11 token (e.g. a smart card or HSM) as entropy source
+via the libp11 wrapper around the underlying PKCS#11 module. The token must
+expose a hardware random number generator (CKF_RNG / C_GenerateRandom).
+
+Note, if this option is enabled and no usable PKCS#11 token is found at
+runtime, the ESDM will automatically detect this and ignore the source.
+''')
+
+# Option for: ESDM_PKCS11_ENTROPY_RATE
+option('es_pkcs11_entropy_rate', type: 'integer', min: 0, max: 256, value: 128,
+       description:'''PKCS#11 entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256
+bits of data obtained from the PKCS#11 entropy source. The ESDM
+enforces the limit that this value must be in the range between 0 and 256.
+
+When configuring this value to 0, the PKCS#11 entropy source will provide
+256 bits of data without being credited to contain entropy.
+''')
+
+# Option for: ESDM_PKCS11_ENTROPY_BLOCKS
+option('es_pkcs11_entropy_blocks', type: 'integer', value: 64,
+       description:'''PKCS#11 entropy buffer size
+
+The PKCS#11 entropy source can use an asynchronous block cache that is filled
+by a separate thread. This ensures that data is readily available when needed.
+
+This option sets the size of the cache in number of blocks. It must be a power
+of two and at least 4. When set to zero, the cache is disabled and the source
+delivers data synchronously.
+''')
+
+option('es_pkcs11_module_path', type: 'string', value: '',
+       description: '''PKCS#11 module path used by the PKCS#11 entropy source.
+
+Path of the PKCS#11 module shared library to load (e.g.
+/usr/lib/softhsm/libsofthsm2.so or /usr/lib/pkcs11/opensc-pkcs11.so).
+
+When left empty, the PKCS#11 entropy source is disabled at runtime even if it
+was compiled in.
+''')
+
+option('es_pkcs11_token_label', type: 'string', value: '',
+       description: '''Optional PKCS#11 token label for the PKCS#11 entropy source.
+
+If set, only a token whose label matches this value will be used. Otherwise the
+first slot with a present token that exposes an RNG is selected.
+''')
+
+option('es_pkcs11_pin', type: 'string', value: '',
+       description: '''Optional PKCS#11 user PIN for the PKCS#11 entropy source.
+
+C_GenerateRandom usually does not require a login. Set this only for tokens
+that require an authenticated session before random data can be obtained.
 ''')
 
 ################################################################################
@@ -343,6 +470,24 @@ enforces the limit that this value must be in the range between 0 and 256.
 
 When configuring this value to 0, the kernel jitter entropy source will provide
 256 bits of data without being credited to contain entropy.
+''')
+
+# Option for: ESDM_JENT_KERNEL_ENTROPY_BLOCKS
+option('es_jent_kernel_entropy_blocks', type: 'integer', value: 64,
+       description:'''kernel-based jitter entropy source entropy buffer size
+
+The kernel-based jitter entropy source has an entropy buffer that is filled
+in the background by the ES manager monitor. This ensures that data from the
+kernel jitter RNG is readily available when needed by the ESDM, without having
+to perform a synchronous kernel call on the consumer path.
+
+This option sets the size of the buffer in terms of entropy blocks.
+
+This value must be a power of 2 and at least 4.
+
+When set to a value smaller than 4, the kernel jitter entropy buffer is not
+compiled which implies a synchronous generation of data from the kernel jitter
+entropy source.
 ''')
 
 ################################################################################

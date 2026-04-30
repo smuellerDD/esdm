@@ -189,22 +189,20 @@
         };
 
         packages = {
-          jitterentropy = pkgs.jitterentropy.overrideAttrs (
-            _: {
-              version = "3.7.0";
-              src = pkgs.fetchFromGitHub {
-                owner = "smuellerDD";
-                repo = "jitterentropy-library";
-                rev = "3a8ef4b7ace53ad7dcbb1b30a0b5bf984f994fa2";
-                hash = "sha256-z2PJiHfeHXvSOu9i8oZNvz+5Zv9J0V2CyWORr/Pe4WA=";
-              };
-              patches = [ ];
-              cmakeFlags = [
-                "-DINTERNAL_TIMER=OFF"
-                "-DBUILD_SHARED_LIBS=ON"
-              ];
-            }
-          );
+          jitterentropy = pkgs.jitterentropy.overrideAttrs (_: {
+            version = "3.7.0";
+            src = pkgs.fetchFromGitHub {
+              owner = "smuellerDD";
+              repo = "jitterentropy-library";
+              rev = "e31959660658667ff4bb865984c47e543c3169e2";
+              hash = "sha256-GYUoVSqwhz01Ubk3KXvD4KAC+WDjSSiGcmLQoX5v4PU=";
+            };
+            patches = [ ];
+            cmakeFlags = [
+              "-DINTERNAL_TIMER=OFF"
+              "-DBUILD_SHARED_LIBS=ON"
+            ];
+          });
 
           # this currently defaults to the botan crypto backend
           esdm =
@@ -224,6 +222,7 @@
               inherit (self.packages.${system}) jitterentropy;
             }).overrideAttrs
               (prev: {
+                buildInputs = prev.buildInputs ++ [ pkgs.libp11 ];
                 mesonFlags =
                   (builtins.filter (
                     x: (!lib.hasInfix "max_threads" x) && (!lib.hasInfix "term-on-signal" x)
@@ -234,12 +233,70 @@
                   ]
                   ++ [
                     "-Des_jent_osr=4"
+                    "-Des_pkcs11=enabled"
+                    "-Des_pkcs11_module_path=/home/mtheil/Code/mini-pkcs11-rand/result/lib/libp11rand.so"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
                 src = lib.cleanSource ./.;
                 dontStrip = debugEsdm;
               });
+
+          openssl-config =
+            let
+              esdm = self.packages.${system}.esdm;
+            in
+            pkgs.writeTextFile {
+              name = "openssl.cnf";
+              text = ''
+                HOME                    = .
+                RANDFILE                = $ENV::HOME/.rnd
+
+                openssl_conf = openssl_init
+
+                [openssl_init]
+                providers = provider_sect
+
+                [provider_sect]
+                esdm = esdm_sect
+                default = default_sect
+
+                [default_sect]
+                activate = 1
+
+                [esdm_sect]
+                activate = 1
+                module = ${esdm}/lib/libesdm-rng-provider.so
+              '';
+            };
+
+          openssl-config-pr =
+            let
+              esdm = self.packages.${system}.esdm;
+            in
+            pkgs.writeTextFile {
+              name = "openssl.cnf";
+              text = ''
+                HOME                    = .
+                RANDFILE                = $ENV::HOME/.rnd
+
+                openssl_conf = openssl_init
+
+                [openssl_init]
+                providers = provider_sect
+
+                [provider_sect]
+                esdm = esdm_sect
+                default = default_sect
+
+                [default_sect]
+                activate = 1
+
+                [esdm_sect]
+                activate = 1
+                module = ${esdm}/lib/libesdm-rng-provider-pr.so
+              '';
+            };
 
           # 6.6 is the first version currently supported by ESDM
           esdm_es_6_6 = pkgs.callPackage ./addon/linux_esdm_es {
@@ -286,20 +343,21 @@
         devShells = {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
+              libp11
               botan3
               fuse3
               gnutls
-              self.packages.${system}.jitterentropy
               libkcapi
               libselinux
               openssl
               protobufc
+              self.packages.${system}.jitterentropy
             ];
             nativeBuildInputs = with pkgs; [
-              pkg-config
+              cmake
               meson
               ninja
-              cmake
+              pkg-config
             ];
           };
         };

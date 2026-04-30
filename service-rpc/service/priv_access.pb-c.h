@@ -27,6 +27,8 @@ typedef struct SetWriteWakeupThreshRequest SetWriteWakeupThreshRequest;
 typedef struct SetWriteWakeupThreshResponse SetWriteWakeupThreshResponse;
 typedef struct SetMinReseedSecsRequest SetMinReseedSecsRequest;
 typedef struct SetMinReseedSecsResponse SetMinReseedSecsResponse;
+typedef struct SetPkcs11ConfigRequest SetPkcs11ConfigRequest;
+typedef struct SetPkcs11ConfigResponse SetPkcs11ConfigResponse;
 
 
 /* --- enums --- */
@@ -210,6 +212,56 @@ struct  SetMinReseedSecsResponse
 };
 #define SET_MIN_RESEED_SECS_RESPONSE__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&set_min_reseed_secs_response__descriptor) \
+, 0 }
+
+
+/*
+ **
+ * @brief Request to update the runtime configuration of the PKCS#11 entropy
+ *	  source.
+ * Each field is only applied when its corresponding `set_*` flag is true,
+ * which lets callers update only the PIN, only the label, or both atomically.
+ * Update order on the server: the token label is applied first (it re-opens
+ * the PKCS#11 module against the new label), then the PIN is installed and
+ * a login is attempted on the freshly opened slot if the token requires it.
+ * If the label update fails, the PIN is not applied.
+ * Passing the empty string for `pin` or `token_label` (with the matching
+ * `set_*` flag set) clears the runtime override and falls back to the
+ * compile-time default.
+ * The settings are in-memory only and are not persisted across server
+ * restarts.
+ * @param set_token_label Apply `token_label` if true.
+ * @param token_label PKCS#11 token label to select.
+ * @param set_pin Apply `pin` if true.
+ * @param pin User PIN to authenticate with the PKCS#11 token (CKU_USER).
+ */
+struct  SetPkcs11ConfigRequest
+{
+  ProtobufCMessage base;
+  protobuf_c_boolean set_token_label;
+  char *token_label;
+  protobuf_c_boolean set_pin;
+  char *pin;
+};
+#define SET_PKCS11_CONFIG_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_pkcs11_config_request__descriptor) \
+, 0, (char *)protobuf_c_empty_string, 0, (char *)protobuf_c_empty_string }
+
+
+/*
+ **
+ * @brief Response of a PKCS#11 entropy source configuration update.
+ * @param ret Return code (0 on success, < 0 on error; in particular -ENOENT
+ *	      if the PKCS#11 entropy source is not compiled in or no matching
+ *	      token was found).
+ */
+struct  SetPkcs11ConfigResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+};
+#define SET_PKCS11_CONFIG_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_pkcs11_config_response__descriptor) \
 , 0 }
 
 
@@ -441,6 +493,44 @@ SetMinReseedSecsResponse *
 void   set_min_reseed_secs_response__free_unpacked
                      (SetMinReseedSecsResponse *message,
                       ProtobufCAllocator *allocator);
+/* SetPkcs11ConfigRequest methods */
+void   set_pkcs11_config_request__init
+                     (SetPkcs11ConfigRequest         *message);
+size_t set_pkcs11_config_request__get_packed_size
+                     (const SetPkcs11ConfigRequest   *message);
+size_t set_pkcs11_config_request__pack
+                     (const SetPkcs11ConfigRequest   *message,
+                      uint8_t             *out);
+size_t set_pkcs11_config_request__pack_to_buffer
+                     (const SetPkcs11ConfigRequest   *message,
+                      ProtobufCBuffer     *buffer);
+SetPkcs11ConfigRequest *
+       set_pkcs11_config_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_pkcs11_config_request__free_unpacked
+                     (SetPkcs11ConfigRequest *message,
+                      ProtobufCAllocator *allocator);
+/* SetPkcs11ConfigResponse methods */
+void   set_pkcs11_config_response__init
+                     (SetPkcs11ConfigResponse         *message);
+size_t set_pkcs11_config_response__get_packed_size
+                     (const SetPkcs11ConfigResponse   *message);
+size_t set_pkcs11_config_response__pack
+                     (const SetPkcs11ConfigResponse   *message,
+                      uint8_t             *out);
+size_t set_pkcs11_config_response__pack_to_buffer
+                     (const SetPkcs11ConfigResponse   *message,
+                      ProtobufCBuffer     *buffer);
+SetPkcs11ConfigResponse *
+       set_pkcs11_config_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_pkcs11_config_response__free_unpacked
+                     (SetPkcs11ConfigResponse *message,
+                      ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
 typedef void (*RndAddToEntCntRequest_Closure)
@@ -479,6 +569,12 @@ typedef void (*SetMinReseedSecsRequest_Closure)
 typedef void (*SetMinReseedSecsResponse_Closure)
                  (const SetMinReseedSecsResponse *message,
                   void *closure_data);
+typedef void (*SetPkcs11ConfigRequest_Closure)
+                 (const SetPkcs11ConfigRequest *message,
+                  void *closure_data);
+typedef void (*SetPkcs11ConfigResponse_Closure)
+                 (const SetPkcs11ConfigResponse *message,
+                  void *closure_data);
 
 /* --- services --- */
 
@@ -510,6 +606,10 @@ struct PrivAccess_Service
                                   const SetMinReseedSecsRequest *input,
                                   SetMinReseedSecsResponse_Closure closure,
                                   void *closure_data);
+  void (*rpc_set_pkcs11_config)(PrivAccess_Service *service,
+                                const SetPkcs11ConfigRequest *input,
+                                SetPkcs11ConfigResponse_Closure closure,
+                                void *closure_data);
 };
 typedef void (*PrivAccess_ServiceDestroy)(PrivAccess_Service *);
 void priv_access__init (PrivAccess_Service *service,
@@ -523,7 +623,8 @@ void priv_access__init (PrivAccess_Service *service,
       function_prefix__ ## rpc_rnd_clear_pool,\
       function_prefix__ ## rpc_rnd_reseed_crng,\
       function_prefix__ ## rpc_set_write_wakeup_thresh,\
-      function_prefix__ ## rpc_set_min_reseed_secs  }
+      function_prefix__ ## rpc_set_min_reseed_secs,\
+      function_prefix__ ## rpc_set_pkcs11_config  }
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
                                          const RndAddToEntCntRequest *input,
                                          RndAddToEntCntResponse_Closure closure,
@@ -548,6 +649,10 @@ void priv_access__rpc_set_min_reseed_secs(ProtobufCService *service,
                                           const SetMinReseedSecsRequest *input,
                                           SetMinReseedSecsResponse_Closure closure,
                                           void *closure_data);
+void priv_access__rpc_set_pkcs11_config(ProtobufCService *service,
+                                        const SetPkcs11ConfigRequest *input,
+                                        SetPkcs11ConfigResponse_Closure closure,
+                                        void *closure_data);
 
 /* --- descriptors --- */
 
@@ -563,6 +668,8 @@ extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_request__descrip
 extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_response__descriptor;
 extern const ProtobufCMessageDescriptor set_min_reseed_secs_request__descriptor;
 extern const ProtobufCMessageDescriptor set_min_reseed_secs_response__descriptor;
+extern const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor;
+extern const ProtobufCMessageDescriptor set_pkcs11_config_response__descriptor;
 extern const ProtobufCServiceDescriptor priv_access__descriptor;
 
 PROTOBUF_C__END_DECLS
