@@ -101,12 +101,24 @@ static bool pkcs11_buf_alloced = false;
 
 static bool esdm_es_pkcs11_active(void);
 
-/* Caller must hold pkcs11_mutex (write lock). */
-static void esdm_es_pkcs11_finalize_locked(void)
+/*
+ * Caller must hold pkcs11_mutex (write lock).
+ * Drop just the bound slot. Keeps the loaded module so we can re-discover
+ * tokens (e.g. after a smartcard is re-inserted) without paying the cost of a
+ * full module unload/reload.
+ */
+static void esdm_es_pkcs11_drop_slot_locked(void)
 {
 	if (pkcs11_logged_in && pkcs11_slot)
 		PKCS11_logout(pkcs11_slot);
 	pkcs11_logged_in = false;
+	pkcs11_slot = NULL;
+}
+
+/* Caller must hold pkcs11_mutex (write lock). */
+static void esdm_es_pkcs11_finalize_locked(void)
+{
+	esdm_es_pkcs11_drop_slot_locked();
 
 	if (pkcs11_slots && pkcs11_ctx) {
 		PKCS11_release_all_slots(pkcs11_ctx, pkcs11_slots,
@@ -114,7 +126,6 @@ static void esdm_es_pkcs11_finalize_locked(void)
 	}
 	pkcs11_slots = NULL;
 	pkcs11_nslots = 0;
-	pkcs11_slot = NULL;
 
 	if (pkcs11_ctx) {
 		if (pkcs11_module_loaded)
@@ -255,6 +266,67 @@ static int esdm_es_pkcs11_open_module_locked(void)
 	return 0;
 }
 
+/*
+ * Caller must hold pkcs11_mutex (write lock).
+ * Try to (re-)bind to a usable token without unloading the module. Used after
+ * a read failure or when the smartcard has been physically removed and
+ * re-inserted: PKCS#11 only refreshes its slot view via release_all_slots +
+ * enumerate_slots.
+ *
+ * Returns 0 on success, -ENODEV when the module is not loaded and reloading
+ * fails, -EIO when slot enumeration fails, -ENOENT when no usable token is
+ * present, and -EACCES when login fails.
+ */
+static int esdm_es_pkcs11_refresh_slot_locked(void)
+{
+	const char *pin = esdm_es_pkcs11_pin_locked();
+	int logged_in = 0;
+
+	/* Drop any previous slot binding before refreshing. */
+	esdm_es_pkcs11_drop_slot_locked();
+
+	/* Module isn't loaded — try a full open. */
+	if (!pkcs11_ctx)
+		return esdm_es_pkcs11_open_module_locked();
+
+	/* Refresh the slot list so newly-inserted tokens become visible. */
+	if (pkcs11_slots) {
+		PKCS11_release_all_slots(pkcs11_ctx, pkcs11_slots,
+					 pkcs11_nslots);
+		pkcs11_slots = NULL;
+		pkcs11_nslots = 0;
+	}
+
+	if (PKCS11_enumerate_slots(pkcs11_ctx, &pkcs11_slots, &pkcs11_nslots) <
+	    0) {
+		pkcs11_slots = NULL;
+		pkcs11_nslots = 0;
+		return -EIO;
+	}
+
+	pkcs11_slot = esdm_es_pkcs11_pick_slot();
+	if (!pkcs11_slot)
+		return -ENOENT;
+
+	if (pin[0] != '\0' && pkcs11_slot->token->loginRequired) {
+		if (PKCS11_is_logged_in(pkcs11_slot, 0, &logged_in) == 0 &&
+		    !logged_in) {
+			if (PKCS11_login(pkcs11_slot, 0, pin) != 0) {
+				pkcs11_slot = NULL;
+				return -EACCES;
+			}
+			pkcs11_logged_in = true;
+		}
+	}
+
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		    "PKCS#11 entropy source recovered token '%s'\n",
+		    pkcs11_slot->token->label ? pkcs11_slot->token->label :
+						"(no label)");
+
+	return 0;
+}
+
 static int esdm_es_pkcs11_init(void)
 {
 	mutex_lock(&pkcs11_mutex);
@@ -328,10 +400,16 @@ static void esdm_es_pkcs11_get_sync(struct entropy_es *eb_es,
 
 		if (PKCS11_generate_random(pkcs11_slot, buffer,
 					   ESDM_PKCS11_CHUNK_BYTES) != 0) {
+			/*
+			 * Don't tear the module down — a transient error (e.g.
+			 * smartcard removed) just drops the slot binding and
+			 * the monitor will try to re-acquire a token on the
+			 * next round.
+			 */
 			esdm_logger(
 				LOGGER_WARN, LOGGER_C_ES,
-				"PKCS#11 C_GenerateRandom failed, disabling source\n");
-			esdm_es_pkcs11_finalize_locked();
+				"PKCS#11 C_GenerateRandom failed, dropping slot for re-discovery\n");
+			esdm_es_pkcs11_drop_slot_locked();
 			goto err;
 		}
 
@@ -366,8 +444,30 @@ static void esdm_es_pkcs11_buf_fill(struct entropy_es *eb_es,
 static int esdm_es_pkcs11_monitor(void)
 {
 	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
+	bool slot_present;
 
-	if (!esdm_es_pkcs11_active())
+	if (ESDM_PKCS11_MODULE_PATH[0] == '\0')
+		return 0;
+
+	mutex_reader_lock(&pkcs11_mutex);
+	slot_present = pkcs11_slot != NULL;
+	mutex_reader_unlock(&pkcs11_mutex);
+
+	/*
+	 * If we lost the slot (read failure earlier, or smartcard was removed
+	 * since startup), try to re-bind. Failure is silent here — the user is
+	 * already aware of the original failure that dropped the slot, and the
+	 * card may simply still be absent.
+	 */
+	if (!slot_present) {
+		mutex_lock(&pkcs11_mutex);
+		if (!pkcs11_slot)
+			(void)esdm_es_pkcs11_refresh_slot_locked();
+		slot_present = pkcs11_slot != NULL;
+		mutex_unlock(&pkcs11_mutex);
+	}
+
+	if (!slot_present)
 		return 0;
 
 	return esdm_es_buf_monitor(&pkcs11_buf, requested_bits,
@@ -419,13 +519,13 @@ static void esdm_es_pkcs11_es_state(char *buf, size_t buflen)
 
 static bool esdm_es_pkcs11_active(void)
 {
-	bool ret;
-
-	mutex_reader_lock(&pkcs11_mutex);
-	ret = pkcs11_slot != NULL;
-	mutex_reader_unlock(&pkcs11_mutex);
-
-	return ret;
+	/*
+	 * Stay active as long as a module is configured at compile time. The
+	 * monitor handles slot (re-)acquisition, so a temporarily absent
+	 * smartcard does not turn the source off — it just delivers no entropy
+	 * until the card comes back.
+	 */
+	return ESDM_PKCS11_MODULE_PATH[0] != '\0';
 }
 
 struct esdm_es_cb esdm_es_pkcs11 = {
