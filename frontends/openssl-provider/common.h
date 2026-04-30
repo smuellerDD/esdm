@@ -26,7 +26,9 @@
 #include <openssl/params.h>
 #include <openssl/provider.h>
 
+#ifndef ESDM_PROV_NAME
 #define ESDM_PROV_NAME "ESDM RNG Provider"
+#endif
 #define ESDM_PROV_VERSION VERSION
 #define ESDM_PROV_BUILDINFO VERSION
 
