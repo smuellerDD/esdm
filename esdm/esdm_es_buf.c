@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
+ * Copyright (C) 2026, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
