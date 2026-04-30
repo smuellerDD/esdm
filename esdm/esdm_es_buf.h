@@ -84,9 +84,11 @@ int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 
 /*
  * Try to obtain a pre-filled block from the cache. On hit, eb_es is populated
- * and the function returns true. On miss, the caller must fall back to its
+ * and the function returns true. On miss (or when requested_bits exceeds what
+ * a single cached block carries), the caller must fall back to its
  * synchronous path.
  */
-bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es);
+bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
+			 uint32_t requested_bits);
 
 #endif /* _ESDM_ES_BUF_H */

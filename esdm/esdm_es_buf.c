@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esdm_es_aux.h"
 #include "esdm_es_buf.h"
 #include "esdm_es_mgr.h"
 #include "esdm_logger.h"
@@ -138,11 +139,21 @@ int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 	return 0;
 }
 
-bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es)
+bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
+			 uint32_t requested_bits)
 {
 	unsigned int slot;
 
 	if (!buf || !buf->blocks || !eb_es)
+		return false;
+
+	/*
+	 * The cache is filled at esdm_get_seed_entropy_osr(false, true) bits
+	 * per block by the ES monitor. Requests larger than that cannot be
+	 * served from a single cached block; tell the caller to take its
+	 * synchronous path instead.
+	 */
+	if (requested_bits > esdm_get_seed_entropy_osr(false, true))
 		return false;
 
 	slot = ((unsigned int)atomic_inc(&buf->idx)) & buf->mask;
