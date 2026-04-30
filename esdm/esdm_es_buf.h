@@ -1,9 +1,5 @@
 /*
- * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
- *
- * Asynchronous entropy source block cache. The producer (ES monitor) fills
- * empty slots in the background while the consumer can pull pre-filled blocks
- * from the cache without blocking on the underlying noise source.
+ * Copyright (C) 2026, Stephan Mueller <smueller@chronox.de>
  *
  * License: see LICENSE file in root directory
  *
