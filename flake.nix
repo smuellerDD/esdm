@@ -189,22 +189,20 @@
         };
 
         packages = {
-          jitterentropy = pkgs.jitterentropy.overrideAttrs (
-            _: {
-              version = "3.7.0";
-              src = pkgs.fetchFromGitHub {
-                owner = "smuellerDD";
-                repo = "jitterentropy-library";
-                rev = "3a8ef4b7ace53ad7dcbb1b30a0b5bf984f994fa2";
-                hash = "sha256-z2PJiHfeHXvSOu9i8oZNvz+5Zv9J0V2CyWORr/Pe4WA=";
-              };
-              patches = [ ];
-              cmakeFlags = [
-                "-DINTERNAL_TIMER=OFF"
-                "-DBUILD_SHARED_LIBS=ON"
-              ];
-            }
-          );
+          jitterentropy = pkgs.jitterentropy.overrideAttrs (_: {
+            version = "3.7.0";
+            src = pkgs.fetchFromGitHub {
+              owner = "smuellerDD";
+              repo = "jitterentropy-library";
+              rev = "e31959660658667ff4bb865984c47e543c3169e2";
+              hash = "sha256-GYUoVSqwhz01Ubk3KXvD4KAC+WDjSSiGcmLQoX5v4PU=";
+            };
+            patches = [ ];
+            cmakeFlags = [
+              "-DINTERNAL_TIMER=OFF"
+              "-DBUILD_SHARED_LIBS=ON"
+            ];
+          });
 
           # this currently defaults to the botan crypto backend
           esdm =
@@ -224,6 +222,7 @@
               inherit (self.packages.${system}) jitterentropy;
             }).overrideAttrs
               (prev: {
+                buildInputs = prev.buildInputs ++ [ pkgs.libp11 ];
                 mesonFlags =
                   (builtins.filter (
                     x: (!lib.hasInfix "max_threads" x) && (!lib.hasInfix "term-on-signal" x)
@@ -234,6 +233,7 @@
                   ]
                   ++ [
                     "-Des_jent_osr=4"
+                    "-Des_pkcs11=enabled"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
@@ -286,7 +286,7 @@
         devShells = {
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
-	      libp11
+              libp11
               botan3
               fuse3
               gnutls
