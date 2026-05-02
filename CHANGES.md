@@ -1,4 +1,4 @@
-Changes 1.2.3-prerelease
+Changes 1.2.3
 * Fix handling of non-blocking server response
 
 * Reduce chunk size for the PR IPC interface to 32 bytes for more responsive
