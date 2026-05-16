@@ -1,3 +1,10 @@
+Changes 1.2.4
+* Centralize asynchronous buffer management to collect entropy from slow entropy sources
+
+* Add TPM2 entropy source
+
+* Add PKCS11 entropy source
+
 Changes 1.2.3
 * Fix handling of non-blocking server response
 

@@ -11,7 +11,7 @@
 # Patchlevel Version: API / ABI compatible, no functional changes, no
 #		      enhancements, bug fixes only.
 project('esdm', 'c',
-	version: '1.2.3',
+	version: '1.2.4',
 	default_options: [
 		'warning_level=3',
 		'optimization=2',
