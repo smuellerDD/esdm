@@ -74,10 +74,6 @@ static void esdm_hwrand_finalize(void)
 
 static int esdm_hwrand_init(void)
 {
-	char buf[1];
-	size_t buflen = 1;
-	int fd;
-
 	mutex_lock(&hwrand_mutex);
 
 	/* Allow the init function to be called multiple times */
@@ -91,26 +87,6 @@ static int esdm_hwrand_init(void)
 			ESDM_ES_HWRAND_IF, strerror(errno));
 		mutex_unlock(&hwrand_mutex);
 		return 0;
-	}
-
-	/* Check the presence of RNG-providers */
-	fd = open(ESDM_ES_HWRAND_AVAIL, O_RDONLY | O_CLOEXEC);
-	if (fd >= 0) {
-		ssize_t nread = esdm_safe_read(fd, (uint8_t *)buf, buflen);
-
-		/*
-		 * An empty rng_available file (just a newline) means no
-		 * backing device is present. Also disable on read failure.
-		 */
-		if (nread <= 0 ||
-		    (nread == (ssize_t)buflen && buf[0] == '\n')) {
-			esdm_logger(
-				LOGGER_WARN, LOGGER_C_ES,
-				"Disabling /dev/hwrng-based entropy source as it has no backing device\n");
-			close(esdm_hwrand_fd);
-			esdm_hwrand_fd = -1;
-		}
-		close(fd);
 	}
 
 	mutex_unlock(&hwrand_mutex);
@@ -187,8 +163,6 @@ static void esdm_hwrand_get_sync(struct entropy_es *eb_es,
 
 		if (esdm_safe_read(esdm_hwrand_fd, buffer, hwrng_chunk_len) !=
 		    (ssize_t)hwrng_chunk_len) {
-			close(esdm_hwrand_fd);
-			esdm_hwrand_fd = -1;
 			goto err;
 		}
 		memcpy(eb_es->e + (done_bits >> 3), buffer, chunk_size_bytes);
