@@ -556,6 +556,23 @@ shall be adjusted.
 The value must not be lower than 1.
 ''')
 
+# Option for: ESDM_ES_PARALLEL_FETCH
+option('es_parallel_fetch', type: 'feature', value: 'enabled',
+       description: '''Fetch seed material from entropy sources in parallel.
+
+When enabled, the entropy source manager spawns one thread per entropy
+source to gather seed material concurrently during a reseed, joining them
+afterwards. This reduces reseed latency when slow entropy sources (e.g.
+TPM 2.0 or PKCS#11 tokens) are configured.
+
+Parallel fetching is only used at runtime if more than one processor core
+is available; otherwise the sources are queried sequentially. If thread
+creation fails for an individual source, that source is queried inline as
+a fallback.
+
+When disabled, the entropy sources are always queried sequentially.
+''')
+
 option('drng_reseed_threshold_bits', type: 'integer', value: 0xffffffff,
        description: '''Besides request count based reseeding, this option can
        be used to enable request size (Bit) based reseeding. Set this to

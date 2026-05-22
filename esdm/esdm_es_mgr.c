@@ -161,6 +161,24 @@ static int esdm_es_monitor_thread(void *data)
 	return arg->rc;
 }
 
+#ifdef ESDM_ES_PARALLEL_FETCH
+struct esdm_es_get_ent_thread_arg {
+	unsigned int es_idx;
+	struct entropy_es *eb_es;
+	uint32_t requested_bits;
+	bool fully_seeded;
+};
+
+static void *esdm_es_get_ent_thread(void *data)
+{
+	struct esdm_es_get_ent_thread_arg *arg = data;
+
+	esdm_es[arg->es_idx]->get_ent(arg->eb_es, arg->requested_bits,
+				      arg->fully_seeded);
+	return NULL;
+}
+#endif
+
 /* ES monitor worker loop */
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
@@ -824,9 +842,16 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 			   bool force)
 {
 	struct esdm_state *state = &esdm_state;
+#ifdef ESDM_ES_PARALLEL_FETCH
+	struct esdm_es_get_ent_thread_arg args[esdm_ext_es_last];
+	pthread_t tids[esdm_ext_es_last];
+	bool spawned[esdm_ext_es_last];
+	bool have_parallelism = esdm_online_nodes() > 1;
+#endif
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
 				      esdm_security_strength() :
 				      ESDM_FULL_SEED_ENTROPY_BITS;
+	bool fully_seeded = atomic_bool_read(&state->esdm_fully_seeded);
 	int ret;
 
 	/* Guarantee that requested bits is a multiple of bytes */
@@ -842,20 +867,60 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
 	 */
-	if (!force && atomic_bool_read(&state->esdm_fully_seeded) &&
-	    (esdm_avail_entropy() < req_ent)) {
+	if (!force && fully_seeded && (esdm_avail_entropy() < req_ent)) {
 		for_each_esdm_es (i)
 			eb->entropy_es[i].e_bits = 0;
 
 		goto wakeup;
 	}
 
+#ifdef ESDM_ES_PARALLEL_FETCH
+	/*
+	 * Feed seed material from all entropy sources in parallel and wait
+	 * for completion. We use plain pthread_create/pthread_join here
+	 * instead of the shared thread pool so the join is bounded to the
+	 * exact threads spawned in this batch. If thread creation fails for
+	 * any source, run that source inline as a fallback.
+	 *
+	 * Using the thread pool would lead to deadlocks on join, as we cannot
+	 * guarantee, that no other threads were already spawned from the one
+	 * requesting that wait/join. If this should be needed in more than one
+	 * place add a fork + join abstraction in threading_support.{c,h}.
+	 */
+	for_each_esdm_es (i) {
+		args[i].es_idx = i;
+		args[i].eb_es = &eb->entropy_es[i];
+		args[i].requested_bits = requested_bits;
+		args[i].fully_seeded = fully_seeded;
+
+		/*
+		 * Only use parallel fetches if more than one processor core
+		 * is available for this task.
+		 */
+		if (have_parallelism &&
+		    pthread_create(&tids[i], NULL,
+				   esdm_es_get_ent_thread,
+				   &args[i]) == 0) {
+			spawned[i] = true;
+		} else {
+			spawned[i] = false;
+			esdm_es[i]->get_ent(&eb->entropy_es[i], requested_bits,
+					    fully_seeded);
+		}
+	}
+
+	for_each_esdm_es (i) {
+		if (spawned[i]) {
+			pthread_join(tids[i], NULL);
+		}
+	}
+#else
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {
-		esdm_es[i]->get_ent(
-			&eb->entropy_es[i], requested_bits,
-			atomic_bool_read(&state->esdm_fully_seeded));
+		esdm_es[i]->get_ent(&eb->entropy_es[i], requested_bits,
+				    fully_seeded);
 	}
+#endif
 
 wakeup:
 	esdm_writer_wakeup();
