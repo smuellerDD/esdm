@@ -85,6 +85,8 @@ conf_data.set('ESDM_BOTAN_DRNG_HMAC', get_option('botan_drng_type') == 'hmac')
 conf_data.set('THREADING_MAX_WORKER_THREADS', get_option('threading_max_worker_threads'))
 conf_data.set('THREADING_MAX_THREADS', get_option('threading_max_worker_threads') + 3)
 
+conf_data.set('ESDM_ES_PARALLEL_FETCH', get_option('es_parallel_fetch').enabled())
+
 conf_data.set('ESDM_ES_JENT', get_option('es_jent').enabled())
 conf_data.set('ESDM_JENT_ENTROPY_RATE',
 	      get_option('es_jent_entropy_rate'))

@@ -233,8 +233,6 @@
                   ]
                   ++ [
                     "-Des_jent_osr=4"
-                    "-Des_pkcs11=enabled"
-                    "-Des_pkcs11_module_path=/home/mtheil/Code/mini-pkcs11-rand/result/lib/libp11rand.so"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
