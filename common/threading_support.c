@@ -31,6 +31,7 @@
 #include "bool.h"
 #include "config.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "ret_checkers.h"
@@ -618,6 +619,36 @@ int thread_start(int (*start_routine)(void *), void *tdata,
 void thread_stop_spawning(void)
 {
 	atomic_bool_set_true(&threads_in_cancel);
+}
+
+void thread_fork_join(void *(*start_routine)(void *), void *args,
+		      size_t arg_stride, size_t num)
+{
+	if (num == 0)
+		return;
+
+	bool have_parallelism = num > 1 && esdm_online_nodes() > 1;
+	pthread_t tids[num];
+	bool spawned[num];
+	char *arg_base = args;
+	size_t i;
+
+	for (i = 0; i < num; i++) {
+		void *arg = arg_base + i * arg_stride;
+
+		if (have_parallelism &&
+		    pthread_create(&tids[i], NULL, start_routine, arg) == 0) {
+			spawned[i] = true;
+		} else {
+			spawned[i] = false;
+			start_routine(arg);
+		}
+	}
+
+	for (i = 0; i < num; i++) {
+		if (spawned[i])
+			pthread_join(tids[i], NULL);
+	}
 }
 
 DSO_PUBLIC
