@@ -844,9 +844,6 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	struct esdm_state *state = &esdm_state;
 #ifdef ESDM_ES_PARALLEL_FETCH
 	struct esdm_es_get_ent_thread_arg args[esdm_ext_es_last];
-	pthread_t tids[esdm_ext_es_last];
-	bool spawned[esdm_ext_es_last];
-	bool have_parallelism = esdm_online_nodes() > 1;
 #endif
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
 				      esdm_security_strength() :
@@ -875,45 +872,14 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	}
 
 #ifdef ESDM_ES_PARALLEL_FETCH
-	/*
-	 * Feed seed material from all entropy sources in parallel and wait
-	 * for completion. We use plain pthread_create/pthread_join here
-	 * instead of the shared thread pool so the join is bounded to the
-	 * exact threads spawned in this batch. If thread creation fails for
-	 * any source, run that source inline as a fallback.
-	 *
-	 * Using the thread pool would lead to deadlocks on join, as we cannot
-	 * guarantee, that no other threads were already spawned from the one
-	 * requesting that wait/join. If this should be needed in more than one
-	 * place add a fork + join abstraction in threading_support.{c,h}.
-	 */
 	for_each_esdm_es (i) {
 		args[i].es_idx = i;
 		args[i].eb_es = &eb->entropy_es[i];
 		args[i].requested_bits = requested_bits;
 		args[i].fully_seeded = fully_seeded;
-
-		/*
-		 * Only use parallel fetches if more than one processor core
-		 * is available for this task.
-		 */
-		if (have_parallelism &&
-		    pthread_create(&tids[i], NULL,
-				   esdm_es_get_ent_thread,
-				   &args[i]) == 0) {
-			spawned[i] = true;
-		} else {
-			spawned[i] = false;
-			esdm_es[i]->get_ent(&eb->entropy_es[i], requested_bits,
-					    fully_seeded);
-		}
 	}
-
-	for_each_esdm_es (i) {
-		if (spawned[i]) {
-			pthread_join(tids[i], NULL);
-		}
-	}
+	thread_fork_join(esdm_es_get_ent_thread, args, sizeof(args[0]),
+			 esdm_ext_es_last);
 #else
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {

@@ -22,6 +22,7 @@
 #define THREADING_SUPPORT_H
 
 #include <pthread.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "bool.h"
@@ -133,6 +134,38 @@ int thread_wait_all(bool system_threads);
  */
 int thread_start(int (*start_routine)(void *), void *tdata,
 		 uint32_t thread_group, int *ret_ancestor);
+
+/**
+ * @brief - Run @num independent tasks concurrently and wait for all of them.
+ *
+ * Each task is invoked as @start_routine(arg_i), where arg_i is the i-th
+ * element of a contiguous array at @args with element size @arg_stride.
+ *
+ * Unlike thread_start, this helper spawns plain pthreads directly instead
+ * of going through the shared thread pool. The join is therefore bounded
+ * to exactly the threads spawned in this batch, avoiding the deadlocks
+ * that thread_wait can hit when unrelated worker threads were scheduled
+ * from the caller in the meantime.
+ *
+ * If pthread_create fails for an individual task, that task is executed
+ * inline on the calling thread as a fallback. When fewer than two CPUs
+ * are online or @num <= 1, all tasks run inline.
+ *
+ * Intended for short-lived batches of independent work where deadlock-free
+ * joining matters more than thread reuse (e.g. fetching seed material from
+ * multiple entropy sources during a reseed).
+ *
+ * @param [in] start_routine Function invoked once per task. Its return
+ *			     value is discarded; report results via the
+ *			     task's argument record.
+ * @param [in] args Pointer to a contiguous array of per-task argument
+ *		    records.
+ * @param [in] arg_stride Size of one record in bytes (e.g.
+ *			  sizeof(args[0])).
+ * @param [in] num Number of tasks to run; zero is a no-op.
+ */
+void thread_fork_join(void *(*start_routine)(void *), void *args,
+		      size_t arg_stride, size_t num);
 
 #define ESDM_THREAD_MAX_NAMELEN 16
 /**
