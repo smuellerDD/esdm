@@ -627,7 +627,13 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 	if (num == 0)
 		return;
 
-	bool have_parallelism = num > 1 && esdm_online_nodes() > 1;
+	/*
+	 * Run inline during teardown: threads spawned here are invisible to
+	 * thread_cancel, so a forced cancellation of the caller would orphan
+	 * them while they still write into the caller's stack frame.
+	 */
+	bool have_parallelism = num > 1 && esdm_online_nodes() > 1 &&
+				!atomic_bool_read(&threads_in_cancel);
 	pthread_t tids[num];
 	bool spawned[num];
 	char *arg_base = args;
