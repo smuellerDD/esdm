@@ -20,6 +20,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/poll.h>
@@ -31,6 +32,7 @@
 
 #include "bool.h"
 #include "buffer.h"
+#include "build_bug_on.h"
 #include "config.h"
 #include "atomic.h"
 #include "conv_be_le.h"
@@ -339,6 +341,66 @@ out:
 	return ret;
 }
 
+/*
+ * Responses that carry an int64 "ret" (field 1) plus a "bytes randval"
+ * (field 2) payload. These qualify for the zero-copy in-place decode in the
+ * read handler below, which decodes the wire bytes by hand and hands the
+ * closure a synthesized GetRandomBytesFullResponse for all three types.
+ *
+ * That bypasses the generated unpack code, so it bakes in two assumptions:
+ *   1. all four response structs are layout-identical, and
+ *   2. each is exactly { int64 ret = 1; bytes randval = 2; }.
+ * Both are guarded below so a future .proto change cannot silently break the
+ * fast path:
+ *   - the compile-time BUILD_BUG_ON()s fail the build if the structs stop
+ *     being layout-identical (added/removed/reordered fields), and
+ *   - the runtime checks fall back to the generic protobuf unpack path (which
+ *     is always correct) if the live descriptor no longer matches the assumed
+ *     {ret, randval} shape.
+ */
+static bool
+esdm_rpcc_is_fast_bytes_response(const ProtobufCMessageDescriptor *message_desc)
+{
+	/* (1) The four response structs must remain layout-identical. */
+	BUILD_BUG_ON(sizeof(GetRandomBytesPrResponse) !=
+		     sizeof(GetRandomBytesFullResponse));
+	BUILD_BUG_ON(sizeof(GetRandomBytesResponse) !=
+		     sizeof(GetRandomBytesFullResponse));
+	BUILD_BUG_ON(offsetof(GetRandomBytesPrResponse, ret) !=
+		     offsetof(GetRandomBytesFullResponse, ret));
+	BUILD_BUG_ON(offsetof(GetRandomBytesPrResponse, randval) !=
+		     offsetof(GetRandomBytesFullResponse, randval));
+	BUILD_BUG_ON(offsetof(GetRandomBytesResponse, ret) !=
+		     offsetof(GetRandomBytesFullResponse, ret));
+	BUILD_BUG_ON(offsetof(GetRandomBytesResponse, randval) !=
+		     offsetof(GetRandomBytesFullResponse, randval));
+
+	if (message_desc != &get_random_bytes_full_response__descriptor &&
+	    message_desc != &get_random_bytes_pr_response__descriptor &&
+	    message_desc != &get_random_bytes_response__descriptor)
+		return false;
+
+	/*
+	 * (2) The live message must still be exactly { int64 ret = 1;
+	 * bytes randval = 2; } at the offsets the synthesized
+	 * GetRandomBytesFullResponse uses. If a .proto change diverges from
+	 * this, decline the fast path and let the caller fall back to the
+	 * generic protobuf unpack. n_fields is checked before dereferencing
+	 * the fields array.
+	 */
+	return (message_desc->sizeof_message ==
+			sizeof(GetRandomBytesFullResponse) &&
+		message_desc->n_fields == 2 &&
+		message_desc->fields[0].id == 1 &&
+		message_desc->fields[0].type == PROTOBUF_C_TYPE_INT64 &&
+		message_desc->fields[0].offset ==
+			offsetof(GetRandomBytesFullResponse, ret) &&
+		message_desc->fields[1].id == 2 &&
+		message_desc->fields[1].type == PROTOBUF_C_TYPE_BYTES &&
+		message_desc->fields[1].offset ==
+			offsetof(GetRandomBytesFullResponse, randval));
+}
+
 static int
 esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			     const ProtobufCMessageDescriptor *message_desc,
@@ -449,42 +511,74 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * We now have a filled buffer that has a header and received
 		 * as much data as the header defined. We also start the
 		 * processing of data which returns it to the caller.
-		 *
-		 * Unpack into a per-connection scratch buffer via a bump
-		 * allocator instead of malloc()/free(). This avoids a heap
-		 * allocation per call and lets us reliably zeroize the unpacked
-		 * (secret) response copy afterwards - the default allocator's
-		 * free() would otherwise leave it in the heap unscrubbed.
 		 */
-		struct buffer tlh = {
-			.len = sizeof(rpc_conn->unpack_buf),
-			.consumed = 0,
-			.buf = rpc_conn->unpack_buf,
-		};
-		ProtobufCAllocator allocator = {
-			.alloc = esdm_rpc_alloc,
-			.free = esdm_rpc_free,
-			.allocator_data = &tlh,
-		};
-		ProtobufCMessage *msg =
-			protobuf_c_message_unpack(message_desc, &allocator,
-						  header->message_length,
-						  received_data->data);
-		if (msg) {
-			closure(msg, closure_data);
-			protobuf_c_message_free_unpacked(msg, &allocator);
-			esdm_logger(
-				LOGGER_DEBUG, LOGGER_C_RPC,
-				"Data with length %u send to client closure handler\n",
-				header->message_length);
+		if (esdm_rpcc_is_fast_bytes_response(message_desc)) {
+			/*
+			 * Zero-copy fast path for the random responses:
+			 * decode the (ret, randval) message in place so
+			 * randval.data points straight into the receive buffer.
+			 * The closure then performs the single mandatory copy
+			 * into the caller's buffer - avoiding the extra copy and
+			 * allocation that a full unpack would incur. The receive
+			 * buffer (and thus the payload) is zeroized at out:.
+			 */
+			GetRandomBytesFullResponse resp =
+				GET_RANDOM_BYTES_FULL_RESPONSE__INIT;
+			const uint8_t *payload;
+			size_t payload_len;
+			int64_t retval;
+
+			if (!esdm_rpc_decode_bytes_response(
+				    received_data->data, header->message_length,
+				    &retval, &payload, &payload_len)) {
+				resp.base.descriptor = message_desc;
+				resp.ret = retval;
+				resp.randval.data = (uint8_t *)payload;
+				resp.randval.len = payload_len;
+				closure((ProtobufCMessage *)&resp, closure_data);
+			} else {
+				esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+					    "Response message could not be decoded\n");
+				closure(ERR_PTR(-EPROTO), closure_data);
+			}
 		} else {
-			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-				    "Response message not found\n");
-			msg = ERR_PTR(-EFAULT);
-			closure(msg, closure_data);
+			/*
+			 * Unpack into a per-connection scratch buffer via a bump
+			 * allocator instead of malloc()/free(). This avoids a
+			 * heap allocation per call and lets us reliably zeroize
+			 * the unpacked copy afterwards - the default allocator's
+			 * free() would otherwise leave it in the heap unscrubbed.
+			 */
+			struct buffer tlh = {
+				.len = sizeof(rpc_conn->unpack_buf),
+				.consumed = 0,
+				.buf = rpc_conn->unpack_buf,
+			};
+			ProtobufCAllocator allocator = {
+				.alloc = esdm_rpc_alloc,
+				.free = esdm_rpc_free,
+				.allocator_data = &tlh,
+			};
+			ProtobufCMessage *msg = protobuf_c_message_unpack(
+				message_desc, &allocator, header->message_length,
+				received_data->data);
+			if (msg) {
+				closure(msg, closure_data);
+				protobuf_c_message_free_unpacked(msg, &allocator);
+				esdm_logger(
+					LOGGER_DEBUG, LOGGER_C_RPC,
+					"Data with length %u send to client closure handler\n",
+					header->message_length);
+			} else {
+				esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+					    "Response message not found\n");
+				msg = ERR_PTR(-EFAULT);
+				closure(msg, closure_data);
+			}
+			if (tlh.consumed)
+				memset_secure(rpc_conn->unpack_buf, 0,
+					      tlh.consumed);
 		}
-		if (tlh.consumed)
-			memset_secure(rpc_conn->unpack_buf, 0, tlh.consumed);
 		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 	} else if (interrupted) {
 		ProtobufCMessage *msg;

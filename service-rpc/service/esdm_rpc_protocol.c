@@ -79,6 +79,109 @@ int set_fd_nonblocking(int fd)
 	return 0;
 }
 
+/* Read a base-128 varint, advancing *pos. Returns 0 or -EPROTO. */
+static int esdm_rpc_get_varint(const uint8_t *data, size_t data_len,
+			       size_t *pos, uint64_t *val)
+{
+	uint64_t v = 0;
+	unsigned int shift = 0;
+
+	for (;;) {
+		uint8_t b;
+
+		/* Over-long varint or buffer exhausted -> malformed. */
+		if (*pos >= data_len || shift > 63)
+			return -EPROTO;
+
+		b = data[(*pos)++];
+		v |= (uint64_t)(b & 0x7f) << shift;
+		if (!(b & 0x80))
+			break;
+		shift += 7;
+	}
+
+	*val = v;
+	return 0;
+}
+
+/*
+ * Decode a "bytes-carrying" RPC response (int64 ret = field 1, bytes
+ * randval = field 2) straight from the receive buffer without copying the
+ * payload: on success *payload points into data and the caller performs the
+ * single mandatory copy into its own buffer. This avoids the copy and the
+ * allocation that protobuf_c_message_unpack() would otherwise incur for the
+ * random/seed hot paths.
+ *
+ * The proto3 wire format is parsed defensively; any malformed input yields
+ * -EPROTO. Absent fields keep their proto3 default (ret 0, empty payload).
+ */
+int esdm_rpc_decode_bytes_response(const uint8_t *data, size_t data_len,
+				   int64_t *ret_val, const uint8_t **payload,
+				   size_t *payload_len)
+{
+	size_t pos = 0;
+
+	*ret_val = 0;
+	*payload = NULL;
+	*payload_len = 0;
+
+	while (pos < data_len) {
+		uint64_t tag, field, wire, v;
+
+		if (esdm_rpc_get_varint(data, data_len, &pos, &tag))
+			return -EPROTO;
+		field = tag >> 3;
+		wire = tag & 0x7;
+
+		if (field == 1 && wire == 0) {
+			/* int64 ret encoded as a plain varint */
+			if (esdm_rpc_get_varint(data, data_len, &pos, &v))
+				return -EPROTO;
+			*ret_val = (int64_t)v;
+		} else if (field == 2 && wire == 2) {
+			/* bytes randval: length-delimited, point in place */
+			if (esdm_rpc_get_varint(data, data_len, &pos, &v))
+				return -EPROTO;
+			if (v > data_len - pos)
+				return -EPROTO;
+			*payload = data + pos;
+			*payload_len = (size_t)v;
+			pos += (size_t)v;
+		} else {
+			/* Unknown field: skip it based on the wire type. */
+			switch (wire) {
+			case 0:
+				if (esdm_rpc_get_varint(data, data_len, &pos,
+							&v))
+					return -EPROTO;
+				break;
+			case 1:
+				if (data_len - pos < 8)
+					return -EPROTO;
+				pos += 8;
+				break;
+			case 2:
+				if (esdm_rpc_get_varint(data, data_len, &pos,
+							&v))
+					return -EPROTO;
+				if (v > data_len - pos)
+					return -EPROTO;
+				pos += (size_t)v;
+				break;
+			case 5:
+				if (data_len - pos < 4)
+					return -EPROTO;
+				pos += 4;
+				break;
+			default:
+				return -EPROTO;
+			}
+		}
+	}
+
+	return 0;
+}
+
 int esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
 				  const struct esdm_rpc_proto_cs *received_data,
 				  const ProtobufCMessageDescriptor **desc)
