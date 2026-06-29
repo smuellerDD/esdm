@@ -56,15 +56,15 @@ struct esdm_rpc_client_connection {
 	mutex_w_t ref_cnt;
 	atomic_t state;
 
-	/* per request data */
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE];
-
 	/*
-	 * Scratch buffer used to unpack a response without a malloc()/free()
-	 * round-trip per call. Held exclusively while rpc_conn->lock is taken,
-	 * so it can back the esdm_rpc_alloc() bump allocator.
+	 * The request/response and unpack scratch buffers are not stored per
+	 * connection but per calling thread (see esdm_rpcc_reqbuf /
+	 * esdm_rpcc_unpack_buf in esdm_rpc_client.c): they are only ever used
+	 * during a single synchronous invoke held by the calling thread, so one
+	 * buffer set per thread suffices instead of one per connection. This
+	 * bounds the buffer memory by the number of threads issuing RPCs rather
+	 * than by the size of the connection pool.
 	 */
-	uint8_t unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
 
 	/*
 	 * Used to track successfull reads from esdm-server.

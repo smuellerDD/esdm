@@ -52,6 +52,24 @@ struct esdm_rpcc_write_buf {
 	esdm_rpc_client_connection_t *rpc_conn;
 };
 
+/*
+ * Per-thread request/response and unpack scratch buffers. An invoke runs
+ * entirely in the calling thread while it holds the connection lock, and the
+ * buffers are filled, processed and zeroized within that single synchronous
+ * call - they never carry state across calls or get touched by another thread.
+ * So one buffer set per calling thread suffices instead of one per connection,
+ * bounding this memory by the number of RPC-issuing threads rather than by the
+ * connection pool size. esdm_rpcc_reqbuf is cast to the protocol header
+ * structs, hence the 64-bit alignment.
+ */
+static __thread uint8_t esdm_rpcc_reqbuf[ESDM_RPC_MAX_MSG_SIZE]
+	__attribute__((aligned(sizeof(uint64_t))));
+/*
+ * Scratch buffer used to unpack a response without a malloc()/free() round-trip
+ * per call; backs the esdm_rpc_alloc() bump allocator while in use.
+ */
+static __thread uint8_t esdm_rpcc_unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
+
 static void register_fork_handler_unprivileged(void);
 static void register_fork_handler_privileged(void);
 
@@ -301,9 +319,9 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 		return -EFAULT;
 	}
 
-	tmp.dst_buf = rpc_conn->buf + ESDM_RPCC_BUF_WRITE_HEADER_SZ;
+	tmp.dst_buf = esdm_rpcc_reqbuf + ESDM_RPCC_BUF_WRITE_HEADER_SZ;
 
-	cs_header = (struct esdm_rpc_proto_cs_header *)rpc_conn->buf;
+	cs_header = (struct esdm_rpc_proto_cs_header *)esdm_rpcc_reqbuf;
 	cs_header->method_index = le_bswap32(method_index);
 	cs_header->message_length = le_bswap32(message_length);
 	cs_header->request_id = le_bswap32(0);
@@ -322,7 +340,7 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 		goto out;
 	}
 
-	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, rpc_conn->buf,
+	CKINT_LOG(esdm_rpc_client_write_data_fd(rpc_conn, esdm_rpcc_reqbuf,
 						ESDM_RPCC_BUF_WRITE_HEADER_SZ +
 							message_length),
 		  "Submission of message data failed with error %d\n", ret);
@@ -334,7 +352,7 @@ out:
 	 * and clear data from ESDM in your application or patch
 	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	memset_secure(rpc_conn->buf, 0,
+	memset_secure(esdm_rpcc_reqbuf, 0,
 		      message_length + ESDM_RPCC_BUF_WRITE_HEADER_SZ);
 	return ret;
 }
@@ -358,7 +376,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		return -EINVAL;
 
 	/* The cast is appropriate as the buffer is aligned to 64 bits. */
-	received_data = (struct esdm_rpc_proto_sc *)rpc_conn->buf;
+	received_data = (struct esdm_rpc_proto_sc *)esdm_rpcc_reqbuf;
 
 	/* Read the data into the local buffer storage */
 	do {
@@ -376,8 +394,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * full message is submitted in one send operation. Therefore,
 		 * short-reads cannot occur here and can be ignored.
 		 */
-		received = read(rpc_conn->fd, rpc_conn->buf,
-				sizeof(rpc_conn->buf));
+		received = read(rpc_conn->fd, esdm_rpcc_reqbuf,
+				sizeof(esdm_rpcc_reqbuf));
 
 		pret = 0;
 		if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -488,9 +506,9 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			 * free() would otherwise leave it in the heap unscrubbed.
 			 */
 			struct buffer tlh = {
-				.len = sizeof(rpc_conn->unpack_buf),
+				.len = sizeof(esdm_rpcc_unpack_buf),
 				.consumed = 0,
-				.buf = rpc_conn->unpack_buf,
+				.buf = esdm_rpcc_unpack_buf,
 			};
 			ProtobufCAllocator allocator = {
 				.alloc = esdm_rpc_alloc,
@@ -514,7 +532,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				closure(msg, closure_data);
 			}
 			if (tlh.consumed)
-				memset_secure(rpc_conn->unpack_buf, 0,
+				memset_secure(esdm_rpcc_unpack_buf, 0,
 					      tlh.consumed);
 		}
 		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
@@ -536,7 +554,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 out:
 	if (received > 0) {
-		memset_secure(rpc_conn->buf, 0, (size_t)received);
+		memset_secure(esdm_rpcc_reqbuf, 0, (size_t)received);
 	}
 	return ret;
 }
@@ -607,7 +625,10 @@ static void esdm_client_destroy(ProtobufCService *service)
 	if (rpc_conn->fd >= 0) {
 		reset_conn_socket(rpc_conn);
 	}
-	memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
+	/*
+	 * No per-connection buffer to wipe - the per-thread esdm_rpcc_reqbuf is
+	 * zeroized after every invoke in esdm_rpc_client_read_handler().
+	 */
 	mutex_w_unlock(&rpc_conn->lock);
 }
 
@@ -625,8 +646,6 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	strncpy(rpc_conn->socketname, socketname, sizeof(rpc_conn->socketname));
 	rpc_conn->socketname[sizeof(rpc_conn->socketname) - 1] = '\0';
 	rpc_conn->interrupt_func = interrupt_func;
-
-	memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
 
 	service->descriptor = descriptor;
 	service->invoke = esdm_client_invoke;
