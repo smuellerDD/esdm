@@ -26,10 +26,10 @@
 
 void esdm_rpc_rnd_add_to_ent_cnt(PrivAccess_Service *service,
 				 const RndAddToEntCntRequest *request,
-				 RndAddToEntCntResponse_Closure closure,
+				 RetResponse_Closure closure,
 				 void *closure_data)
 {
-	RndAddToEntCntResponse response = RND_ADD_TO_ENT_CNT_RESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	(void)service;
 
 	if (request == NULL) {

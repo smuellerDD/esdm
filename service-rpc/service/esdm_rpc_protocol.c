@@ -23,7 +23,6 @@
 #include <string.h>
 
 #include "buffer.h"
-#include "build_bug_on.h"
 #include "esdm_rpc_protocol.h"
 #include "unpriv_access.pb-c.h"
 
@@ -187,61 +186,41 @@ int esdm_rpc_decode_bytes_response(const uint8_t *data, size_t data_len,
 
 /*
  * Responses that carry an int64 "ret" (field 1) plus a "bytes randval"
- * (field 2) payload. These qualify for the hand-rolled in-place encode/decode
- * fast paths: the server encodes them with esdm_rpc_encode_bytes_response()
- * and the client decodes them with esdm_rpc_decode_bytes_response(), both
- * bypassing the generated protobuf pack/unpack code for the random hot paths.
+ * (field 2) payload. These all share the RandValResponse message type and
+ * qualify for the hand-rolled in-place encode/decode fast paths: the server
+ * encodes them with esdm_rpc_encode_bytes_response() and the client decodes
+ * them with esdm_rpc_decode_bytes_response(), both bypassing the generated
+ * protobuf pack/unpack code for the random hot paths.
  *
- * Bypassing the generated code bakes in two assumptions:
- *   1. all three response structs are layout-identical, and
- *   2. each is exactly { int64 ret = 1; bytes randval = 2; }.
- * Both are guarded here so a future .proto change cannot silently break the
- * fast path:
- *   - the compile-time BUILD_BUG_ON()s fail the build if the structs stop
- *     being layout-identical (added/removed/reordered fields), and
- *   - the runtime checks decline the fast path (letting the caller fall back
- *     to the always-correct generic protobuf code) if the live descriptor no
- *     longer matches the assumed {ret, randval} shape.
+ * Bypassing the generated code bakes in the assumption that RandValResponse is
+ * exactly { int64 ret = 1; bytes randval = 2; }. The runtime check below
+ * declines the fast path (letting the caller fall back to the always-correct
+ * generic protobuf code) if a future .proto change makes the live descriptor
+ * no longer match that shape.
  */
 bool esdm_rpc_is_fast_bytes_response(
 	const ProtobufCMessageDescriptor *message_desc)
 {
-	/* (1) The response structs must remain layout-identical. */
-	BUILD_BUG_ON(sizeof(GetRandomBytesPrResponse) !=
-		     sizeof(GetRandomBytesFullResponse));
-	BUILD_BUG_ON(sizeof(GetRandomBytesResponse) !=
-		     sizeof(GetRandomBytesFullResponse));
-	BUILD_BUG_ON(offsetof(GetRandomBytesPrResponse, ret) !=
-		     offsetof(GetRandomBytesFullResponse, ret));
-	BUILD_BUG_ON(offsetof(GetRandomBytesPrResponse, randval) !=
-		     offsetof(GetRandomBytesFullResponse, randval));
-	BUILD_BUG_ON(offsetof(GetRandomBytesResponse, ret) !=
-		     offsetof(GetRandomBytesFullResponse, ret));
-	BUILD_BUG_ON(offsetof(GetRandomBytesResponse, randval) !=
-		     offsetof(GetRandomBytesFullResponse, randval));
-
-	if (message_desc != &get_random_bytes_full_response__descriptor &&
-	    message_desc != &get_random_bytes_pr_response__descriptor &&
-	    message_desc != &get_random_bytes_response__descriptor)
+	if (message_desc != &rand_val_response__descriptor)
 		return false;
 
 	/*
-	 * (2) The live message must still be exactly { int64 ret = 1;
+	 * The live message must still be exactly { int64 ret = 1;
 	 * bytes randval = 2; } at the offsets the fast paths use. If a .proto
 	 * change diverges from this, decline the fast path. n_fields is
 	 * checked before dereferencing the fields array.
 	 */
 	return (message_desc->sizeof_message ==
-			sizeof(GetRandomBytesFullResponse) &&
+			sizeof(RandValResponse) &&
 		message_desc->n_fields == 2 &&
 		message_desc->fields[0].id == 1 &&
 		message_desc->fields[0].type == PROTOBUF_C_TYPE_INT64 &&
 		message_desc->fields[0].offset ==
-			offsetof(GetRandomBytesFullResponse, ret) &&
+			offsetof(RandValResponse, ret) &&
 		message_desc->fields[1].id == 2 &&
 		message_desc->fields[1].type == PROTOBUF_C_TYPE_BYTES &&
 		message_desc->fields[1].offset ==
-			offsetof(GetRandomBytesFullResponse, randval));
+			offsetof(RandValResponse, randval));
 }
 
 /* Write a base-128 varint, advancing *pos. Returns 0 or -EOVERFLOW. */

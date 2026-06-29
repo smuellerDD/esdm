@@ -27,10 +27,10 @@
 
 void esdm_rpc_set_write_wakeup_thresh(
 	PrivAccess_Service *service, const SetWriteWakeupThreshRequest *request,
-	SetWriteWakeupThreshResponse_Closure closure, void *closure_data)
+	RetResponse_Closure closure, void *closure_data)
 {
-	SetWriteWakeupThreshResponse response =
-		SET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
+	RetResponse response =
+		RET_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 

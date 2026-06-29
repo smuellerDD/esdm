@@ -27,10 +27,10 @@
 
 void esdm_rpc_set_min_reseed_secs(PrivAccess_Service *service,
 				  const SetMinReseedSecsRequest *request,
-				  SetMinReseedSecsResponse_Closure closure,
+				  RetResponse_Closure closure,
 				  void *closure_data)
 {
-	SetMinReseedSecsResponse response = SET_MIN_RESEED_SECS_RESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 

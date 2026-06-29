@@ -478,8 +478,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			 * allocation that a full unpack would incur. The receive
 			 * buffer (and thus the payload) is zeroized at out:.
 			 */
-			GetRandomBytesFullResponse resp =
-				GET_RANDOM_BYTES_FULL_RESPONSE__INIT;
+			RandValResponse resp =
+				RAND_VAL_RESPONSE__INIT;
 			const uint8_t *payload;
 			size_t payload_len;
 			int64_t retval;

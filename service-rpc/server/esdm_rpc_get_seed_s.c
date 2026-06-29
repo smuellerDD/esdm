@@ -33,9 +33,9 @@
 
 void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		       const GetSeedRequest *request,
-		       GetSeedResponse_Closure closure, void *closure_data)
+		       RandValResponse_Closure closure, void *closure_data)
 {
-	GetSeedResponse response = GET_SEED_RESPONSE__INIT;
+	RandValResponse response = RAND_VAL_RESPONSE__INIT;
 	uint64_t rndval[ESDM_RPC_MAX_DATA / sizeof(uint64_t)];
 	(void)service;
 

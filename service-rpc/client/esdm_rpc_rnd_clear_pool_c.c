@@ -33,7 +33,7 @@ struct esdm_rnd_clear_pool_buf {
 	int ret;
 };
 
-static void esdm_rpcc_rnd_clear_pool_cb(const RndClearPoolResponse *response,
+static void esdm_rpcc_rnd_clear_pool_cb(const RetResponse *response,
 					void *closure_data)
 {
 	struct esdm_rnd_clear_pool_buf *buffer =
@@ -46,7 +46,7 @@ static void esdm_rpcc_rnd_clear_pool_cb(const RndClearPoolResponse *response,
 DSO_PUBLIC
 int esdm_rpcc_rnd_clear_pool_int(void *int_data)
 {
-	RndClearPoolRequest msg = RND_CLEAR_POOL_REQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_rnd_clear_pool_buf buffer;
 	int ret = 0;

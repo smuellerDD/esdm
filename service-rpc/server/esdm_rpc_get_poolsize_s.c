@@ -23,15 +23,15 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_get_poolsize(UnprivAccess_Service *service,
-			   const GetPoolsizeRequest *request,
-			   GetPoolsizeResponse_Closure closure,
+			   const EmptyRequest *request,
+			   ValResponse_Closure closure,
 			   void *closure_data)
 {
-	GetPoolsizeResponse response = GET_POOLSIZE_RESPONSE__INIT;
+	ValResponse response = VAL_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 
-	response.poolsize = esdm_avail_poolsize_aux();
+	response.val = esdm_avail_poolsize_aux();
 	response.ret = 0;
 	closure(&response, closure_data);
 }

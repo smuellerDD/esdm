@@ -28,10 +28,10 @@
 
 void esdm_rpc_set_pkcs11_config(PrivAccess_Service *service,
 				const SetPkcs11ConfigRequest *request,
-				SetPkcs11ConfigResponse_Closure closure,
+				RetResponse_Closure closure,
 				void *closure_data)
 {
-	SetPkcs11ConfigResponse response = SET_PKCS11_CONFIG_RESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	int ret = 0;
 	(void)service;
 

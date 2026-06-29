@@ -37,7 +37,7 @@ struct esdm_get_seed_buf {
 	size_t buflen;
 };
 
-static void esdm_rpcc_get_seed_cb(const GetSeedResponse *response,
+static void esdm_rpcc_get_seed_cb(const RandValResponse *response,
 				  void *closure_data)
 {
 	struct esdm_get_seed_buf *buffer =

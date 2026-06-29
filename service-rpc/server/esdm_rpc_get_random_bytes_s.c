@@ -25,10 +25,10 @@
 
 void esdm_rpc_get_random_bytes(UnprivAccess_Service *service,
 			       const GetRandomBytesRequest *request,
-			       GetRandomBytesResponse_Closure closure,
+			       RandValResponse_Closure closure,
 			       void *closure_data)
 {
-	GetRandomBytesResponse response = GET_RANDOM_BYTES_RESPONSE__INIT;
+	RandValResponse response = RAND_VAL_RESPONSE__INIT;
 	uint8_t rndval[ESDM_RPC_MAX_DATA];
 	(void)service;
 

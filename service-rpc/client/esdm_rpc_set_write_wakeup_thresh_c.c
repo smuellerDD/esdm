@@ -33,7 +33,7 @@ struct esdm_set_write_wakeup_thresh_buf {
 };
 
 static void esdm_rpcc_set_write_wakeup_thresh_cb(
-	const SetWriteWakeupThreshResponse *response, void *closure_data)
+	const RetResponse *response, void *closure_data)
 {
 	struct esdm_set_write_wakeup_thresh_buf *buffer =
 		(struct esdm_set_write_wakeup_thresh_buf *)closure_data;

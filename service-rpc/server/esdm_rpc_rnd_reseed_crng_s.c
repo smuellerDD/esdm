@@ -26,11 +26,11 @@
 #include "priv_access.pb-c.h"
 
 void esdm_rpc_rnd_reseed_crng(PrivAccess_Service *service,
-			      const RndReseedCRNGRequest *request,
-			      RndReseedCRNGResponse_Closure closure,
+			      const EmptyRequest *request,
+			      RetResponse_Closure closure,
 			      void *closure_data)
 {
-	RndReseedCRNGResponse response = RND_RESEED_CRNGRESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 

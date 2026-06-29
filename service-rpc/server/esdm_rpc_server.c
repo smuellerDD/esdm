@@ -286,8 +286,8 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		 * payload_max, so the resulting message_length can never
 		 * exceed ESDM_RPC_MAX_INTERNAL_MSG_SIZE.
 		 */
-		const GetRandomBytesFullResponse *resp =
-			(const GetRandomBytesFullResponse *)message;
+		const RandValResponse *resp =
+			(const RandValResponse *)message;
 
 		ret = esdm_rpc_encode_bytes_response(payload_buf, payload_max,
 						     resp->ret,

@@ -27,9 +27,9 @@
 
 void esdm_rpc_write_data(UnprivAccess_Service *service,
 			 const WriteDataRequest *request,
-			 WriteDataResponse_Closure closure, void *closure_data)
+			 RetResponse_Closure closure, void *closure_data)
 {
-	WriteDataResponse response = WRITE_DATA_RESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	(void)service;
 
 	if (request == NULL || request->data.data == NULL) {

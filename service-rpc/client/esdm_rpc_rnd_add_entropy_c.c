@@ -33,7 +33,7 @@ struct esdm_rnd_add_entropy_buf {
 	int ret;
 };
 
-static void esdm_rpcc_rnd_add_entropy_cb(const RndAddEntropyResponse *response,
+static void esdm_rpcc_rnd_add_entropy_cb(const RetResponse *response,
 					 void *closure_data)
 {
 	struct esdm_rnd_add_entropy_buf *buffer =

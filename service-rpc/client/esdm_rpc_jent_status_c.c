@@ -34,7 +34,7 @@ struct esdm_get_jent_status_buf {
 	size_t buflen;
 };
 
-static void esdm_rpcc_jent_status_cb(const JentStatusResponse *response,
+static void esdm_rpcc_jent_status_cb(const StatusResponse *response,
 				     void *closure_data)
 {
 	struct esdm_get_jent_status_buf *buffer =
@@ -55,7 +55,7 @@ static void esdm_rpcc_jent_status_cb(const JentStatusResponse *response,
 DSO_PUBLIC
 int esdm_rpcc_jent_status_int(char *buf, size_t buflen, void *int_data)
 {
-	JentStatusRequest msg = JENT_STATUS_REQUEST__INIT;
+	StatusRequest msg = STATUS_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_jent_status_buf buffer = {
 		.ret = -ETIMEDOUT,

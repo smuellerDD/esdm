@@ -34,7 +34,7 @@ struct esdm_rnd_get_ent_cnt_buf {
 	unsigned int entcnt;
 };
 
-static void esdm_rpcc_rnd_get_ent_cnt_cb(const RndGetEntCntResponse *response,
+static void esdm_rpcc_rnd_get_ent_cnt_cb(const ValResponse *response,
 					 void *closure_data)
 {
 	struct esdm_rnd_get_ent_cnt_buf *buffer =
@@ -42,13 +42,13 @@ static void esdm_rpcc_rnd_get_ent_cnt_cb(const RndGetEntCntResponse *response,
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
-	buffer->entcnt = response->entcnt;
+	buffer->entcnt = response->val;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_rnd_get_ent_cnt_int(unsigned int *entcnt, void *int_data)
 {
-	RndGetEntCntRequest msg = RND_GET_ENT_CNT_REQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_rnd_get_ent_cnt_buf buffer;
 	int ret = 0;

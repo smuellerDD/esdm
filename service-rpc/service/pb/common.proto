@@ -1,0 +1,26 @@
+/*
+ * Message types shared between the privileged and unprivileged protocols.
+ *
+ * Many calls on both sockets take no parameters or return only a status code.
+ * To avoid one near-identical message definition per call, they share the two
+ * generic messages below, which are imported by both priv_access.proto and
+ * unpriv_access.proto.
+ */
+
+syntax = "proto3";
+
+/**
+ * @brief Request without parameters.
+ */
+message EmptyRequest {
+	/* No message */
+}
+
+/**
+ * @brief Response carrying only a return code.
+ *
+ * @param ret Return code (0 on success, < 0 on error)
+ */
+message RetResponse {
+	int32 ret = 1;
+}

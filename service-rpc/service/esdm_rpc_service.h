@@ -106,89 +106,89 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		     StatusResponse_Closure closure, void *closure_data);
 
 void esdm_rpc_is_fully_seeded(UnprivAccess_Service *service,
-			      const IsFullySeededRequest *request,
+			      const EmptyRequest *request,
 			      IsFullySeededResponse_Closure closure,
 			      void *closure_data);
 
 void esdm_rpc_get_ent_lvl(UnprivAccess_Service *service,
-			  const GetEntLvlRequest *request,
-			  GetEntLvlResponse_Closure closure,
+			  const EmptyRequest *request,
+			  ValResponse_Closure closure,
 			  void *closure_data);
 
 void esdm_rpc_get_random_bytes_full(UnprivAccess_Service *service,
-				    const GetRandomBytesFullRequest *request,
-				    GetRandomBytesFullResponse_Closure closure,
+				    const GetRandomBytesRequest *request,
+				    RandValResponse_Closure closure,
 				    void *closure_data);
 
 void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
-				  const GetRandomBytesPrRequest *request,
-				  GetRandomBytesPrResponse_Closure closure,
+				  const GetRandomBytesRequest *request,
+				  RandValResponse_Closure closure,
 				  void *closure_data);
 
 void esdm_rpc_get_random_bytes(UnprivAccess_Service *service,
 			       const GetRandomBytesRequest *request,
-			       GetRandomBytesResponse_Closure closure,
+			       RandValResponse_Closure closure,
 			       void *closure_data);
 
 void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		       const GetSeedRequest *request,
-		       GetSeedResponse_Closure closure, void *closure_data);
+		       RandValResponse_Closure closure, void *closure_data);
 
 void esdm_rpc_write_data(UnprivAccess_Service *service,
 			 const WriteDataRequest *request,
-			 WriteDataResponse_Closure closure, void *closure_data);
+			 RetResponse_Closure closure, void *closure_data);
 
 /* IOCTL implementations */
 void esdm_rpc_rnd_get_ent_cnt(UnprivAccess_Service *service,
-			      const RndGetEntCntRequest *request,
-			      RndGetEntCntResponse_Closure closure,
+			      const EmptyRequest *request,
+			      ValResponse_Closure closure,
 			      void *closure_data);
 void esdm_rpc_rnd_add_to_ent_cnt(PrivAccess_Service *service,
 				 const RndAddToEntCntRequest *request,
-				 RndAddToEntCntResponse_Closure closure,
+				 RetResponse_Closure closure,
 				 void *closure_data);
 void esdm_rpc_rnd_add_entropy(PrivAccess_Service *service,
 			      const RndAddEntropyRequest *request,
-			      RndAddEntropyResponse_Closure closure,
+			      RetResponse_Closure closure,
 			      void *closure_data);
 void esdm_rpc_rnd_clear_pool(PrivAccess_Service *service,
-			     const RndClearPoolRequest *request,
-			     RndClearPoolResponse_Closure closure,
+			     const EmptyRequest *request,
+			     RetResponse_Closure closure,
 			     void *closure_data);
 void esdm_rpc_rnd_reseed_crng(PrivAccess_Service *service,
-			      const RndReseedCRNGRequest *request,
-			      RndReseedCRNGResponse_Closure closure,
+			      const EmptyRequest *request,
+			      RetResponse_Closure closure,
 			      void *closure_data);
 
 /* /proc implementations */
 void esdm_rpc_get_poolsize(UnprivAccess_Service *service,
-			   const GetPoolsizeRequest *request,
-			   GetPoolsizeResponse_Closure closure,
+			   const EmptyRequest *request,
+			   ValResponse_Closure closure,
 			   void *closure_data);
 void esdm_rpc_get_write_wakeup_thresh(
 	UnprivAccess_Service *service,
-	const GetWriteWakeupThreshRequest *request,
-	GetWriteWakeupThreshResponse_Closure closure, void *closure_data);
+	const EmptyRequest *request,
+	ValResponse_Closure closure, void *closure_data);
 void esdm_rpc_set_write_wakeup_thresh(
 	PrivAccess_Service *service, const SetWriteWakeupThreshRequest *request,
-	SetWriteWakeupThreshResponse_Closure closure, void *closure_data);
+	RetResponse_Closure closure, void *closure_data);
 void esdm_rpc_get_min_reseed_secs(UnprivAccess_Service *service,
-				  const GetMinReseedSecsRequest *request,
-				  GetMinReseedSecsResponse_Closure closure,
+				  const EmptyRequest *request,
+				  ValResponse_Closure closure,
 				  void *closure_data);
 void esdm_rpc_set_min_reseed_secs(PrivAccess_Service *service,
 				  const SetMinReseedSecsRequest *request,
-				  SetMinReseedSecsResponse_Closure closure,
+				  RetResponse_Closure closure,
 				  void *closure_data);
 
 /* entropy source specific implementations */
 void esdm_rpc_jent_status(UnprivAccess_Service *service,
-			  const JentStatusRequest *request,
-			  JentStatusResponse_Closure closure,
+			  const StatusRequest *request,
+			  StatusResponse_Closure closure,
 			  void *closure_data);
 void esdm_rpc_set_pkcs11_config(PrivAccess_Service *service,
 				const SetPkcs11ConfigRequest *request,
-				SetPkcs11ConfigResponse_Closure closure,
+				RetResponse_Closure closure,
 				void *closure_data);
 
 /******************************************************************************

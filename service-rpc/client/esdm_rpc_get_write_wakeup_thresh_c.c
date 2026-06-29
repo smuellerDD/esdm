@@ -35,21 +35,21 @@ struct esdm_write_wakeup_thresh_buf {
 };
 
 static void esdm_rpcc_get_write_wakeup_thresh_cb(
-	const GetWriteWakeupThreshResponse *response, void *closure_data)
+	const ValResponse *response, void *closure_data)
 {
 	struct esdm_write_wakeup_thresh_buf *buffer =
 		(struct esdm_write_wakeup_thresh_buf *)closure_data;
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
-	buffer->wakeup = response->wakeup;
+	buffer->wakeup = response->val;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_get_write_wakeup_thresh_int(unsigned int *write_wakeup_thresh,
 					  void *int_data)
 {
-	GetWriteWakeupThreshRequest msg = GET_WRITE_WAKEUP_THRESH_REQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_write_wakeup_thresh_buf buffer;
 	int ret = 0;

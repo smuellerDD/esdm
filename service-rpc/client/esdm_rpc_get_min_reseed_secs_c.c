@@ -35,7 +35,7 @@ struct esdm_min_reseed_secs_buf {
 };
 
 static void
-esdm_rpcc_get_min_reseed_secs_cb(const GetMinReseedSecsResponse *response,
+esdm_rpcc_get_min_reseed_secs_cb(const ValResponse *response,
 				 void *closure_data)
 {
 	struct esdm_min_reseed_secs_buf *buffer =
@@ -43,13 +43,13 @@ esdm_rpcc_get_min_reseed_secs_cb(const GetMinReseedSecsResponse *response,
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
-	buffer->seconds = response->seconds;
+	buffer->seconds = response->val;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_get_min_reseed_secs_int(unsigned int *seconds, void *int_data)
 {
-	GetMinReseedSecsRequest msg = GET_MIN_RESEED_SECS_REQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_min_reseed_secs_buf buffer;
 	int ret = 0;
