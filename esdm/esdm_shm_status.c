@@ -326,7 +326,15 @@ static int esdm_shm_status_create_shm(void)
 		return -errsv;
 	}
 	esdm_shm_status = tmp;
-	esdm_shm_status->version = ESDM_SHM_STATUS_VERSION;
+	/*
+	 * Mark the segment not-yet-ready until esdm_shm_status_init() has
+	 * populated info/infolen/unpriv_threads. Readers gate on
+	 * version == ESDM_SHM_STATUS_VERSION; publishing the version here, before
+	 * those fields are filled (and possibly over a stale segment left by a
+	 * previous daemon), would expose torn/stale status to readers.
+	 */
+	esdm_shm_status->version = 0;
+	__sync_synchronize();
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
 		    "ESDM shared memory segment initialized\n");
@@ -365,6 +373,14 @@ int esdm_shm_status_init(void)
 	esdm_status(esdm_shm_status->info, sizeof(esdm_shm_status->info));
 	esdm_shm_status->infolen = strlen(esdm_shm_status->info);
 	esdm_shm_status->unpriv_threads = esdm_config_online_nodes();
+
+	/*
+	 * Publish the version last, after a barrier, so a reader that observes
+	 * the ready version is guaranteed to also see the populated
+	 * info/infolen/unpriv_threads written above.
+	 */
+	__sync_synchronize();
+	esdm_shm_status->version = ESDM_SHM_STATUS_VERSION;
 
 	esdm_shm_status_set_operational(esdm_state_operational());
 	esdm_shm_status_set_need_entropy();
