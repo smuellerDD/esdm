@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <time.h>
 
+#include "atomic_bool.h"
 #include "bool.h"
 #include "config.h"
 #include "esdm.h"
@@ -55,11 +56,16 @@ struct esdm_drng {
 	atomic_t request_bits_since_fully_seeded;
 
 	struct timespec last_seeded; /* Last time it was seeded */
-	bool fully_seeded; /* Is DRNG fully seeded? */
-	bool force_reseed; /* Force a reseed */
-	bool initiated; /* Was DRNG initiated once? (used for pr drng) */
+	/*
+	 * These flags have no single owning lock: they are touched both under
+	 * drng->lock and from lock-free fast paths (must_reseed, force_reseed,
+	 * unset_fully_seeded), so they are atomic to avoid torn reads / C11 data
+	 * races, mirroring the esdm_state flags in esdm_es_mgr.c.
+	 */
+	atomic_bool_t fully_seeded; /* Is DRNG fully seeded? */
+	atomic_bool_t force_reseed; /* Force a reseed */
+	atomic_bool_t initiated; /* Was DRNG initiated once? (used for pr drng) */
 
-	mutex_t hash_lock; /* Lock hash_cb replacement */
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
 	mutex_w_t lock; /* Non-atomic DRNG operation */
 };
@@ -69,8 +75,9 @@ struct esdm_drng {
 	.requests = ATOMIC_INIT(ESDM_DRNG_RESEED_THRESH),                      \
 	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
 	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
-	.last_seeded = { 0 }, .fully_seeded = false, .force_reseed = true,     \
-	.initiated = false, .hash_lock = MUTEX_UNLOCKED
+	.last_seeded = { 0 }, .fully_seeded = ATOMIC_BOOL_INIT(false),        \
+	.force_reseed = ATOMIC_BOOL_INIT(true),                               \
+	.initiated = ATOMIC_BOOL_INIT(false)
 
 struct esdm_drng *esdm_drng_init_instance(void);
 struct esdm_drng *esdm_drng_node_instance(void);
