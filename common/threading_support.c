@@ -125,9 +125,22 @@ static inline bool thread_is_special(struct thread_ctx *tctx)
 
 static inline void thread_block(pthread_cond_t *cv, pthread_mutex_t *lock)
 {
-	/* Wait */
+	struct timespec ts;
+
+	/*
+	 * Callers evaluate their wake-up predicate without holding @lock, so a
+	 * completion broadcast can fire between the predicate check and the
+	 * wait below and be lost. Bound the sleep so the caller re-checks its
+	 * predicate instead of sleeping indefinitely on a missed wake-up.
+	 */
 	pthread_mutex_lock(lock);
-	pthread_cond_wait(cv, lock);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	ts.tv_nsec += 100 * 1000 * 1000;
+	if (ts.tv_nsec >= 1000000000L) {
+		ts.tv_sec++;
+		ts.tv_nsec -= 1000000000L;
+	}
+	pthread_cond_timedwait(cv, lock, &ts);
 	pthread_mutex_unlock(lock);
 }
 
@@ -157,12 +170,23 @@ static inline void thread_cleanup_full(struct thread_ctx *tctx)
 	atomic_bool_set_false(&tctx->thread_pending);
 	tctx->scheduled = false;
 	tctx->ret_ancestor = 0;
-	mutex_w_destroy(&tctx->inuse);
+	/*
+	 * Deliberately do NOT destroy tctx->inuse here: the mutex lives in
+	 * the static threads[] array and is initialized exactly once in
+	 * thread_init(). This function runs both in the exiting worker and
+	 * again in thread_wait_all/thread_cancel after the join (double
+	 * destroy), thread_schedule trylocks the mutex when reusing the slot
+	 * without any re-initialization, and a self-destroying worker races
+	 * with concurrent trylocks. The pool is restartable after
+	 * thread_wait_all, so the mutex must stay valid for the process
+	 * lifetime.
+	 */
 }
 
 int thread_init(uint32_t groups)
 {
 	static uint32_t thread_initialized = 0;
+	pthread_condattr_t cattr;
 	unsigned int i;
 	int ret;
 
@@ -186,11 +210,24 @@ int thread_init(uint32_t groups)
 	CKINT(pthread_attr_init(&pthread_attr));
 	memset(threads, 0, sizeof(threads));
 
+	/*
+	 * Arm the condition variables used with thread_block()'s timed wait
+	 * against CLOCK_MONOTONIC. thread_block() computes the absolute deadline
+	 * from clock_gettime() + a relative offset, so a wall-clock step (NTP /
+	 * settimeofday) must not be able to stretch the bound into a long hang.
+	 */
+	CKINT(pthread_condattr_init(&cattr));
+	CKINT(pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC));
+	pthread_cond_init(&thread_schedule_cv, &cattr);
+	pthread_cond_init(&thread_wait_cv, &cattr);
+
 	for (i = 0; i < THREADING_REALLY_ALL_THREADS; i++) {
 		atomic_bool_set_false(&threads[i].thread_pending);
 		mutex_w_init(&threads[i].inuse, false, 0);
 		atomic_bool_set_false(&threads[i].shutdown);
+		pthread_cond_init(&threads[i].worker_cv, &cattr);
 	}
+	pthread_condattr_destroy(&cattr);
 
 	threads_groups = groups;
 	threads_per_threadgroup = THREADING_MAX_THREADS / threads_groups;
@@ -213,6 +250,13 @@ out:
 static void *thread_worker(void *arg)
 {
 	struct thread_ctx *tctx = (struct thread_ctx *)arg;
+
+	/*
+	 * pthread_setcanceltype() only affects the calling thread, so it must
+	 * be invoked here in the worker and not in thread_create() (where it
+	 * would mark the creator async-cancelable instead).
+	 */
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
 	if (!thread_is_special(tctx)) {
 		sigset_t block, old;
@@ -276,16 +320,20 @@ static int thread_create(struct thread_ctx *tctx, unsigned int slot)
 
 	tctx->thread_num = slot;
 	tctx->data = NULL;
-	atomic_bool_set_true(&tctx->thread_pending);
 
 	ret = -pthread_create(&tctx->thread_id, &pthread_attr, &thread_worker,
 			      tctx);
 	if (ret)
 		goto err;
 
-	ret = -pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-	if (ret)
-		goto err;
+	/*
+	 * Publish thread_pending only after pthread_create has written a valid
+	 * thread_id. thread_dirty() readers (thread_wait_all / thread_cancel)
+	 * gate their pthread_join/pthread_cancel solely on this flag, so setting
+	 * it before the create let them operate on an uninitialized/stale
+	 * thread_id when a create was still in flight.
+	 */
+	atomic_bool_set_true(&tctx->thread_pending);
 
 	return 0;
 
@@ -531,8 +579,17 @@ int thread_wait_all(bool system_threads)
 
 	/* Ensure that no new thread is spawned. */
 	for (i = 0; i < upper; i++) {
+		/*
+		 * Publish the shutdown flag under the worker's inuse lock:
+		 * an idle worker checks the flag and enters its condvar wait
+		 * while holding inuse, so setting + broadcasting without the
+		 * lock can fire in that window and the wake-up is lost,
+		 * hanging the pthread_join below.
+		 */
+		mutex_w_lock(&threads[i].inuse);
 		atomic_bool_set_true(&threads[i].shutdown);
 		pthread_cond_broadcast(&threads[i].worker_cv);
+		mutex_w_unlock(&threads[i].inuse);
 	}
 	pthread_cond_broadcast(&thread_wait_cv);
 
@@ -570,10 +627,18 @@ static void thread_cancel(bool system_threads)
 
 	atomic_bool_set_true(&threads_in_cancel);
 	mutex_w_lock(&threads_cleanup);
-	/* Ensure that no new thread is spawned. */
+	/*
+	 * Ensure that no new thread is spawned.
+	 *
+	 * Do not clear threads[i].start_routine here: it is protected by the
+	 * per-slot inuse lock (which we intentionally do not take on this kill
+	 * path), and a running worker dereferences it under that lock. An
+	 * unlocked write races that dereference and can crash the worker. The
+	 * shutdown flag plus the pthread_cancel below already terminate every
+	 * worker, so the write is redundant as well as unsafe.
+	 */
 	for (i = 0; i < upper; i++) {
 		atomic_bool_set_true(&threads[i].shutdown);
-		threads[i].start_routine = NULL;
 		pthread_cond_broadcast(&threads[i].worker_cv);
 	}
 	pthread_cond_broadcast(&thread_wait_cv);
@@ -637,7 +702,16 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 	pthread_t tids[num];
 	bool spawned[num];
 	char *arg_base = args;
+	int oldstate;
 	size_t i;
+
+	/*
+	 * The caller must outlive its batch: the tasks write through pointers
+	 * into the caller's stack frame, and pthread_join is a cancellation
+	 * point. A thread_cancel hitting the caller mid-join would reclaim
+	 * that frame while children invisible to thread_cancel still use it.
+	 */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
 
 	for (i = 0; i < num; i++) {
 		void *arg = arg_base + i * arg_stride;
@@ -655,6 +729,8 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 		if (spawned[i])
 			pthread_join(tids[i], NULL);
 	}
+
+	pthread_setcancelstate(oldstate, NULL);
 }
 
 DSO_PUBLIC
