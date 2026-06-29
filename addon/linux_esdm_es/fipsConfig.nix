@@ -25,7 +25,6 @@ in
       with lib.kernel;
       {
         CRYPTO_FIPS = yes;
-        CRYPTO_DRBG = lib.mkForce yes;
         DEBUG_KERNEL = yes;
         MODULE_SIG = lib.mkForce yes;
         MODULE_SIG_ALL = yes;
