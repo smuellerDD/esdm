@@ -581,6 +581,18 @@ static void esdm_set_operational(void)
 		esdm_shm_status_set_operational(true);
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			    "ESDM fully operational\n");
+
+		/*
+		 * Opt-in startup marker for test harnesses: when the
+		 * ESDM_STARTUP_MARKER environment variable is set, emit a
+		 * fixed, greppable line to stdout the moment the RNG is
+		 * correctly initialized (init DRNG fully seeded -> operational).
+		 * Inert in production (no env var set).
+		 */
+		if (getenv("ESDM_STARTUP_MARKER")) {
+			fprintf(stdout, "ESDM_RNG_OPERATIONAL\n");
+			fflush(stdout);
+		}
 	}
 }
 
