@@ -81,6 +81,14 @@ int esdm_rpc_proto_get_descriptor(const ProtobufCService *service,
 void *esdm_rpc_alloc(void *allocator_data, size_t size);
 void esdm_rpc_free(void *allocator_data, void *data);
 
+/*
+ * Decode an int64 "ret" (field 1) + bytes "randval" (field 2) response in
+ * place. On success *payload points into data (no copy/allocation).
+ */
+int esdm_rpc_decode_bytes_response(const uint8_t *data, size_t data_len,
+				   int64_t *ret_val, const uint8_t **payload,
+				   size_t *payload_len);
+
 #ifdef __cplusplus
 }
 #endif
