@@ -33,7 +33,7 @@ struct esdm_set_min_reseed_secs_buf {
 };
 
 static void
-esdm_rpcc_set_min_reseed_secs_cb(const SetMinReseedSecsResponse *response,
+esdm_rpcc_set_min_reseed_secs_cb(const RetResponse *response,
 				 void *closure_data)
 {
 	struct esdm_set_min_reseed_secs_buf *buffer =

@@ -22,7 +22,7 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_is_fully_seeded(UnprivAccess_Service *service,
-			      const IsFullySeededRequest *request,
+			      const EmptyRequest *request,
 			      IsFullySeededResponse_Closure closure,
 			      void *closure_data)
 {

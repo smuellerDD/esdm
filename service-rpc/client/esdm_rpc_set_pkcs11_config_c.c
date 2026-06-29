@@ -33,7 +33,7 @@ struct esdm_set_pkcs11_config_buf {
 };
 
 static void
-esdm_rpcc_set_pkcs11_config_cb(const SetPkcs11ConfigResponse *response,
+esdm_rpcc_set_pkcs11_config_cb(const RetResponse *response,
 			       void *closure_data)
 {
 	struct esdm_set_pkcs11_config_buf *buffer =

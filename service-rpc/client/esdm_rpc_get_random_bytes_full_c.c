@@ -38,7 +38,7 @@ struct esdm_get_random_bytes_full_buf {
 };
 
 static void
-esdm_rpcc_get_random_bytes_full_cb(const GetRandomBytesFullResponse *response,
+esdm_rpcc_get_random_bytes_full_cb(const RandValResponse *response,
 				   void *closure_data)
 {
 	struct esdm_get_random_bytes_full_buf *buffer =
@@ -66,7 +66,7 @@ DSO_PUBLIC
 ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 					    void *int_data)
 {
-	GetRandomBytesFullRequest msg = GET_RANDOM_BYTES_FULL_REQUEST__INIT;
+	GetRandomBytesRequest msg = GET_RANDOM_BYTES_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_random_bytes_full_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;

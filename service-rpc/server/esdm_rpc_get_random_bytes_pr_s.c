@@ -31,11 +31,11 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
-				  const GetRandomBytesPrRequest *request,
-				  GetRandomBytesPrResponse_Closure closure,
+				  const GetRandomBytesRequest *request,
+				  RandValResponse_Closure closure,
 				  void *closure_data)
 {
-	GetRandomBytesPrResponse response = GET_RANDOM_BYTES_PR_RESPONSE__INIT;
+	RandValResponse response = RAND_VAL_RESPONSE__INIT;
 	uint8_t rndval[ESDM_RPC_MAX_DATA];
 	(void)service;
 

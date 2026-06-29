@@ -52,51 +52,6 @@ void   rnd_add_to_ent_cnt_request__free_unpacked
   assert(message->base.descriptor == &rnd_add_to_ent_cnt_request__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-void   rnd_add_to_ent_cnt_response__init
-                     (RndAddToEntCntResponse         *message)
-{
-  static const RndAddToEntCntResponse init_value = RND_ADD_TO_ENT_CNT_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t rnd_add_to_ent_cnt_response__get_packed_size
-                     (const RndAddToEntCntResponse *message)
-{
-  assert(message->base.descriptor == &rnd_add_to_ent_cnt_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t rnd_add_to_ent_cnt_response__pack
-                     (const RndAddToEntCntResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &rnd_add_to_ent_cnt_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t rnd_add_to_ent_cnt_response__pack_to_buffer
-                     (const RndAddToEntCntResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &rnd_add_to_ent_cnt_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-RndAddToEntCntResponse *
-       rnd_add_to_ent_cnt_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (RndAddToEntCntResponse *)
-     protobuf_c_message_unpack (&rnd_add_to_ent_cnt_response__descriptor,
-                                allocator, len, data);
-}
-void   rnd_add_to_ent_cnt_response__free_unpacked
-                     (RndAddToEntCntResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &rnd_add_to_ent_cnt_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
 void   rnd_add_entropy_request__init
                      (RndAddEntropyRequest         *message)
 {
@@ -140,231 +95,6 @@ void   rnd_add_entropy_request__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &rnd_add_entropy_request__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   rnd_add_entropy_response__init
-                     (RndAddEntropyResponse         *message)
-{
-  static const RndAddEntropyResponse init_value = RND_ADD_ENTROPY_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t rnd_add_entropy_response__get_packed_size
-                     (const RndAddEntropyResponse *message)
-{
-  assert(message->base.descriptor == &rnd_add_entropy_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t rnd_add_entropy_response__pack
-                     (const RndAddEntropyResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &rnd_add_entropy_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t rnd_add_entropy_response__pack_to_buffer
-                     (const RndAddEntropyResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &rnd_add_entropy_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-RndAddEntropyResponse *
-       rnd_add_entropy_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (RndAddEntropyResponse *)
-     protobuf_c_message_unpack (&rnd_add_entropy_response__descriptor,
-                                allocator, len, data);
-}
-void   rnd_add_entropy_response__free_unpacked
-                     (RndAddEntropyResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &rnd_add_entropy_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   rnd_clear_pool_request__init
-                     (RndClearPoolRequest         *message)
-{
-  static const RndClearPoolRequest init_value = RND_CLEAR_POOL_REQUEST__INIT;
-  *message = init_value;
-}
-size_t rnd_clear_pool_request__get_packed_size
-                     (const RndClearPoolRequest *message)
-{
-  assert(message->base.descriptor == &rnd_clear_pool_request__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t rnd_clear_pool_request__pack
-                     (const RndClearPoolRequest *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &rnd_clear_pool_request__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t rnd_clear_pool_request__pack_to_buffer
-                     (const RndClearPoolRequest *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &rnd_clear_pool_request__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-RndClearPoolRequest *
-       rnd_clear_pool_request__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (RndClearPoolRequest *)
-     protobuf_c_message_unpack (&rnd_clear_pool_request__descriptor,
-                                allocator, len, data);
-}
-void   rnd_clear_pool_request__free_unpacked
-                     (RndClearPoolRequest *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &rnd_clear_pool_request__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   rnd_clear_pool_response__init
-                     (RndClearPoolResponse         *message)
-{
-  static const RndClearPoolResponse init_value = RND_CLEAR_POOL_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t rnd_clear_pool_response__get_packed_size
-                     (const RndClearPoolResponse *message)
-{
-  assert(message->base.descriptor == &rnd_clear_pool_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t rnd_clear_pool_response__pack
-                     (const RndClearPoolResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &rnd_clear_pool_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t rnd_clear_pool_response__pack_to_buffer
-                     (const RndClearPoolResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &rnd_clear_pool_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-RndClearPoolResponse *
-       rnd_clear_pool_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (RndClearPoolResponse *)
-     protobuf_c_message_unpack (&rnd_clear_pool_response__descriptor,
-                                allocator, len, data);
-}
-void   rnd_clear_pool_response__free_unpacked
-                     (RndClearPoolResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &rnd_clear_pool_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   rnd_reseed_crngrequest__init
-                     (RndReseedCRNGRequest         *message)
-{
-  static const RndReseedCRNGRequest init_value = RND_RESEED_CRNGREQUEST__INIT;
-  *message = init_value;
-}
-size_t rnd_reseed_crngrequest__get_packed_size
-                     (const RndReseedCRNGRequest *message)
-{
-  assert(message->base.descriptor == &rnd_reseed_crngrequest__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t rnd_reseed_crngrequest__pack
-                     (const RndReseedCRNGRequest *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &rnd_reseed_crngrequest__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t rnd_reseed_crngrequest__pack_to_buffer
-                     (const RndReseedCRNGRequest *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &rnd_reseed_crngrequest__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-RndReseedCRNGRequest *
-       rnd_reseed_crngrequest__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (RndReseedCRNGRequest *)
-     protobuf_c_message_unpack (&rnd_reseed_crngrequest__descriptor,
-                                allocator, len, data);
-}
-void   rnd_reseed_crngrequest__free_unpacked
-                     (RndReseedCRNGRequest *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &rnd_reseed_crngrequest__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   rnd_reseed_crngresponse__init
-                     (RndReseedCRNGResponse         *message)
-{
-  static const RndReseedCRNGResponse init_value = RND_RESEED_CRNGRESPONSE__INIT;
-  *message = init_value;
-}
-size_t rnd_reseed_crngresponse__get_packed_size
-                     (const RndReseedCRNGResponse *message)
-{
-  assert(message->base.descriptor == &rnd_reseed_crngresponse__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t rnd_reseed_crngresponse__pack
-                     (const RndReseedCRNGResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &rnd_reseed_crngresponse__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t rnd_reseed_crngresponse__pack_to_buffer
-                     (const RndReseedCRNGResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &rnd_reseed_crngresponse__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-RndReseedCRNGResponse *
-       rnd_reseed_crngresponse__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (RndReseedCRNGResponse *)
-     protobuf_c_message_unpack (&rnd_reseed_crngresponse__descriptor,
-                                allocator, len, data);
-}
-void   rnd_reseed_crngresponse__free_unpacked
-                     (RndReseedCRNGResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &rnd_reseed_crngresponse__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   set_write_wakeup_thresh_request__init
@@ -412,51 +142,6 @@ void   set_write_wakeup_thresh_request__free_unpacked
   assert(message->base.descriptor == &set_write_wakeup_thresh_request__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-void   set_write_wakeup_thresh_response__init
-                     (SetWriteWakeupThreshResponse         *message)
-{
-  static const SetWriteWakeupThreshResponse init_value = SET_WRITE_WAKEUP_THRESH_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t set_write_wakeup_thresh_response__get_packed_size
-                     (const SetWriteWakeupThreshResponse *message)
-{
-  assert(message->base.descriptor == &set_write_wakeup_thresh_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t set_write_wakeup_thresh_response__pack
-                     (const SetWriteWakeupThreshResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &set_write_wakeup_thresh_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t set_write_wakeup_thresh_response__pack_to_buffer
-                     (const SetWriteWakeupThreshResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &set_write_wakeup_thresh_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-SetWriteWakeupThreshResponse *
-       set_write_wakeup_thresh_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (SetWriteWakeupThreshResponse *)
-     protobuf_c_message_unpack (&set_write_wakeup_thresh_response__descriptor,
-                                allocator, len, data);
-}
-void   set_write_wakeup_thresh_response__free_unpacked
-                     (SetWriteWakeupThreshResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &set_write_wakeup_thresh_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
 void   set_min_reseed_secs_request__init
                      (SetMinReseedSecsRequest         *message)
 {
@@ -500,51 +185,6 @@ void   set_min_reseed_secs_request__free_unpacked
   if(!message)
     return;
   assert(message->base.descriptor == &set_min_reseed_secs_request__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
-void   set_min_reseed_secs_response__init
-                     (SetMinReseedSecsResponse         *message)
-{
-  static const SetMinReseedSecsResponse init_value = SET_MIN_RESEED_SECS_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t set_min_reseed_secs_response__get_packed_size
-                     (const SetMinReseedSecsResponse *message)
-{
-  assert(message->base.descriptor == &set_min_reseed_secs_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t set_min_reseed_secs_response__pack
-                     (const SetMinReseedSecsResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &set_min_reseed_secs_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t set_min_reseed_secs_response__pack_to_buffer
-                     (const SetMinReseedSecsResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &set_min_reseed_secs_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-SetMinReseedSecsResponse *
-       set_min_reseed_secs_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (SetMinReseedSecsResponse *)
-     protobuf_c_message_unpack (&set_min_reseed_secs_response__descriptor,
-                                allocator, len, data);
-}
-void   set_min_reseed_secs_response__free_unpacked
-                     (SetMinReseedSecsResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &set_min_reseed_secs_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
 void   set_pkcs11_config_request__init
@@ -592,51 +232,6 @@ void   set_pkcs11_config_request__free_unpacked
   assert(message->base.descriptor == &set_pkcs11_config_request__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-void   set_pkcs11_config_response__init
-                     (SetPkcs11ConfigResponse         *message)
-{
-  static const SetPkcs11ConfigResponse init_value = SET_PKCS11_CONFIG_RESPONSE__INIT;
-  *message = init_value;
-}
-size_t set_pkcs11_config_response__get_packed_size
-                     (const SetPkcs11ConfigResponse *message)
-{
-  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
-  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
-}
-size_t set_pkcs11_config_response__pack
-                     (const SetPkcs11ConfigResponse *message,
-                      uint8_t       *out)
-{
-  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
-  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
-}
-size_t set_pkcs11_config_response__pack_to_buffer
-                     (const SetPkcs11ConfigResponse *message,
-                      ProtobufCBuffer *buffer)
-{
-  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
-  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
-}
-SetPkcs11ConfigResponse *
-       set_pkcs11_config_response__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data)
-{
-  return (SetPkcs11ConfigResponse *)
-     protobuf_c_message_unpack (&set_pkcs11_config_response__descriptor,
-                                allocator, len, data);
-}
-void   set_pkcs11_config_response__free_unpacked
-                     (SetPkcs11ConfigResponse *message,
-                      ProtobufCAllocator *allocator)
-{
-  if(!message)
-    return;
-  assert(message->base.descriptor == &set_pkcs11_config_response__descriptor);
-  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
-}
 static const ProtobufCFieldDescriptor rnd_add_to_ent_cnt_request__field_descriptors[1] =
 {
   {
@@ -673,44 +268,6 @@ const ProtobufCMessageDescriptor rnd_add_to_ent_cnt_request__descriptor =
   rnd_add_to_ent_cnt_request__field_indices_by_name,
   1,  rnd_add_to_ent_cnt_request__number_ranges,
   (ProtobufCMessageInit) rnd_add_to_ent_cnt_request__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor rnd_add_to_ent_cnt_response__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(RndAddToEntCntResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned rnd_add_to_ent_cnt_response__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange rnd_add_to_ent_cnt_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor rnd_add_to_ent_cnt_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "RndAddToEntCntResponse",
-  "RndAddToEntCntResponse",
-  "RndAddToEntCntResponse",
-  "",
-  sizeof(RndAddToEntCntResponse),
-  1,
-  rnd_add_to_ent_cnt_response__field_descriptors,
-  rnd_add_to_ent_cnt_response__field_indices_by_name,
-  1,  rnd_add_to_ent_cnt_response__number_ranges,
-  (ProtobufCMessageInit) rnd_add_to_ent_cnt_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor rnd_add_entropy_request__field_descriptors[2] =
@@ -764,156 +321,6 @@ const ProtobufCMessageDescriptor rnd_add_entropy_request__descriptor =
   (ProtobufCMessageInit) rnd_add_entropy_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor rnd_add_entropy_response__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(RndAddEntropyResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned rnd_add_entropy_response__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange rnd_add_entropy_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor rnd_add_entropy_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "RndAddEntropyResponse",
-  "RndAddEntropyResponse",
-  "RndAddEntropyResponse",
-  "",
-  sizeof(RndAddEntropyResponse),
-  1,
-  rnd_add_entropy_response__field_descriptors,
-  rnd_add_entropy_response__field_indices_by_name,
-  1,  rnd_add_entropy_response__number_ranges,
-  (ProtobufCMessageInit) rnd_add_entropy_response__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-#define rnd_clear_pool_request__field_descriptors NULL
-#define rnd_clear_pool_request__field_indices_by_name NULL
-#define rnd_clear_pool_request__number_ranges NULL
-const ProtobufCMessageDescriptor rnd_clear_pool_request__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "RndClearPoolRequest",
-  "RndClearPoolRequest",
-  "RndClearPoolRequest",
-  "",
-  sizeof(RndClearPoolRequest),
-  0,
-  rnd_clear_pool_request__field_descriptors,
-  rnd_clear_pool_request__field_indices_by_name,
-  0,  rnd_clear_pool_request__number_ranges,
-  (ProtobufCMessageInit) rnd_clear_pool_request__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor rnd_clear_pool_response__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(RndClearPoolResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned rnd_clear_pool_response__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange rnd_clear_pool_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor rnd_clear_pool_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "RndClearPoolResponse",
-  "RndClearPoolResponse",
-  "RndClearPoolResponse",
-  "",
-  sizeof(RndClearPoolResponse),
-  1,
-  rnd_clear_pool_response__field_descriptors,
-  rnd_clear_pool_response__field_indices_by_name,
-  1,  rnd_clear_pool_response__number_ranges,
-  (ProtobufCMessageInit) rnd_clear_pool_response__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-#define rnd_reseed_crngrequest__field_descriptors NULL
-#define rnd_reseed_crngrequest__field_indices_by_name NULL
-#define rnd_reseed_crngrequest__number_ranges NULL
-const ProtobufCMessageDescriptor rnd_reseed_crngrequest__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "RndReseedCRNGRequest",
-  "RndReseedCRNGRequest",
-  "RndReseedCRNGRequest",
-  "",
-  sizeof(RndReseedCRNGRequest),
-  0,
-  rnd_reseed_crngrequest__field_descriptors,
-  rnd_reseed_crngrequest__field_indices_by_name,
-  0,  rnd_reseed_crngrequest__number_ranges,
-  (ProtobufCMessageInit) rnd_reseed_crngrequest__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor rnd_reseed_crngresponse__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(RndReseedCRNGResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned rnd_reseed_crngresponse__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange rnd_reseed_crngresponse__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor rnd_reseed_crngresponse__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "RndReseedCRNGResponse",
-  "RndReseedCRNGResponse",
-  "RndReseedCRNGResponse",
-  "",
-  sizeof(RndReseedCRNGResponse),
-  1,
-  rnd_reseed_crngresponse__field_descriptors,
-  rnd_reseed_crngresponse__field_indices_by_name,
-  1,  rnd_reseed_crngresponse__number_ranges,
-  (ProtobufCMessageInit) rnd_reseed_crngresponse__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
 static const ProtobufCFieldDescriptor set_write_wakeup_thresh_request__field_descriptors[1] =
 {
   {
@@ -952,44 +359,6 @@ const ProtobufCMessageDescriptor set_write_wakeup_thresh_request__descriptor =
   (ProtobufCMessageInit) set_write_wakeup_thresh_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor set_write_wakeup_thresh_response__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(SetWriteWakeupThreshResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned set_write_wakeup_thresh_response__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange set_write_wakeup_thresh_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor set_write_wakeup_thresh_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "SetWriteWakeupThreshResponse",
-  "SetWriteWakeupThreshResponse",
-  "SetWriteWakeupThreshResponse",
-  "",
-  sizeof(SetWriteWakeupThreshResponse),
-  1,
-  set_write_wakeup_thresh_response__field_descriptors,
-  set_write_wakeup_thresh_response__field_indices_by_name,
-  1,  set_write_wakeup_thresh_response__number_ranges,
-  (ProtobufCMessageInit) set_write_wakeup_thresh_response__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
 static const ProtobufCFieldDescriptor set_min_reseed_secs_request__field_descriptors[1] =
 {
   {
@@ -1026,44 +395,6 @@ const ProtobufCMessageDescriptor set_min_reseed_secs_request__descriptor =
   set_min_reseed_secs_request__field_indices_by_name,
   1,  set_min_reseed_secs_request__number_ranges,
   (ProtobufCMessageInit) set_min_reseed_secs_request__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
-static const ProtobufCFieldDescriptor set_min_reseed_secs_response__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(SetMinReseedSecsResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned set_min_reseed_secs_response__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange set_min_reseed_secs_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor set_min_reseed_secs_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "SetMinReseedSecsResponse",
-  "SetMinReseedSecsResponse",
-  "SetMinReseedSecsResponse",
-  "",
-  sizeof(SetMinReseedSecsResponse),
-  1,
-  set_min_reseed_secs_response__field_descriptors,
-  set_min_reseed_secs_response__field_indices_by_name,
-  1,  set_min_reseed_secs_response__number_ranges,
-  (ProtobufCMessageInit) set_min_reseed_secs_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
 static const ProtobufCFieldDescriptor set_pkcs11_config_request__field_descriptors[4] =
@@ -1143,53 +474,15 @@ const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor =
   (ProtobufCMessageInit) set_pkcs11_config_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor set_pkcs11_config_response__field_descriptors[1] =
-{
-  {
-    "ret",
-    1,
-    PROTOBUF_C_LABEL_NONE,
-    PROTOBUF_C_TYPE_INT32,
-    0,   /* quantifier_offset */
-    offsetof(SetPkcs11ConfigResponse, ret),
-    NULL,
-    NULL,
-    0,             /* flags */
-    0,NULL,NULL    /* reserved1,reserved2, etc */
-  },
-};
-static const unsigned set_pkcs11_config_response__field_indices_by_name[] = {
-  0,   /* field[0] = ret */
-};
-static const ProtobufCIntRange set_pkcs11_config_response__number_ranges[1 + 1] =
-{
-  { 1, 0 },
-  { 0, 1 }
-};
-const ProtobufCMessageDescriptor set_pkcs11_config_response__descriptor =
-{
-  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
-  "SetPkcs11ConfigResponse",
-  "SetPkcs11ConfigResponse",
-  "SetPkcs11ConfigResponse",
-  "",
-  sizeof(SetPkcs11ConfigResponse),
-  1,
-  set_pkcs11_config_response__field_descriptors,
-  set_pkcs11_config_response__field_indices_by_name,
-  1,  set_pkcs11_config_response__number_ranges,
-  (ProtobufCMessageInit) set_pkcs11_config_response__init,
-  NULL,NULL,NULL    /* reserved[123] */
-};
 static const ProtobufCMethodDescriptor priv_access__method_descriptors[7] =
 {
-  { "RpcRndAddToEntCnt", &rnd_add_to_ent_cnt_request__descriptor, &rnd_add_to_ent_cnt_response__descriptor },
-  { "RpcRndAddEntropy", &rnd_add_entropy_request__descriptor, &rnd_add_entropy_response__descriptor },
-  { "RpcRndClearPool", &rnd_clear_pool_request__descriptor, &rnd_clear_pool_response__descriptor },
-  { "RpcRndReseedCRNG", &rnd_reseed_crngrequest__descriptor, &rnd_reseed_crngresponse__descriptor },
-  { "RpcSetWriteWakeupThresh", &set_write_wakeup_thresh_request__descriptor, &set_write_wakeup_thresh_response__descriptor },
-  { "RpcSetMinReseedSecs", &set_min_reseed_secs_request__descriptor, &set_min_reseed_secs_response__descriptor },
-  { "RpcSetPkcs11Config", &set_pkcs11_config_request__descriptor, &set_pkcs11_config_response__descriptor },
+  { "RpcRndAddToEntCnt", &rnd_add_to_ent_cnt_request__descriptor, &ret_response__descriptor },
+  { "RpcRndAddEntropy", &rnd_add_entropy_request__descriptor, &ret_response__descriptor },
+  { "RpcRndClearPool", &empty_request__descriptor, &ret_response__descriptor },
+  { "RpcRndReseedCRNG", &empty_request__descriptor, &ret_response__descriptor },
+  { "RpcSetWriteWakeupThresh", &set_write_wakeup_thresh_request__descriptor, &ret_response__descriptor },
+  { "RpcSetMinReseedSecs", &set_min_reseed_secs_request__descriptor, &ret_response__descriptor },
+  { "RpcSetPkcs11Config", &set_pkcs11_config_request__descriptor, &ret_response__descriptor },
 };
 const unsigned priv_access__method_indices_by_name[] = {
   1,        /* RpcRndAddEntropy */
@@ -1213,7 +506,7 @@ const ProtobufCServiceDescriptor priv_access__descriptor =
 };
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
                                          const RndAddToEntCntRequest *input,
-                                         RndAddToEntCntResponse_Closure closure,
+                                         RetResponse_Closure closure,
                                          void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);
@@ -1221,23 +514,23 @@ void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
 }
 void priv_access__rpc_rnd_add_entropy(ProtobufCService *service,
                                       const RndAddEntropyRequest *input,
-                                      RndAddEntropyResponse_Closure closure,
+                                      RetResponse_Closure closure,
                                       void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);
   service->invoke(service, 1, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void priv_access__rpc_rnd_clear_pool(ProtobufCService *service,
-                                     const RndClearPoolRequest *input,
-                                     RndClearPoolResponse_Closure closure,
+                                     const EmptyRequest *input,
+                                     RetResponse_Closure closure,
                                      void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);
   service->invoke(service, 2, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void priv_access__rpc_rnd_reseed_crng(ProtobufCService *service,
-                                      const RndReseedCRNGRequest *input,
-                                      RndReseedCRNGResponse_Closure closure,
+                                      const EmptyRequest *input,
+                                      RetResponse_Closure closure,
                                       void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);
@@ -1245,7 +538,7 @@ void priv_access__rpc_rnd_reseed_crng(ProtobufCService *service,
 }
 void priv_access__rpc_set_write_wakeup_thresh(ProtobufCService *service,
                                               const SetWriteWakeupThreshRequest *input,
-                                              SetWriteWakeupThreshResponse_Closure closure,
+                                              RetResponse_Closure closure,
                                               void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);
@@ -1253,7 +546,7 @@ void priv_access__rpc_set_write_wakeup_thresh(ProtobufCService *service,
 }
 void priv_access__rpc_set_min_reseed_secs(ProtobufCService *service,
                                           const SetMinReseedSecsRequest *input,
-                                          SetMinReseedSecsResponse_Closure closure,
+                                          RetResponse_Closure closure,
                                           void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);
@@ -1261,7 +554,7 @@ void priv_access__rpc_set_min_reseed_secs(ProtobufCService *service,
 }
 void priv_access__rpc_set_pkcs11_config(ProtobufCService *service,
                                         const SetPkcs11ConfigRequest *input,
-                                        SetPkcs11ConfigResponse_Closure closure,
+                                        RetResponse_Closure closure,
                                         void *closure_data)
 {
   assert(service->descriptor == &priv_access__descriptor);

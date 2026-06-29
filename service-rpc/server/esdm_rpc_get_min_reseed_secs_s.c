@@ -23,15 +23,15 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_get_min_reseed_secs(UnprivAccess_Service *service,
-				  const GetMinReseedSecsRequest *request,
-				  GetMinReseedSecsResponse_Closure closure,
+				  const EmptyRequest *request,
+				  ValResponse_Closure closure,
 				  void *closure_data)
 {
-	GetMinReseedSecsResponse response = GET_MIN_RESEED_SECS_RESPONSE__INIT;
+	ValResponse response = VAL_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 
-	response.seconds = esdm_get_reseed_max_time();
+	response.val = esdm_get_reseed_max_time();
 	response.ret = 0;
 	closure(&response, closure_data);
 }

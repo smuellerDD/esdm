@@ -26,11 +26,11 @@
 #include "priv_access.pb-c.h"
 
 void esdm_rpc_rnd_clear_pool(PrivAccess_Service *service,
-			     const RndClearPoolRequest *request,
-			     RndClearPoolResponse_Closure closure,
+			     const EmptyRequest *request,
+			     RetResponse_Closure closure,
 			     void *closure_data)
 {
-	RndClearPoolResponse response = RND_CLEAR_POOL_RESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 

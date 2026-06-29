@@ -33,7 +33,7 @@ struct esdm_rnd_reseed_crng_buf {
 	int ret;
 };
 
-static void esdm_rpcc_rnd_reseed_crng_cb(const RndReseedCRNGResponse *response,
+static void esdm_rpcc_rnd_reseed_crng_cb(const RetResponse *response,
 					 void *closure_data)
 {
 	struct esdm_rnd_reseed_crng_buf *buffer =
@@ -46,7 +46,7 @@ static void esdm_rpcc_rnd_reseed_crng_cb(const RndReseedCRNGResponse *response,
 DSO_PUBLIC
 int esdm_rpcc_rnd_reseed_crng_int(void *int_data)
 {
-	RndReseedCRNGRequest msg = RND_RESEED_CRNGREQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_rnd_reseed_crng_buf buffer;
 	int ret = 0;

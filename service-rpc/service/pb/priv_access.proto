@@ -5,6 +5,9 @@
 
 syntax = "proto3";
 
+/* EmptyRequest and RetResponse are shared between both protocols. */
+import "common.proto";
+
 /******************************************************************************
  * RNDADDTOENTCNT IOCTL
  ******************************************************************************/
@@ -17,15 +20,6 @@ syntax = "proto3";
  */
 message RndAddToEntCntRequest {
 	uint32 entcnt = 1;
-}
-
-/**
- * @brief Response of the change of the entropy estimator operation
- *
- * @param ret Return code (0 on success, < 0 on error)
- */
-message RndAddToEntCntResponse {
-	int32 ret = 1;
 }
 
 /******************************************************************************
@@ -44,58 +38,6 @@ message RndAddEntropyRequest {
 	uint32 entcnt = 2;
 }
 
-/**
- * @brief Response of the addition of entropy data operation
- *
- * @param ret Return code (0 on success, < 0 on error)
- */
-message RndAddEntropyResponse {
-	int32 ret = 1;
-}
-
-/******************************************************************************
- * RNDZAPENTCNT / RNDCLEARPOOL IOCTL
- ******************************************************************************/
-
-/**
- * @brief Request to clear the auxiliary entropy pool
- */
-message RndClearPoolRequest {
-	/* No message */
-}
-
-/**
- * @brief Response of clearing the auxiliary entropy pool
- *
- * @param ret Return code (0 on success, < 0 on error)
- */
-message RndClearPoolResponse {
-	int32 ret = 1;
-}
-
-/******************************************************************************
- * RNDRESEEDCRNG IOCTL
- *
- * Add the privilege check here to be compliant with the kernel although
- * a caller can invoke the reseed operation by simply writing data
- * into the DRNG.
- ******************************************************************************/
-/**
- * @brief Request the reseeding of the DRNGs
- */
-message RndReseedCRNGRequest {
-	/* No message */
-}
-
-/**
- * @brief Response of requesting the reseed of the DRNGs
- *
- * @param ret Return code (0 on success, < 0 on error)
- */
-message RndReseedCRNGResponse {
-	int32 ret = 1;
-}
-
 /******************************************************************************
  * write of write_wakeup_threshold /proc file
  ******************************************************************************/
@@ -107,15 +49,6 @@ message SetWriteWakeupThreshRequest {
 	uint32 wakeup = 1;
 }
 
-/**
- * @brief Response returning the result of write wakeup threshold
- *
- * @param ret Return code (0 on success, < 0 on error)
- */
-message SetWriteWakeupThreshResponse {
-	int32 ret = 1;
-}
-
 /******************************************************************************
  * write of urandom_min_reseed_secs /proc file
  ******************************************************************************/
@@ -125,15 +58,6 @@ message SetWriteWakeupThreshResponse {
  */
 message SetMinReseedSecsRequest {
 	uint32 seconds = 1;
-}
-
-/**
- * @brief Response returning the result of write min reseed secs
- *
- * @param ret Return code (0 on success, < 0 on error)
- */
-message SetMinReseedSecsResponse {
-	int32 ret = 1;
 }
 
 /******************************************************************************
@@ -171,37 +95,20 @@ message SetPkcs11ConfigRequest {
 	string pin = 4;
 }
 
-/**
- * @brief Response of a PKCS#11 entropy source configuration update.
- *
- * @param ret Return code (0 on success, < 0 on error; in particular -ENOENT
- *	      if the PKCS#11 entropy source is not compiled in or no matching
- *	      token was found).
- */
-message SetPkcs11ConfigResponse {
-	int32 ret = 1;
-}
-
 /******************************************************************************
  * Protocol handler
  ******************************************************************************/
 service PrivAccess {
-	rpc RpcRndAddToEntCnt (RndAddToEntCntRequest) returns
-			      (RndAddToEntCntResponse);
-	rpc RpcRndAddEntropy (RndAddEntropyRequest) returns
-			     (RndAddEntropyResponse);
-	rpc RpcRndClearPool (RndClearPoolRequest) returns
-			    (RndClearPoolResponse);
-	rpc RpcRndReseedCRNG (RndReseedCRNGRequest) returns
-			     (RndReseedCRNGResponse);
+	rpc RpcRndAddToEntCnt (RndAddToEntCntRequest) returns (RetResponse);
+	rpc RpcRndAddEntropy (RndAddEntropyRequest) returns (RetResponse);
+	rpc RpcRndClearPool (EmptyRequest) returns (RetResponse);
+	rpc RpcRndReseedCRNG (EmptyRequest) returns (RetResponse);
 
 	/* /proc entry */
 	rpc RpcSetWriteWakeupThresh (SetWriteWakeupThreshRequest) returns
-				    (SetWriteWakeupThreshResponse);
-	rpc RpcSetMinReseedSecs (SetMinReseedSecsRequest) returns
-				(SetMinReseedSecsResponse);
+				    (RetResponse);
+	rpc RpcSetMinReseedSecs (SetMinReseedSecsRequest) returns (RetResponse);
 
 	/* entropy source configuration */
-	rpc RpcSetPkcs11Config (SetPkcs11ConfigRequest) returns
-			       (SetPkcs11ConfigResponse);
+	rpc RpcSetPkcs11Config (SetPkcs11ConfigRequest) returns (RetResponse);
 }

@@ -22,14 +22,14 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_get_ent_lvl(UnprivAccess_Service *service,
-			  const GetEntLvlRequest *request,
-			  GetEntLvlResponse_Closure closure, void *closure_data)
+			  const EmptyRequest *request,
+			  ValResponse_Closure closure, void *closure_data)
 {
-	GetEntLvlResponse response = GET_ENT_LVL_RESPONSE__INIT;
+	ValResponse response = VAL_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 
-	response.entlvl = esdm_avail_entropy();
+	response.val = esdm_avail_entropy();
 	response.ret = 0;
 	closure(&response, closure_data);
 }

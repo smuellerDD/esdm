@@ -49,7 +49,7 @@ static void esdm_rpcc_is_fully_seeded_cb(const IsFullySeededResponse *response,
 DSO_PUBLIC
 int esdm_rpcc_is_fully_seeded_int(bool *fully_seeded, void *int_data)
 {
-	IsFullySeededRequest msg = IS_FULLY_SEEDED_REQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_is_fully_seeded_buf buffer;
 	int ret = 0;

@@ -27,10 +27,10 @@
 
 void esdm_rpc_rnd_add_entropy(PrivAccess_Service *service,
 			      const RndAddEntropyRequest *request,
-			      RndAddEntropyResponse_Closure closure,
+			      RetResponse_Closure closure,
 			      void *closure_data)
 {
-	RndAddEntropyResponse response = RND_ADD_ENTROPY_RESPONSE__INIT;
+	RetResponse response = RET_RESPONSE__INIT;
 	(void)service;
 
 	if (request == NULL || request->randval.data == NULL) {

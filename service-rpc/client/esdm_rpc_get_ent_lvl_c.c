@@ -34,7 +34,7 @@ struct esdm_get_ent_lvl_buf {
 	unsigned int entlvl;
 };
 
-static void esdm_rpcc_get_ent_lvl_cb(const GetEntLvlResponse *response,
+static void esdm_rpcc_get_ent_lvl_cb(const ValResponse *response,
 				     void *closure_data)
 {
 	struct esdm_get_ent_lvl_buf *buffer =
@@ -42,13 +42,13 @@ static void esdm_rpcc_get_ent_lvl_cb(const GetEntLvlResponse *response,
 
 	esdm_rpcc_error_check(response, buffer);
 	buffer->ret = response->ret;
-	buffer->entlvl = response->entlvl;
+	buffer->entlvl = response->val;
 }
 
 DSO_PUBLIC
 int esdm_rpcc_get_ent_lvl_int(unsigned int *entlvl, void *int_data)
 {
-	GetEntLvlRequest msg = GET_ENT_LVL_REQUEST__INIT;
+	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_ent_lvl_buf buffer;
 	int ret = 0;

@@ -36,7 +36,7 @@ struct esdm_rnd_add_to_ent_cnt_buf {
 };
 
 static void
-esdm_rpcc_rnd_add_to_ent_cnt_cb(const RndAddToEntCntResponse *response,
+esdm_rpcc_rnd_add_to_ent_cnt_cb(const RetResponse *response,
 				void *closure_data)
 {
 	struct esdm_rnd_add_to_ent_cnt_buf *buffer =

@@ -38,7 +38,7 @@ struct esdm_get_random_bytes_buf {
 };
 
 static void
-esdm_rpcc_get_random_bytes_cb(const GetRandomBytesResponse *response,
+esdm_rpcc_get_random_bytes_cb(const RandValResponse *response,
 			      void *closure_data)
 {
 	struct esdm_get_random_bytes_buf *buffer =

@@ -2,6 +2,7 @@
 service_rpc_src = files([
 	'esdm_rpc_protocol_helper.c',
 	'esdm_rpc_protocol.c',
+	'common.pb-c.c',
 	'priv_access.pb-c.c',
 	'unpriv_access.pb-c.c',
 ])

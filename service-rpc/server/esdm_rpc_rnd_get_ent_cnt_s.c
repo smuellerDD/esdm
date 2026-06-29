@@ -23,15 +23,15 @@
 #include "unpriv_access.pb-c.h"
 
 void esdm_rpc_rnd_get_ent_cnt(UnprivAccess_Service *service,
-			      const RndGetEntCntRequest *request,
-			      RndGetEntCntResponse_Closure closure,
+			      const EmptyRequest *request,
+			      ValResponse_Closure closure,
 			      void *closure_data)
 {
-	RndGetEntCntResponse response = RND_GET_ENT_CNT_RESPONSE__INIT;
+	ValResponse response = VAL_RESPONSE__INIT;
 	(void)request;
 	(void)service;
 
-	response.entcnt = esdm_avail_entropy_aux();
+	response.val = esdm_avail_entropy_aux();
 	response.ret = 0;
 	closure(&response, closure_data);
 }
