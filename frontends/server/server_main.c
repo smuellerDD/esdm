@@ -289,15 +289,17 @@ static void dealloc(void)
  * Signal handler: trigger server shutdown.
  *
  * Only perform async-signal-safe operations here.
- * esdm_rpc_server_signal_exit() only sets an atomic flag and wakes threads,
- * which is acceptable from signal context on Linux. The full cleanup
- * (thread join, free) happens in esdm_rpc_server_fini() after the main
- * loop exits.
+ * esdm_rpc_server_signal_exit_safe() only sets an atomic flag (a barrier +
+ * store), which is async-signal-safe. It deliberately does NOT broadcast a
+ * condvar (pthread_cond_broadcast is not async-signal-safe); blocked waiters
+ * observe the flag via thread_wait_event()'s bounded re-poll. The full cleanup
+ * (thread join, free) happens in esdm_rpc_server_fini() after the main loop
+ * exits.
  */
 static void sig_term(int sig)
 {
 	(void)sig;
-	esdm_rpc_server_signal_exit();
+	esdm_rpc_server_signal_exit_safe();
 }
 
 static void install_term(void)
@@ -481,7 +483,7 @@ int main(int argc, char *argv[])
 	systemd_notify_stopping();
 
 out:
-	daemon_release();
+	/* dealloc() performs the daemon_release() teardown itself. */
 	dealloc();
 
 	if (memlock) {
