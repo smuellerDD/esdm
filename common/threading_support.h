@@ -90,6 +90,18 @@ enum esdm_request_type {
 int thread_init(uint32_t groups);
 
 /**
+ * @brief - Set the stack size used for threads created afterwards
+ *
+ * This affects the worker pool threads as well as the transient threads
+ * spawned by thread_fork_join(). It must be called before thread_init() so
+ * the size is applied when the pool's thread attribute is set up. A value of
+ * 0 (the default) leaves the platform default stack size in place.
+ *
+ * @param [in] stacksize Stack size in bytes for each newly created thread
+ */
+void thread_set_default_stacksize(size_t stacksize);
+
+/**
  * @brief - Wait for currently executing threads and release threading support
  *
  * @param force Shall the threads being attached and waited for (false) or

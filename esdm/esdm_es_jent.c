@@ -179,6 +179,20 @@ static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
 	int ret = 0;
 
+	/*
+	 * When the asynchronous Jitter RNG block collection is disabled (e.g.
+	 * the server's small-memory mode or --jent_block_disable), this second
+	 * collector instance and its block cache are never consumed - the
+	 * synchronous esdm_jent_state serves every request. Skip the allocation
+	 * to save a full Jitter RNG collector plus the ESDM_JENT_ENTROPY_BLOCKS
+	 * sized cache. esdm_jent_get_check() and esdm_jent_async_monitor()
+	 * already gate on esdm_config_es_jent_async_enabled() and
+	 * esdm_es_buf_try_get() tolerates the unallocated (NULL) buffer, so a
+	 * later runtime re-enable simply keeps using the synchronous path.
+	 */
+	if (!esdm_config_es_jent_async_enabled())
+		return 0;
+
 	CKINT(esdm_es_buf_alloc(&esdm_jent_buf, ESDM_JENT_ENTROPY_BLOCKS,
 				"JitterRNG"));
 

@@ -88,6 +88,9 @@ static uint32_t threads_per_threadgroup = 1;
 
 static pthread_attr_t pthread_attr;
 
+/* Stack size applied to newly created threads; 0 means the platform default. */
+static size_t pthread_stacksize = 0;
+
 /*
  * Indicator to prevent spawning of new threads while the cleanup / garbage
  * collector functions execute.
@@ -183,6 +186,11 @@ static inline void thread_cleanup_full(struct thread_ctx *tctx)
 	 */
 }
 
+void thread_set_default_stacksize(size_t stacksize)
+{
+	pthread_stacksize = stacksize;
+}
+
 int thread_init(uint32_t groups)
 {
 	static uint32_t thread_initialized = 0;
@@ -208,6 +216,29 @@ int thread_init(uint32_t groups)
 	mutex_w_init(&threads_cleanup, 0, 0);
 
 	CKINT(pthread_attr_init(&pthread_attr));
+
+	/*
+	 * Optionally reduce the per-thread stack size to keep the memory
+	 * footprint of the worker pool small. This must be configured before
+	 * the pool is initialized as the attribute is applied to every thread
+	 * spawned from it.
+	 */
+	if (pthread_stacksize) {
+		int rc = pthread_attr_setstacksize(&pthread_attr,
+						   pthread_stacksize);
+
+		if (rc) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_THREADING,
+				"Cannot set thread stack size to %zu bytes: %s\n",
+				pthread_stacksize, strerror(rc));
+			return -rc;
+		}
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+			    "Thread stack size limited to %zu bytes\n",
+			    pthread_stacksize);
+	}
+
 	memset(threads, 0, sizeof(threads));
 
 	/*
@@ -702,8 +733,22 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 	pthread_t tids[num];
 	bool spawned[num];
 	char *arg_base = args;
+	pthread_attr_t fj_attr;
+	pthread_attr_t *fj_attrp = NULL;
 	int oldstate;
 	size_t i;
+
+	/*
+	 * Honor the configured reduced stack size for these transient threads
+	 * too, falling back to the platform default if the attribute cannot be
+	 * prepared.
+	 */
+	if (pthread_stacksize && pthread_attr_init(&fj_attr) == 0) {
+		if (pthread_attr_setstacksize(&fj_attr, pthread_stacksize) == 0)
+			fj_attrp = &fj_attr;
+		else
+			pthread_attr_destroy(&fj_attr);
+	}
 
 	/*
 	 * The caller must outlive its batch: the tasks write through pointers
@@ -717,7 +762,8 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 		void *arg = arg_base + i * arg_stride;
 
 		if (have_parallelism &&
-		    pthread_create(&tids[i], NULL, start_routine, arg) == 0) {
+		    pthread_create(&tids[i], fj_attrp, start_routine, arg) ==
+			    0) {
 			spawned[i] = true;
 		} else {
 			spawned[i] = false;
@@ -731,6 +777,9 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 	}
 
 	pthread_setcancelstate(oldstate, NULL);
+
+	if (fj_attrp)
+		pthread_attr_destroy(fj_attrp);
 }
 
 DSO_PUBLIC
