@@ -36,7 +36,6 @@
 #include "mutex_w.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
-#include "xoshiro_prng.h"
 #include "visibility.h"
 
 /**
