@@ -59,6 +59,7 @@
 #include "math_helper.h"
 #include "esdm_logger.h"
 #include "memset_secure.h"
+#include "unpriv_access.pb-c.h"
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "queue.h"
@@ -255,34 +256,74 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 {
 #define ESDM_RPCS_BUF_WRITE_HEADER_SZ (sizeof(struct esdm_rpc_proto_sc_header))
 
+	uint8_t *const payload_buf =
+		rpc_conn->buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ;
+	const size_t payload_max =
+		sizeof(rpc_conn->buf) - ESDM_RPCS_BUF_WRITE_HEADER_SZ;
 	size_t message_length;
 	int ret;
 	struct esdm_rpc_proto_sc_header *sc_header;
-	struct esdm_rpc_write_data_buf tmp = {
-		.dst_written = 0,
-	};
 
-	tmp.base.append = esdm_rpc_append_data;
+	if (esdm_rpc_is_fast_bytes_response(message->descriptor)) {
+		/*
+		 * Fast path for the get_random_bytes{,_full,_pr} responses:
+		 * encode the (ret, randval) message straight into the buffer,
+		 * bypassing the generic descriptor walk and the per-chunk
+		 * append callbacks of protobuf_c_message_pack_to_buffer().
+		 * This is the encode counterpart of the client's zero-copy
+		 * decode fast path. The encoder bounds its writes to
+		 * payload_max, so the resulting message_length can never
+		 * exceed ESDM_RPC_MAX_INTERNAL_MSG_SIZE.
+		 */
+		const GetRandomBytesFullResponse *resp =
+			(const GetRandomBytesFullResponse *)message;
 
-	message_length = protobuf_c_message_get_packed_size(message);
-	if (message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
-			    "Unexpected message length: %zu > %zu\n",
-			    message_length, ESDM_RPC_MAX_INTERNAL_MSG_SIZE);
-		return -EFAULT;
+		ret = esdm_rpc_encode_bytes_response(payload_buf, payload_max,
+						     resp->ret,
+						     resp->randval.data,
+						     resp->randval.len,
+						     &message_length);
+		if (ret) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_RPC,
+				"Message too large for connection buffer\n");
+			return ret;
+		}
+	} else {
+		struct esdm_rpc_write_data_buf tmp = {
+			.dst_written = 0,
+		};
+
+		tmp.base.append = esdm_rpc_append_data;
+
+		message_length = protobuf_c_message_get_packed_size(message);
+		if (message_length > ESDM_RPC_MAX_INTERNAL_MSG_SIZE) {
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+				    "Unexpected message length: %zu > %zu\n",
+				    message_length,
+				    ESDM_RPC_MAX_INTERNAL_MSG_SIZE);
+			return -EFAULT;
+		}
+
+		if (message_length > payload_max) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_RPC,
+				"Message too large for connection buffer: %zu > %zu\n",
+				message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ,
+				sizeof(rpc_conn->buf));
+			return -EOVERFLOW;
+		}
+
+		tmp.dst_buf = payload_buf;
+
+		if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
+		    message_length) {
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
+				    "Short write of data to file descriptor\n");
+			ret = -EFAULT;
+			goto out;
+		}
 	}
-
-	if (message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ >
-	    sizeof(rpc_conn->buf)) {
-		esdm_logger(
-			LOGGER_ERR, LOGGER_C_RPC,
-			"Message too large for connection buffer: %zu > %zu\n",
-			message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ,
-			sizeof(rpc_conn->buf));
-		return -EOVERFLOW;
-	}
-
-	tmp.dst_buf = (rpc_conn->buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ);
 
 	sc_header = (struct esdm_rpc_proto_sc_header *)rpc_conn->buf;
 	sc_header->status_code = le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SUCCESS);
@@ -295,14 +336,6 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		"Server sending: server status %u, message length %u, message index %u, request ID %u\n",
 		sc_header->status_code, sc_header->message_length,
 		sc_header->method_index, sc_header->request_id);
-
-	if (protobuf_c_message_pack_to_buffer(message, &tmp.base) !=
-	    message_length) {
-		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
-			    "Short write of data to file descriptor\n");
-		ret = -EFAULT;
-		goto out;
-	}
 
 	/* this message is also printed when the client closed early, don't spam logs */
 	ret = esdm_rpcs_write_data(rpc_conn, rpc_conn->buf,

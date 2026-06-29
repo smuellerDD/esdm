@@ -21,6 +21,7 @@
 #define ESDM_RPC_PROTOCOL_H
 
 #include <protobuf-c/protobuf-c.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -88,6 +89,21 @@ void esdm_rpc_free(void *allocator_data, void *data);
 int esdm_rpc_decode_bytes_response(const uint8_t *data, size_t data_len,
 				   int64_t *ret_val, const uint8_t **payload,
 				   size_t *payload_len);
+
+/*
+ * Encode an int64 "ret" (field 1) + bytes "randval" (field 2) response into
+ * dst. On success *out_len holds the number of bytes written.
+ */
+int esdm_rpc_encode_bytes_response(uint8_t *dst, size_t dst_len,
+				   int64_t ret_val, const uint8_t *payload,
+				   size_t payload_len, size_t *out_len);
+
+/*
+ * Does this message descriptor qualify for the hand-rolled bytes-response
+ * encode/decode fast paths (exactly { int64 ret = 1; bytes randval = 2; })?
+ */
+bool esdm_rpc_is_fast_bytes_response(
+	const ProtobufCMessageDescriptor *message_desc);
 
 #ifdef __cplusplus
 }
