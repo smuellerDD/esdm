@@ -45,13 +45,23 @@ int esdm_rpc_server_init(const char *username, const char *groupname);
 void esdm_rpc_server_fini(void);
 
 /**
- * @brief Async-signal-safe shutdown trigger
+ * @brief Shutdown trigger for normal (non-signal) context
  *
- * Only sets the exit flag and wakes waiting threads via eventfd/condvar.
- * Safe to call from a signal handler. Does NOT join threads or free memory;
- * the main loop must call esdm_rpc_server_fini() after returning.
+ * Sets the exit flag and wakes waiting threads via a condvar broadcast. The
+ * broadcast is NOT async-signal-safe, so do not call this from a signal
+ * handler; use esdm_rpc_server_signal_exit_safe() there instead. Does NOT join
+ * threads or free memory; the caller must invoke esdm_rpc_server_fini().
  */
 void esdm_rpc_server_signal_exit(void);
+
+/**
+ * @brief Async-signal-safe shutdown trigger
+ *
+ * Only sets the exit flag (an atomic store + barrier), which is safe from a
+ * signal handler. Blocked waiters notice the flag via the bounded re-poll in
+ * thread_wait_event(), so no condvar broadcast is needed here.
+ */
+void esdm_rpc_server_signal_exit_safe(void);
 
 #ifdef __cplusplus
 }
