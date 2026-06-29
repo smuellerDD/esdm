@@ -124,7 +124,8 @@
               ++ lib.optionals kernelFips (
                 lpself.callPackage ./addon/linux_esdm_es/fipsConfig.nix { inherit (lpsuper) kernel; }
               )
-              ++ lib.optionals kernelDebug (lpself.callPackage ./addon/linux_esdm_es/debug.nix { });
+              ++ lib.optionals kernelDebug (lpself.callPackage ./addon/linux_esdm_es/debug.nix { })
+              ++ lpself.callPackage ./addon/linux_esdm_es/drbg.nix { };
           };
           esdm_es = lpself.callPackage ./addon/linux_esdm_es { };
         };
@@ -194,8 +195,8 @@
             src = pkgs.fetchFromGitHub {
               owner = "smuellerDD";
               repo = "jitterentropy-library";
-              rev = "e31959660658667ff4bb865984c47e543c3169e2";
-              hash = "sha256-GYUoVSqwhz01Ubk3KXvD4KAC+WDjSSiGcmLQoX5v4PU=";
+              rev = "e783cf1c450bce4d72f95c9f9c84546a6094976a";
+              hash = "sha256-sJWgPx3GbvnBBVlCML/eRtUoMXux38tpWi1ZKhz41xY=";
             };
             patches = [ ];
             cmakeFlags = [
