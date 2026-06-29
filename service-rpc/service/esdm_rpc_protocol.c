@@ -19,10 +19,13 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "buffer.h"
+#include "build_bug_on.h"
 #include "esdm_rpc_protocol.h"
+#include "unpriv_access.pb-c.h"
 
 /* Allocate 8-byte aligned memory from thread local storage */
 void *esdm_rpc_alloc(void *allocator_data, size_t size)
@@ -110,7 +113,7 @@ static int esdm_rpc_get_varint(const uint8_t *data, size_t data_len,
  * payload: on success *payload points into data and the caller performs the
  * single mandatory copy into its own buffer. This avoids the copy and the
  * allocation that protobuf_c_message_unpack() would otherwise incur for the
- * random/seed hot paths.
+ * random hot paths.
  *
  * The proto3 wire format is parsed defensively; any malformed input yields
  * -EPROTO. Absent fields keep their proto3 default (ret 0, empty payload).
@@ -179,6 +182,127 @@ int esdm_rpc_decode_bytes_response(const uint8_t *data, size_t data_len,
 		}
 	}
 
+	return 0;
+}
+
+/*
+ * Responses that carry an int64 "ret" (field 1) plus a "bytes randval"
+ * (field 2) payload. These qualify for the hand-rolled in-place encode/decode
+ * fast paths: the server encodes them with esdm_rpc_encode_bytes_response()
+ * and the client decodes them with esdm_rpc_decode_bytes_response(), both
+ * bypassing the generated protobuf pack/unpack code for the random hot paths.
+ *
+ * Bypassing the generated code bakes in two assumptions:
+ *   1. all three response structs are layout-identical, and
+ *   2. each is exactly { int64 ret = 1; bytes randval = 2; }.
+ * Both are guarded here so a future .proto change cannot silently break the
+ * fast path:
+ *   - the compile-time BUILD_BUG_ON()s fail the build if the structs stop
+ *     being layout-identical (added/removed/reordered fields), and
+ *   - the runtime checks decline the fast path (letting the caller fall back
+ *     to the always-correct generic protobuf code) if the live descriptor no
+ *     longer matches the assumed {ret, randval} shape.
+ */
+bool esdm_rpc_is_fast_bytes_response(
+	const ProtobufCMessageDescriptor *message_desc)
+{
+	/* (1) The response structs must remain layout-identical. */
+	BUILD_BUG_ON(sizeof(GetRandomBytesPrResponse) !=
+		     sizeof(GetRandomBytesFullResponse));
+	BUILD_BUG_ON(sizeof(GetRandomBytesResponse) !=
+		     sizeof(GetRandomBytesFullResponse));
+	BUILD_BUG_ON(offsetof(GetRandomBytesPrResponse, ret) !=
+		     offsetof(GetRandomBytesFullResponse, ret));
+	BUILD_BUG_ON(offsetof(GetRandomBytesPrResponse, randval) !=
+		     offsetof(GetRandomBytesFullResponse, randval));
+	BUILD_BUG_ON(offsetof(GetRandomBytesResponse, ret) !=
+		     offsetof(GetRandomBytesFullResponse, ret));
+	BUILD_BUG_ON(offsetof(GetRandomBytesResponse, randval) !=
+		     offsetof(GetRandomBytesFullResponse, randval));
+
+	if (message_desc != &get_random_bytes_full_response__descriptor &&
+	    message_desc != &get_random_bytes_pr_response__descriptor &&
+	    message_desc != &get_random_bytes_response__descriptor)
+		return false;
+
+	/*
+	 * (2) The live message must still be exactly { int64 ret = 1;
+	 * bytes randval = 2; } at the offsets the fast paths use. If a .proto
+	 * change diverges from this, decline the fast path. n_fields is
+	 * checked before dereferencing the fields array.
+	 */
+	return (message_desc->sizeof_message ==
+			sizeof(GetRandomBytesFullResponse) &&
+		message_desc->n_fields == 2 &&
+		message_desc->fields[0].id == 1 &&
+		message_desc->fields[0].type == PROTOBUF_C_TYPE_INT64 &&
+		message_desc->fields[0].offset ==
+			offsetof(GetRandomBytesFullResponse, ret) &&
+		message_desc->fields[1].id == 2 &&
+		message_desc->fields[1].type == PROTOBUF_C_TYPE_BYTES &&
+		message_desc->fields[1].offset ==
+			offsetof(GetRandomBytesFullResponse, randval));
+}
+
+/* Write a base-128 varint, advancing *pos. Returns 0 or -EOVERFLOW. */
+static int esdm_rpc_put_varint(uint8_t *data, size_t data_len, size_t *pos,
+			       uint64_t val)
+{
+	do {
+		uint8_t b = (uint8_t)(val & 0x7f);
+
+		val >>= 7;
+		if (val)
+			b |= 0x80;
+		if (*pos >= data_len)
+			return -EOVERFLOW;
+		data[(*pos)++] = b;
+	} while (val);
+
+	return 0;
+}
+
+/*
+ * Encode a "bytes-carrying" RPC response (int64 ret = field 1, bytes
+ * randval = field 2) straight into the destination buffer, mirroring what
+ * protobuf_c_message_pack_to_buffer() would emit for the proto3 message but
+ * without the generic descriptor walk and per-chunk append callbacks. This is
+ * the encode counterpart of esdm_rpc_decode_bytes_response() and serves the
+ * random hot paths.
+ *
+ * Following proto3 wire semantics, default-valued fields are omitted (ret == 0
+ * and an empty payload produce no output). On success *out_len holds the
+ * number of bytes written; -EOVERFLOW is returned if dst is too small.
+ */
+int esdm_rpc_encode_bytes_response(uint8_t *dst, size_t dst_len,
+				   int64_t ret_val, const uint8_t *payload,
+				   size_t payload_len, size_t *out_len)
+{
+	size_t pos = 0;
+
+	/* int64 ret (field 1, wire type 0 - varint); omit proto3 default. */
+	if (ret_val != 0) {
+		if (esdm_rpc_put_varint(dst, dst_len, &pos, (1 << 3) | 0))
+			return -EOVERFLOW;
+		if (esdm_rpc_put_varint(dst, dst_len, &pos,
+					(uint64_t)ret_val))
+			return -EOVERFLOW;
+	}
+
+	/* bytes randval (field 2, wire type 2); omit proto3 default. */
+	if (payload && payload_len) {
+		if (esdm_rpc_put_varint(dst, dst_len, &pos, (2 << 3) | 2))
+			return -EOVERFLOW;
+		if (esdm_rpc_put_varint(dst, dst_len, &pos,
+					(uint64_t)payload_len))
+			return -EOVERFLOW;
+		if (payload_len > dst_len - pos)
+			return -EOVERFLOW;
+		memcpy(dst + pos, payload, payload_len);
+		pos += payload_len;
+	}
+
+	*out_len = pos;
 	return 0;
 }
 
