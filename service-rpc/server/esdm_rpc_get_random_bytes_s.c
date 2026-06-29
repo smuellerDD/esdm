@@ -46,6 +46,13 @@ void esdm_rpc_get_random_bytes(UnprivAccess_Service *service,
 		}
 		closure(&response, closure_data);
 
-		memset_secure(rndval, 0, sizeof(rndval));
+		/*
+		 * Only the first request->len bytes can ever hold generated
+		 * secret data (request->len is bounded by sizeof(rndval) above).
+		 * Wiping the whole ~64KB buffer on every call - even for tiny
+		 * requests - dominates the per-call cost, so wipe just what was
+		 * touched.
+		 */
+		memset_secure(rndval, 0, (size_t)request->len);
 	}
 }

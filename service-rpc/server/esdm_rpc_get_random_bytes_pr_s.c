@@ -54,6 +54,12 @@ void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
 		}
 		closure(&response, closure_data);
 
-		memset_secure(rndval, 0, sizeof(rndval));
+		/*
+		 * Only the first request->len bytes can ever hold generated
+		 * secret data (request->len is bounded by
+		 * ESDM_RPC_MAX_PR_REQUEST_SIZE above). Avoid wiping the whole
+		 * ~64KB buffer on every call.
+		 */
+		memset_secure(rndval, 0, (size_t)request->len);
 	}
 }
