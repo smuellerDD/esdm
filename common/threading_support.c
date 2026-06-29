@@ -765,6 +765,24 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 		    pthread_create(&tids[i], fj_attrp, start_routine, arg) ==
 			    0) {
 			spawned[i] = true;
+
+#ifndef __APPLE__
+			/*
+			 * Give the worker a recognizable name in ps/top/htop.
+			 * Cosmetic and best effort, so ignore errors. Only the
+			 * genuinely spawned threads are named: the inline
+			 * fallback below runs on the caller's own thread, which
+			 * must keep its name. On Apple a thread can only rename
+			 * itself, so those workers keep the caller's name.
+			 */
+			{
+				char name[ESDM_THREAD_MAX_NAMELEN];
+
+				snprintf(name, sizeof(name), "ESDM fj_%03u",
+					 (unsigned int)(i % 1000));
+				pthread_setname_np(tids[i], name);
+			}
+#endif
 		} else {
 			spawned[i] = false;
 			start_routine(arg);
