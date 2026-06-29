@@ -83,9 +83,35 @@ struct thread_wait_queue {
 		assert(__mret == 0);                                           \
 	} while (0)
 
+/*
+ * Wait until @condition becomes true.
+ *
+ * The predicate is evaluated WITHOUT holding thread_wait_lock, so a
+ * thread_wake[_all] issued by another thread between the predicate check and
+ * the blocking wait below would be lost. To avoid an indefinite hang on such a
+ * missed wakeup, the wait is bounded: on timeout the loop simply re-checks the
+ * predicate. The condition variable's clock is overridden to CLOCK_MONOTONIC
+ * per-wait so a wall-clock step cannot stretch the bound.
+ */
 #define thread_wait_event(queue, condition)                                    \
 	while (!(condition)) {                                                 \
-		thread_wait_no_event(queue);                                   \
+		struct timespec __ts;                                          \
+		int __mret __attribute__((unused));                            \
+                                                                               \
+		__mret = pthread_mutex_lock(&(queue)->thread_wait_lock);       \
+		assert(__mret == 0);                                           \
+		clock_gettime(CLOCK_MONOTONIC, &__ts);                         \
+		__ts.tv_nsec += 100 * 1000 * 1000;                            \
+		if (__ts.tv_nsec >= 1000000000L) {                            \
+			__ts.tv_sec++;                                        \
+			__ts.tv_nsec -= 1000000000L;                         \
+		}                                                             \
+		__mret = pthread_cond_clockwait(&(queue)->thread_wait_cv,     \
+						&(queue)->thread_wait_lock,   \
+						CLOCK_MONOTONIC, &__ts);      \
+		assert(__mret == 0 || __mret == ETIMEDOUT);                   \
+		__mret = pthread_mutex_unlock(&(queue)->thread_wait_lock);    \
+		assert(__mret == 0);                                          \
 	}
 
 /*
