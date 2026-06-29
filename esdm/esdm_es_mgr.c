@@ -23,6 +23,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <time.h>
@@ -259,7 +260,15 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 		}
 
 		if (!ret && esdm_pool_all_nodes_seeded_get()) {
-			thread_wait_no_event(&esdm_monitor_wait);
+			/*
+			 * Bounded wait: a wakeup (entropy need via
+			 * esdm_es_mgr_monitor_wakeup, or termination) delivered
+			 * between the checks above and this wait would otherwise
+			 * be lost, hanging the monitor. On timeout the enclosing
+			 * loop re-checks esdm_es_mgr_terminate and the seeded
+			 * state, so a missed wakeup costs at most one interval.
+			 */
+			thread_timedwait_no_event(&esdm_monitor_wait, &ts);
 		} else {
 			nanosleep(&ts, NULL);
 		}
@@ -534,7 +543,7 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 /* Mark one DRNG as not fully seeded */
 void esdm_unset_fully_seeded(struct esdm_drng *drng)
 {
-	drng->fully_seeded = false;
+	atomic_bool_set_false(&drng->fully_seeded);
 	esdm_pool_all_nodes_seeded(false);
 
 	/*
