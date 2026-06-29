@@ -265,5 +265,4 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.state = esdm_hwrand_es_state,
 	.reset = NULL,
 	.active = esdm_hwrand_active,
-	.switch_hash = NULL,
 };

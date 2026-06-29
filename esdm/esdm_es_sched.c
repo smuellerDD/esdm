@@ -476,5 +476,4 @@ struct esdm_es_cb esdm_es_sched = {
 	.state = esdm_sched_es_state,
 	.reset = esdm_sched_reset,
 	.active = esdm_sched_active,
-	.switch_hash = NULL,
 };

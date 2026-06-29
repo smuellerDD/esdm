@@ -478,5 +478,4 @@ struct esdm_es_cb esdm_es_irq = {
 	.state = esdm_irq_es_state,
 	.reset = esdm_irq_reset,
 	.active = esdm_irq_active,
-	.switch_hash = NULL,
 };

@@ -242,5 +242,4 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.state = esdm_jent_kernel_es_state,
 	.reset = NULL,
 	.active = esdm_jent_kernel_active,
-	.switch_hash = NULL,
 };

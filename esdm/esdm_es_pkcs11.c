@@ -543,7 +543,6 @@ struct esdm_es_cb esdm_es_pkcs11 = {
 	.state = esdm_es_pkcs11_es_state,
 	.reset = NULL,
 	.active = esdm_es_pkcs11_active,
-	.switch_hash = NULL,
 };
 
 DSO_PUBLIC

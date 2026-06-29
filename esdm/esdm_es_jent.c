@@ -414,5 +414,4 @@ struct esdm_es_cb esdm_es_jent = {
 	.state = esdm_jent_es_state,
 	.reset = NULL,
 	.active = esdm_jent_active,
-	.switch_hash = NULL,
 };

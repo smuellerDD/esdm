@@ -110,7 +110,6 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 	uint32_t ent_bits = 0, i, partial_bits = 0, digestsize, digestsize_bits,
 		 full_bits, full_chunks;
 
-	mutex_reader_lock(&drng->hash_lock);
 	hash_cb = drng->hash_cb;
 
 	if (shash_free) {
@@ -183,7 +182,6 @@ out:
 		hash_cb->hash_desc_zero(shash);
 	if (shash_free && shash)
 		hash_cb->hash_dealloc(shash);
-	mutex_reader_unlock(&drng->hash_lock);
 	esdm_drng_put_instances();
 	return ent_bits;
 
@@ -200,31 +198,6 @@ err:
 static uint32_t esdm_cpu_multiplier(void)
 {
 	return esdm_cpu_data_multiplier;
-}
-
-static int esdm_cpu_switch_hash(struct esdm_drng __unused *drng,
-				int __unused node,
-				const struct esdm_hash_cb __unused *new_cb,
-				const struct esdm_hash_cb __unused *old_cb)
-{
-	uint32_t digestsize, multiplier, curr_ent_rate;
-
-	digestsize = esdm_get_digestsize();
-	multiplier = esdm_cpu_multiplier();
-	curr_ent_rate = esdm_config_es_cpu_entropy_rate();
-
-	/*
-	 * It would be security violation if the new digestsize is smaller than
-	 * the set CPU entropy rate.
-	 */
-	if (multiplier > 1 && digestsize < curr_ent_rate)
-		esdm_logger(
-			LOGGER_WARN, LOGGER_C_ES,
-			"Compression hash has smaller digest size than CPU entropy rate\n");
-
-	esdm_config_es_cpu_entropy_rate_set(
-		min_uint32(digestsize, curr_ent_rate));
-	return 0;
 }
 
 /*
@@ -288,5 +261,4 @@ struct esdm_es_cb esdm_es_cpu = {
 	.state = esdm_cpu_es_state,
 	.reset = NULL,
 	.active = esdm_cpu_active,
-	.switch_hash = esdm_cpu_switch_hash,
 };

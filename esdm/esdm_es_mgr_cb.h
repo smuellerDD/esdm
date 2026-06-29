@@ -115,8 +115,6 @@ struct entropy_buf {
  * @reset: Reset entropy source (drop all entropy and reinitialize).
  *	   This callback may be NULL.
  * @active: Is ES active.
- * @switch_hash: callback to switch from an old hash callback definition to
- *		 a new one. This callback may be NULL.
  */
 struct esdm_es_cb {
 	const char *name;
@@ -130,9 +128,6 @@ struct esdm_es_cb {
 	void (*state)(char *buf, size_t buflen);
 	void (*reset)(void);
 	bool (*active)(void);
-	int (*switch_hash)(struct esdm_drng *drng, int node,
-			   const struct esdm_hash_cb *new_cb,
-			   const struct esdm_hash_cb *old_cb);
 };
 
 /* Reseed is desired */
