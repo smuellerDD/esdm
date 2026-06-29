@@ -85,9 +85,6 @@ struct esdm_rpcs_connection {
 	uint32_t request_id;
 	struct timespec last_used;
 
-	/* per request data */
-	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE];
-
 	/* list handling for cleanup */
 	TAILQ_ENTRY(esdm_rpcs_connection) tailq;
 };
@@ -98,6 +95,20 @@ struct esdm_rpc_thread {
 	uint32_t id;
 	int eventfd;
 };
+
+/*
+ * Per-worker-thread scratch buffer holding the single in-flight request and
+ * its response. A worker processes its connections one at a time in its event
+ * loop, and the buffer is filled by the read, parsed in place, the response
+ * packed back into it, written out and zeroized - all within one synchronous
+ * request handling. It never carries state across epoll events, so one buffer
+ * per worker thread suffices instead of one per connection. This bounds the
+ * server's request-buffer memory by the (small, fixed) number of worker
+ * threads rather than by the number of open connections. It is cast to the
+ * protocol header structs, hence the 64-bit alignment.
+ */
+static __thread uint8_t esdm_rpcs_reqbuf[ESDM_RPC_MAX_MSG_SIZE]
+	__attribute__((aligned(sizeof(uint64_t))));
 
 struct esdm_rpcs_write_buf {
 	ProtobufCBuffer base;
@@ -257,9 +268,9 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 #define ESDM_RPCS_BUF_WRITE_HEADER_SZ (sizeof(struct esdm_rpc_proto_sc_header))
 
 	uint8_t *const payload_buf =
-		rpc_conn->buf + ESDM_RPCS_BUF_WRITE_HEADER_SZ;
+		esdm_rpcs_reqbuf + ESDM_RPCS_BUF_WRITE_HEADER_SZ;
 	const size_t payload_max =
-		sizeof(rpc_conn->buf) - ESDM_RPCS_BUF_WRITE_HEADER_SZ;
+		sizeof(esdm_rpcs_reqbuf) - ESDM_RPCS_BUF_WRITE_HEADER_SZ;
 	size_t message_length;
 	int ret;
 	struct esdm_rpc_proto_sc_header *sc_header;
@@ -310,7 +321,7 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 				LOGGER_ERR, LOGGER_C_RPC,
 				"Message too large for connection buffer: %zu > %zu\n",
 				message_length + ESDM_RPCS_BUF_WRITE_HEADER_SZ,
-				sizeof(rpc_conn->buf));
+				sizeof(esdm_rpcs_reqbuf));
 			return -EOVERFLOW;
 		}
 
@@ -325,7 +336,7 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		}
 	}
 
-	sc_header = (struct esdm_rpc_proto_sc_header *)rpc_conn->buf;
+	sc_header = (struct esdm_rpc_proto_sc_header *)esdm_rpcs_reqbuf;
 	sc_header->status_code = le_bswap32(PROTOBUF_C_RPC_STATUS_CODE_SUCCESS);
 	sc_header->method_index = le_bswap32(rpc_conn->method_index);
 	sc_header->message_length = le_bswap32(message_length);
@@ -338,7 +349,7 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		sc_header->method_index, sc_header->request_id);
 
 	/* this message is also printed when the client closed early, don't spam logs */
-	ret = esdm_rpcs_write_data(rpc_conn, rpc_conn->buf,
+	ret = esdm_rpcs_write_data(rpc_conn, esdm_rpcs_reqbuf,
 				   ESDM_RPCS_BUF_WRITE_HEADER_SZ +
 					   message_length);
 	if (ret != 0) {
@@ -356,7 +367,7 @@ out:
 	 * and clear data from ESDM in your application or patch
 	 * ESDM to include a cryptographic tunnel to your application.
 	 */
-	memset_secure(rpc_conn->buf, 0,
+	memset_secure(esdm_rpcs_reqbuf, 0,
 		      ESDM_RPCS_BUF_WRITE_HEADER_SZ + message_length);
 
 	return ret;
@@ -491,8 +502,8 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	 * full message is submitted in one send operation. Therefore,
 	 * short-reads cannot occur here and can be ignored.
 	 */
-	received =
-		read(rpc_conn->child_fd, rpc_conn->buf, sizeof(rpc_conn->buf));
+	received = read(rpc_conn->child_fd, esdm_rpcs_reqbuf,
+			sizeof(esdm_rpcs_reqbuf));
 	if (received < 0) {
 		ret = -errno;
 		goto out;
@@ -510,7 +521,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 
 	/* Header is received, analyze it. */
 	struct esdm_rpc_proto_cs_header *header =
-		(struct esdm_rpc_proto_cs_header *)rpc_conn->buf;
+		(struct esdm_rpc_proto_cs_header *)esdm_rpcs_reqbuf;
 
 	/* Convert incoming data to LE */
 	header->message_length = le_bswap32(header->message_length);
@@ -546,11 +557,11 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	 * processing of data and the subsequent submission of the answer here.
 	 */
 	CKINT(esdm_rpcs_unpack(rpc_conn,
-			       (struct esdm_rpc_proto_cs *)rpc_conn->buf));
+			       (struct esdm_rpc_proto_cs *)esdm_rpcs_reqbuf));
 
 out:
 	if (received > 0) {
-		memset_secure(rpc_conn->buf, 0, (size_t)received);
+		memset_secure(esdm_rpcs_reqbuf, 0, (size_t)received);
 	}
 	return ret;
 }
@@ -564,7 +575,11 @@ static void esdm_rpcs_release_conn(struct esdm_rpcs_connection *rpc_conn)
 		close(rpc_conn->child_fd);
 		rpc_conn->child_fd = -1;
 	}
-	memset_secure(rpc_conn->buf, 0, sizeof(rpc_conn->buf));
+	/*
+	 * No per-connection request buffer to wipe here anymore - the shared
+	 * per-worker esdm_rpcs_reqbuf is zeroized after every request in
+	 * esdm_rpcs_read()/esdm_rpcs_pack_internal().
+	 */
 	free(rpc_conn);
 }
 
