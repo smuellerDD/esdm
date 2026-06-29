@@ -259,9 +259,9 @@ static void esdm_sp80090b_startup(struct esdm_health *health,
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
-	if (!es_state->sp80090b_startup_done &&
+	if (!READ_ONCE(es_state->sp80090b_startup_done) &&
 	    atomic_dec_and_test(&es_state->sp80090b_startup_blocks)) {
-		es_state->sp80090b_startup_done = true;
+		WRITE_ONCE(es_state->sp80090b_startup_done, true);
 		pr_info("SP800-90B startup health tests for internal entropy source %u completed\n",
 			es);
 	}
@@ -299,7 +299,7 @@ static void esdm_sp80090b_runtime_failure(struct esdm_health *health,
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
 	esdm_sp80090b_startup_failure(health, es);
-	es_state->sp80090b_startup_done = false;
+	WRITE_ONCE(es_state->sp80090b_startup_done, false);
 }
 
 static void esdm_rct_reset(struct esdm_rct *rct);
@@ -331,7 +331,7 @@ static void esdm_sp80090b_failure(struct esdm_health *health,
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
-	if (es_state->sp80090b_startup_done) {
+	if (READ_ONCE(es_state->sp80090b_startup_done)) {
 		pr_err("SP800-90B runtime health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
 		       es);
 		esdm_sp80090b_runtime_failure(health, es);
@@ -350,7 +350,7 @@ bool esdm_sp80090b_startup_complete_es(enum esdm_internal_es es)
 	if (!esdm_sp80090b_health_enabled())
 		return true;
 
-	return es_state->sp80090b_startup_done;
+	return READ_ONCE(es_state->sp80090b_startup_done);
 }
 
 bool esdm_sp80090b_compliant(enum esdm_internal_es es)

@@ -184,7 +184,13 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 		if (collected_events >= requested_events)
 			break;
 
-		w_pos = READ_ONCE(*per_cpu_ptr(&esdm_irq_array_wp, cpu));
+		/*
+		 * Acquire the producer's write pointer so the array reads below
+		 * are ordered after the producer's data store that precedes its
+		 * smp_store_release(wp); a plain READ_ONCE could observe the
+		 * advanced wp but stale slot data on weak-memory architectures.
+		 */
+		w_pos = smp_load_acquire(per_cpu_ptr(&esdm_irq_array_wp, cpu));
 		r_pos = smp_load_acquire(per_cpu_ptr(&esdm_irq_array_rp, cpu));
 
 		found_events = (w_pos >= r_pos) ?
@@ -398,15 +404,21 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 static void esdm_time_process(void)
 {
 	u64 now_time = random_get_entropy();
+	/*
+	 * Snapshot the GCD once: a concurrent esdm_gcd_set(0) on another CPU
+	 * (reset / health failure / vmgenid notifier) between a separate
+	 * "tested" check and the divide would otherwise turn the divisor into 0
+	 * and oops in IRQ context.
+	 */
+	u64 gcd = esdm_gcd_get();
 
-	if (unlikely(!esdm_gcd_tested())) {
+	if (unlikely(!gcd)) {
 		/* When GCD is unknown, we process the full time stamp */
 		esdm_time_process_common(now_time, esdm_irq_array_add);
 		esdm_gcd_add_value(now_time);
 	} else {
 		/* GCD is known and applied */
-		esdm_time_process_common(now_time / esdm_gcd_get(),
-					 esdm_irq_array_add);
+		esdm_time_process_common(now_time / gcd, esdm_irq_array_add);
 	}
 
 	esdm_irq_perf_time(now_time);
@@ -556,6 +568,16 @@ void esdm_es_irq_module_exit(void)
 
 	if (atomic_read(&esdm_es_irq_init_state) == esdm_es_init_unused)
 		return;
+
+	/*
+	 * The deferred setup work may still be queued or sleeping in
+	 * wait_for_random_bytes(). Wait for it to finish before tearing down
+	 * (and before the module text/state it touches is freed); otherwise
+	 * the work runs against freed state. This also covers the
+	 * still-registering early return below, which would otherwise leave the
+	 * work pending. cancel_work_sync tolerates a never-queued work item.
+	 */
+	cancel_work_sync(&esdm_es_irq_set_callback);
 
 	/* If we are in still in registering phase, do not process it */
 	if (atomic_xchg(&esdm_es_irq_init_state, esdm_es_init_unregistering) <

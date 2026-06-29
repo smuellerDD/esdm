@@ -36,7 +36,13 @@ struct esdm_testing {
 	u32 rb_reader;
 	atomic_t rb_writer;
 	atomic_t esdm_testing_enabled;
-	spinlock_t lock;
+	/*
+	 * raw_spinlock_t (not spinlock_t): esdm_testing_store() is reached from
+	 * the scheduler hook (esdm_sched_randomness) with rq->lock held, i.e. a
+	 * genuinely atomic context. On PREEMPT_RT a spinlock_t becomes a sleeping
+	 * rtmutex, which must not be acquired there; a raw spinlock never sleeps.
+	 */
+	raw_spinlock_t lock;
 	wait_queue_head_t read_wait;
 };
 
@@ -55,10 +61,10 @@ static void esdm_testing_reset(struct esdm_testing *data)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&data->lock, flags);
+	raw_spin_lock_irqsave(&data->lock, flags);
 	data->rb_reader = 0;
 	atomic_set(&data->rb_writer, 0);
-	spin_unlock_irqrestore(&data->lock, flags);
+	raw_spin_unlock_irqrestore(&data->lock, flags);
 }
 
 static void esdm_testing_init(struct esdm_testing *data, u32 boot)
@@ -106,7 +112,7 @@ static bool esdm_testing_store(struct esdm_testing *data, u64 value, u32 *boot)
 	if (!atomic_read(&data->esdm_testing_enabled) && (*boot != 1))
 		return false;
 
-	spin_lock_irqsave(&data->lock, flags);
+	raw_spin_lock_irqsave(&data->lock, flags);
 
 	/*
 	 * Disable entropy testing for boot time testing after ring buffer
@@ -118,7 +124,7 @@ static bool esdm_testing_store(struct esdm_testing *data, u64 value, u32 *boot)
 			*boot = 2;
 			pr_warn_once(
 				"One time data collection test disabled\n");
-			spin_unlock_irqrestore(&data->lock, flags);
+			raw_spin_unlock_irqrestore(&data->lock, flags);
 			return false;
 		}
 
@@ -130,7 +136,7 @@ static bool esdm_testing_store(struct esdm_testing *data, u64 value, u32 *boot)
 			      ESDM_TESTING_RINGBUFFER_MASK] = value;
 	atomic_inc(&data->rb_writer);
 
-	spin_unlock_irqrestore(&data->lock, flags);
+	raw_spin_unlock_irqrestore(&data->lock, flags);
 
 #ifndef ESDM_TESTING_USE_BUSYLOOP
 	if (wq_has_sleeper(&data->read_wait))
@@ -158,11 +164,11 @@ static int esdm_testing_reader(struct esdm_testing *data, u32 *boot, u8 *outbuf,
 	while (outbuflen) {
 		u32 writer = (u32)atomic_read(&data->rb_writer);
 
-		spin_lock_irqsave(&data->lock, flags);
+		raw_spin_lock_irqsave(&data->lock, flags);
 
 		/* We have no data or reached the writer. */
 		if (!writer || (writer == data->rb_reader)) {
-			spin_unlock_irqrestore(&data->lock, flags);
+			raw_spin_unlock_irqrestore(&data->lock, flags);
 
 			/*
 			 * Now we gathered all boot data, enable regular data
@@ -190,7 +196,7 @@ static int esdm_testing_reader(struct esdm_testing *data, u32 *boot, u8 *outbuf,
 
 		/* We copy out word-wise */
 		if (outbuflen < sizeof(u64)) {
-			spin_unlock_irqrestore(&data->lock, flags);
+			raw_spin_unlock_irqrestore(&data->lock, flags);
 			goto out;
 		}
 
@@ -198,7 +204,7 @@ static int esdm_testing_reader(struct esdm_testing *data, u32 *boot, u8 *outbuf,
 		       sizeof(u64));
 		data->rb_reader++;
 
-		spin_unlock_irqrestore(&data->lock, flags);
+		raw_spin_unlock_irqrestore(&data->lock, flags);
 
 		outbuf += sizeof(u64);
 		outbuflen -= sizeof(u64);
@@ -283,7 +289,7 @@ MODULE_PARM_DESC(
 static struct esdm_testing esdm_raw_hires = {
 	.rb_reader = 0,
 	.rb_writer = ATOMIC_INIT(0),
-	.lock = __SPIN_LOCK_UNLOCKED(esdm_raw_hires.lock),
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(esdm_raw_hires.lock),
 	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_hires.read_wait)
 };
 
@@ -325,7 +331,7 @@ MODULE_PARM_DESC(
 static struct esdm_testing esdm_irq_perf = {
 	.rb_reader = 0,
 	.rb_writer = ATOMIC_INIT(0),
-	.lock = __SPIN_LOCK_UNLOCKED(esdm_irq_perf.lock),
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(esdm_irq_perf.lock),
 	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_irq_perf.read_wait)
 };
 
@@ -368,7 +374,7 @@ MODULE_PARM_DESC(
 static struct esdm_testing esdm_raw_sched_hires = {
 	.rb_reader = 0,
 	.rb_writer = ATOMIC_INIT(0),
-	.lock = __SPIN_LOCK_UNLOCKED(esdm_raw_sched_hires.lock),
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(esdm_raw_sched_hires.lock),
 	.read_wait =
 		__WAIT_QUEUE_HEAD_INITIALIZER(esdm_raw_sched_hires.read_wait)
 };
@@ -413,7 +419,7 @@ MODULE_PARM_DESC(
 static struct esdm_testing esdm_sched_perf = {
 	.rb_reader = 0,
 	.rb_writer = ATOMIC_INIT(0),
-	.lock = __SPIN_LOCK_UNLOCKED(esdm_sched_perf.lock),
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(esdm_sched_perf.lock),
 	.read_wait = __WAIT_QUEUE_HEAD_INITIALIZER(esdm_sched_perf.read_wait)
 };
 

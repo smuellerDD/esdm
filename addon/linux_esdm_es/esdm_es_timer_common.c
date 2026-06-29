@@ -28,18 +28,18 @@ static u64 esdm_gcd_timer = 0;
 
 bool esdm_gcd_tested(void)
 {
-	return (esdm_gcd_timer != 0);
+	return (READ_ONCE(esdm_gcd_timer) != 0);
 }
 
 u64 esdm_gcd_get(void)
 {
-	return esdm_gcd_timer;
+	return READ_ONCE(esdm_gcd_timer);
 }
 
 /* Set the GCD for use in IRQ ES - if 0, the GCD calculation is restarted. */
 void esdm_gcd_set(u64 running_gcd)
 {
-	esdm_gcd_timer = running_gcd;
+	WRITE_ONCE(esdm_gcd_timer, running_gcd);
 	/* Ensure that update to global variable esdm_gcd_timer is visible */
 	mb();
 }
