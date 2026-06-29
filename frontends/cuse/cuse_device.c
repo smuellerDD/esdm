@@ -156,6 +156,20 @@ static int esdm_cuse_shm_status_create_shm(void)
  ******************************************************************************/
 
 static atomic_bool_t esdm_cuse_poll_thread_shutdown = ATOMIC_BOOL_INIT(false);
+/*
+ * Predicate for the init handshake below: without it, the checker's
+ * thread_wake_all() can fire before esdm_cuse_init() reaches its wait, losing
+ * the wakeup and hanging startup.
+ */
+static atomic_bool_t esdm_cuse_poll_checker_ready = ATOMIC_BOOL_INIT(false);
+
+/*
+ * Active FUSE session, published by main_common() while the session loop runs.
+ * The termination signal handler reads it to request a clean loop exit via the
+ * async-signal-safe fuse_session_exit(). volatile so the handler sees the
+ * current value; pointer-sized loads/stores are atomic on supported platforms.
+ */
+static struct fuse_session *volatile esdm_cuse_session;
 static sem_t *esdm_cuse_semid = SEM_FAILED;
 static const char *esdm_sem_name = NULL;
 
@@ -258,67 +272,59 @@ static void esdm_cuse_term(void)
 /* terminate the daemon cleanly */
 static void esdm_cuse_sig_handler(int sig)
 {
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "Received signal %d\n", sig);
+	struct fuse_session *se = esdm_cuse_session;
 
-	esdm_cuse_term();
+	(void)sig;
 
-	signal(SIGABRT, SIG_DFL);
-	signal(SIGALRM, SIG_DFL);
-	signal(SIGBUS, SIG_DFL);
-	signal(SIGFPE, SIG_DFL);
-	signal(SIGHUP, SIG_DFL);
-	signal(SIGILL, SIG_DFL);
-	signal(SIGINT, SIG_DFL);
-	signal(SIGIO, SIG_DFL);
-	signal(SIGIOT, SIG_DFL);
-	//signal(SIGPIPE, SIG_DFL);
-	signal(SIGPOLL, SIG_DFL);
-	signal(SIGPROF, SIG_DFL);
-	signal(SIGPWR, SIG_DFL);
-	signal(SIGQUIT, SIG_DFL);
-	signal(SIGSEGV, SIG_DFL);
-	signal(SIGSYS, SIG_DFL);
-	signal(SIGTERM, SIG_DFL);
-	signal(SIGTRAP, SIG_DFL);
-	signal(SIGUSR1, SIG_DFL);
-	signal(SIGUSR2, SIG_DFL);
-	signal(SIGVTALRM, SIG_DFL);
-	signal(SIGXCPU, SIG_DFL);
-	signal(SIGXFSZ, SIG_DFL);
-
-	exit(0);
+	/*
+	 * Async-signal-safe only. fuse_session_exit() merely sets the session's
+	 * exit flag, which makes fuse_session_loop() return so the real teardown
+	 * (esdm_cuse_term) runs in normal context in main_common(). We must NOT
+	 * call esdm_cuse_term(), esdm_logger(), free(), thread join/cancel,
+	 * shmdt/sem_close, umount, or exit() from here: none are
+	 * async-signal-safe and several could self-deadlock against an
+	 * interrupted worker (e.g. holding the malloc arena or a mutex).
+	 */
+	if (se)
+		fuse_session_exit(se);
 }
 
 static int esdm_cuse_install_sig_handler(void)
 {
+	/*
+	 * Only asynchronous termination signals get the graceful handler: it
+	 * makes the FUSE loop return so teardown (incl. bind-unmount) runs in
+	 * normal context. Synchronous fault signals (SIGSEGV/SIGBUS/SIGILL/
+	 * SIGFPE/SIGABRT/SIGSYS/SIGTRAP) are deliberately left at their default
+	 * disposition - a "set flag and return" handler would loop forever on
+	 * the faulting instruction, and running teardown from a fault context is
+	 * unsafe; a core dump is more useful there.
+	 */
+	static const int term_signals[] = {
+		SIGHUP,	  SIGINT,  SIGQUIT,   SIGTERM, SIGALRM,
+		SIGIO,	  SIGPOLL, SIGPROF,   SIGPWR,  SIGUSR1,
+		SIGUSR2,  SIGVTALRM, SIGXCPU, SIGXFSZ,
+	};
+	struct sigaction sa;
+	size_t i;
+
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
 		    "Install termination signal handler\n");
 
-	/* Catch all termination signals to ensure the bind mount is removed */
-	signal(SIGABRT, esdm_cuse_sig_handler);
-	signal(SIGALRM, esdm_cuse_sig_handler);
-	signal(SIGBUS, esdm_cuse_sig_handler);
-	signal(SIGFPE, esdm_cuse_sig_handler);
-	signal(SIGHUP, esdm_cuse_sig_handler);
-	signal(SIGILL, esdm_cuse_sig_handler);
-	signal(SIGINT, esdm_cuse_sig_handler);
-	signal(SIGIO, esdm_cuse_sig_handler);
-	signal(SIGIOT, esdm_cuse_sig_handler);
-	/* SIGPIPE is used as control mechanism by Protobuf-C-RPC */
-	//signal(SIGPIPE, esdm_cuse_sig_handler);
-	signal(SIGPOLL, esdm_cuse_sig_handler);
-	signal(SIGPROF, esdm_cuse_sig_handler);
-	signal(SIGPWR, esdm_cuse_sig_handler);
-	signal(SIGQUIT, esdm_cuse_sig_handler);
-	signal(SIGSEGV, esdm_cuse_sig_handler);
-	signal(SIGSYS, esdm_cuse_sig_handler);
-	signal(SIGTERM, esdm_cuse_sig_handler);
-	signal(SIGTRAP, esdm_cuse_sig_handler);
-	signal(SIGUSR1, esdm_cuse_sig_handler);
-	signal(SIGUSR2, esdm_cuse_sig_handler);
-	signal(SIGVTALRM, esdm_cuse_sig_handler);
-	signal(SIGXCPU, esdm_cuse_sig_handler);
-	signal(SIGXFSZ, esdm_cuse_sig_handler);
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = esdm_cuse_sig_handler;
+	sigemptyset(&sa.sa_mask);
+	/*
+	 * No SA_RESTART: the FUSE loop's read() must return EINTR so the loop
+	 * observes the exit flag set by fuse_session_exit() above. (glibc's
+	 * signal() defaults to SA_RESTART, which would suppress that.)
+	 * SIGPIPE is intentionally left untouched (control mechanism for
+	 * Protobuf-C-RPC).
+	 */
+	sa.sa_flags = 0;
+
+	for (i = 0; i < sizeof(term_signals) / sizeof(term_signals[0]); i++)
+		sigaction(term_signals[i], &sa, NULL);
 
 	return 0;
 }
@@ -953,6 +959,7 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 		esdm_cuse_polls[i].ph = NULL;
 		esdm_cuse_polls[i].poll_events = 0;
 	}
+	atomic_bool_set_true(&esdm_cuse_poll_checker_ready);
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
 	while (!atomic_bool_read(&esdm_cuse_poll_thread_shutdown)) {
@@ -1042,7 +1049,10 @@ void esdm_cuse_init_done(void *userdata)
 		  "Starting poll-in-reset thread failed: %d\n", ret);
 
 	/* Wait until thread is fully initialized */
-	thread_wait_no_event(&esdm_cuse_poll_checker_wait);
+	thread_wait_event(&esdm_cuse_poll_checker_wait,
+			  atomic_bool_read(&esdm_cuse_poll_checker_ready) ||
+				  atomic_bool_read(
+					  &esdm_cuse_poll_thread_shutdown));
 
 	return;
 
@@ -1219,7 +1229,34 @@ int main_common(const char *_devname, const char *target, const char *semname,
 	ci.flags = CUSE_UNRESTRICTED_IOCTL;
 
 	esdm_cuse_install_sig_handler();
-	ret = cuse_lowlevel_main(args.argc, args.argv, &ci, clop, NULL);
+
+	/*
+	 * Open-code cuse_lowlevel_main() so the session handle is reachable by
+	 * the signal handler (via esdm_cuse_session), which exits the loop
+	 * cleanly instead of running teardown from signal context. On loop
+	 * return the ESDM-specific teardown runs below at out: in normal
+	 * context.
+	 */
+	{
+		int multithreaded = 0;
+		struct fuse_session *se = cuse_lowlevel_setup(
+			args.argc, args.argv, &ci, clop, &multithreaded, NULL);
+
+		if (se == NULL) {
+			ret = 1;
+		} else {
+			esdm_cuse_session = se;
+
+			if (multithreaded)
+				ret = fuse_session_loop_mt(se, 0);
+			else
+				ret = fuse_session_loop(se);
+
+			esdm_cuse_session = NULL;
+			cuse_lowlevel_teardown(se);
+			ret = ret ? 1 : 0;
+		}
+	}
 
 out:
 	esdm_cuse_term();
