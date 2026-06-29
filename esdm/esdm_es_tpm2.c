@@ -519,5 +519,4 @@ struct esdm_es_cb esdm_es_tpm2 = {
 	.state = esdm_es_tpm2_es_state,
 	.reset = NULL,
 	.active = esdm_es_tpm2_active,
-	.switch_hash = NULL,
 };
