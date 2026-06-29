@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -89,7 +90,7 @@ static void usage(void)
 	fprintf(stderr,
 		"\t-P --raise_sched_priority\tRaise scheduling priority/nice level\n");
 	fprintf(stderr,
-		"\t-m --memlock\tLock all memory from being swapped out\n");
+		"\t-m --memlock\tLock all memory from being swapped out and disable core dumps\n");
 	exit(1);
 }
 
@@ -468,6 +469,21 @@ int main(int argc, char *argv[])
 		if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 				    "Cannot use mlockall\n");
+			exit(-1);
+		}
+
+		/*
+		 * Locking memory keeps the secrets ESDM handles out of swap;
+		 * a core dump would defeat that by writing the whole address
+		 * space (including the locked pages) to disk. Mark the process
+		 * non-dumpable so the kernel refuses to generate a core dump
+		 * for it at all - this also covers core_pattern pipe handlers
+		 * (e.g. systemd-coredump), which a mere RLIMIT_CORE of 0 does
+		 * not reliably suppress.
+		 */
+		if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot disable core dumps\n");
 			exit(-1);
 		}
 	}
