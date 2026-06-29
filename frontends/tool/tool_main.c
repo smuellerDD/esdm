@@ -1441,8 +1441,8 @@ int main(int argc, char **argv)
 	} else if (is_fully_seeded) {
 		return_val = handle_is_fully_seeded();
 	} else if (get_random) {
-		handle_get_random(num_rand_bytes, getrandom_mode, raw_bytes,
-				  timeout_msec);
+		return_val = handle_get_random(num_rand_bytes, getrandom_mode,
+					       raw_bytes, timeout_msec);
 	} else if (entropy_count) {
 		return_val = handle_entropy_count();
 	} else if (entropy_level) {
