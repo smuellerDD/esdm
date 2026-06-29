@@ -187,7 +187,13 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 		if (collected_events >= requested_events)
 			break;
 
-		w_pos = READ_ONCE(*per_cpu_ptr(&esdm_sched_array_wp, cpu));
+		/*
+		 * Acquire the producer's write pointer so the array reads below
+		 * are ordered after the producer's data store that precedes its
+		 * smp_store_release(wp); a plain READ_ONCE could observe the
+		 * advanced wp but stale slot data on weak-memory architectures.
+		 */
+		w_pos = smp_load_acquire(per_cpu_ptr(&esdm_sched_array_wp, cpu));
 		r_pos = smp_load_acquire(
 			per_cpu_ptr(&esdm_sched_array_rp, cpu));
 
@@ -409,15 +415,21 @@ static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 static void esdm_sched_time_process(void)
 {
 	u64 now_time = random_get_entropy();
+	/*
+	 * Snapshot the GCD once: a concurrent esdm_gcd_set(0) on another CPU
+	 * (reset / health failure / vmgenid notifier) between a separate
+	 * "tested" check and the divide would otherwise turn the divisor into 0
+	 * and oops in the scheduler hot path.
+	 */
+	u64 gcd = esdm_gcd_get();
 
-	if (unlikely(!esdm_gcd_tested())) {
+	if (unlikely(!gcd)) {
 		/* When GCD is unknown, we process the full time stamp */
 		esdm_time_process_common(now_time, esdm_sched_array_add);
 		esdm_gcd_add_value(now_time);
 	} else {
 		/* GCD is known and applied */
-		esdm_time_process_common(now_time / esdm_gcd_get(),
-					 esdm_sched_array_add);
+		esdm_time_process_common(now_time / gcd, esdm_sched_array_add);
 	}
 
 	esdm_sched_perf_time(now_time);
