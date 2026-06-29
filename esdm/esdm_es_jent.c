@@ -246,7 +246,13 @@ static int esdm_jent_initialize(void)
 	/* Allow the init function to be called multiple times */
 	esdm_jent_finalize();
 
-	mutex_w_init(&esdm_jent_lock, 1, 0);
+	/*
+	 * esdm_jent_lock is statically initialized (DEFINE_MUTEX_W_UNLOCKED) and
+	 * left unlocked by esdm_jent_finalize() above, so just acquire it.
+	 * Re-running mutex_w_init() here on the already-initialized mutex (the
+	 * reinit path) is undefined behaviour and leaks the mutexattr.
+	 */
+	mutex_w_lock(&esdm_jent_lock);
 
 	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() ||
 	    esdm_ntg1_2024_compliant()) {
