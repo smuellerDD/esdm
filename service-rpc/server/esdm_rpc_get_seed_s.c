@@ -68,6 +68,12 @@ void esdm_rpc_get_seed(UnprivAccess_Service *service,
 
 		closure(&response, closure_data);
 
-		memset_secure(rndval, 0, sizeof(rndval));
+		/*
+		 * esdm_get_seed() never writes beyond the request->len byte
+		 * buffer it was handed (bounded by sizeof(rndval) above), so
+		 * wiping request->len bytes covers all generated seed data
+		 * without scrubbing the whole ~64KB buffer on every call.
+		 */
+		memset_secure(rndval, 0, (size_t)request->len);
 	}
 }
