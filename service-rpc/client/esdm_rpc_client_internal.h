@@ -60,6 +60,13 @@ struct esdm_rpc_client_connection {
 	uint8_t buf[ESDM_RPC_MAX_MSG_SIZE];
 
 	/*
+	 * Scratch buffer used to unpack a response without a malloc()/free()
+	 * round-trip per call. Held exclusively while rpc_conn->lock is taken,
+	 * so it can back the esdm_rpc_alloc() bump allocator.
+	 */
+	uint8_t unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
+
+	/*
 	 * Used to track successfull reads from esdm-server.
 	 * esdm-server closes idle connections after ESDM_RPC_IDLE_TIMEOUT_USEC.
 	 * Only update this, when data is received or on new connections.

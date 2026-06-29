@@ -44,6 +44,7 @@
 #include <unistd.h>
 
 #include "atomic.h"
+#include "buffer.h"
 #include "build_bug_on.h"
 #include "conv_be_le.h"
 #include "config.h"
@@ -397,8 +398,28 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 	uint32_t method_index = header->method_index;
 	int ret = 0;
 
+	/*
+	 * Unpack the request into a thread-local scratch buffer via a bump
+	 * allocator rather than malloc()/free() on every call. Each worker
+	 * thread processes one request at a time, so a single reused buffer
+	 * is safe. The consumed range is zeroized at the end to avoid leaving
+	 * a copy of the request payload (e.g. write_data entropy) in memory.
+	 */
+	static __thread uint8_t unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
+	struct buffer tlh = {
+		.len = sizeof(unpack_buf),
+		.consumed = 0,
+		.buf = unpack_buf,
+	};
+	ProtobufCAllocator allocator = {
+		.alloc = esdm_rpc_alloc,
+		.free = esdm_rpc_free,
+		.allocator_data = &tlh,
+	};
+
 	CKINT(esdm_rpc_proto_get_descriptor(service, received_data, &desc));
-	message = protobuf_c_message_unpack(desc, NULL, header->message_length,
+	message = protobuf_c_message_unpack(desc, &allocator,
+					    header->message_length,
 					    received_data->data);
 
 	CKNULL(message, -ENOMEM);
@@ -412,7 +433,9 @@ static int esdm_rpcs_unpack(struct esdm_rpcs_connection *rpc_conn,
 
 out:
 	if (message)
-		protobuf_c_message_free_unpacked(message, NULL);
+		protobuf_c_message_free_unpacked(message, &allocator);
+	if (tlh.consumed)
+		memset_secure(unpack_buf, 0, tlh.consumed);
 
 	/* Pick up the error from esdm_rpcs_write_data */
 	if (rpc_conn->child_fd == -1)
