@@ -23,7 +23,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <cassert>
 #include <botan/hash.h>
 #include <botan/exceptn.h>
 
@@ -68,7 +67,7 @@ static int esdm_botan_hash_init(void *hash)
 	try {
 		ctx->hash_fn = Botan::HashFunction::create_or_throw(
 			DEFAULT_BOTAN_HASH);
-	} catch (const Botan::Lookup_Error &ex) {
+	} catch (const std::exception &ex) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 			    "Botan::HashFunction::create() failed %s\n",
 			    ex.what());
@@ -84,7 +83,13 @@ static int esdm_botan_hash_update(void *hash, const uint8_t *inbuf,
 	struct esdm_botan_hash_ctx *ctx =
 		reinterpret_cast<esdm_botan_hash_ctx *>(hash);
 
-	ctx->hash_fn->update(inbuf, inbuflen);
+	try {
+		ctx->hash_fn->update(inbuf, inbuflen);
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Botan hash update failed %s\n", ex.what());
+		return -EFAULT;
+	}
 
 	return 0;
 }
@@ -94,7 +99,13 @@ static int esdm_botan_hash_final(void *hash, uint8_t *digest)
 	struct esdm_botan_hash_ctx *ctx =
 		reinterpret_cast<esdm_botan_hash_ctx *>(hash);
 
-	ctx->hash_fn->final(digest);
+	try {
+		ctx->hash_fn->final(digest);
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Botan hash final failed %s\n", ex.what());
+		return -EFAULT;
+	}
 
 	return 0;
 }
@@ -247,19 +258,37 @@ static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
 {
 	struct esdm_botan_drng_state *state =
 		reinterpret_cast<esdm_botan_drng_state *>(drng);
-
-	if (state->initialized) {
-		state->drbg->add_entropy(inbuf, inbuflen);
-	} else {
 #ifdef ESDM_BOTAN_DRNG_HMAC
-		/* init at least with 256 bit entropy + 128 bit nonce */
-		assert(inbuflen >= 3 * (256 / 8) / 2);
+	/* init at least with 256 bit entropy + 128 bit nonce */
+	const size_t min_init_seedlen = 3 * (256 / 8) / 2;
+#else
+	/* init at least with 256 bit entropy */
+	const size_t min_init_seedlen = 256 / 8;
 #endif
+
+	try {
+		if (state->initialized) {
+			state->drbg->add_entropy(inbuf, inbuflen);
+			return 0;
+		}
+
+		if (inbuflen < min_init_seedlen) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_ANY,
+				"Botan DRNG initial seed too short: %zu < %zu bytes\n",
+				inbuflen, min_init_seedlen);
+			return -EINVAL;
+		}
+
 		state->drbg->initialize_with(inbuf, inbuflen);
 		state->initialized = true;
-	}
 
-	return 0;
+		return 0;
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Botan DRNG seeding failed: %s\n", ex.what());
+		return -EFAULT;
+	}
 }
 
 #ifdef ESDM_BOTAN_DRNG_HMAC
@@ -272,7 +301,14 @@ static ssize_t esdm_botan_drbg_generate_w_additional_data(void *drng,
 	struct esdm_botan_drng_state *state =
 		reinterpret_cast<esdm_botan_drng_state *>(drng);
 
-	state->drbg->randomize_with_input(outbuf, outbuflen, adata, adatalen);
+	try {
+		state->drbg->randomize_with_input(outbuf, outbuflen, adata,
+						  adatalen);
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Botan DRNG generate failed: %s\n", ex.what());
+		return -EFAULT;
+	}
 
 	return (ssize_t)outbuflen;
 }
@@ -289,13 +325,21 @@ static ssize_t esdm_botan_drbg_generate(void *drng, uint8_t *outbuf,
 	struct esdm_botan_drng_state *state =
 		reinterpret_cast<esdm_botan_drng_state *>(drng);
 
-	state->drbg->randomize(outbuf, outbuflen);
+	try {
+		state->drbg->randomize(outbuf, outbuflen);
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Botan DRNG generate failed: %s\n", ex.what());
+		return -EFAULT;
+	}
 
 	return (ssize_t)outbuflen;
 #endif
 
 #ifdef ESDM_BOTAN_DRNG_HMAC
-	struct timespec ts;
+	/* value-initialize to avoid feeding uninitialized padding bytes as
+	 * additional data */
+	struct timespec ts = {};
 	int ret;
 
 	ret = clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -331,20 +375,30 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (!state)
 		return -ENOMEM;
 
+	/* the DRNG constructors can throw, e.g. Botan::Lookup_Error if the
+	 * underlying primitive is not compiled into Botan; exceptions must
+	 * not propagate into the C callers */
+	try {
 #ifdef ESDM_BOTAN_DRNG_CHACHA20
-	state->drbg.reset(new (std::nothrow) Botan::ChaCha_RNG());
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-		    "Botan ChaCha20 DRNG core allocated\n");
+		state->drbg.reset(new Botan::ChaCha_RNG());
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+			    "Botan ChaCha20 DRNG core allocated\n");
 #endif
 #ifdef ESDM_BOTAN_DRNG_HMAC
-	state->drbg.reset(new (std::nothrow) Botan::HMAC_DRBG("SHA-512"));
-	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-		    "Botan SP800-90A HMAC-DRBG core allocated\n");
+		state->drbg.reset(new Botan::HMAC_DRBG("SHA-512"));
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+			    "Botan SP800-90A HMAC-DRBG core allocated\n");
 #endif
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Botan DRNG allocation failed: %s\n", ex.what());
+		delete state;
+		return -EFAULT;
+	}
 
 	if (state->drbg == nullptr) {
 		delete state;
-		return -1;
+		return -ENOMEM;
 	}
 
 	*drng = state;
@@ -479,8 +533,8 @@ struct nist_test_vector_hmac_drbg {
 static int esdm_botan_drbg_selftest_hmac()
 {
 	void *drng = NULL;
-	uint8_t *seed_material;
-	uint8_t *act;
+	uint8_t seed_material[32 + 16 + 32];
+	uint8_t act[256];
 	int ret;
 
 	/*
@@ -899,8 +953,9 @@ static int esdm_botan_drbg_selftest_hmac()
 			entropy_size + nonce_size + pers_size;
 		size_t offset = 0;
 
-		seed_material = (uint8_t *)malloc(seed_material_size);
-		act = (uint8_t *)malloc(result_size);
+		static_assert(sizeof(seed_material) ==
+			      entropy_size + nonce_size + pers_size);
+		static_assert(sizeof(act) == result_size);
 
 		memcpy(seed_material + offset, test_vectors[i].entropy,
 		       entropy_size);
@@ -939,24 +994,10 @@ static int esdm_botan_drbg_selftest_hmac()
 		}
 		esdm_botan_drbg_dealloc(drng);
 		drng = NULL;
-
-		free(seed_material);
-		seed_material = NULL;
-
-		free(act);
-		act = NULL;
 	}
 
 out:
 	esdm_botan_drbg_dealloc(drng);
-
-	/* does nothing if already NULL */
-	free(seed_material);
-	seed_material = NULL;
-
-	/* does nothing if already NULL */
-	free(act);
-	act = NULL;
 
 	return ret;
 }
