@@ -270,6 +270,17 @@ uint32_t esdm_config_drng_max_wo_reseed_bits(void);
  */
 uint32_t esdm_config_max_nodes(void);
 
+/**
+ * @brief DRNG Manager configuration: set upper limit of DRNG instances
+ *
+ * The ESDM operates one DRNG instance ("node") per online CPU by default.
+ * Limiting the number of instances reduces the memory footprint at the cost
+ * of more contention on the remaining DRNG instances.
+ *
+ * @param [in] val Maximum number of DRNG instances (must be >= 1).
+ */
+void esdm_config_max_nodes_set(uint32_t val);
+
 /* FIPS mode enforcement */
 enum esdm_config_force_fips {
 	/** Default: no FIPS enforcement is set, ESDM checks environment */

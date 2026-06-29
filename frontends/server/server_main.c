@@ -29,6 +29,10 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
+
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_rpc_server.h"
@@ -36,6 +40,15 @@
 #include "helper.h"
 #include "ret_checkers.h"
 #include "systemd_support.h"
+#include "threading_support.h"
+
+/*
+ * Per-thread stack size used in small-memory mode. The RPC worker threads only
+ * execute shallow handler call chains, so 2 MiB is ample while drastically
+ * cutting the address space reserved across the entire worker pool compared to
+ * the (commonly 8 MiB) platform default.
+ */
+#define ESDM_SERVER_SMALL_MEM_STACKSIZE (2 * 1024 * 1024)
 
 static unsigned int verbosity = 0;
 static unsigned int foreground = 0;
@@ -45,6 +58,7 @@ static int pidfile_fd = -1;
 static const char *username = NULL;
 static const char *groupname = NULL;
 static unsigned int memlock = 0;
+static unsigned int small_memory = 0;
 
 /*******************************************************************
  * Forward Declarations
@@ -91,6 +105,8 @@ static void usage(void)
 		"\t-P --raise_sched_priority\tRaise scheduling priority/nice level\n");
 	fprintf(stderr,
 		"\t-m --memlock\tLock all memory from being swapped out and disable core dumps\n");
+	fprintf(stderr,
+		"\t-M --small_memory\tReduce memory consumption (1 MiB thread stacks, single DRNG node)\n");
 	exit(1);
 }
 
@@ -115,9 +131,10 @@ static void parse_opts(int argc, char *argv[])
 			{ "raise_sched_priority", 0, 0, 0 },
 			{ "groupname", 1, 0, 0 },
 			{ "memlock", 0, 0, 0 },
+			{ "small_memory", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "hvp:u:fisSPg:m", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fisSPg:mM", opts, &opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -186,6 +203,10 @@ static void parse_opts(int argc, char *argv[])
 				/* memlock */
 				memlock = 1;
 				break;
+			case 13:
+				/* small_memory */
+				small_memory = 1;
+				break;
 
 			default:
 				usage();
@@ -233,6 +254,10 @@ static void parse_opts(int argc, char *argv[])
 		case 'm':
 			/* memlock */
 			memlock = 1;
+			break;
+		case 'M':
+			/* small_memory */
+			small_memory = 1;
 			break;
 
 		default:
@@ -466,7 +491,17 @@ int main(int argc, char *argv[])
 				    "Cannot raise memlock limit\n");
 			exit(-1);
 		}
-		if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
+		/*
+		 * Lock pages only once they are faulted in instead of
+		 * pre-faulting and locking every reserved-but-untouched page.
+		 * Without this, MCL_FUTURE forces each newly mapped region fully
+		 * resident at map time - most notably the whole of every thread
+		 * stack and the glibc heap reservation - which dominates the
+		 * locked resident set. Any page that ever holds data is faulted
+		 * and therefore still locked, so no secret can reach swap; only
+		 * the untouched reservations stop being paid for.
+		 */
+		if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) != 0) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 				    "Cannot use mlockall\n");
 			exit(-1);
@@ -486,6 +521,50 @@ int main(int argc, char *argv[])
 				    "Cannot disable core dumps\n");
 			exit(-1);
 		}
+	}
+
+	if (small_memory) {
+		/*
+		 * Shrink the per-thread stack size. This must happen before the
+		 * thread pool is initialized in daemon_init() so the reduced
+		 * size is applied to every worker thread that gets spawned.
+		 */
+		thread_set_default_stacksize(ESDM_SERVER_SMALL_MEM_STACKSIZE);
+
+		/*
+		 * Collapse the per-CPU DRNG instances down to a single node.
+		 * Each node carries its own DRNG state and buffers, so on hosts
+		 * with many CPUs this is the largest single memory reduction.
+		 */
+		esdm_config_max_nodes_set(1);
+
+		/*
+		 * Disable the asynchronous Jitter RNG block collection, which
+		 * otherwise keeps pre-filled entropy buffers resident.
+		 */
+		esdm_config_es_jent_async_enabled_set(0);
+
+#ifdef __GLIBC__
+		/*
+		 * Tune the glibc allocator for a small footprint:
+		 *  - cap the number of malloc arenas at one: glibc otherwise
+		 *    creates up to 8 arenas per CPU for multi-threaded
+		 *    programs, each able to grow to tens of MiB;
+		 *  - drop the top pad to zero;
+		 *  - use a low trim threshold so the heap top is returned to the
+		 *    kernel promptly instead of being retained by the process;
+		 *  - use a low (and, by being set explicitly, fixed) mmap
+		 *    threshold so larger allocations are served via mmap and
+		 *    handed straight back to the kernel on free rather than
+		 *    growing the retained heap.
+		 */
+		if (!mallopt(M_ARENA_MAX, 1) || !mallopt(M_TOP_PAD, 0) ||
+		    !mallopt(M_TRIM_THRESHOLD, 64 * 1024) ||
+		    !mallopt(M_MMAP_THRESHOLD, 64 * 1024))
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_SERVER,
+				"Cannot tune glibc allocator for small memory mode\n");
+#endif
 	}
 
 	if (pidfile && strlen(pidfile))

@@ -345,6 +345,12 @@ uint32_t esdm_config_max_nodes(void)
 	return esdm_config.esdm_max_nodes;
 }
 
+DSO_PUBLIC
+void esdm_config_max_nodes_set(uint32_t val)
+{
+	esdm_config.esdm_max_nodes = val;
+}
+
 #ifdef ESDM_TESTMODE
 void esdm_config_drng_max_wo_reseed_set(uint32_t val)
 {
@@ -354,11 +360,6 @@ void esdm_config_drng_max_wo_reseed_set(uint32_t val)
 void esdm_config_drng_max_wo_reseed_bits_set(uint32_t val)
 {
 	esdm_config.esdm_drng_max_wo_reseed_bits = val;
-}
-
-void esdm_config_max_nodes_set(uint32_t val)
-{
-	esdm_config.esdm_max_nodes = val;
 }
 #endif
 
