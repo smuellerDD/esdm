@@ -216,6 +216,15 @@ extern PrivAccess_Service priv_access_service;
 #define ESDM_RPC_MAX_DATA                                                      \
 	(ESDM_RPC_MAX_INTERNAL_MSG_SIZE - ESDM_RPC_MAX_INTERNAL_MSG_HEADER_SIZE)
 
+/*
+ * Scratch buffer size for unpacking a received protobuf message with the
+ * esdm_rpc_alloc() bump allocator instead of malloc()/free() on every call.
+ * It must hold the unpacked message struct plus the largest possible
+ * variable-length field (up to ESDM_RPC_MAX_DATA) plus per-allocation
+ * alignment padding, hence the headroom over the raw wire message size.
+ */
+#define ESDM_RPC_MAX_UNPACK_SIZE (ESDM_RPC_MAX_MSG_SIZE + 1024)
+
 #ifdef __cplusplus
 }
 #endif

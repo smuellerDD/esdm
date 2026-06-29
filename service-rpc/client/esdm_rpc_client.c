@@ -449,14 +449,30 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * We now have a filled buffer that has a header and received
 		 * as much data as the header defined. We also start the
 		 * processing of data which returns it to the caller.
+		 *
+		 * Unpack into a per-connection scratch buffer via a bump
+		 * allocator instead of malloc()/free(). This avoids a heap
+		 * allocation per call and lets us reliably zeroize the unpacked
+		 * (secret) response copy afterwards - the default allocator's
+		 * free() would otherwise leave it in the heap unscrubbed.
 		 */
+		struct buffer tlh = {
+			.len = sizeof(rpc_conn->unpack_buf),
+			.consumed = 0,
+			.buf = rpc_conn->unpack_buf,
+		};
+		ProtobufCAllocator allocator = {
+			.alloc = esdm_rpc_alloc,
+			.free = esdm_rpc_free,
+			.allocator_data = &tlh,
+		};
 		ProtobufCMessage *msg =
-			protobuf_c_message_unpack(message_desc, NULL,
+			protobuf_c_message_unpack(message_desc, &allocator,
 						  header->message_length,
 						  received_data->data);
 		if (msg) {
 			closure(msg, closure_data);
-			protobuf_c_message_free_unpacked(msg, NULL);
+			protobuf_c_message_free_unpacked(msg, &allocator);
 			esdm_logger(
 				LOGGER_DEBUG, LOGGER_C_RPC,
 				"Data with length %u send to client closure handler\n",
@@ -467,6 +483,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			msg = ERR_PTR(-EFAULT);
 			closure(msg, closure_data);
 		}
+		if (tlh.consumed)
+			memset_secure(rpc_conn->unpack_buf, 0, tlh.consumed);
 		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
@@ -500,20 +518,22 @@ static void esdm_client_invoke(ProtobufCService *service,
 	const ProtobufCMethodDescriptor *method = desc->methods + method_index;
 	esdm_rpc_client_connection_t *rpc_conn =
 		(esdm_rpc_client_connection_t *)service;
-	static const double half_server_timeout =
-		(double)ESDM_RPC_IDLE_TIMEOUT_USEC / 1E6 / 2.0;
+	static const int64_t half_server_timeout_ns =
+		(int64_t)ESDM_RPC_IDLE_TIMEOUT_USEC * 1000 / 2;
 	struct timespec current_time;
-	double used_before_secs;
+	int64_t used_before_ns;
 	int ret;
 
 	mutex_w_lock(&rpc_conn->lock);
 
 	do {
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
-		used_before_secs = (double)current_time.tv_sec -
-				   (double)rpc_conn->last_used.tv_sec;
-		used_before_secs += (double)current_time.tv_nsec / 1E9 -
-				    (double)rpc_conn->last_used.tv_nsec / 1E9;
+		used_before_ns =
+			((int64_t)current_time.tv_sec -
+			 (int64_t)rpc_conn->last_used.tv_sec) *
+				1000000000LL +
+			((int64_t)current_time.tv_nsec -
+			 (int64_t)rpc_conn->last_used.tv_nsec);
 
 		/*
 		 * Connect to the server if we do not have a connection,
@@ -523,7 +543,7 @@ static void esdm_client_invoke(ProtobufCService *service,
 		 * ESDM_RPC_IDLE_TIMEOUT_USEC, consider it closed a bit earlier.
 		 */
 		if (rpc_conn->fd == -1 ||
-		    used_before_secs >= half_server_timeout) {
+		    used_before_ns >= half_server_timeout_ns) {
 			reset_conn_socket(rpc_conn);
 			CKINT(esdm_connect_proto_service(rpc_conn));
 		}
