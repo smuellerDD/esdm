@@ -621,9 +621,14 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 	uint32_t i, num_conn = *num;
 	int lock_res;
 
-	/* Atomic exchange */
-	*num = 0;
+	/*
+	 * Atomic exchange. Null the array pointer first, then clear the count:
+	 * a concurrent getter then either sees the NULL pointer (rejected by its
+	 * CKNULL) or a stale-but-consistent count, never a non-NULL pointer with
+	 * a count it is about to modulo against.
+	 */
 	rpc_conn_array = __sync_lock_test_and_set(rpc_conn, NULL);
+	*num = 0;
 	if (!rpc_conn_array)
 		return;
 
@@ -761,6 +766,16 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 
 	CKNULL(rpc_conn_array, -EFAULT);
 	CKNULL(ret_rpc_conn, -EFAULT);
+
+	/*
+	 * num_conn can transiently be observed as 0 by a caller racing a
+	 * concurrent init/fini: the connection array pointer and its count are
+	 * published (init) / cleared (fini) as two separate stores, so a window
+	 * exists where the pointer is non-NULL but the count is 0. The modulo
+	 * operations below would then be a divide-by-zero (SIGFPE), so bail.
+	 */
+	if (!num_conn)
+		return -ESHUTDOWN;
 
 	/*
 	 * Always using a fixed connection based on the current
