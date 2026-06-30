@@ -55,8 +55,13 @@ static void handle_sigint(int signal)
 
 	if (atomic_bool_cmpxchg(&should_terminate, false, true)) {
 		for (i = 0; i < cores; ++i) {
-			printf("Sending SIGKILL to child %i after SIGINT\n",
-			       processes[i]);
+			/*
+			 * Only signal real children. A not-yet-forked entry is 0
+			 * (calloc); kill(0, ...) would signal the entire process
+			 * group - including this parent and unrelated members.
+			 */
+			if (processes[i] <= 0)
+				continue;
 			kill(processes[i], SIGKILL);
 		}
 

@@ -44,7 +44,10 @@ void handle_stress_delay_one_core(double timeout_sec, long id, int sock_fd,
 	ssize_t ret;
 
 	rnd_buffer = malloc(request_size);
-	assert(rnd_buffer != NULL);
+	if (rnd_buffer == NULL) {
+		fprintf(stderr, "Failed to allocate stress request buffer\n");
+		return;
+	}
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 

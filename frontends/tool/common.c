@@ -124,6 +124,10 @@ char *format_time_sec(double time_sec)
 {
 	const size_t buffer_size = 32;
 	char *buffer = calloc(1, buffer_size);
+
+	if (buffer == NULL)
+		return NULL;
+
 	if (time_sec < 1e-6) {
 		snprintf(buffer, buffer_size, "%.0f ns", time_sec * 1e9);
 	} else if (time_sec < 1e-3) {
@@ -140,6 +144,10 @@ char *format_byte_sec(double byte_sec)
 {
 	const size_t buffer_size = 32;
 	char *buffer = calloc(1, buffer_size);
+
+	if (buffer == NULL)
+		return NULL;
+
 	if (byte_sec < 1e3) {
 		snprintf(buffer, buffer_size, "%7.0f B/s", byte_sec);
 	} else if (byte_sec < 1e6) {
@@ -190,7 +198,8 @@ void handle_messages(int *sockets, size_t num_sockets, bool show_cpu_usage)
 	int ret;
 
 	util_timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
-	assert(util_timer_fd > 0);
+	/* fd 0 is a valid descriptor; only a negative return is an error. */
+	assert(util_timer_fd >= 0);
 
 	timeout_timer.it_value.tv_sec = report_interval_sec;
 	timeout_timer.it_interval.tv_sec = report_interval_sec;
