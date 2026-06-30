@@ -141,9 +141,14 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 					  sizeof(struct TPM2ResponseHeader) +
 						  rsp_buffer_len);
 
-		/* TPM 2.0 may return less than requested data. Skip. */
-		if (safe_ret &&
-		    safe_ret < (ssize_t)sizeof(struct TPM2ResponseHeader)) {
+		/*
+		 * A response shorter than the header - including a 0-byte EOF
+		 * read (resource manager closed the fd) - cannot be parsed.
+		 * Treat it as a hard I/O error instead of memcpy'ing the zeroed
+		 * buffer below, which would otherwise yield responseCode 0 and
+		 * be mistaken for TPM2_RC_SUCCESS.
+		 */
+		if (safe_ret < (ssize_t)sizeof(struct TPM2ResponseHeader)) {
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 				    "TPM 2.0 response read failed: %i\n", ret);
 			close(tpm2_fd);
