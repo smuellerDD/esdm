@@ -166,10 +166,25 @@ int __real_getentropy(void *__buffer, size_t __length);
 DSO_PUBLIC
 int __real_getentropy(void *__buffer, size_t __length)
 {
-	if (__length > 256)
-		return -EIO;
+	ssize_t ret;
 
-	return (int)syscall(__NR_getrandom, __buffer, __length, 0);
+	/* getentropy(3) semantics: 0 on success, -1 with errno on error. */
+	if (__length > 256) {
+		errno = EIO;
+		return -1;
+	}
+
+	ret = syscall(__NR_getrandom, __buffer, __length, 0);
+	if (ret < 0)
+		/* the syscall already set errno */
+		return -1;
+	if ((size_t)ret != __length) {
+		/* getentropy must fill the whole buffer or fail */
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
 }
 
 static int getentropy_common(void *buffer, size_t length)
