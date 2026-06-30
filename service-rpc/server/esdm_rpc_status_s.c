@@ -42,7 +42,16 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 
 	size_t alloc_size = min_uint32(request->maxlen, ESDM_RPC_MAX_DATA);
 
-	status = malloc(alloc_size);
+	/*
+	 * Guarantee at least one byte (avoid malloc(0)) and use calloc so the
+	 * buffer is always NUL-terminated before it is consumed as a string
+	 * (esdm_status() calls strlen on it). Otherwise a maxlen of 0 would lead
+	 * to an out-of-bounds read of uninitialized heap.
+	 */
+	if (alloc_size == 0)
+		alloc_size = 1;
+
+	status = calloc(1, alloc_size);
 	if (!status) {
 		response.ret = -ENOMEM;
 		closure(&response, closure_data);

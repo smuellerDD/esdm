@@ -307,6 +307,7 @@ static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 	int ret;
 	struct esdm_rpc_proto_cs_header *cs_header;
 	struct esdm_rpc_write_data_buf tmp = {
+		.dst_len = sizeof(esdm_rpcc_reqbuf) - ESDM_RPCC_BUF_WRITE_HEADER_SZ,
 		.dst_written = 0,
 	};
 

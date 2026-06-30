@@ -29,6 +29,7 @@ extern "C" {
 struct esdm_rpc_write_data_buf {
 	ProtobufCBuffer base;
 	uint8_t *dst_buf;
+	size_t dst_len;
 	size_t dst_written;
 };
 
