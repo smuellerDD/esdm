@@ -42,15 +42,25 @@ struct esdm_drng **esdm_drng_get_instances(void)
 	 */
 	mb();
 
-	/* Lock not needed as threads receive signals */
-	//mutex_reader_lock(&esdm_node_cleanup_lock);
+	/*
+	 * Hold the cleanup lock for read while the caller works with the
+	 * returned per-node DRNG array. esdm_node_fini() takes the same lock
+	 * for write before it swaps esdm_drng to NULL and frees every per-node
+	 * struct esdm_drng (including their ->lock and ->drng). Without this
+	 * read side a consumer that obtained the array pointer and is mid
+	 * esdm_drng_get() could touch freed memory if finalize runs
+	 * concurrently. The lock is reader-preferring (default rwlock attrs),
+	 * so the recursive read that a synchronous reseed may take from within
+	 * a generate does not deadlock; the only writer is the shutdown path.
+	 * Callers must pair this with esdm_drng_put_instances().
+	 */
+	mutex_reader_lock(&esdm_node_cleanup_lock);
 	return esdm_drng;
 }
 
 void esdm_drng_put_instances(void)
 {
-	/* Lock not needed as threads receive signals */
-	//mutex_reader_unlock(&esdm_node_cleanup_lock);
+	mutex_reader_unlock(&esdm_node_cleanup_lock);
 }
 
 static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
