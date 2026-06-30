@@ -348,7 +348,11 @@ uint32_t esdm_config_max_nodes(void)
 DSO_PUBLIC
 void esdm_config_max_nodes_set(uint32_t val)
 {
-	esdm_config.esdm_max_nodes = val;
+	/*
+	 * Never store 0: esdm_config_curr_node() uses this as a modulus, so a
+	 * zero would cause a divide-by-zero (SIGFPE).
+	 */
+	esdm_config.esdm_max_nodes = val ? val : 1;
 }
 
 #ifdef ESDM_TESTMODE

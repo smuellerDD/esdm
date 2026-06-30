@@ -149,6 +149,19 @@ struct esdm_drng *esdm_drng_node_instance(void)
 }
 
 /*
+ * Record the seed time. last_seeded (the full timespec) is only valid to read
+ * under drng->lock; last_seeded_time mirrors its seconds component as an atomic
+ * so the lock-free must_reseed() fast path can read it without a torn access.
+ * Caller holds drng->lock.
+ */
+static void esdm_drng_set_seeded_now(struct esdm_drng *drng)
+{
+	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
+	atomic_set_64(&drng->last_seeded_time,
+		      (long long)drng->last_seeded.tv_sec);
+}
+
+/*
  * Reset the DRNG by clearing all meta data, but leave the state (which implies)
  * the state is credited with zero entropy, but is used to have a state other
  * than zero).
@@ -159,7 +172,7 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	atomic_set(&drng->requests, 1);
 	atomic_set(&drng->requests_since_fully_seeded, 0);
 	atomic_set(&drng->request_bits_since_fully_seeded, 0);
-	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
+	esdm_drng_set_seeded_now(drng);
 	atomic_bool_set_false(&drng->fully_seeded);
 	/* Do not set force, as this flag is used for the emergency reseeding */
 	atomic_bool_set_false(&drng->force_reseed);
@@ -409,7 +422,7 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		} else
 			atomic_add(&drng->requests_since_fully_seeded, gc);
 
-		clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
+		esdm_drng_set_seeded_now(drng);
 		atomic_set(&drng->requests, ESDM_DRNG_RESEED_THRESH);
 		atomic_bool_set_false(&drng->force_reseed);
 
@@ -551,8 +564,11 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	if (node > 0) {
 		/* Prevent reseed storm: stagger re-seed times across nodes */
 		mutex_w_lock(&drng->lock);
-		if (atomic_bool_read(&drng->fully_seeded))
+		if (atomic_bool_read(&drng->fully_seeded)) {
 			drng->last_seeded.tv_sec += node * 60;
+			atomic_set_64(&drng->last_seeded_time,
+				      (long long)drng->last_seeded.tv_sec);
+		}
 		mutex_w_unlock(&drng->lock);
 	}
 }
@@ -701,7 +717,16 @@ out:
 
 static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 {
-	struct timespec check_time = drng->last_seeded;
+	/*
+	 * Read the seed time from the atomic seconds mirror rather than copying
+	 * the (multi-word, lock-protected) struct timespec lock-free, which
+	 * would be a torn read / C11 data race. The time-based check only uses
+	 * whole seconds, so dropping the sub-second component is immaterial.
+	 */
+	struct timespec check_time = {
+		.tv_sec = (time_t)atomic_read_64(&drng->last_seeded_time),
+		.tv_nsec = 0,
+	};
 	bool request_bits_since_fully_seeded_reached =
 		(ESDM_DRNG_RESEED_THRESH_BITS != UINT32_MAX) &&
 		(atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
@@ -835,6 +860,13 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				/* If we cannot get the pool lock, try again. */
 				if (!esdm_pool_trylock()) {
 					mutex_w_unlock(&drng->lock);
+					/*
+					 * Yield before retrying: another thread
+					 * holds the pool lock only briefly, so do
+					 * not hot-spin on drng->lock/pool-lock
+					 * churn while waiting for it.
+					 */
+					sched_yield();
 					continue;
 				}
 
@@ -869,8 +901,17 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				ret);
 			return -EFAULT;
 		}
-		atomic_add(&drng->request_bits_since_fully_seeded,
-			   (int)ret << 3);
+		/*
+		 * Saturate at INT_MAX so the counter cannot wrap to a negative
+		 * value: it is only reset on a full-entropy reseed, so with a
+		 * finite reseed threshold but disabled max-reseed it would
+		 * otherwise grow without bound. atomic_read_u32() already reads
+		 * it unsigned, so a saturated value still forces a reseed.
+		 */
+		if (atomic_add(&drng->request_bits_since_fully_seeded,
+			       (int)ret << 3) < 0)
+			atomic_set(&drng->request_bits_since_fully_seeded,
+				   INT_MAX);
 		processed += ret;
 		outbuflen -= (size_t)ret;
 
@@ -1155,7 +1196,7 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 	if (mutex_w_trylock(&esdm_pr_lock) != 0)
 		return -EAGAIN;
 
-	ret = esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+	ret = esdm_drng_get_sleep(buf, nbytes, true);
 	mutex_w_unlock(&esdm_pr_lock);
 	return ret;
 }
@@ -1176,7 +1217,7 @@ ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *buf, size_t nbytes)
 	if (mutex_w_trylock(&esdm_pr_lock) != 0) {
 		return -EAGAIN;
 	}
-	ret = esdm_drng_get_sleep(buf, (uint32_t)nbytes, true);
+	ret = esdm_drng_get_sleep(buf, nbytes, true);
 	mutex_w_unlock(&esdm_pr_lock);
 
 	return ret;
@@ -1189,18 +1230,18 @@ ssize_t esdm_get_random_bytes_full_noblock(uint8_t *buf, size_t nbytes)
 
 	if (ret)
 		return ret;
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
+	return esdm_drng_get_sleep(buf, nbytes, false);
 }
 
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_full(uint8_t *buf, size_t nbytes)
 {
 	esdm_drng_sleep_while_nonoperational(0);
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
+	return esdm_drng_get_sleep(buf, nbytes, false);
 }
 
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes(uint8_t *buf, size_t nbytes)
 {
-	return esdm_drng_get_sleep(buf, (uint32_t)nbytes, false);
+	return esdm_drng_get_sleep(buf, nbytes, false);
 }

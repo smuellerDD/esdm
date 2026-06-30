@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <time.h>
 
+#include "atomic_64.h"
 #include "atomic_bool.h"
 #include "bool.h"
 #include "config.h"
@@ -55,7 +56,14 @@ struct esdm_drng {
 	 */
 	atomic_t request_bits_since_fully_seeded;
 
-	struct timespec last_seeded; /* Last time it was seeded */
+	struct timespec last_seeded; /* Last time it was seeded (under lock) */
+	/*
+	 * Seconds component of last_seeded, mirrored as an atomic so the
+	 * lock-free must_reseed() fast path can read the seed time without a
+	 * torn multi-word access of the struct timespec (which is only safe to
+	 * read/write whole under drng->lock).
+	 */
+	atomic_64_t last_seeded_time;
 	/*
 	 * These flags have no single owning lock: they are touched both under
 	 * drng->lock and from lock-free fast paths (must_reseed, force_reseed,
@@ -75,7 +83,8 @@ struct esdm_drng {
 	.requests = ATOMIC_INIT(ESDM_DRNG_RESEED_THRESH),                      \
 	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
 	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
-	.last_seeded = { 0 }, .fully_seeded = ATOMIC_BOOL_INIT(false),        \
+	.last_seeded = { 0 }, .last_seeded_time = ATOMIC_64_INIT(0),          \
+	.fully_seeded = ATOMIC_BOOL_INIT(false),                              \
 	.force_reseed = ATOMIC_BOOL_INIT(true),                               \
 	.initiated = ATOMIC_BOOL_INIT(false)
 
