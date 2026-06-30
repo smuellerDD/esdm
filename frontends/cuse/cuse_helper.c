@@ -82,7 +82,15 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 			return -errsv;
 		}
 
-		fd = creat(mount_dst, 0666);
+		/*
+		 * O_EXCL closes the stat()->creat() TOCTOU window and
+		 * O_NOFOLLOW refuses a symlink at mount_dst; creat() would
+		 * follow symlinks and races a concurrent create. We run as root,
+		 * so harden the creation of the (admin-supplied) mount target.
+		 */
+		fd = open(mount_dst, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW |
+					     O_CLOEXEC,
+			  0666);
 		if (fd < 0) {
 			errsv = errno;
 

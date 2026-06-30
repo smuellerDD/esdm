@@ -36,6 +36,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "esdm_logger.h"
+#include "mutex.h"
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "selinux.h"
@@ -68,6 +69,18 @@ static void esdm_proc_drop_privileges(void)
 		dropped = true;
 }
 
+/*
+ * fuse_main() runs the proc handlers multi-threaded, while raising/dropping
+ * privileges changes the process-global effective UID/GID. Without
+ * serialization, one thread's transient root window would be visible to other
+ * threads (their RPCs would be seen as privileged via SO_PEERCRED, and one
+ * thread could drop back to "nobody" mid-operation of another). Mirror the CUSE
+ * design: privileged operations take the write lock, unprivileged operations
+ * take the read lock, so the elevated-credential window is never concurrent
+ * with another request.
+ */
+static mutex_t esdm_proc_priv = MUTEX_UNLOCKED;
+
 static bool esdm_proc_client_privileged(void)
 {
 	/*
@@ -89,8 +102,15 @@ static bool esdm_proc_client_privileged(void)
 
 static void esdm_proc_raise_privilege(void)
 {
+	mutex_lock(&esdm_proc_priv);
 	if (esdm_proc_client_privileged())
 		raise_privilege_transient(0, 0);
+}
+
+static void esdm_proc_drop_privilege(void)
+{
+	drop_privileges_transient(esdm_proc_unprivileged_user);
+	mutex_unlock(&esdm_proc_priv);
 }
 
 static void esdm_proc_empty_file(struct esdm_proc_file *file)
@@ -201,7 +221,7 @@ static int esdm_proc_set_write_wakeup_thresh(struct esdm_proc_file *file,
 
 	esdm_proc_raise_privilege();
 	esdm_invoke(esdm_rpcc_set_write_wakeup_thresh((uint32_t)thresh));
-	drop_privileges_transient(esdm_proc_unprivileged_user);
+	esdm_proc_drop_privilege();
 
 	return ret;
 }
@@ -233,7 +253,7 @@ static int esdm_proc_set_min_reseed_secs(struct esdm_proc_file *file,
 
 	esdm_proc_raise_privilege();
 	esdm_invoke(esdm_rpcc_set_min_reseed_secs((uint32_t)thresh));
-	drop_privileges_transient(esdm_proc_unprivileged_user);
+	esdm_proc_drop_privilege();
 
 	return ret;
 }
@@ -414,7 +434,17 @@ static int esdm_proc_getattr(const char *path, struct stat *stbuf,
 			    !strncmp(path + 1, file->filename,
 				     file->filename_len)) {
 				if (file->fill_data) {
-					CKINT(file->fill_data(file));
+					/*
+					 * fill_data issues unprivileged RPCs; take
+					 * the read lock so it never overlaps a
+					 * privileged (write-locked) raise/drop
+					 * window in another thread.
+					 */
+					mutex_reader_lock(&esdm_proc_priv);
+					ret = file->fill_data(file);
+					mutex_reader_unlock(&esdm_proc_priv);
+					if (ret < 0)
+						goto out;
 				}
 
 				stbuf->st_mode = S_IFREG | file->perm;
