@@ -34,8 +34,14 @@
 #include "threading_support.h"
 #include "visibility.h"
 
-static enum esdm_logger_verbosity esdm_logger_verbosity_level = LOGGER_STATUS;
-static enum esdm_logger_class esdm_logger_class_level = LOGGER_C_ANY;
+/*
+ * These are written by the DSO_PUBLIC setters and read by every worker thread
+ * in the logging path. Make them _Atomic so the concurrent access is
+ * well-defined (relaxed-enough loads/stores) instead of a torn-read data race.
+ */
+static _Atomic enum esdm_logger_verbosity esdm_logger_verbosity_level =
+	LOGGER_STATUS;
+static _Atomic enum esdm_logger_class esdm_logger_class_level = LOGGER_C_ANY;
 
 struct esdm_logger_class_map {
 	const enum esdm_logger_class class;
