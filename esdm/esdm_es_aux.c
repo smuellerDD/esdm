@@ -476,8 +476,15 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 	/* Cap to maximum entropy that can ever be generated with given hash */
 	esdm_cap_requested(digestsize_bits, requested_bits);
 
-	/* Ensure that no more than the size of aux_pool can be requested */
+	/*
+	 * Ensure that no more than the size of aux_pool can be requested and,
+	 * crucially, never more than fits into the caller's output buffer
+	 * (struct entropy_es::e is ESDM_DRNG_INIT_SEED_SIZE_BYTES). The digest
+	 * buffer is larger (ESDM_MAX_DIGESTSIZE), so bounding only by it would
+	 * permit the memcpy() below to overflow outbuf for a future caller.
+	 */
 	requested_bits = min_uint32(requested_bits, (ESDM_MAX_DIGESTSIZE << 3));
+	requested_bits = min_uint32(requested_bits, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 #ifdef ESDM_AUX_INPUT_HAS_FULL_ENTROPY
 	requested_bits_osr = requested_bits;
 #else
