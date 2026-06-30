@@ -87,18 +87,16 @@ __attribute__((target("+rng"))) static inline bool arm_seed(unsigned long *data)
 
 static inline bool cpu_es_get(unsigned long *buf)
 {
-	unsigned int i = 0;
-
 	if (!arm_id_aa64isar0_el1_feature(ARM8_RNDR_FEATURE))
 		return false;
 
-	for (i = 0; i < sizeof(unsigned long);
-	     i += sizeof(unsigned long), buf += sizeof(unsigned long)) {
-		if (!arm_seed(buf))
-			return false;
-	}
-
-	return true;
+	/*
+	 * RNDRRS yields one 64-bit value, which is exactly one unsigned long on
+	 * aarch64, so fill the caller's single slot directly. The previous
+	 * for-loop only ever ran once but advanced buf by sizeof(unsigned long)
+	 * *elements* - a latent out-of-bounds footgun had the loop bound changed.
+	 */
+	return arm_seed(buf);
 }
 
 static inline unsigned int cpu_es_multiplier(void)
