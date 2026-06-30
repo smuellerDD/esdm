@@ -52,13 +52,6 @@ int drop_privileges_transient(const char *user)
 		uid = pwd->pw_uid;
 		gid = pwd->pw_gid;
 		initialized = true;
-
-		/* Drop all supplemental groups */
-		if (setgroups(0, NULL) == -1) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-				    "Cannot clear supplemental groups: %s\n",
-				    strerror(errno));
-		}
 	}
 
 	/* Drop privileged group */
@@ -85,6 +78,32 @@ int drop_privileges_transient(const char *user)
 		user, uid, gid);
 
 	return ret;
+}
+
+int drop_supplemental_groups(void)
+{
+	/*
+	 * Clear all supplemental groups. This must be called once during
+	 * start-up while the effective UID is still 0: setgroups(2) requires
+	 * CAP_SETGID in the *effective* capability set, which the kernel clears
+	 * as soon as the effective UID transitions from 0 to a non-zero value
+	 * (as happens during the transient drop to the unprivileged worker
+	 * user). Doing it lazily inside the transient drop races with concurrent
+	 * request handlers that may already have dropped the euid process-wide.
+	 */
+	if (setgroups(0, NULL) == -1) {
+		int errsv = errno;
+
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Cannot clear supplemental groups: %s\n",
+			    strerror(errsv));
+		return -errsv;
+	}
+
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+		    "Successfully cleared supplemental groups\n");
+
+	return 0;
 }
 
 int raise_privilege_transient(uid_t uid, gid_t gid)

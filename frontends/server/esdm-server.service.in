@@ -44,6 +44,7 @@ DeviceAllow=/dev/esdm_es r
 DeviceAllow=/dev/hwrng r
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/random r
+DeviceAllow=/dev/tpmrm0 rw
 DevicePolicy=strict
 ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock -vvv
 IPAddressDeny=any
@@ -77,6 +78,15 @@ RestrictNamespaces=mnt cgroup net
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
+# @system-service covers the syscalls the server needs (unshare/setns via
+# @process, mlockall via @memlock, setrlimit/setpriority via @resources and the
+# set[ug]id family via @setuid), so only the clearly dangerous groups are
+# denied. @privileged must NOT be denied here: it also contains the set[ug]id /
+# setgroups family the server uses to drop privileges, and a deny overrides the
+# @system-service allow. @system-service already excludes the truly dangerous
+# privileged calls (bpf, kexec, init_module, ...).
+SystemCallFilter=@system-service
+SystemCallFilter=~@clock @cpu-emulation @debug @module @mount @obsolete @raw-io @reboot @swap
 UMask=0077
 
 [Install]

@@ -25,6 +25,14 @@ extern "C" {
 #endif
 
 /**
+ * @brief Clear all supplemental groups
+ *
+ * Must be called once during start-up while the effective UID is still 0,
+ * before privileges are dropped transiently for the first time.
+ */
+int drop_supplemental_groups(void);
+
+/**
  * @brief Transiently dropping privileges
  */
 int drop_privileges_transient(const char *user);

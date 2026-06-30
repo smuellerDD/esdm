@@ -21,3 +21,60 @@ PartOf=esdm-linux-compat.target
 Restart=on-failure
 RestartSec=5s
 ExecStart=@PATH@/esdm-cuse-random -f --syslog -v 3
+
+# --- Sandboxing / hardening ---
+#
+# CRITICAL: this daemon publishes a mount to the *host* mount namespace — it
+# overlays /dev/random with a CUSE character device via a bind mount that every
+# process on the system must see. systemd sets mount propagation to MS_SLAVE as
+# soon as ANY file-system / mount namespacing option is enabled, which turns off
+# propagation from the service to the host; neither PrivateMounts=no nor
+# MountFlags=shared can re-establish it (see systemd.exec(5), MountFlags=).
+#
+# Therefore this unit MUST run in the host mount namespace and MUST NOT set any
+# option that creates a mount namespace, i.e. none of: ProtectSystem=,
+# ProtectHome=, PrivateTmp=, ReadOnlyPaths=/ReadWritePaths=/InaccessiblePaths=,
+# ProtectProc=, ProcSubset=, ProtectControlGroups=, ProtectKernelTunables=,
+# ProtectKernelModules=, ProtectKernelLogs=, PrivateDevices=, PrivateMounts=,
+# PrivateNetwork=. Confinement below is limited to mechanisms that do NOT create
+# a mount namespace (capabilities, seccomp, BPF, the device cgroup).
+
+# Privilege hardening (CAP_SYS_ADMIN: mount + CUSE device, CAP_SET[UG]ID:
+# transient drop to/raise from the unprivileged worker user)
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SETUID CAP_SETGID
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SETUID CAP_SETGID
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LimitMEMLOCK=0
+
+# Devices (device cgroup / BPF — no mount namespace). This also supplies the
+# kernel-module / kernel-log protection that ProtectKernelModules= /
+# ProtectKernelLogs= would (module devices and /dev/kmsg are not allowed here),
+# without creating a mount namespace.
+DevicePolicy=strict
+DeviceAllow=/dev/cuse rw
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/random rw
+
+# Network — block everything except local Unix sockets (seccomp + BPF; no
+# network/mount namespace, so PrivateNetwork= is intentionally not used).
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+
+# Further confinement that does not require a mount namespace
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=mnt cgroup net
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+UMask=0077
+
+# Syscall filtering. @mount is required for the bind mount / umount; @module is
+# denied (in lieu of ProtectKernelModules=). @privileged must NOT be denied: it
+# also contains the set[ug]id / setgroups family used for the transient
+# privilege drop, and a deny overrides the @system-service allow.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service @mount
+SystemCallFilter=~@clock @cpu-emulation @debug @module @obsolete @raw-io @reboot @swap
