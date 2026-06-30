@@ -113,10 +113,17 @@ static pthread_mutex_t thread_wait_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static inline unsigned int thread_get_special_slot(unsigned int thread_group)
 {
-	if (thread_group <= THREADING_MAX_THREADS)
+	/*
+	 * Special groups are exactly (uint32_t)-1 .. -ESDM_THREAD_MAX_SPECIAL_GROUPS.
+	 * Only those map to a special slot; any other large value (the gap
+	 * between the normal groups and the specials) is NOT special and must
+	 * return 0 so thread_schedule()/thread_send_signal() reject it via the
+	 * validity check rather than indexing threads[] out of bounds with a
+	 * wrapped slot number.
+	 */
+	if (thread_group <= UINT_MAX - ESDM_THREAD_MAX_SPECIAL_GROUPS)
 		return 0;
 
-	/* Special groups are defined as (uint32_t)-1 and lower */
 	return (THREADING_MAX_THREADS + (UINT_MAX - thread_group));
 }
 
