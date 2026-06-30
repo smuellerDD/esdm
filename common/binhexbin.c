@@ -49,17 +49,25 @@ void hex2bin(const char *hex, const size_t hexlen, uint8_t *bin,
 	     const size_t binlen)
 {
 	size_t i;
-	size_t chars = (binlen > (hexlen / 2)) ? (hexlen / 2) : binlen;
+	size_t avail = binlen;
+	size_t chars;
 
 	/*
 	 * handle odd-length of strings where the first digit is the least
-	 * significant nibble
+	 * significant nibble. This consumes one output byte, so account for it
+	 * against the destination budget (avail) - and never write it into a
+	 * zero-length buffer - before computing how many full bytes follow.
 	 */
 	if (hexlen & 1) {
+		if (!avail)
+			return;
 		bin[0] = bin_char(hex[0]);
 		bin++;
 		hex++;
+		avail--;
 	}
+
+	chars = (avail > (hexlen / 2)) ? (hexlen / 2) : avail;
 
 	for (i = 0; i < chars; i++) {
 		bin[i] = (uint8_t)(bin_char(hex[(i * 2)]) << 4);
@@ -209,6 +217,17 @@ static int _bin2hex_html(const unsigned char *str, size_t strlen, char *html,
 		else
 			return -EINVAL;
 
+		/*
+		 * Reject a multi-byte sequence that is truncated at the end of
+		 * the input (a valid lead byte as the last byte). Without this,
+		 * the counting pass below does "strlen -= charbytes" with
+		 * charbytes > strlen, underflowing the size_t length and reading
+		 * far past the buffer. Checking here covers both the counting and
+		 * the writing pass.
+		 */
+		if (charbytes > strlen)
+			return -EINVAL;
+
 		if (charbytes == 1) {
 			for (i = 0; i < unreservedlen; i++) {
 				if (*str == unreserved[i]) {
@@ -235,10 +254,8 @@ static int _bin2hex_html(const unsigned char *str, size_t strlen, char *html,
 			continue;
 		}
 
-		/* ensure we have sufficient space */
+		/* ensure we have sufficient space (truncation already checked) */
 		if (hexbytes >= htmllen)
-			return -ENOMEM;
-		if (charbytes > strlen)
 			return -ENOMEM;
 
 		/*
