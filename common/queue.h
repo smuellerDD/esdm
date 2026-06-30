@@ -122,32 +122,19 @@ struct thread_wait_queue {
 		thread_timedwait_no_event(queue, reltime);                     \
 	}
 
-static inline bool thread_queue_sleeper(struct thread_wait_queue *queue)
-{
-	int ret __attribute__((unused));
-	ret = pthread_mutex_trylock(&queue->thread_wait_lock);
-	if (ret == 0)
-		return true;
-	assert(ret == EBUSY);
-
-	ret = pthread_mutex_unlock(&(queue)->thread_wait_lock);
-	assert(ret == 0);
-	return false;
-}
-
 #define thread_wake(queue)                                                     \
 	do {                                                                   \
 		int __cret __attribute__((unused));                            \
 		__cret = pthread_cond_signal(&(queue)->thread_wait_cv);        \
 		assert(__cret == 0);                                           \
-	} while (0);
+	} while (0)
 
 #define thread_wake_all(queue)                                                 \
 	do {                                                                   \
 		int __cret __attribute__((unused));                            \
 		__cret = pthread_cond_broadcast(&(queue)->thread_wait_cv);     \
 		assert(__cret == 0);                                           \
-	} while (0);
+	} while (0)
 
 #ifdef __cplusplus
 }
