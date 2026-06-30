@@ -115,6 +115,15 @@ DECLARE_WAIT_QUEUE(esdm_init_wait);
 
 static atomic_t esdm_drng_mgr_terminate = ATOMIC_INIT(0);
 
+/*
+ * Single throttle shared by the blocking and non-blocking prediction-resistant
+ * entry points so that only one PR request is ever in flight - a precaution so
+ * a caller cannot flood the slow PR DRNG and starve the others. It must be
+ * file-scope: two separate function-local statics would each permit one call,
+ * allowing two concurrent PR requests and weakening the rate limit.
+ */
+static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
+
 /********************************** Helper ************************************/
 
 bool esdm_get_available(void)
@@ -1134,7 +1143,6 @@ out:
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 {
-	static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
 	ssize_t ret;
 
 	esdm_drng_sleep_while_nonoperational(0);
@@ -1155,7 +1163,6 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 DSO_PUBLIC
 ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *buf, size_t nbytes)
 {
-	static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
 	ssize_t ret = esdm_drng_sleep_while_nonoperational(1);
 
 	if (ret)
