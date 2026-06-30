@@ -205,7 +205,7 @@ const struct esdm_drbg_cb *esdm_drbg_cb = &esdm_drbg_cb_int;
 
 int esdm_drbg_selftest(void)
 {
-	struct crypto_rng *drbg;
+	struct crypto_rng *drbg = NULL;
 	struct drbg_state *drbg_s;
 	int ret = 0;
 
@@ -216,6 +216,11 @@ int esdm_drbg_selftest(void)
 		pr_err("could not allocate DRBG and trigger self-test: %ld\n",
 		       PTR_ERR(drbg));
 		ret = PTR_ERR(drbg);
+		/*
+		 * Clear the error pointer so the "if (drbg)" cleanup below does
+		 * not pass an ERR_PTR to crypto_free_rng().
+		 */
+		drbg = NULL;
 		goto out;
 	}
 

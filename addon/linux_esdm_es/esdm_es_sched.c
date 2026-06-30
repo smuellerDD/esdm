@@ -330,6 +330,15 @@ static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 	/* only set entropy, when generate was successful */
 	eb->e_bits = 0;
 
+	/*
+	 * Defense in depth: the extraction loop below writes requested_bits/8
+	 * bytes into the fixed-size eb->e. The es-manager validates
+	 * requested_bits against the allowed seed sizes, but guard locally so a
+	 * future manager change can never drive an overflow of eb->e here.
+	 */
+	if (requested_bits > ESDM_DRNG_INIT_SEED_SIZE_BITS)
+		return;
+
 	/* Only deliver entropy when SP800-90B self test is completed */
 	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_sched)) {
 		return;
@@ -500,7 +509,14 @@ int __init esdm_es_sched_module_init(void)
 	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc(
 		(u8 *)esdm_sched_drbg_domain_separation,
 		sizeof(esdm_sched_drbg_domain_separation) - 1);
-	if (!esdm_sched_drbg_state) {
+	/*
+	 * drbg_alloc() reports failure via ERR_PTR, never NULL. Testing for
+	 * NULL would store an error pointer as the live DRBG state and later
+	 * dereference / kfree it. Normalize to NULL so the teardown and the
+	 * NULL-guarded sec_strength/is_initialized helpers stay safe.
+	 */
+	if (IS_ERR_OR_NULL(esdm_sched_drbg_state)) {
+		esdm_sched_drbg_state = NULL;
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto free_mem;
 	}
