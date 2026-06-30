@@ -533,7 +533,11 @@ void esdm_cuse_write_internal(fuse_req_t req, const char *buf, size_t size,
 			      int fallback_fd)
 {
 	size_t written = 0;
-	ssize_t ret = -EFAULT;
+	/*
+	 * Default to success so a zero-length write (size == 0, loop body never
+	 * runs) is reported as a successful 0-byte write rather than EFAULT.
+	 */
+	ssize_t ret = 0;
 
 	(void)fi;
 	(void)off;
@@ -573,6 +577,13 @@ err:
 			if (ret > 0)
 				written += (size_t)ret;
 		} while (ret > 0 && written < size);
+
+		/*
+		 * A short fallback write (e.g. write() returning 0) must not be
+		 * reported to the caller as a successful full write.
+		 */
+		if (ret >= 0 && written < size)
+			ret = -EIO;
 	}
 
 out:
@@ -858,6 +869,14 @@ static void esdm_cuse_get_pollmask(unsigned int *outmask)
 
 	*outmask = 0;
 
+	/*
+	 * Guard against a not-yet-attached status segment, mirroring the other
+	 * consumers (e.g. ioctl case 42). Init failure exits the process, so
+	 * this is normally unreachable, but keep the access symmetric and safe.
+	 */
+	if (!esdm_cuse_shm_status)
+		return;
+
 	if (atomic_bool_read(&esdm_cuse_shm_status->operational))
 		*outmask |= ESDM_POLL_READER;
 	if (atomic_bool_read(&esdm_cuse_shm_status->need_entropy))
@@ -906,39 +925,49 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 
 	/* cleanup first, as we may have an interrupted poll/select */
 	mutex_w_lock(&esdm_cuse_ph_lock);
-	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
-		if (esdm_cuse_polls[i].fh == fi->fh) {
-			if (esdm_cuse_polls[i].ph) {
-				fuse_pollhandle_destroy(esdm_cuse_polls[i].ph);
+	{
+		unsigned int free_slot = ESDM_CUSE_MAX_PH;
+
+		/*
+		 * First pass: drop any stale handle for this fh and remember the
+		 * first free slot. Doing the cleanup as a full pass - rather than
+		 * merging it with the insert and breaking early - preserves the
+		 * one-handle-per-fh invariant even when a free slot has a lower
+		 * index than the stale entry (which would otherwise leave a
+		 * duplicate registration behind).
+		 */
+		for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
+			if (esdm_cuse_polls[i].fh == fi->fh) {
+				if (esdm_cuse_polls[i].ph)
+					fuse_pollhandle_destroy(
+						esdm_cuse_polls[i].ph);
+				esdm_cuse_polls[i].fh = 0;
+				esdm_cuse_polls[i].ph = NULL;
+				esdm_cuse_polls[i].poll_events = 0;
 			}
-			esdm_cuse_polls[i].fh = 0;
-			esdm_cuse_polls[i].ph = NULL;
-			esdm_cuse_polls[i].poll_events = 0;
+
+			if (free_slot == ESDM_CUSE_MAX_PH &&
+			    !esdm_cuse_polls[i].ph)
+				free_slot = i;
 		}
 
-		if (esdm_cuse_polls[i].ph)
-			continue;
-
-		if (mask) {
-			fuse_notify_poll(ph);
+		if (mask || free_slot == ESDM_CUSE_MAX_PH) {
+			/*
+			 * Events are already available (already replied above)
+			 * or there is no free slot: notify if ready and destroy
+			 * ph, as the callee owns it when it is not stored.
+			 */
+			if (mask)
+				fuse_notify_poll(ph);
 			fuse_pollhandle_destroy(ph);
-			break;
+		} else {
+			esdm_cuse_polls[free_slot].fh = fi->fh;
+			esdm_cuse_polls[free_slot].ph = ph;
+			esdm_cuse_polls[free_slot].poll_events =
+				fi->poll_events;
 		}
-
-		esdm_cuse_polls[i].fh = fi->fh;
-		esdm_cuse_polls[i].ph = ph;
-		esdm_cuse_polls[i].poll_events = fi->poll_events;
-		break;
 	}
 	mutex_w_unlock(&esdm_cuse_ph_lock);
-
-	if (i == ESDM_CUSE_MAX_PH) {
-		/*
-		 * No free slot. ph was not stored.
-		 * Destroy, as callee is responsible for ph.
-		 */
-		fuse_pollhandle_destroy(ph);
-	}
 
 	return;
 

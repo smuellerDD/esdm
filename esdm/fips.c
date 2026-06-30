@@ -46,7 +46,9 @@ static int fips_post_hmac_sha256(void)
 	uint8_t calculated[ESDM_SHA_MAX_SIZE_DIGEST];
 	int ret;
 
-	esdm_hmac_init(hmac_ctx, key, sizeof(key) - 1);
+	ret = esdm_hmac_init(hmac_ctx, key, sizeof(key) - 1);
+	if (ret)
+		goto out;
 	esdm_hmac_update(hmac_ctx, msg, sizeof(msg) - 1);
 	esdm_hmac_final(hmac_ctx, calculated);
 
