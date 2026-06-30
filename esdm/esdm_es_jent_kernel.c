@@ -143,7 +143,16 @@ static void esdm_jent_kernel_get_sync(struct entropy_es *eb_es,
 	if (jent_rng == NULL)
 		goto err;
 
-	if (kcapi_rng_generate(jent_rng, eb_es->e, requested_bits >> 3) < 0)
+	/*
+	 * kcapi_rng_generate() returns the number of bytes produced: the full
+	 * length on success, a negative errno on error, or 0 if the AF_ALG
+	 * recv() hits EOF (e.g. the kernel jitterentropy_rng socket was torn
+	 * down). Insist on the full length so a short/zero read can never leave
+	 * eb_es->e (partly) uninitialized while still being credited the full
+	 * requested entropy below.
+	 */
+	if (kcapi_rng_generate(jent_rng, eb_es->e, requested_bits >> 3) !=
+	    (ssize_t)(requested_bits >> 3))
 		goto err;
 
 	eb_es->e_bits = esdm_jent_kernel_entropylevel_locked(requested_bits);
