@@ -356,7 +356,13 @@ static void create_pid_file(const char *pid_file)
 	 * another instance is running. If the file is stale (left
 	 * from a crash), the lock will succeed and we can reuse it.
 	 */
-	pidfile_fd = open(pid_file, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	/*
+	 * O_NOFOLLOW: do not follow a symlink planted at pid_file (the daemon
+	 * runs as root and would otherwise ftruncate()/overwrite the target).
+	 * O_CLOEXEC: do not leak the descriptor across the exec of helpers.
+	 */
+	pidfile_fd = open(pid_file, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
+			  S_IRUSR | S_IWUSR);
 	if (pidfile_fd == -1) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot open pid file\n");
