@@ -91,19 +91,41 @@ static inline int mutex_w_init(mutex_w_t *mutex, int locked, int robust)
 {
 	int ret = 0;
 
-	CKINT(pthread_mutexattr_init(&mutex->ma));
+	/*
+	 * pthread_* report errors as POSITIVE errno values, so the CKINT (which
+	 * only branches on ret < 0) used here previously let every failure slip
+	 * through and returned a partially/never-initialized mutex as success.
+	 * Negate the returns so failures are detected and propagated as the
+	 * negative-errno convention the callers expect.
+	 */
+
+	/* Always initialize robust so lock/unlock do not read an indeterminate
+	 * value when the struct was not zeroed by the caller. */
+	mutex->robust = 0;
+
+	CKINT(-pthread_mutexattr_init(&mutex->ma));
 	mutex->ma_used = 1;
 
 	if (robust) {
-		CKINT(pthread_mutexattr_setrobust(&mutex->ma,
-						  PTHREAD_MUTEX_ROBUST));
+		CKINT(-pthread_mutexattr_setrobust(&mutex->ma,
+						   PTHREAD_MUTEX_ROBUST));
 		mutex->robust = 1;
 	}
 
-	CKINT(pthread_mutex_init(&mutex->lock, &mutex->ma));
+	CKINT(-pthread_mutex_init(&mutex->lock, &mutex->ma));
 
-	if (locked)
-		CKINT(mutex_w_lock(mutex));
+	/*
+	 * mutex_w_lock returns 0 (or, only for an already-contended robust
+	 * mutex, EOWNERDEAD which it recovers); a freshly created mutex cannot
+	 * yield EOWNERDEAD, so a non-zero result is a genuine error.
+	 */
+	if (locked) {
+		ret = mutex_w_lock(mutex);
+		if (ret) {
+			ret = -ret;
+			goto out;
+		}
+	}
 
 out:
 	return ret;
