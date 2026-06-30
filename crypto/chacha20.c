@@ -124,6 +124,14 @@ void cc20_block(struct lc_sym_state *state, uint32_t *stream)
 	for (i = 0; i < LC_CC20_BLOCK_SIZE_WORDS; i++)
 		out[i] = le_bswap32(ws[i] + state_w[i]);
 
+	/*
+	 * 32-bit block counter. It wraps silently after 2^32 blocks (256 GiB)
+	 * of keystream, after which the keystream repeats. This is a hard
+	 * per-key limit of the construction: callers MUST rekey/reseed before
+	 * generating that much from a single key. The ESDM ChaCha20 DRNG
+	 * reseeds far below this bound, so the wrap is unreachable in practice;
+	 * any new generic lc_sym user must honor the same limit.
+	 */
 	state_w[12]++;
 }
 

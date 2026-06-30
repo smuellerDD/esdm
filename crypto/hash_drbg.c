@@ -168,7 +168,7 @@ static void drbg_hash_update(struct esdm_drbg_hash_state *drbg,
 static void drbg_hash_process_addtl(struct esdm_drbg_hash_state *drbg,
 				    struct esdm_drbg_string *addtl)
 {
-	struct esdm_drbg_string data1, data2;
+	struct esdm_drbg_string data1, data2, data3;
 	uint8_t prefix = DRBG_PREFIX2;
 
 	/* 10.1.1.4 step 2 */
@@ -179,8 +179,15 @@ static void drbg_hash_process_addtl(struct esdm_drbg_hash_state *drbg,
 	esdm_drbg_string_fill(&data1, &prefix, 1);
 	esdm_drbg_string_fill(&data2, drbg->V, ESDM_DRBG_HASH_STATELEN);
 	data1.next = &data2;
-	data2.next = addtl;
-	addtl->next = NULL;
+	/*
+	 * Hash this step's single additional-input node. Use a local copy with
+	 * a NULL terminator instead of writing addtl->next = NULL through the
+	 * caller-owned string, which would be an unexpected side effect on the
+	 * caller's list.
+	 */
+	data3 = *addtl;
+	data3.next = NULL;
+	data2.next = &data3;
 	drbg_hash(drbg, drbg->scratchpad, &data1);
 
 	/* 10.1.1.4 step 2b */

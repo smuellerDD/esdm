@@ -40,18 +40,25 @@ void esdm_hmac_reinit(struct esdm_hmac_ctx *hmac_ctx)
 }
 
 DSO_PUBLIC
-void esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
-		    size_t keylen)
+int esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
+		   size_t keylen)
 {
 	struct esdm_hash_ctx *hash_ctx = &hmac_ctx->hash_ctx;
-	const struct esdm_hash *hash = hash_ctx->hash;
 	uint8_t *k_opad, *k_ipad;
 	unsigned int i;
 
-	if (esdm_hash_ctxsize(hash_ctx) > ESDM_HASH_STATE_SIZE(hash) ||
-	    esdm_hash_blocksize(hash_ctx) > ESDM_SHA_MAX_SIZE_BLOCK ||
+	/*
+	 * Bound the hash parameters against the fixed-size storage of the HMAC
+	 * context (k_ipad/k_opad are ESDM_SHA_MAX_SIZE_BLOCK, the digest fits
+	 * ESDM_SHA_MAX_SIZE_DIGEST). Report the misconfiguration to the caller
+	 * instead of silently returning with an uninitialized context. (The
+	 * former first clause compared esdm_hash_ctxsize() against
+	 * ESDM_HASH_STATE_SIZE(), both of which are hash->statesize - a
+	 * tautology that never caught anything.)
+	 */
+	if (esdm_hash_blocksize(hash_ctx) > ESDM_SHA_MAX_SIZE_BLOCK ||
 	    esdm_hash_digestsize(hash_ctx) > ESDM_SHA_MAX_SIZE_DIGEST)
-		return;
+		return -EINVAL;
 
 	k_opad = hmac_ctx->k_opad;
 	k_ipad = hmac_ctx->k_ipad;
@@ -76,6 +83,8 @@ void esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
 		k_opad[i] ^= OPAD;
 
 	esdm_hmac_reinit(hmac_ctx);
+
+	return 0;
 }
 
 DSO_PUBLIC
