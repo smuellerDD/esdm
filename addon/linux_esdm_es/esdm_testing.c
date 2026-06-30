@@ -200,7 +200,17 @@ static int esdm_testing_reader(struct esdm_testing *data, u32 *boot, u8 *outbuf,
 			goto out;
 		}
 
-		memcpy(outbuf, &data->esdm_testing_rb[data->rb_reader],
+		/*
+		 * Mask the reader index like the writer does (line storing into
+		 * esdm_testing_rb) and like have_data(). rb_reader is a monotonic
+		 * counter that is never wrapped, so indexing it unmasked walks
+		 * past the ESDM_TESTING_RINGBUFFER_SIZE-element array once it
+		 * exceeds the ring size, reading adjacent kernel memory into the
+		 * buffer that is then copied to userspace.
+		 */
+		memcpy(outbuf,
+		       &data->esdm_testing_rb[data->rb_reader &
+					      ESDM_TESTING_RINGBUFFER_MASK],
 		       sizeof(u64));
 		data->rb_reader++;
 
