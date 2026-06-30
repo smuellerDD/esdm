@@ -8,6 +8,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/fips.h>
+#include <linux/irq_work.h>
 #include <linux/module.h>
 
 #include "esdm_es_irq.h"
@@ -15,6 +16,31 @@
 #include "esdm_es_mgr_cb.h"
 #include "esdm_es_sched.h"
 #include "esdm_health.h"
+
+/*
+ * Deferred logging from the health-test hot path.
+ *
+ * The health test is invoked from the scheduler and IRQ hooks which run with
+ * rq->lock (and, as observed via the workqueue wakeup path, the workqueue
+ * pool->lock) held. A regular printk grabs the console_owner lock while
+ * flushing, and the console flush path in turn queues work (taking pool->lock)
+ * while holding console_owner. This inverse lock order results in a circular
+ * locking dependency / potential deadlock.
+ *
+ * The kernel solves this with printk_deferred(), which only fills the ring
+ * buffer and flushes the console later from a safe context via irq_work, but
+ * its symbols are not exported to modules. We therefore perform the same
+ * deferral ourselves: the hot path only records which message is pending per
+ * entropy source and queues an irq_work; the actual printk runs from the
+ * irq_work callback, which the kernel executes without rq->lock / pool->lock
+ * held.
+ */
+enum esdm_health_log_bit {
+	esdm_health_log_startup_done,
+	esdm_health_log_permanent_failure,
+	esdm_health_log_runtime_failure,
+	esdm_health_log_startup_failure,
+};
 
 /* Stuck Test */
 struct esdm_stuck_test {
@@ -58,6 +84,9 @@ struct esdm_health_es_state {
 	 ESDM_APT_WINDOW_SIZE)
 	bool sp80090b_startup_done;
 	atomic_t sp80090b_startup_blocks;
+
+	/* Bitmask of esdm_health_log_bit messages pending deferred printk */
+	unsigned long pending_log;
 };
 
 #define ESDM_HEALTH_ES_INIT(x)                                                 \
@@ -227,6 +256,52 @@ static struct esdm_health esdm_health = {
 static DEFINE_PER_CPU(struct esdm_stuck_test[esdm_int_es_last],
 		      esdm_stuck_test_array);
 
+/*
+ * irq_work callback emitting the health-test messages recorded by the hot path.
+ * Runs in a context where neither rq->lock nor the workqueue pool->lock is
+ * held, so the regular printk is safe here.
+ */
+static void esdm_health_log_func(struct irq_work *work)
+{
+	struct esdm_health *health = &esdm_health;
+	enum esdm_internal_es es;
+
+	for (es = 0; es < esdm_int_es_last; es++) {
+		unsigned long *pending = &health->es_state[es].pending_log;
+
+		if (test_and_clear_bit(esdm_health_log_startup_done, pending))
+			pr_info("SP800-90B startup health tests for internal entropy source %u completed\n",
+				es);
+		if (test_and_clear_bit(esdm_health_log_permanent_failure,
+				       pending))
+			pr_err("SP800-90B permanent health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
+			       es);
+		if (test_and_clear_bit(esdm_health_log_runtime_failure, pending))
+			pr_err("SP800-90B runtime health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
+			       es);
+		if (test_and_clear_bit(esdm_health_log_startup_failure, pending))
+			pr_err("SP800-90B startup test failure for internal entropy source %u - resetting\n",
+			       es);
+	}
+}
+
+static struct irq_work esdm_health_log_work =
+	IRQ_WORK_INIT(esdm_health_log_func);
+
+/* Record a pending health-test message and schedule its deferred printk. */
+static void esdm_health_log(enum esdm_internal_es es,
+			    enum esdm_health_log_bit bit)
+{
+	set_bit(bit, &esdm_health.es_state[es].pending_log);
+	irq_work_queue(&esdm_health_log_work);
+}
+
+/* Drain pending deferred health-test messages (called on module unload). */
+void esdm_health_exit(void)
+{
+	irq_work_sync(&esdm_health_log_work);
+}
+
 static bool esdm_sp80090b_health_requested(void)
 {
 	/* Health tests are only requested in FIPS mode */
@@ -262,8 +337,7 @@ static void esdm_sp80090b_startup(struct esdm_health *health,
 	if (!READ_ONCE(es_state->sp80090b_startup_done) &&
 	    atomic_dec_and_test(&es_state->sp80090b_startup_blocks)) {
 		WRITE_ONCE(es_state->sp80090b_startup_done, true);
-		pr_info("SP800-90B startup health tests for internal entropy source %u completed\n",
-			es);
+		esdm_health_log(es, esdm_health_log_startup_done);
 	}
 }
 
@@ -317,8 +391,7 @@ static void esdm_sp80090b_permanent_failure(struct esdm_health *health,
 		      es);
 	}
 
-	pr_err("SP800-90B permanent health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
-	       es);
+	esdm_health_log(es, esdm_health_log_permanent_failure);
 	esdm_sp80090b_runtime_failure(health, es);
 
 	esdm_rct_reset(rct);
@@ -332,12 +405,10 @@ static void esdm_sp80090b_failure(struct esdm_health *health,
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
 	if (READ_ONCE(es_state->sp80090b_startup_done)) {
-		pr_err("SP800-90B runtime health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
-		       es);
+		esdm_health_log(es, esdm_health_log_runtime_failure);
 		esdm_sp80090b_runtime_failure(health, es);
 	} else {
-		pr_err("SP800-90B startup test failure for internal entropy source %u - resetting\n",
-		       es);
+		esdm_health_log(es, esdm_health_log_startup_failure);
 		esdm_sp80090b_startup_failure(health, es);
 	}
 }

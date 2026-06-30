@@ -24,6 +24,7 @@
 #include "esdm_es_mgr_irq.h"
 #include "esdm_es_mgr_sched.h"
 #include "esdm_es_timer_common.h"
+#include "esdm_health.h"
 #include "esdm_drbg_kcapi.h"
 #include "esdm_testing.h"
 
@@ -323,6 +324,13 @@ static void __exit esdm_es_mgr_exit(void)
 	esdm_test_exit();
 	esdm_es_mgr_sched_exit();
 	esdm_es_mgr_irq_exit();
+
+	/*
+	 * The scheduler and IRQ hooks are unregistered above, so no further
+	 * deferred health-test messages can be queued. Drain any still pending
+	 * before the module text is freed.
+	 */
+	esdm_health_exit();
 }
 
 module_init(esdm_es_mgr_init);
