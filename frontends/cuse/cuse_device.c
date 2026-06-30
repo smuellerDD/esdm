@@ -1237,6 +1237,15 @@ int main_common(const char *_devname, const char *target, const char *semname,
 			free(param.dev_name);
 	}
 
+	/*
+	 * Clear supplemental groups once, while still running as (e)uid 0 and
+	 * before the CUSE device is reachable by clients. See
+	 * drop_supplemental_groups() for why this cannot be done during the
+	 * transient privilege drop.
+	 */
+	if (geteuid() == 0)
+		drop_supplemental_groups();
+
 	CKINT_LOG(esdm_rpcc_init_unpriv_service(esdm_cuse_interrupt),
 		  "Initialization of dispatcher failed\n");
 	CKINT_LOG(esdm_rpcc_init_priv_service(esdm_cuse_interrupt),

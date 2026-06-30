@@ -146,7 +146,15 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	uint8_t uuid[16];
 	ssize_t ret;
 
-	esdm_invoke(esdm_rpcc_get_random_bytes_full(uuid, sizeof(uuid)));
+	/*
+	 * Mirror the kernel's /proc/sys/kernel/random/uuid which uses
+	 * generate_random_uuid() -> get_random_bytes() and never blocks. Using
+	 * the _full() variant here would hang `cat uuid` (and, via
+	 * esdm_proc_pre_init(), daemon startup) until the DRNG is fully seeded.
+	 * A v4 UUID is not a key, so best-effort output before full seeding is
+	 * acceptable and matches the interface being emulated.
+	 */
+	esdm_invoke(esdm_rpcc_get_random_bytes(uuid, sizeof(uuid)));
 	if (ret < 0) {
 		esdm_proc_empty_file(file);
 		return 0;
@@ -680,6 +688,15 @@ int main(int argc, char *argv[])
 		CKINT(esdm_cuse_add_label("/proc/sys/kernel/random/poolsize",
 					  &args));
 	}
+
+	/*
+	 * Clear supplemental groups once, while still running as (e)uid 0 and
+	 * before the FUSE file system is reachable by clients. See
+	 * drop_supplemental_groups() for why this cannot be done during the
+	 * transient privilege drop.
+	 */
+	if (geteuid() == 0)
+		drop_supplemental_groups();
 
 	CKINT_LOG(esdm_rpcc_init_unpriv_service(NULL),
 		  "Initialization of dispatcher failed\n");
