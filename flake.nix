@@ -97,6 +97,7 @@
           nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
+              { _module.args.kernel = kernel; }
               baseModule
               (
                 {
@@ -130,64 +131,96 @@
           esdm_es = lpself.callPackage ./addon/linux_esdm_es { };
         };
 
-        linuxPackages_6_6 = pkgs.linuxPackages_6_6.extend addEsdmToKernel;
-        linuxPackages_6_12 = pkgs.linuxPackages_6_12.extend addEsdmToKernel;
-        linuxPackages_6_18 = pkgs.linuxPackages_6_18.extend addEsdmToKernel;
-        linuxPackages_latest = pkgs.linuxPackages_latest.extend addEsdmToKernel;
+        # 6.6 is the first kernel version supported by ESDM.
+        minKernel = {
+          major = 6;
+          minor = 6;
+        };
+
+        # All `linuxPackages_<major>_<minor>` sets nixpkgs currently exposes,
+        # restricted to the versions ESDM supports (>= minKernel). Discovered
+        # automatically so newly packaged kernels are picked up without editing
+        # this file. Keyed by the suffix used for the generated outputs, e.g.
+        # "6_6" -> live_6_6 / esdm_es_6_6. The rolling "latest" alias is added
+        # on top for convenience.
+        kernels =
+          let
+            versioned = builtins.listToAttrs (
+              builtins.concatMap (
+                name:
+                let
+                  m = builtins.match "linuxPackages_([0-9]+)_([0-9]+)" name;
+                in
+                if m == null then
+                  [ ]
+                else
+                  let
+                    major = lib.toInt (builtins.elemAt m 0);
+                    minor = lib.toInt (builtins.elemAt m 1);
+                    supported = major > minKernel.major || (major == minKernel.major && minor >= minKernel.minor);
+                  in
+                  lib.optional supported {
+                    name = "${toString major}_${toString minor}";
+                    value = pkgs.${name}.extend addEsdmToKernel;
+                  }
+              ) (builtins.attrNames pkgs)
+            );
+          in
+          versioned // { latest = pkgs.linuxPackages_latest.extend addEsdmToKernel; };
+
+        mkCheck =
+          kernel:
+          pkgs.testers.nixosTest {
+            name = "basic test with esdm-tool";
+
+            nodes.machine =
+              { ... }:
+              {
+                imports = [
+                  (
+                    { ... }:
+                    {
+                      _module.args.kernel = kernel;
+                    }
+                  )
+                  baseModule
+                  (
+                    { ... }:
+                    {
+                      boot.kernelParams = [
+                        "kmemleak=on"
+                        "page_owner=on"
+                        "log_buf_len=32M"
+                      ];
+
+                      virtualisation = {
+                        efi.OVMF = pkgs.OVMFFull.fd;
+                        useEFIBoot = true;
+                        tpm = {
+                          enable = true;
+                        };
+                        memorySize = 2048;
+                        cores = 10;
+                        qemu.options = [
+                          "-smbios type=1,uuid=2715dd9b-5684-4eeb-ae88-a62bb4232563"
+                        ];
+                      };
+                    }
+                  )
+                ];
+              };
+
+            testScript = "";
+          };
       in
       {
         # nix fmt
         formatter = pkgs.nixfmt-tree;
 
-        checks = {
-          # nix run .#checks.x86_64-linux.live_6_18.driverInteractive
-          live_6_18 =
-            let
-              kernel = linuxPackages_6_18;
-            in
-            pkgs.testers.nixosTest {
-              name = "basic test with esdm-tool";
-
-              nodes.machine =
-                { ... }:
-                {
-                  imports = [
-                    (
-                      { ... }:
-                      {
-                        _module.args.kernel = kernel;
-                      }
-                    )
-                    baseModule
-                    (
-                      { ... }:
-                      {
-                        boot.kernelParams = [
-                          "kmemleak=on"
-                          "page_owner=on"
-                          "log_buf_len=32M"
-                        ];
-
-                        virtualisation = {
-                          efi.OVMF = pkgs.OVMFFull.fd;
-                          useEFIBoot = true;
-                          tpm = {
-                            enable = true;
-                          };
-                          memorySize = 2048;
-                          cores = 10;
-                          qemu.options = [
-                            "-smbios type=1,uuid=2715dd9b-5684-4eeb-ae88-a62bb4232563"
-                          ];
-                        };
-                      }
-                    )
-                  ];
-                };
-
-              testScript = "";
-            };
-        };
+        # One check per defined kernel version, e.g.:
+        #   nix run .#checks.x86_64-linux.live_6_18.driverInteractive
+        #   nix flake check
+        checks = lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck kernel)) kernels;
 
         packages = {
           jitterentropy = pkgs.jitterentropy.overrideAttrs (_: {
@@ -297,46 +330,27 @@
               '';
             };
 
-          # 6.6 is the first version currently supported by ESDM
-          esdm_es_6_6 = pkgs.callPackage ./addon/linux_esdm_es {
-            inherit (pkgs) lib;
-            inherit (linuxPackages_6_6) kernel;
-          };
-          # 6.12 is the next LTS kernel after 6.6
-          esdm_es_6_12 = pkgs.callPackage ./addon/linux_esdm_es {
-            inherit (pkgs) lib;
-            inherit (linuxPackages_6_12) kernel;
-          };
-          # 6.18 is the next LTS kernel after 6.12
-          esdm_es_6_18 = pkgs.callPackage ./addon/linux_esdm_es {
-            inherit (pkgs) lib;
-            inherit (linuxPackages_6_18) kernel;
-          };
-          # always allow testing with latest kernel
-          esdm_es_latest = pkgs.callPackage ./addon/linux_esdm_es {
-            inherit (pkgs) lib;
-            inherit (linuxPackages_latest) kernel;
-          };
-        };
+        }
+        # One out-of-tree esdm_es module build per defined kernel, e.g.
+        # esdm_es_6_6 / esdm_es_latest.
+        // lib.mapAttrs' (
+          name: kernel:
+          lib.nameValuePair "esdm_es_${name}" (
+            pkgs.callPackage ./addon/linux_esdm_es {
+              inherit (pkgs) lib;
+              inherit (kernel) kernel;
+            }
+          )
+        ) kernels;
 
-        nixosConfigurations = {
-          live_6_6 = mkLiveSystem {
+        # One live system per defined kernel version, e.g. live_6_18.
+        nixosConfigurations = lib.mapAttrs' (
+          name: kernel:
+          lib.nameValuePair "live_${name}" (mkLiveSystem {
             inherit (self.packages.${system}) esdm;
-            kernel = linuxPackages_6_6;
-          };
-          live_6_12 = mkLiveSystem {
-            inherit (self.packages.${system}) esdm;
-            kernel = linuxPackages_6_12;
-          };
-          live_6_18 = mkLiveSystem {
-            inherit (self.packages.${system}) esdm;
-            kernel = linuxPackages_6_12;
-          };
-          live_latest = mkLiveSystem {
-            inherit (self.packages.${system}) esdm;
-            kernel = linuxPackages_latest;
-          };
-        };
+            inherit kernel;
+          })
+        ) kernels;
 
         # nix develop
         devShells = {
