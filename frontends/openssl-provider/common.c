@@ -128,6 +128,13 @@ static int esdm_rand_generate(void *ctx __unused, unsigned char *out,
 	return 1;
 
 err:
+	/*
+	 * The RPC may have partially filled out before failing. We return 0
+	 * (failure) so OpenSSL must not consume out, but cleanse it anyway so no
+	 * partial random data lingers in the caller's buffer.
+	 */
+	if (out)
+		OPENSSL_cleanse(out, outlen);
 	return 0;
 }
 
