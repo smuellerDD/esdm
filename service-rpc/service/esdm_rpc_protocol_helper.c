@@ -27,11 +27,16 @@
 static int esdm_rpc_write_data_to_buf(struct esdm_rpc_write_data_buf *write_buf,
 				      const uint8_t *data, size_t len)
 {
-	/* Guard against underflow if dst_written is corrupted */
-	if (write_buf->dst_written > ESDM_RPC_MAX_MSG_SIZE)
+	/*
+	 * Bound against the actual destination capacity (dst_len) rather than a
+	 * hardcoded maximum: dst_buf is the payload area, which is smaller than
+	 * ESDM_RPC_MAX_MSG_SIZE by the header size, so checking the latter would
+	 * permit a small overrun of dst_buf.
+	 */
+	if (write_buf->dst_written > write_buf->dst_len)
 		return -EOVERFLOW;
 
-	if (len > ESDM_RPC_MAX_MSG_SIZE - write_buf->dst_written)
+	if (len > write_buf->dst_len - write_buf->dst_written)
 		return -EOVERFLOW;
 
 	memcpy(write_buf->dst_buf + write_buf->dst_written, data, len);

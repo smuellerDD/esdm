@@ -34,6 +34,7 @@ void esdm_rpc_jent_status(UnprivAccess_Service *service,
 {
 	StatusResponse response = STATUS_RESPONSE__INIT;
 	char *status;
+	int ret;
 	(void)service;
 
 	if (request == NULL) {
@@ -42,17 +43,29 @@ void esdm_rpc_jent_status(UnprivAccess_Service *service,
 		return;
 	}
 
-	status = malloc(ESDM_RPC_MAX_DATA);
+	/*
+	 * Use calloc so the buffer is always NUL-terminated: esdm_jent_status()
+	 * leaves it untouched when the Jitter RNG is not (yet) initialized, and
+	 * the buffer is subsequently packed as a string (strlen). A malloc'd
+	 * buffer would otherwise leak uninitialized process heap to the
+	 * unprivileged client and could be read out of bounds.
+	 */
+	status = calloc(1, ESDM_RPC_MAX_DATA);
 	if (!status) {
 		response.ret = -ENOMEM;
 		closure(&response, closure_data);
 		return;
 	}
 
-	esdm_jent_status(status,
-			 min_uint32(request->maxlen, ESDM_RPC_MAX_DATA));
-	response.ret = 0;
-	response.buffer = status;
+	ret = esdm_jent_status(status,
+			       min_uint32(request->maxlen, ESDM_RPC_MAX_DATA));
+	if (ret < 0) {
+		/* Propagate the error; leave response.buffer at its "" default. */
+		response.ret = ret;
+	} else {
+		response.ret = 0;
+		response.buffer = status;
+	}
 	closure(&response, closure_data);
 
 	free(status);

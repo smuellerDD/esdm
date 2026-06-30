@@ -302,6 +302,7 @@ static int esdm_rpcs_pack_internal(const ProtobufCMessage *message,
 		}
 	} else {
 		struct esdm_rpc_write_data_buf tmp = {
+			.dst_len = payload_max,
 			.dst_written = 0,
 		};
 
