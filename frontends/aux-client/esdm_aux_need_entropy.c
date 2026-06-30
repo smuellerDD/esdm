@@ -46,7 +46,8 @@ static int esdm_cuse_shm_status_avail(void)
 		initialized = 1;
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_CUSE,
-			"A client started detected ESDM server with properties:\n%s\n",
+			"A client started detected ESDM server with properties:\n%.*s\n",
+			(int)sizeof(esdm_cuse_shm_status->info),
 			esdm_cuse_shm_status->info);
 	}
 
