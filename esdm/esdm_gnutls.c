@@ -47,8 +47,19 @@ static int esdm_gnutls_hash_update(void *hash, const uint8_t *inbuf,
 				   size_t inbuflen)
 {
 	gnutls_hash_hd_t hd = (gnutls_hash_hd_t)hash;
+	int ret = gnutls_hash(hd, inbuf, inbuflen);
 
-	gnutls_hash(hd, inbuf, inbuflen);
+	/*
+	 * gnutls_hash() can fail (e.g. with HW/PKCS#11-backed digests). Propagate
+	 * the failure so the entropy framework does not credit/emit a digest
+	 * computed over incompletely-absorbed input.
+	 */
+	if (ret < 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "GnuTLS hash update failed: %s\n",
+			    gnutls_strerror(ret));
+		return -EFAULT;
+	}
 	return 0;
 }
 
