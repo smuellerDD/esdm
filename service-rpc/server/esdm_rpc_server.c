@@ -783,7 +783,17 @@ static int esdm_rpcs_handler(void *args)
 							LOGGER_C_RPC,
 							"Unable to add client FD %d to epoll, exiting worker\n",
 							accepted_fd);
+						/*
+						 * Capture errno before the cleanup
+						 * calls clobber it. This conn was
+						 * never inserted into rpc_conn_list,
+						 * so the out: cleanup loop cannot
+						 * reach it - free/close here to
+						 * avoid leaking the conn and its fd.
+						 */
 						ret = -errno;
+						free(rpc_conn);
+						close(accepted_fd);
 						goto out;
 					}
 				}

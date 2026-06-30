@@ -86,7 +86,21 @@ ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 			esdm_rpcc_get_random_bytes_full_cb, &buffer);
 
 		if (buffer.ret < -255) {
-			maxbuflen = (size_t)(-buffer.ret);
+			size_t new_max = (size_t)(-buffer.ret);
+
+			/*
+			 * The server signals the largest size it can serve by
+			 * returning its negated value, asking us to retry with a
+			 * smaller request. Only honor it if it actually shrinks
+			 * the request; a buggy or hostile peer returning a
+			 * non-shrinking value must not be able to spin this loop
+			 * forever.
+			 */
+			if (new_max >= maxbuflen) {
+				ret = -EPROTO;
+				goto out;
+			}
+			maxbuflen = new_max;
 			continue;
 		} else if (buffer.ret == -EAGAIN) {
 			nanosleep(&esdm_client_poll_ts, NULL);
