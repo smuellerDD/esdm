@@ -96,12 +96,12 @@ static inline void atomic_bool_set_false(atomic_bool_t *v)
  * variable is equal to the old value, set the new value)
  * @param v atomic variable
  * @param old integer value to compare with
- * @param new integer value to set atomic variable to
- * @return true if comparison is successful and new was written
+ * @param newval integer value to set atomic variable to
+ * @return true if comparison is successful and newval was written
  */
-static inline int atomic_bool_cmpxchg(atomic_bool_t *v, bool old, bool new)
+static inline int atomic_bool_cmpxchg(atomic_bool_t *v, bool old, bool newval)
 {
-	return __sync_bool_compare_and_swap(&v->counter, old, new);
+	return __sync_bool_compare_and_swap(&v->counter, old, newval);
 }
 
 #endif /* _ATOMIC_BOOL_H */
