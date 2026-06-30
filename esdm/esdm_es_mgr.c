@@ -98,6 +98,18 @@ uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
 
 static atomic_t esdm_es_mgr_terminate = ATOMIC_INIT(0);
 
+/*
+ * Serializes the ES monitor's active work against esdm_reinit(). The monitor
+ * holds this around the per-ES monitor_es() pass (which, for the Jitter/TPM2/
+ * PKCS11 sources, resets/fills their async caches), and esdm_reinit() holds it
+ * across the whole reinitialization via esdm_es_mgr_monitor_pause()/_resume().
+ * This guarantees no monitor iteration runs while the entropy sources are being
+ * torn down and re-initialized, so the reinit path cannot reset/reallocate ES
+ * state underneath a concurrently running monitor. The monitor releases it
+ * while sleeping, so pausing only waits for an in-flight iteration to finish.
+ */
+static DEFINE_MUTEX_W_UNLOCKED(esdm_es_mgr_monitor_lock);
+
 /* Wait queue to wait until the ESDM is not initialized. */
 static DECLARE_WAIT_QUEUE(esdm_monitor_wait);
 
@@ -147,6 +159,23 @@ bool esdm_es_mgr_running(void)
 void esdm_es_mgr_monitor_wakeup(void)
 {
 	thread_wake_all(&esdm_monitor_wait);
+}
+
+/*
+ * Quiesce the ES monitor: block until any in-flight monitor iteration has
+ * finished and prevent the next one from starting. esdm_reinit() calls this
+ * before re-initializing the entropy sources so a monitor pass cannot touch ES
+ * state that is being torn down. Must be paired with
+ * esdm_es_mgr_monitor_resume().
+ */
+void esdm_es_mgr_monitor_pause(void)
+{
+	mutex_w_lock(&esdm_es_mgr_monitor_lock);
+}
+
+void esdm_es_mgr_monitor_resume(void)
+{
+	mutex_w_unlock(&esdm_es_mgr_monitor_lock);
 }
 
 struct esdm_es_monitor_thread_arg {
@@ -212,6 +241,16 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 		bool priv_init_complete = true;
 		bool spawned = false;
 
+		/*
+		 * Hold the monitor lock across the active pass (spawning the
+		 * per-ES monitors, joining them, and consuming their results) so
+		 * esdm_reinit() cannot tear down/re-initialize entropy sources
+		 * while a monitor pass is touching them. The lock is dropped
+		 * before the sleep below so a pause only waits for an in-flight
+		 * pass to finish.
+		 */
+		mutex_w_lock(&esdm_es_mgr_monitor_lock);
+
 		for_each_esdm_es (j) {
 			args[j].es_idx = j;
 			args[j].rc = 0;
@@ -258,6 +297,8 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 			priv_init_completion();
 			priv_init_completed = true;
 		}
+
+		mutex_w_unlock(&esdm_es_mgr_monitor_lock);
 
 		if (!ret && esdm_pool_all_nodes_seeded_get()) {
 			/*
@@ -329,7 +370,14 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 
 	switch (data_size) {
 	case esdm_es_data_equal:
-		/* Nothing to do */
+		/*
+		 * Cap the entropy reported by the (kernel) entropy source to
+		 * the size of the data buffer. A misbehaving or compromised ES
+		 * must not be able to over-credit the pool beyond the amount of
+		 * data actually delivered. This mirrors the large/small paths.
+		 */
+		eb_es->e_bits =
+			min_uint32(ESDM_DRNG_INIT_SEED_SIZE_BITS, eb_es->e_bits);
 		break;
 	case esdm_es_data_large:
 		/*
@@ -355,7 +403,12 @@ void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 		break;
 	case esdm_es_data_small:
 		memcpy(eb_es->e, small_es.e, ESDM_DRNG_SECURITY_STRENGTH_BYTES);
-		eb_es->e_bits = small_es.e_bits;
+		/*
+		 * Cap to the size of the small-ES data buffer so a misbehaving
+		 * entropy source cannot over-credit the pool (see equal path).
+		 */
+		eb_es->e_bits = min_uint32(ESDM_DRNG_SECURITY_STRENGTH_BITS,
+					   small_es.e_bits);
 		memset_secure(&small_es, 0, sizeof(small_es));
 		break;
 	default:

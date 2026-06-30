@@ -45,6 +45,8 @@ int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void));
 void esdm_es_mgr_monitor_wakeup(void);
+void esdm_es_mgr_monitor_pause(void);
+void esdm_es_mgr_monitor_resume(void);
 bool esdm_es_mgr_running(void);
 void esdm_es_mgr_finalize(void);
 
