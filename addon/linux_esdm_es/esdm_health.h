@@ -143,5 +143,6 @@ bool esdm_sp80090b_compliant(enum esdm_internal_es es);
 
 enum esdm_health_res esdm_health_test(u64 now_time, enum esdm_internal_es es);
 void esdm_health_disable(void);
+void esdm_health_exit(void);
 
 #endif /* _ESDM_HEALTH_H */
