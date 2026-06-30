@@ -367,7 +367,8 @@ void esdm_logger_inc_verbosity(void)
 	if (esdm_logger_verbosity_level >= LOGGER_MAX_LEVEL - 1)
 		return;
 
-	esdm_logger_verbosity_level++;
+	esdm_logger_verbosity_level =
+		(enum esdm_logger_verbosity)(esdm_logger_verbosity_level + 1);
 }
 
 DSO_PUBLIC
