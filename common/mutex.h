@@ -96,10 +96,19 @@ static inline void mutex_reader_lock(mutex_t *mutex)
 {
 	int ret;
 
+	/*
+	 * pthread_rwlock_rdlock() reports errors via its return value, not
+	 * errno. Inspect the return value so the documented transient failures
+	 * (EAGAIN: max read locks exceeded, EBUSY) are actually retried instead
+	 * of falling through and leaving the lock unheld - which under NDEBUG
+	 * (assert compiled out) would let callers touch shared state unlocked
+	 * and unbalance the paired mutex_reader_unlock().
+	 */
 	do {
 		ret = pthread_rwlock_rdlock(mutex);
-	} while (ret != 0 && (errno == EAGAIN || errno == EBUSY));
+	} while (ret == EAGAIN || ret == EBUSY);
 	assert(ret == 0);
+	(void)ret;
 }
 
 /**
