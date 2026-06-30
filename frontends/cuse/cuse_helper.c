@@ -118,6 +118,15 @@ int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
 		int errsv = errno;
 
 		umount(mount_dst);
+		/*
+		 * If we created the (world-writable 0666) mount target above,
+		 * remove it on this failure path so a failed startup does not
+		 * leave a stray writable node behind.
+		 */
+		if (cuse_unlink) {
+			unlink(mount_dst);
+			cuse_unlink = 0;
+		}
 		esdm_logger(LOGGER_ERR, LOGGER_C_CUSE,
 			    "Failed properly relabel %s\n", mount_dst);
 		return -errsv;
