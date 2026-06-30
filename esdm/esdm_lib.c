@@ -66,6 +66,16 @@ int esdm_reinit(void)
 {
 	int ret;
 
+	/*
+	 * Stop the ES monitor first: quiesce any in-flight monitor pass and
+	 * prevent new ones for the duration of the reinitialization. Otherwise
+	 * the monitor could run a per-ES collection pass (e.g. resetting/filling
+	 * the Jitter/TPM2/PKCS11 async caches) concurrently with the entropy
+	 * sources being torn down and re-initialized here. Resumed on every exit
+	 * path via the out label.
+	 */
+	esdm_es_mgr_monitor_pause();
+
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_reinit());
 
@@ -79,6 +89,7 @@ int esdm_reinit(void)
 	CKINT(esdm_shm_status_reinit());
 
 out:
+	esdm_es_mgr_monitor_resume();
 	return ret;
 }
 
