@@ -83,6 +83,11 @@ static int esdm_botan_hash_update(void *hash, const uint8_t *inbuf,
 	struct esdm_botan_hash_ctx *ctx =
 		reinterpret_cast<esdm_botan_hash_ctx *>(hash);
 
+	/* A null hash_fn (hash_init never ran or failed) would SIGSEGV - the
+	 * deref is not a C++ exception, so try/catch cannot recover it. */
+	if (!ctx || !ctx->hash_fn)
+		return -EFAULT;
+
 	try {
 		ctx->hash_fn->update(inbuf, inbuflen);
 	} catch (const std::exception &ex) {
@@ -98,6 +103,10 @@ static int esdm_botan_hash_final(void *hash, uint8_t *digest)
 {
 	struct esdm_botan_hash_ctx *ctx =
 		reinterpret_cast<esdm_botan_hash_ctx *>(hash);
+
+	/* See esdm_botan_hash_update: guard the null unique_ptr deref. */
+	if (!ctx || !ctx->hash_fn)
+		return -EFAULT;
 
 	try {
 		ctx->hash_fn->final(digest);
@@ -210,7 +219,8 @@ static int esdm_botan_hash_selftest(void)
 	const size_t md_len = 512 / 8;
 	uint8_t act[md_len];
 	void *hash = NULL;
-	int ret;
+	/* default to failure so an (empty) test table cannot return success */
+	int ret = -EFAULT;
 
 	for (size_t i = 0;
 	     i < sizeof(test_vectors) / sizeof(struct nist_test_vector_sha3);
@@ -436,7 +446,8 @@ static const char *esdm_botan_drbg_name(void)
 static int esdm_botan_drbg_selftest_chacha20(void)
 {
 	void *drng = NULL;
-	int ret;
+	/* default to failure so an (empty) test table cannot return success */
+	int ret = -EFAULT;
 
 	static const uint8_t ent_nonce[] = {
 		0xBF, 0x26, 0x84, 0xC8, 0xA6, 0x9E, 0x68, 0x6E, 0xAE, 0x68,
@@ -535,7 +546,8 @@ static int esdm_botan_drbg_selftest_hmac()
 	void *drng = NULL;
 	uint8_t seed_material[32 + 16 + 32];
 	uint8_t act[256];
-	int ret;
+	/* default to failure so an (empty) test table cannot return success */
+	int ret = -EFAULT;
 
 	/*
 	 * Taken from NIST SP800-90A DRBG Test Vectors
