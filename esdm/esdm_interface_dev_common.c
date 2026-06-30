@@ -30,7 +30,14 @@ static DECLARE_WAIT_QUEUE(esdm_write_wait);
 void esdm_writer_wakeup(void)
 {
 	esdm_shm_status_set_need_entropy();
-	if (esdm_need_entropy() && thread_queue_sleeper(&esdm_write_wait))
+	/*
+	 * Always signal: pthread_cond_signal is cheap and a no-op when no thread
+	 * waits. The previous "is there a sleeper?" trylock probe was both
+	 * unreliable (a real waiter releases the mutex while parked in
+	 * pthread_cond_wait, so the probe could not observe it) and unsafe (it
+	 * leaked the lock on success and unlocked an unowned mutex on EBUSY).
+	 */
+	if (esdm_need_entropy())
 		thread_wake(&esdm_write_wait);
 }
 
