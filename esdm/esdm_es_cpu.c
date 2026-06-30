@@ -84,6 +84,14 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 		if (!cpu_es_get((unsigned long *)(outbuf + i))) {
 #pragma GCC diagnostic pop
 			esdm_config_es_cpu_entropy_rate_set(0);
+			/*
+			 * Wipe any partial CPU-ES output already written so it
+			 * does not linger in the caller's buffer, consistent
+			 * with the compress path's failure handling. The data is
+			 * credited 0 bits and thus never used, but is cleared
+			 * defensively.
+			 */
+			memset_secure(outbuf, 0, requested_bits >> 3);
 			return 0;
 		}
 	}
