@@ -70,6 +70,15 @@ ssize_t esdm_drbg_generate(struct esdm_drbg_state *drbg, uint8_t *buf,
 	if (!drbg)
 		return -EINVAL;
 
+	/*
+	 * SP800-90A requires the Generate function to return an error if the
+	 * DRBG has not been instantiated (seeded). Enforce this invariant at
+	 * the primitive so a missing/cleared seed can never produce predictable
+	 * output from a zero/stale internal state.
+	 */
+	if (!drbg->seeded)
+		return -EINVAL;
+
 	if (!buflen || !buf)
 		return -EINVAL;
 

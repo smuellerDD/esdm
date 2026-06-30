@@ -364,6 +364,14 @@ static void keccak_squeeze(struct esdm_hash_state *ctx, uint8_t *digest)
 #pragma GCC diagnostic ignored "-Wcast-align"
 		sha3_fill_state_aligned(ctx, (uint64_t *)ctx->partial);
 #pragma GCC diagnostic pop
+
+		/*
+		 * The padded last input block has been absorbed into the state
+		 * and is no longer needed. Wipe it so the (potentially secret)
+		 * trailing message bytes do not linger in the context, matching
+		 * the SHA-2 final() zeroization of ctx->partial.
+		 */
+		memset_secure(ctx->partial, 0, ctx->r);
 	}
 
 	while (digest_len) {

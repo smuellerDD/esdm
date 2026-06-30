@@ -71,8 +71,8 @@ struct esdm_hmac_ctx {
  * The caller must provide an allocated hmac_ctx. This can be achieved by
  * using HMAC_CTX_ON_STACK or by using hmac_alloc.
  */
-void esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
-		    size_t keylen);
+int esdm_hmac_init(struct esdm_hmac_ctx *hmac_ctx, const uint8_t *key,
+		   size_t keylen);
 
 /**
  * @brief Re-initialize HMAC context after a hmac_final operation
@@ -184,17 +184,22 @@ static inline size_t esdm_hmac_macsize(struct esdm_hmac_ctx *hmac_ctx)
  *
  * The HMAC calculation operates entirely on the stack.
  */
-static inline void esdm_hmac(const struct esdm_hash *hash, const uint8_t *key,
-			     size_t keylen, const uint8_t *in, size_t inlen,
-			     uint8_t *mac)
+static inline int esdm_hmac(const struct esdm_hash *hash, const uint8_t *key,
+			    size_t keylen, const uint8_t *in, size_t inlen,
+			    uint8_t *mac)
 {
+	int ret;
 	ESDM_HMAC_CTX_ON_STACK(hmac_ctx, hash);
 
-	esdm_hmac_init(hmac_ctx, key, keylen);
+	ret = esdm_hmac_init(hmac_ctx, key, keylen);
+	if (ret)
+		return ret;
 	esdm_hmac_update(hmac_ctx, in, inlen);
 	esdm_hmac_final(hmac_ctx, mac);
 
 	esdm_hmac_zero(hmac_ctx);
+
+	return 0;
 }
 
 #ifdef __cplusplus
