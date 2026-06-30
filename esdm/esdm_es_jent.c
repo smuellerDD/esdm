@@ -50,6 +50,16 @@ static struct rand_data *esdm_jent_state = NULL;
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
 static struct esdm_es_buf esdm_jent_buf;
 static struct rand_data *esdm_jent_state_thread = NULL;
+/*
+ * Whether the async cache/collector are allocated. The async cache and the
+ * async collector are read lock-free by the monitor thread (producer) and by
+ * esdm_es_buf_try_get() (consumers), so they must NOT be freed/reallocated on
+ * the reinit path while those readers can still run - that would be a
+ * use-after-free. They are allocated once, reset in place on reinit, and freed
+ * only in esdm_jent_finalize() (the .fini callback), which the ES manager
+ * invokes after it has joined the monitor thread.
+ */
+static bool esdm_jent_async_alloced = false;
 #endif
 
 int esdm_jent_status(char *buf, size_t buf_length)
@@ -193,11 +203,28 @@ static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 	if (!esdm_config_es_jent_async_enabled())
 		return 0;
 
+	/*
+	 * On a repeated init (reinit) reuse the existing collector and only
+	 * reset the cache in place: the monitor and lock-free consumers may
+	 * still be reading them, so they must not be freed/reallocated here (see
+	 * the esdm_jent_async_alloced comment). A reinit that changes the jent
+	 * flags therefore keeps the previously selected async collector flags;
+	 * the synchronous collector (re-created below under the lock) reflects
+	 * the new flags. This safety-over-exotic-reconfig tradeoff matches the
+	 * reset-on-reinit handling of the TPM2/PKCS11 caches.
+	 */
+	if (esdm_jent_async_alloced) {
+		esdm_es_buf_reset(&esdm_jent_buf);
+		return 0;
+	}
+
 	CKINT(esdm_es_buf_alloc(&esdm_jent_buf, ESDM_JENT_ENTROPY_BLOCKS,
 				"JitterRNG"));
 
 	esdm_jent_state_thread = jent_entropy_collector_alloc(osr, flags);
 	CKNULL(esdm_jent_state_thread, -EFAULT);
+
+	esdm_jent_async_alloced = true;
 
 out:
 	return ret;
@@ -209,6 +236,7 @@ static void esdm_jent_async_fini(void)
 	esdm_jent_state_thread = NULL;
 
 	esdm_es_buf_free(&esdm_jent_buf);
+	esdm_jent_async_alloced = false;
 }
 
 #else
@@ -235,7 +263,18 @@ static inline void esdm_jent_async_fini(void)
 
 #endif
 
-static void esdm_jent_finalize(void)
+/*
+ * Tear down the Jitter RNG ES. free_async selects whether the async cache and
+ * its collector are freed too:
+ *   - true  (.fini / shutdown): the ES manager has already joined the monitor
+ *            thread, so freeing the lock-free-accessed async objects is safe.
+ *   - false (reinit, from esdm_jent_initialize): the monitor and consumers may
+ *            still run, so the async cache/collector are left allocated (reset
+ *            in place by the subsequent esdm_jent_async_init) and only the
+ *            synchronous collector - which is accessed solely under
+ *            esdm_jent_lock - is freed here.
+ */
+static void esdm_jent_finalize_internal(bool free_async)
 {
 	if (!atomic_read(&esdm_jent_initialized))
 		return;
@@ -245,11 +284,17 @@ static void esdm_jent_finalize(void)
 
 	mutex_w_lock(&esdm_jent_lock);
 
-	esdm_jent_async_fini();
+	if (free_async)
+		esdm_jent_async_fini();
 
 	jent_entropy_collector_free(esdm_jent_state);
 	esdm_jent_state = NULL;
 	mutex_w_unlock(&esdm_jent_lock);
+}
+
+static void esdm_jent_finalize(void)
+{
+	esdm_jent_finalize_internal(true);
 }
 
 static int esdm_jent_initialize(void)
@@ -257,8 +302,13 @@ static int esdm_jent_initialize(void)
 	unsigned int flags = 0;
 	int ret;
 
-	/* Allow the init function to be called multiple times */
-	esdm_jent_finalize();
+	/*
+	 * Allow the init function to be called multiple times. Use the
+	 * async-preserving teardown: on reinit the monitor thread is NOT joined
+	 * (unlike shutdown), so the async cache/collector must be reset in place
+	 * rather than freed under the lock-free monitor/consumer readers.
+	 */
+	esdm_jent_finalize_internal(false);
 
 	/*
 	 * esdm_jent_lock is statically initialized (DEFINE_MUTEX_W_UNLOCKED) and
