@@ -176,7 +176,25 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 	if (requested_bits > esdm_get_seed_entropy_osr(false, true))
 		return false;
 
-	slot = ((unsigned int)atomic_inc(&buf->idx)) & buf->mask;
+	/*
+	 * Advance the round-robin slot index, keeping it bounded in [0, mask]
+	 * at all times. A plain atomic_inc() lets the signed counter grow until
+	 * it overflows INT_MAX (signed integer overflow is undefined behavior),
+	 * relying on wraparound semantics. As num_blocks is a power of two, the
+	 * masked value is reproduced by this CAS loop without ever letting the
+	 * stored counter leave the valid range. This path runs once per reseed,
+	 * so the compare-and-swap retry cost is negligible.
+	 */
+	{
+		int old_idx, new_idx;
+
+		do {
+			old_idx = atomic_read(&buf->idx);
+			new_idx = (int)(((unsigned int)old_idx + 1) & buf->mask);
+		} while (__sync_val_compare_and_swap(&buf->idx.counter, old_idx,
+						     new_idx) != old_idx);
+		slot = (unsigned int)new_idx;
+	}
 
 	if (__sync_val_compare_and_swap(&buf->states[slot],
 					esdm_es_buf_filled,
