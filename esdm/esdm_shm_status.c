@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/shm.h>
+#include <unistd.h>
 
 #include "esdm.h"
 #include "esdm_config.h"
@@ -279,21 +280,23 @@ static int esdm_shm_status_create_shm(void)
 	errsv = errno;
 
 	/*
-	 * The status segment uses a well-known ftok() key, so any local user
-	 * could have pre-created it and would then own it and control the flags
-	 * the CUSE /dev/random poll path trusts. As the server runs privileged,
-	 * reject any pre-existing segment that was not created by root and force
-	 * a clean recreation. A prior server instance always has cuid == 0, so
-	 * this only evicts a hijacked segment.
+	 * The status segment uses a well-known ftok() key, so any other local
+	 * user could have pre-created it and would then own it and control the
+	 * flags the CUSE /dev/random poll path trusts. This create path runs
+	 * before the server drops privileges, so compare against our own euid
+	 * (root in the stock deployment, the service uid when the server is
+	 * started unprivileged) rather than a hardcoded 0: a segment created by
+	 * a previous instance of this server has our uid and is kept, while a
+	 * segment planted by a different uid is evicted and recreated.
 	 */
 	if (esdm_shmid >= 0) {
 		struct shmid_ds buf;
 
 		if (shmctl(esdm_shmid, IPC_STAT, &buf) < 0 ||
-		    buf.shm_perm.cuid != 0) {
+		    buf.shm_perm.cuid != geteuid()) {
 			esdm_logger(
 				LOGGER_WARN, LOGGER_C_SERVER,
-				"ESDM status shared memory segment not owned by root - removing and recreating\n");
+				"ESDM status shared memory segment owned by a different uid - removing and recreating\n");
 			shmctl(esdm_shmid, IPC_RMID, NULL);
 			esdm_shmid = -1;
 			errsv = ENOENT;
