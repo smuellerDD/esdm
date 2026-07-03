@@ -50,6 +50,16 @@ struct esdm_proc_file {
 	int (*fill_data)(struct esdm_proc_file *file);
 	int (*write_data)(struct esdm_proc_file *file, const char *buf,
 			  size_t buflen);
+	/*
+	 * If non-zero, esdm_proc_getattr() reports this as the file size instead
+	 * of invoking fill_data(). Used for files whose fill_data() has side
+	 * effects that must not run on a mere stat() - e.g. "uuid" draws fresh
+	 * DRNG output and performs a server round trip on every generation, so a
+	 * plain `ls -l` would needlessly consume randomness. The size is fixed
+	 * (a UUID string is always the same length), so reporting it statically
+	 * is exact.
+	 */
+	size_t getattr_size;
 	size_t vallen;
 	char valdata[ESDM_PROC_BUF_LEN];
 };
@@ -296,6 +306,7 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = esdm_proc_uuid,
 		.write_data = NULL,
+		.getattr_size = ESDM_PROC_UUID_LEN - 1,
 		.vallen = 0,
 		.valdata[0] = '\0',
 	},
@@ -441,6 +452,21 @@ static int esdm_proc_getattr(const char *path, struct stat *stbuf,
 			if (pathlen == file->filename_len &&
 			    !strncmp(path + 1, file->filename,
 				     file->filename_len)) {
+				stbuf->st_mode = S_IFREG | file->perm;
+				stbuf->st_nlink = 1;
+
+				if (file->getattr_size) {
+					/*
+					 * Report the known fixed size without
+					 * running fill_data(), whose side effects
+					 * (e.g. consuming DRNG output for "uuid")
+					 * must not be triggered by a bare stat().
+					 */
+					stbuf->st_size =
+						(off_t)file->getattr_size;
+					goto out;
+				}
+
 				if (file->fill_data) {
 					/*
 					 * fill_data issues unprivileged RPCs; take
@@ -455,8 +481,6 @@ static int esdm_proc_getattr(const char *path, struct stat *stbuf,
 						goto out;
 				}
 
-				stbuf->st_mode = S_IFREG | file->perm;
-				stbuf->st_nlink = 1;
 				stbuf->st_size = (off_t)file->vallen;
 				goto out;
 			}
