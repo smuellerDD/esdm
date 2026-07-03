@@ -14,7 +14,22 @@ esdm_src = files([
 dependencies_esdm_lib = [ ]
 
 if get_option('es_jent').enabled()
-	dependencies_esdm_lib += cc.find_library('jitterentropy' )
+	jitterentropy_dep = cc.find_library('jitterentropy')
+	# find_library() does not verify the version, but ESDM relies on APIs
+	# that older jitterentropy releases lack. Probe for the symbols actually
+	# used so configuration fails with a clear message instead of a confusing
+	# mid-compile or link error against a too-old library.
+	foreach jent_sym : [ 'jent_entropy_init_ex',
+			     'jent_read_entropy_safe',
+			     'jent_entropy_collector_alloc' ]
+		if not cc.has_function(jent_sym,
+				       prefix: '#include <jitterentropy.h>',
+				       dependencies: jitterentropy_dep)
+			error('jitterentropy is too old (missing ' + jent_sym +
+			      '); ESDM requires a newer jitterentropy library.')
+		endif
+	endforeach
+	dependencies_esdm_lib += jitterentropy_dep
 	esdm_src += files('esdm_es_jent.c')
 endif
 
