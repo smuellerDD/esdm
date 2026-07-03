@@ -300,19 +300,21 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 
 		mutex_w_unlock(&esdm_es_mgr_monitor_lock);
 
-		if (!ret && esdm_pool_all_nodes_seeded_get()) {
-			/*
-			 * Bounded wait: a wakeup (entropy need via
-			 * esdm_es_mgr_monitor_wakeup, or termination) delivered
-			 * between the checks above and this wait would otherwise
-			 * be lost, hanging the monitor. On timeout the enclosing
-			 * loop re-checks esdm_es_mgr_terminate and the seeded
-			 * state, so a missed wakeup costs at most one interval.
-			 */
-			thread_timedwait_no_event(&esdm_monitor_wait, &ts);
-		} else {
-			nanosleep(&ts, NULL);
-		}
+		/*
+		 * Bounded, interruptible wait regardless of the current seeding
+		 * state: a wakeup (entropy need via esdm_es_mgr_monitor_wakeup,
+		 * or termination) delivered between the checks above and this
+		 * wait would otherwise be lost, hanging the monitor. The wait is
+		 * a plain condvar wait with no persistent flag, so it only
+		 * returns early on a genuine broadcast and does not busy-loop; on
+		 * timeout the enclosing loop re-checks esdm_es_mgr_terminate and
+		 * the seeded state, so a missed wakeup costs at most one interval.
+		 * Previously the not-fully-seeded branch used an uninterruptible
+		 * nanosleep(), which delayed clean shutdown and ignored entropy
+		 * wakeups for up to a full interval precisely when entropy was
+		 * most needed.
+		 */
+		thread_timedwait_no_event(&esdm_monitor_wait, &ts);
 	}
 
 	if (!priv_init_completed && priv_init_completion)
