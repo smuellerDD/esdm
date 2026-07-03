@@ -31,24 +31,32 @@
 #include "esdm_logger.h"
 #include "visibility.h"
 
+/*
+ * These fields are set at runtime through the RPC configuration setters while
+ * seeding and monitor threads read them on hot paths. They are _Atomic so those
+ * concurrent accesses are well-defined loads/stores rather than a C11 data race
+ * (especially on weakly-ordered architectures); every access goes through the
+ * accessors below, so no call site needs changing. Compare esdm_es_mgr.c, which
+ * documents the same requirement for its shared state.
+ */
 struct esdm_config {
-	uint32_t esdm_es_cpu_entropy_rate_bits;
-	uint32_t esdm_es_jent_entropy_rate_bits;
-	uint32_t esdm_es_irq_entropy_rate_bits;
-	uint32_t esdm_es_krng_entropy_rate_bits;
-	uint32_t esdm_es_sched_entropy_rate_bits;
-	uint32_t esdm_es_hwrand_entropy_rate_bits;
-	uint32_t esdm_es_tpm2_entropy_rate_bits;
-	uint32_t esdm_es_pkcs11_entropy_rate_bits;
-	uint32_t esdm_es_jent_kernel_entropy_rate_bits;
-	uint32_t esdm_drng_max_wo_reseed;
-	uint32_t esdm_drng_max_wo_reseed_bits;
-	uint32_t esdm_max_nodes;
-	enum esdm_config_force_fips force_fips;
+	_Atomic uint32_t esdm_es_cpu_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_jent_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_irq_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_krng_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_sched_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_hwrand_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_tpm2_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_pkcs11_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_jent_kernel_entropy_rate_bits;
+	_Atomic uint32_t esdm_drng_max_wo_reseed;
+	_Atomic uint32_t esdm_drng_max_wo_reseed_bits;
+	_Atomic uint32_t esdm_max_nodes;
+	_Atomic enum esdm_config_force_fips force_fips;
 
-	bool esdm_es_irq_retry;
-	bool esdm_es_sched_retry;
-	bool esdm_jent_entropy_async_enable;
+	_Atomic bool esdm_es_irq_retry;
+	_Atomic bool esdm_es_sched_retry;
+	_Atomic bool esdm_jent_entropy_async_enable;
 };
 
 static struct esdm_config esdm_config = {
