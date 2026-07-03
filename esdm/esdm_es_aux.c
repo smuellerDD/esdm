@@ -535,8 +535,14 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 	    hash_cb->hash_init(shash) || hash_cb->hash_init(ohash) ||
 	    hash_cb->hash_update(shash, (uint8_t *)"STATE0", 6) ||
 	    hash_cb->hash_update(ohash, (uint8_t *)"OUTPUT", 6) ||
-	    hash_cb->hash_update(shash, aux_state, ESDM_MAX_DIGESTSIZE) ||
-	    hash_cb->hash_update(ohash, aux_state, ESDM_MAX_DIGESTSIZE)) {
+	    /*
+	     * Absorb exactly the bytes hash_final() produced. The buffer is
+	     * ESDM_MAX_DIGESTSIZE, but hash_final() only wrote digestsize
+	     * bytes; absorbing the full buffer would feed uninitialized stack
+	     * for any backend whose digest is smaller than the maximum.
+	     */
+	    hash_cb->hash_update(shash, aux_state, digestsize) ||
+	    hash_cb->hash_update(ohash, aux_state, digestsize)) {
 		returned_ent_bits = 0;
 	} else {
 		/*
@@ -547,8 +553,8 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 		memcpy(outbuf, aux_output, requested_bits >> 3);
 	}
 
-	memset_secure(aux_state, 0, digestsize);
-	memset_secure(aux_output, 0, digestsize);
+	memset_secure(aux_state, 0, sizeof(aux_state));
+	memset_secure(aux_output, 0, sizeof(aux_output));
 	return returned_ent_bits;
 }
 
