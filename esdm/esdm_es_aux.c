@@ -246,7 +246,16 @@ void esdm_pool_set_entropy(uint32_t entropy_bits)
 	 * it can nevertheless reset all pools to zero
 	 */
 	for (i = 0; i < ESDM_NUM_AUX_POOLS; i++) {
+		/*
+		 * Hold the pool lock so this absolute set stays consistent with
+		 * the lock-guarded read-modify-write sequences on aux_entropy_bits
+		 * in esdm_aux_pool_insert_locked() and esdm_aux_get_pool(); an
+		 * unlocked atomic_set() could otherwise clobber a concurrent
+		 * xchg/add and corrupt the entropy accounting.
+		 */
+		mutex_w_lock(&esdm_pools[i].lock);
 		esdm_pool_set_entropy_pool(&esdm_pools[i], entropy_bits);
+		mutex_w_unlock(&esdm_pools[i].lock);
 		if (entropy_bits != 0)
 			break;
 	}
