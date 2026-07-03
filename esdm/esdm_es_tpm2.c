@@ -150,7 +150,8 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		 */
 		if (safe_ret < (ssize_t)sizeof(struct TPM2ResponseHeader)) {
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
-				    "TPM 2.0 response read failed: %i\n", ret);
+				    "TPM 2.0 response read failed: %zd\n",
+				    safe_ret);
 			close(tpm2_fd);
 			tpm2_fd = -1;
 			goto out;
