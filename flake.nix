@@ -441,8 +441,9 @@
           };
         };
 
-        # shortcut for development
-        liveIso = self.nixosConfigurations.${system}.live_6_18.config.system.build.isoImage;
+        # shortcut for development - track the rolling "latest" kernel so this
+        # does not break when nixpkgs drops a specific versioned attribute.
+        liveIso = self.nixosConfigurations.${system}.live_latest.config.system.build.isoImage;
       }
     );
 }
