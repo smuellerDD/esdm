@@ -184,6 +184,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 				FIPS_INTEGRITY_LOGGER_PREFIX
 				"Cannot create file %s\n",
 				checkfile);
+			ret = -EIO;
 			goto out;
 		}
 		file = fopen(checkfile, "r");
@@ -192,6 +193,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 				FIPS_INTEGRITY_LOGGER_PREFIX
 				"Cannot open file %s\n",
 				checkfile);
+			ret = -EIO;
 			goto out;
 		}
 	}
@@ -266,7 +268,7 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 
 out:
 	esdm_hmac_zero(hmac_ctx);
-	if (file)
+	if (file && file != stdin)
 		fclose(file);
 	if (memblock)
 		munmap(memblock, size);
@@ -311,7 +313,7 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 	size_t written;
 
 	file = strcmp(checkfile, "-") ? fopen_if_not_exists(checkfile, "w") :
-					stdin;
+					stdout;
 	if (!file) {
 		ret = -EEXIST;
 		goto out;
@@ -345,7 +347,7 @@ int fips_create_checkfile(const char *checkfile, const char *targetfile)
 
 out:
 	esdm_hmac_zero(hmac_ctx);
-	if (file)
+	if (file && file != stdout)
 		fclose(file);
 	if (memblock)
 		munmap(memblock, size);
