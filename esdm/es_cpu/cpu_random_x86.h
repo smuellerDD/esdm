@@ -32,6 +32,16 @@
 
 #define RDRAND_RETRY_LOOPS 10
 
+/*
+ * RDSEED underflows routinely when the DRNG conditioner cannot refill the
+ * seed queue as fast as it is drained - guaranteed to happen when pulling
+ * many words back-to-back. This is a transient condition that clears within
+ * microseconds, so per the Intel DRNG Software Implementation Guide retry
+ * with PAUSE in between. The bound only exists to turn genuinely broken
+ * hardware into a failure instead of a livelock.
+ */
+#define RDSEED_RETRY_LOOPS 1024
+
 #define ECX_RDRAND (1 << 30)
 #define EXT_FEAT_EBX_RDSEED (1 << 18)
 
@@ -123,8 +133,9 @@ static inline bool cpu_es_x86_rdseed(unsigned long *buf)
 		return false;
 
 	while (!esdm_rdseed_step(buf)) {
-		if (retry++ >= RDRAND_RETRY_LOOPS)
+		if (retry++ >= RDSEED_RETRY_LOOPS)
 			return false;
+		__builtin_ia32_pause();
 	}
 
 	return true;
