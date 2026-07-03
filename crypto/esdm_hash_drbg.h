@@ -39,8 +39,15 @@ struct esdm_drbg_hash_state {
 	uint8_t *scratchpad; /* working mem DRBG_STATELEN + DRBG_BLOCKLEN */
 
 	/* Number of RNG requests since last reseed -- 10.1.1.1 1c) */
-	size_t reseed_ctr;
+	uint64_t reseed_ctr;
 };
+
+/*
+ * SP800-90A Table 2: the Hash_DRBG reseed_interval must not exceed 2^48. Once
+ * the reseed counter reaches this, 10.1.1.4 step 1 requires the Generate
+ * function to signal that a reseed is required rather than produce output.
+ */
+#define ESDM_DRBG_HASH_MAX_RESEED (1ULL << 48)
 
 #define ESDM_DRBG_HASH_STATE_SIZE(x)                                           \
 	(3 * ESDM_DRBG_HASH_STATELEN + ESDM_DRBG_HASH_BLOCKLEN +               \

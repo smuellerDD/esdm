@@ -242,6 +242,16 @@ static size_t drbg_hash_generate_internal(struct esdm_drbg_hash_state *drbg,
 	size_t len = 0;
 	uint8_t req[8], prefix = DRBG_PREFIX3;
 
+	/*
+	 * 10.1.1.4 step 1: refuse to generate once the reseed interval is
+	 * exhausted. ESDM's DRNG manager normally reseeds long before this, so
+	 * hitting the limit means reseeding has stalled entirely; returning 0
+	 * fails the request closed (the manager treats a non-positive generate
+	 * as an error) instead of producing output from an over-used state.
+	 */
+	if (drbg->reseed_ctr >= ESDM_DRBG_HASH_MAX_RESEED)
+		return 0;
+
 	drbg->reseed_ctr++;
 
 	/* 10.1.1.4 step 2 */
