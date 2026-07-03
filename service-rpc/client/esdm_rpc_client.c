@@ -787,6 +787,14 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 			esdm_fini_proto_service(tmp_p);
 		if (tmp)
 			free(tmp);
+		tmp = NULL;
+		/*
+		 * Clear the global pointer as well: it still references the
+		 * memory just freed. Otherwise the compare-and-swap below sees a
+		 * stale non-NULL value, fails, and both discards the freshly
+		 * built array and leaves the global dangling (later double free).
+		 */
+		*rpc_conn = NULL;
 		*num_conn = 0;
 	}
 
