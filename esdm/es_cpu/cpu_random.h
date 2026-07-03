@@ -33,7 +33,7 @@
 
 #ifndef ESDM_CPU_ES_IMPLEMENTED
 
-#include "bool.h"
+#include <stdbool.h>
 
 static inline bool cpu_es_get(unsigned long *buf)
 {

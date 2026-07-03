@@ -26,7 +26,7 @@
 #include <pthread.h>
 #include <time.h>
 
-#include "bool.h"
+#include <stdbool.h>
 #include "ret_checkers.h"
 
 /**

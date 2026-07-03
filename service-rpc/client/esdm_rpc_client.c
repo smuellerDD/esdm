@@ -30,7 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "bool.h"
+#include <stdbool.h>
 #include "buffer.h"
 #include "config.h"
 #include "conv_be_le.h"

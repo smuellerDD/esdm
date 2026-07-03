@@ -20,7 +20,7 @@
 #ifndef ESDM_SHM_STATUS_H
 #define ESDM_SHM_STATUS_H
 
-#include "bool.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {

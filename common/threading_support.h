@@ -25,7 +25,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "bool.h"
+#include <stdbool.h>
 #include "buffer.h"
 #include "config.h"
 
