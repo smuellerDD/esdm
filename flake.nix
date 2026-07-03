@@ -185,8 +185,21 @@
                   )
                   baseModule
                   (
-                    { ... }:
+                    { lib, pkgs, ... }:
                     {
+                      # baseModule leaves the daemon disabled (startEsdm =
+                      # false) for the interactive live images; the check must
+                      # actually run it, otherwise there is nothing to test.
+                      services.esdm.enable = lib.mkForce true;
+                      services.esdm.enableLinuxCompatServices = lib.mkForce true;
+
+                      # Make the startup-hang regression harness (and a Python
+                      # to run it) available inside the VM so the check can
+                      # execute it instead of letting it rot.
+                      environment.systemPackages = [ pkgs.python3 ];
+                      environment.etc."esdm-startup-loop.py".source =
+                        ./tests/startup/esdm_startup_loop.py;
+
                       boot.kernelParams = [
                         "kmemleak=on"
                         "page_owner=on"
@@ -210,7 +223,48 @@
                 ];
               };
 
-            testScript = "";
+            testScript = ''
+              machine.wait_for_unit("multi-user.target")
+
+              # The kernel entropy-source module (irq/sched hooks) must load.
+              machine.succeed("test -c /dev/esdm_es")
+
+              # The daemon must come up and reach a fully-seeded DRNG. This is
+              # the code path that the irq/sched deferred-logging deadlock fix
+              # (commit c428c59) and the reinit locking work touch, so a
+              # regression here should fail the check rather than pass silently.
+              machine.wait_for_unit("esdm-server.service")
+              machine.succeed("esdm-tool --wait-until-seeded 60")
+              machine.succeed("esdm-tool --is-fully-seeded")
+              machine.succeed("esdm-tool --status")
+
+              # Draw random data over the RPC interface; 32 bytes are printed
+              # hex-encoded, so expect at least 64 characters back.
+              out = machine.succeed("esdm-tool --get-random 32").strip()
+              assert len(out) >= 64, f"short random output: {out!r}"
+
+              # Linux-compat frontends: /dev/random is served by the CUSE
+              # daemon once the compat target is up.
+              machine.wait_for_unit("esdm-linux-compat.target")
+              machine.succeed("test \"$(head -c 32 /dev/random | wc -c)\" = 32")
+
+              # A clean shutdown must not deadlock or leak (kmemleak is on).
+              machine.succeed("systemctl stop esdm-server.service")
+
+              # Now exercise the dedicated startup-hang regression harness
+              # against the same binary. It repeatedly starts esdm-server in the
+              # foreground, waits for the operational marker, fetches entropy
+              # over RPC and checks for a clean SIGTERM shutdown - the exact
+              # start/seed/teardown cycle the irq/sched deadlock fix touched.
+              # The systemd instance is stopped above so the RPC sockets are
+              # free for the harness to bind.
+              server = machine.succeed("command -v esdm-server").strip()
+              tool = machine.succeed("command -v esdm-tool").strip()
+              machine.succeed(
+                  f"python3 /etc/esdm-startup-loop.py --iterations 25 "
+                  f"--binary {server} --tool {tool} --stop-on-failure"
+              )
+            '';
           };
       in
       {
