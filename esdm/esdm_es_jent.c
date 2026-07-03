@@ -222,7 +222,11 @@ static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 				"JitterRNG"));
 
 	esdm_jent_state_thread = jent_entropy_collector_alloc(osr, flags);
-	CKNULL(esdm_jent_state_thread, -EFAULT);
+	if (!esdm_jent_state_thread) {
+		/* Undo the cache allocation just made so it is not leaked. */
+		esdm_es_buf_free(&esdm_jent_buf);
+		return -EFAULT;
+	}
 
 	esdm_jent_async_alloced = true;
 
@@ -421,12 +425,32 @@ static int esdm_jent_initialize(void)
 
 	CKINT(jent_entropy_init_ex(ESDM_JENT_OSR, flags));
 
+#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
+	/*
+	 * Remember whether the async cache/collector already existed before this
+	 * call. On the reinit path they do, and lock-free consumers/the monitor
+	 * may still be reading them, so the sync-collector failure handler below
+	 * must not free them (that would be a use-after-free). Only a first init
+	 * - where this call itself allocates them and no consumers exist yet -
+	 * may tear them down on error.
+	 */
+	bool async_was_alloced = esdm_jent_async_alloced;
+#endif
+
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
 	CKINT(esdm_jent_async_init(ESDM_JENT_OSR, flags));
 
 	esdm_jent_state = jent_entropy_collector_alloc(ESDM_JENT_OSR, flags);
 	if (!esdm_jent_state) {
-		esdm_jent_async_fini();
+		/*
+		 * When the async cache is compiled out, esdm_jent_async_fini()
+		 * is a no-op stub, so the call is unconditional there; otherwise
+		 * only free what this call itself allocated (see above).
+		 */
+#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
+		if (!async_was_alloced && esdm_jent_async_alloced)
+#endif
+			esdm_jent_async_fini();
 		ret = -EFAULT;
 		goto out;
 	}
