@@ -120,7 +120,10 @@ This subpackage holds the OpenSSL 3 RAND provider
 %meson_build
 
 %check
-%meson_test
+# The CUSE tests require a /dev/cuse device node and privileges that are not
+# available in a clean build chroot, so skip that suite here. The remaining
+# unit tests (crypto, entropy sources, RPC) run fine.
+%meson_test --no-suite cuse
 
 %install
 %meson_install
