@@ -414,7 +414,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 	unsigned int special_slot = thread_get_special_slot(thread_group);
 	unsigned int num_elements, j, k;
 
-	if (threads_groups < thread_group && !special_slot) {
+	if (thread_group >= threads_groups && !special_slot) {
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_THREADING,
 			"undefined thread group requested (%u, max thread group is %u)\n",
