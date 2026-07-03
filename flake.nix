@@ -325,6 +325,18 @@
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
                 src = lib.cleanSource ./.;
+                # Keep the derivation version in sync with the local tree
+                # (parsed from meson.build) instead of inheriting nixpkgs'
+                # pinned version, which produced misleading esdm-1.2.3 store
+                # paths and modinfo for a 1.2.4 checkout.
+                version =
+                  let
+                    lines = lib.splitString "\n" (builtins.readFile ./meson.build);
+                    matches = builtins.filter (m: m != null) (
+                      map (l: builtins.match "[[:space:]]*version: '([0-9.]+)',?[[:space:]]*" l) lines
+                    );
+                  in
+                  builtins.head (builtins.head matches);
                 dontStrip = debugEsdm;
               });
 
