@@ -38,6 +38,7 @@
 #include "esdm_rpc_server.h"
 #include "esdm_logger.h"
 #include "helper.h"
+#include "linux_support.h"
 #include "ret_checkers.h"
 #include "systemd_support.h"
 #include "threading_support.h"
@@ -482,53 +483,6 @@ int main(int argc, char *argv[])
 	if (verbosity == 0 && !foreground)
 		daemonize();
 
-	if (memlock) {
-		/*
-		 * its hard to set a sane limit here, as we have a
-		 * variable amount of memory in jitterentropy entropy source
-		 * and a variable amount of worker threads
-		 */
-		struct rlimit rl = {
-			.rlim_cur = RLIM_INFINITY,
-			.rlim_max = RLIM_INFINITY,
-		};
-		if (setrlimit(RLIMIT_MEMLOCK, &rl) != 0) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-				    "Cannot raise memlock limit\n");
-			exit(-1);
-		}
-		/*
-		 * Lock pages only once they are faulted in instead of
-		 * pre-faulting and locking every reserved-but-untouched page.
-		 * Without this, MCL_FUTURE forces each newly mapped region fully
-		 * resident at map time - most notably the whole of every thread
-		 * stack and the glibc heap reservation - which dominates the
-		 * locked resident set. Any page that ever holds data is faulted
-		 * and therefore still locked, so no secret can reach swap; only
-		 * the untouched reservations stop being paid for.
-		 */
-		if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) != 0) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-				    "Cannot use mlockall\n");
-			exit(-1);
-		}
-
-		/*
-		 * Locking memory keeps the secrets ESDM handles out of swap;
-		 * a core dump would defeat that by writing the whole address
-		 * space (including the locked pages) to disk. Mark the process
-		 * non-dumpable so the kernel refuses to generate a core dump
-		 * for it at all - this also covers core_pattern pipe handlers
-		 * (e.g. systemd-coredump), which a mere RLIMIT_CORE of 0 does
-		 * not reliably suppress.
-		 */
-		if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-				    "Cannot disable core dumps\n");
-			exit(-1);
-		}
-	}
-
 	if (small_memory) {
 		/*
 		 * Shrink the per-thread stack size. This must happen before the
@@ -577,6 +531,69 @@ int main(int argc, char *argv[])
 		create_pid_file(pidfile);
 
 	install_term();
+
+	/*
+	 * Fork into an isolating PID namespace: this process becomes a pure
+	 * supervisor that forwards daemon control signals and mirrors the
+	 * exit status, the child continues below as the actual daemon.
+	 *
+	 * The ordering around this call is deliberate:
+	 * - create_pid_file() must run before it so the PID file names the
+	 *   supervisor, which is the process external parties must signal;
+	 * - install_term() must run before it because a PID namespace init
+	 *   only receives a signal from an ancestor namespace for which it
+	 *   has a handler installed, so the daemon must inherit the handlers;
+	 * - the memlock setup must run after it (in the child) because
+	 *   mlockall() is not inherited across fork().
+	 */
+	CKINT(linux_isolate_namespace_prefork());
+
+	if (memlock) {
+		/*
+		 * its hard to set a sane limit here, as we have a
+		 * variable amount of memory in jitterentropy entropy source
+		 * and a variable amount of worker threads
+		 */
+		struct rlimit rl = {
+			.rlim_cur = RLIM_INFINITY,
+			.rlim_max = RLIM_INFINITY,
+		};
+		if (setrlimit(RLIMIT_MEMLOCK, &rl) != 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot raise memlock limit\n");
+			exit(-1);
+		}
+		/*
+		 * Lock pages only once they are faulted in instead of
+		 * pre-faulting and locking every reserved-but-untouched page.
+		 * Without this, MCL_FUTURE forces each newly mapped region fully
+		 * resident at map time - most notably the whole of every thread
+		 * stack and the glibc heap reservation - which dominates the
+		 * locked resident set. Any page that ever holds data is faulted
+		 * and therefore still locked, so no secret can reach swap; only
+		 * the untouched reservations stop being paid for.
+		 */
+		if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) != 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot use mlockall\n");
+			exit(-1);
+		}
+
+		/*
+		 * Locking memory keeps the secrets ESDM handles out of swap;
+		 * a core dump would defeat that by writing the whole address
+		 * space (including the locked pages) to disk. Mark the process
+		 * non-dumpable so the kernel refuses to generate a core dump
+		 * for it at all - this also covers core_pattern pipe handlers
+		 * (e.g. systemd-coredump), which a mere RLIMIT_CORE of 0 does
+		 * not reliably suppress.
+		 */
+		if (prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+				    "Cannot disable core dumps\n");
+			exit(-1);
+		}
+	}
 
 	CKINT(daemon_init());
 

@@ -28,7 +28,9 @@ if get_option('systemd').enabled()
 	'''
 	)
 
-	server_conf_data.set('SERVICE_TYPE', 'Type=notify')
+	# NotifyAccess=all: the READY notification is sent by the daemon
+	# child inside the PID namespace, not by the supervisor main process
+	server_conf_data.set('SERVICE_TYPE', 'Type=notify\nNotifyAccess=all')
 else
 	server_conf_data.set('UNIT_SNIPPET', '''
 	# NO SOCKET ACTIVATION BEGIN

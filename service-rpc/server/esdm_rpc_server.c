@@ -55,7 +55,6 @@
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
-#include "linux_support.h"
 #include "math_helper.h"
 #include "esdm_logger.h"
 #include "memset_secure.h"
@@ -1317,9 +1316,6 @@ static int esdm_rpc_server_es_monitor(void __unused *unused)
 int esdm_rpc_server_init(const char *username, const char *groupname)
 {
 	int ret = 0;
-
-	/* Enter PID name space */
-	CKINT(linux_isolate_namespace_prefork());
 
 	pthread_setname_np(pthread_self(), "ESDM master");
 
