@@ -106,6 +106,23 @@ static int esdm_cuse_shm_status_create_shm(void)
 			return -errsv;
 		}
 
+		/*
+		 * The segment uses a well-known ftok() key. Only trust it if it
+		 * was created by root (the server) or by ourselves; a segment
+		 * created by another (unprivileged) uid may have been planted to
+		 * feed the /dev/random poll path forged status flags, so fail
+		 * safe rather than trust it.
+		 */
+		if (buf.shm_perm.cuid != 0 &&
+		    buf.shm_perm.cuid != geteuid()) {
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_ANY,
+				"ESDM status shared memory segment has untrusted owner %u - refusing to attach\n",
+				(unsigned int)buf.shm_perm.cuid);
+			esdm_cuse_shm_status_close_shm();
+			return -EPERM;
+		}
+
 		/* SHM exists, but has no attachments -> stale */
 		if (buf.shm_nattch == 0) {
 			esdm_cuse_shm_status_close_shm();
