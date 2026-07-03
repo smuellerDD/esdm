@@ -38,7 +38,6 @@
 #include "helper.h"
 #include "mutex.h"
 
-#define ESDM_ES_HWRAND_AVAIL "/sys/devices/virtual/misc/hw_random/rng_available"
 #define ESDM_ES_HWRAND_IF "/dev/hwrng"
 
 /*
