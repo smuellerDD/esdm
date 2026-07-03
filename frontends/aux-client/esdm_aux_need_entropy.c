@@ -91,9 +91,13 @@ static int esdm_cuse_shm_status_create_shm(void)
 		 * Ownership is not enforced here: a client cannot know the
 		 * server's uid (it may run unprivileged), so rejecting on owner
 		 * would break legitimate cross-uid deployments and could strand
-		 * a client whose segment the server later re-creates. The server
-		 * evicts any foreign-owned segment on startup, which is the
-		 * authoritative defense against a planted status segment.
+		 * a client whose segment the server later re-creates. The primary
+		 * defense against a planted status segment is server-side: the
+		 * server evicts any foreign-owned segment when it (re)creates the
+		 * segment. Note this only covers segments planted before the
+		 * server runs its create path; a client that attaches while no
+		 * server is running has no way to authenticate the segment, so it
+		 * relies on the version gate and the server's eventual eviction.
 		 */
 
 		/* SHM exists, but has no attachments -> stale */

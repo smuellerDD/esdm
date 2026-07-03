@@ -427,6 +427,16 @@ int esdm_shm_status_reinit(void)
 {
 	int ret;
 
+	/*
+	 * Latent edge: esdm_shm_status_create_shm() compares the existing
+	 * segment's owner against the current geteuid(). If a reinit happens
+	 * after the server has dropped privileges, geteuid() no longer matches
+	 * the euid that created the original segment (e.g. root at first init),
+	 * so the still-valid segment is treated as foreign and evicted and
+	 * recreated under the reduced uid. This is benign - exit() already
+	 * detaches and the recreated segment is immediately republished - but
+	 * it does churn the segment and momentarily resets it to version 0.
+	 */
 	esdm_shm_status_exit();
 	CKINT(esdm_shm_status_init());
 
