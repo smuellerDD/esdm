@@ -28,8 +28,9 @@ if get_option('systemd').enabled()
 	'''
 	)
 
-	# NotifyAccess=all: the READY notification is sent by the daemon
-	# child inside the PID namespace, not by the supervisor main process
+	# NotifyAccess=all: when the server runs with --pid_namespace, the
+	# READY notification is sent by the daemon child inside the PID
+	# namespace, not by the supervisor main process; harmless otherwise
 	server_conf_data.set('SERVICE_TYPE', 'Type=notify\nNotifyAccess=all')
 else
 	server_conf_data.set('UNIT_SNIPPET', '''
