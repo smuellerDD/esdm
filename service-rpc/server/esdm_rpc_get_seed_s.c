@@ -52,11 +52,17 @@ void esdm_rpc_get_seed(UnprivAccess_Service *service,
 		if (response.ret >= 0) {
 			size_t resp_len;
 
-			/* Guard against buffer overread and overflow */
-			if (rndval[0] > sizeof(rndval) - sizeof(uint64_t))
+			/*
+			 * esdm_get_seed() returns the total number of bytes it
+			 * wrote (rndval[0] == buflen, already including both
+			 * leading length words). Send exactly that; adding
+			 * another word here would leak sizeof(uint64_t) bytes of
+			 * uninitialized stack past the written region.
+			 */
+			if (rndval[0] > sizeof(rndval))
 				resp_len = sizeof(rndval);
 			else
-				resp_len = (size_t)rndval[0] + sizeof(uint64_t);
+				resp_len = (size_t)rndval[0];
 
 			esdm_test_shm_status_add_rpc_server_written(rndval[0]);
 			response.randval.data = (uint8_t *)rndval;
