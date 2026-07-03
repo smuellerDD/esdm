@@ -599,7 +599,17 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 void esdm_unset_fully_seeded(struct esdm_drng *drng)
 {
 	atomic_bool_set_false(&drng->fully_seeded);
+
+	/*
+	 * Clear all_online_nodes_seeded under the pool lock so it stays ordered
+	 * with the pool-lock-guarded set-to-true in __esdm_drng_seed_work() and
+	 * with the readers in esdm_get_seed() that evaluate this flag under
+	 * the same lock. The lock is scoped narrowly here because
+	 * esdm_force_fully_seeded() below acquires the pool lock itself.
+	 */
+	esdm_pool_lock();
 	esdm_pool_all_nodes_seeded(false);
+	esdm_pool_unlock();
 
 	/*
 	 * The init DRNG instance must always be fully seeded as this instance
