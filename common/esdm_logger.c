@@ -48,7 +48,12 @@ struct esdm_logger_class_map {
 	const char *logdata;
 };
 
-static FILE *esdm_logger_stream = NULL;
+/*
+ * Atomic so esdm_logger_set_file()'s store and the concurrent loads in every
+ * logging thread are well-defined rather than a torn-pointer data race, matching
+ * the treatment of the verbosity/class levels above.
+ */
+static _Atomic(FILE *) esdm_logger_stream = NULL;
 static bool use_syslog = false;
 
 static void log_syslog(int severity, const char *format, ...);
@@ -189,8 +194,11 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	char c[30];
 	char thread_name[ESDM_THREAD_MAX_NAMELEN];
 
+	FILE *stream;
+
 	if (!esdm_logger_stream)
 		esdm_logger_stream = stderr;
+	stream = esdm_logger_stream;
 
 	if (severity > esdm_logger_verbosity_level)
 		return;
@@ -234,16 +242,25 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 
 	thread_get_name(thread_name, sizeof(thread_name));
 
+	/*
+	 * The header and the message body are two separate stdio writes; hold
+	 * the stream lock across both so concurrent threads cannot interleave a
+	 * half-written record. flockfile()/funlockfile() nest with the implicit
+	 * per-call locking stdio already does.
+	 */
+	if (!use_syslog)
+		flockfile(stream);
+
 	switch (esdm_logger_verbosity_level) {
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
 		if (use_syslog) {
-			log_syslog((int)esdm_logger_verbosity_level,
+			log_syslog((int)severity,
 				   "(%s) {%s} [%s:%s:%u] %s", thread_name, c,
 				   file, func, line, msg);
 		} else {
 			fprintf_color(
-				esdm_logger_stream,
+				stream,
 				"ESDM (%.2d:%.2d:%.2d) (%s) %s%s [%s:%s:%u]: ",
 				now_detail.tm_hour, now_detail.tm_min,
 				now_detail.tm_sec, thread_name, sev, c, file,
@@ -258,10 +275,10 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	case LOGGER_MAX_LEVEL:
 	default:
 		if (use_syslog) {
-			log_syslog((int)esdm_logger_verbosity_level,
+			log_syslog((int)severity,
 				   "(%s) {%s} %s", thread_name, c, msg);
 		} else {
-			fprintf_color(esdm_logger_stream,
+			fprintf_color(stream,
 				      "ESDM (%.2d:%.2d:%.2d) (%s) %s%s: ",
 				      now_detail.tm_hour, now_detail.tm_min,
 				      now_detail.tm_sec, thread_name, sev, c);
@@ -270,7 +287,8 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	}
 
 	if (!use_syslog) {
-		fprintf(esdm_logger_stream, "%s", msg);
+		fprintf(stream, "%s", msg);
+		funlockfile(stream);
 	}
 }
 
