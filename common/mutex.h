@@ -35,6 +35,20 @@ typedef pthread_rwlock_t mutex_t;
 #define MUTEX_UNLOCKED PTHREAD_RWLOCK_INITIALIZER
 #define DEFINE_MUTEX_UNLOCKED(name) mutex_t name = MUTEX_UNLOCKED
 
+/*
+ * Writer-preferring variant of MUTEX_UNLOCKED. The default glibc rwlock is
+ * reader-preferring, so a continuous stream of readers can starve a writer
+ * indefinitely. Use this for locks whose read side may be held for a long time
+ * (e.g. across a full RPC round trip) where a writer must not be starved by a
+ * flood of readers.
+ */
+#ifdef PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
+#define MUTEX_UNLOCKED_PREFER_WRITER                                           \
+	PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
+#else
+#define MUTEX_UNLOCKED_PREFER_WRITER MUTEX_UNLOCKED
+#endif
+
 #define DEFINE_MUTEX_LOCKED(name) error "DEFINE_MUTEX_LOCKED not implemented"
 
 /**
