@@ -74,7 +74,8 @@ RemoveIPC=yes
 Restart=on-failure
 RestartSec=5s
 RestrictAddressFamilies=AF_UNIX
-RestrictNamespaces=mnt cgroup net
+# pid: the server forks itself into an isolating PID namespace at startup
+RestrictNamespaces=mnt cgroup net pid
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 SystemCallArchitectures=native
