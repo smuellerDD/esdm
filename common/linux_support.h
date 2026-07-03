@@ -20,16 +20,12 @@
 #ifndef LINUX_SUPPORT_H
 #define LINUX_SUPPORT_H
 
-#include "config.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifdef ESDM_LINUX
 int linux_isolate_namespace(void);
 /**
  * @brief Fork the daemon into an isolating PID namespace.
@@ -43,32 +39,6 @@ int linux_isolate_namespace(void);
  */
 int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void));
 int linux_personalization_string(char **ptr, size_t *length);
-#else
-static inline int linux_isolate_namespace(void)
-{
-	return 0;
-}
-static inline int
-linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
-{
-	(void)supervisor_exit_cb;
-	return 0;
-}
-static inline int linux_personalization_string(char **ptr, size_t *length)
-{
-	static const char *personalization = "ESDM";
-
-	assert(*ptr == NULL);
-	assert(*length == 0);
-
-	*length = strlen(personalization);
-	*ptr = strndup(personalization, *length);
-	if (!*ptr)
-		return -errno;
-
-	return 0;
-}
-#endif
 
 #ifdef __cplusplus
 }
