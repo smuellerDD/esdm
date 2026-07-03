@@ -155,6 +155,8 @@ void esdm_cc20_drng_zero_free(struct esdm_chacha20_drng_ctx *cc20_ctx)
 		return;
 
 	esdm_cc20_drng_zero(cc20_ctx);
+	/* Release the lock taken in esdm_cc20_drng_alloc() before freeing. */
+	munlock(cc20_ctx, ESDM_CC20_DRNG_CTX_SIZE);
 	free(cc20_ctx);
 }
 
@@ -168,8 +170,13 @@ int esdm_cc20_drng_alloc(struct esdm_chacha20_drng_ctx **cc20_ctx)
 	if (ret)
 		return -ret;
 
-	/* prevent paging out of the memory state to swap space */
-	ret = mlock(out_ctx, sizeof(*out_ctx));
+	/*
+	 * Prevent paging out of the memory state to swap space. Lock the whole
+	 * allocation: the ChaCha20 key/state lives in the trailing
+	 * ESDM_CC20_DRNG_STATE_SIZE region, so locking only sizeof(*out_ctx)
+	 * (the small context header) would leave the actual key swappable.
+	 */
+	ret = mlock(out_ctx, ESDM_CC20_DRNG_CTX_SIZE);
 	if (ret && errno != EPERM && errno != EAGAIN) {
 		int errsv = errno;
 
