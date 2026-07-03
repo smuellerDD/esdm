@@ -880,14 +880,42 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
  * Poll system call handler
  ******************************************************************************/
 
-#define ESDM_CUSE_MAX_PH 16
+/*
+ * Registered poll handles are kept in a dynamically grown singly-linked list
+ * rather than a fixed global array: a fixed cap was shared across all clients,
+ * so a single process could pin every slot and make poll() silently block
+ * forever for every other user (a cross-user denial of service). The list is
+ * bounded only by the number of file descriptors currently polling, which the
+ * OS already limits per process. All access is serialized by esdm_cuse_ph_lock.
+ */
 struct esdm_cuse_poll {
 	uint64_t fh;
 	struct fuse_pollhandle *ph;
 	uint32_t poll_events;
+	struct esdm_cuse_poll *next;
 };
-static struct esdm_cuse_poll esdm_cuse_polls[ESDM_CUSE_MAX_PH];
+static struct esdm_cuse_poll *esdm_cuse_poll_list;
 static DEFINE_MUTEX_W_UNLOCKED(esdm_cuse_ph_lock);
+
+/* Unlink and free every registration for fh; caller holds esdm_cuse_ph_lock. */
+static void esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
+{
+	struct esdm_cuse_poll **pp = &esdm_cuse_poll_list;
+
+	while (*pp) {
+		struct esdm_cuse_poll *node = *pp;
+
+		if (node->fh == fh) {
+			if (notify)
+				fuse_notify_poll(node->ph);
+			fuse_pollhandle_destroy(node->ph);
+			*pp = node->next;
+			free(node);
+		} else {
+			pp = &node->next;
+		}
+	}
+}
 
 static void esdm_cuse_get_pollmask(unsigned int *outmask)
 {
@@ -909,11 +937,16 @@ static void esdm_cuse_get_pollmask(unsigned int *outmask)
 	if (atomic_bool_read(&esdm_cuse_shm_status->need_entropy))
 		*outmask |= ESDM_POLL_WRITER;
 
-	/* Simply wake the poller no matter what it waits for. */
-	if (atomic_bool_read(&esdm_cuse_shm_status->suspend_trigger)) {
-		atomic_bool_set(&esdm_cuse_shm_status->suspend_trigger, false);
+	/*
+	 * Simply wake the poller no matter what it waits for. This one-shot
+	 * trigger is NOT cleared here: clearing it as a side effect of reading
+	 * the mask would let whichever caller reads it first consume the event,
+	 * so pollers already parked in the checker's list would never be woken.
+	 * The checker clears it once, after it has evaluated every registered
+	 * poll handle against it (see esdm_cuse_poll_checker()).
+	 */
+	if (atomic_bool_read(&esdm_cuse_shm_status->suspend_trigger))
 		*outmask |= ESDM_POLL_READER | ESDM_POLL_WRITER;
-	}
 
 	/* Simply wake the poller no matter what it waits for. */
 	if (atomic_bool_read(&esdm_cuse_poll_thread_shutdown))
@@ -934,7 +967,7 @@ static void esdm_cuse_set_pollmask(unsigned int request_events,
 void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		    struct fuse_pollhandle *ph)
 {
-	unsigned int i, mask;
+	unsigned int mask;
 	int err_code;
 
 	if (!fi->poll_events) {
@@ -953,45 +986,48 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	/* cleanup first, as we may have an interrupted poll/select */
 	mutex_w_lock(&esdm_cuse_ph_lock);
 	{
-		unsigned int free_slot = ESDM_CUSE_MAX_PH;
+		/* Drop any stale registration for this fh. */
+		esdm_cuse_poll_remove_fh(fi->fh, false);
 
-		/*
-		 * First pass: drop any stale handle for this fh and remember the
-		 * first free slot. Doing the cleanup as a full pass - rather than
-		 * merging it with the insert and breaking early - preserves the
-		 * one-handle-per-fh invariant even when a free slot has a lower
-		 * index than the stale entry (which would otherwise leave a
-		 * duplicate registration behind).
-		 */
-		for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
-			if (esdm_cuse_polls[i].fh == fi->fh) {
-				if (esdm_cuse_polls[i].ph)
-					fuse_pollhandle_destroy(
-						esdm_cuse_polls[i].ph);
-				esdm_cuse_polls[i].fh = 0;
-				esdm_cuse_polls[i].ph = NULL;
-				esdm_cuse_polls[i].poll_events = 0;
-			}
-
-			if (free_slot == ESDM_CUSE_MAX_PH &&
-			    !esdm_cuse_polls[i].ph)
-				free_slot = i;
-		}
-
-		if (mask || free_slot == ESDM_CUSE_MAX_PH) {
-			/*
-			 * Events are already available (already replied above)
-			 * or there is no free slot: notify if ready and destroy
-			 * ph, as the callee owns it when it is not stored.
-			 */
-			if (mask)
-				fuse_notify_poll(ph);
+		if (mask) {
+			/* Event already available (replied above). */
+			fuse_notify_poll(ph);
 			fuse_pollhandle_destroy(ph);
 		} else {
-			esdm_cuse_polls[free_slot].fh = fi->fh;
-			esdm_cuse_polls[free_slot].ph = ph;
-			esdm_cuse_polls[free_slot].poll_events =
-				fi->poll_events;
+			struct esdm_cuse_poll *node = calloc(1, sizeof(*node));
+
+			if (!node) {
+				/*
+				 * Cannot register the handle. Wake the client so
+				 * it re-polls rather than blocking forever on an
+				 * event it would never be notified of.
+				 */
+				fuse_notify_poll(ph);
+				fuse_pollhandle_destroy(ph);
+			} else {
+				unsigned int recheck;
+
+				node->fh = fi->fh;
+				node->ph = ph;
+				node->poll_events = fi->poll_events;
+				node->next = esdm_cuse_poll_list;
+				esdm_cuse_poll_list = node;
+
+				/*
+				 * Close the register-after-reply window: if the
+				 * state became ready between the mask snapshot
+				 * above and this registration, deliver it now
+				 * instead of waiting for the next state change.
+				 */
+				esdm_cuse_get_pollmask(&recheck);
+				esdm_cuse_set_pollmask(fi->poll_events, &recheck);
+				if (recheck) {
+					fuse_notify_poll(node->ph);
+					fuse_pollhandle_destroy(node->ph);
+					esdm_cuse_poll_list = node->next;
+					free(node);
+				}
+			}
 		}
 	}
 	mutex_w_unlock(&esdm_cuse_ph_lock);
@@ -1005,27 +1041,30 @@ err:
 /* Poll checker handler executed in separate thread */
 static int esdm_cuse_poll_checker(void __unused *unused)
 {
-	unsigned int i;
-
 	thread_set_name(cuse_poll, 0);
 
-	/* Clean out the poll status */
-	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
-		esdm_cuse_polls[i].fh = 0;
-		esdm_cuse_polls[i].ph = NULL;
-		esdm_cuse_polls[i].poll_events = 0;
-	}
 	atomic_bool_set_true(&esdm_cuse_poll_checker_ready);
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
 	while (!atomic_bool_read(&esdm_cuse_poll_thread_shutdown)) {
 		unsigned int sysmask, mask;
-		bool sysmask_set = false;
+		bool sysmask_set = false, suspend_seen = false;
+		struct esdm_cuse_poll **pp;
 
 		mutex_w_lock(&esdm_cuse_ph_lock);
-		for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
-			if (!esdm_cuse_polls[i].ph)
-				continue;
+
+		/*
+		 * Capture the one-shot suspend trigger for this pass so it can
+		 * be cleared exactly once below, after every registered handle
+		 * has been evaluated against it.
+		 */
+		if (esdm_cuse_shm_status)
+			suspend_seen = atomic_bool_read(
+				&esdm_cuse_shm_status->suspend_trigger);
+
+		pp = &esdm_cuse_poll_list;
+		while (*pp) {
+			struct esdm_cuse_poll *node = *pp;
 
 			/* Get the mask once for this loop */
 			if (!sysmask_set) {
@@ -1034,18 +1073,28 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 			}
 
 			mask = sysmask;
-			esdm_cuse_set_pollmask(esdm_cuse_polls[i].poll_events,
-					       &mask);
+			esdm_cuse_set_pollmask(node->poll_events, &mask);
 
-			if (!mask)
+			if (!mask) {
+				pp = &node->next;
 				continue;
+			}
 
-			fuse_notify_poll(esdm_cuse_polls[i].ph);
-			fuse_pollhandle_destroy(esdm_cuse_polls[i].ph);
-			esdm_cuse_polls[i].fh = 0;
-			esdm_cuse_polls[i].ph = NULL;
-			esdm_cuse_polls[i].poll_events = 0;
+			fuse_notify_poll(node->ph);
+			fuse_pollhandle_destroy(node->ph);
+			*pp = node->next;
+			free(node);
 		}
+
+		/*
+		 * Clear the one-shot trigger only now - every poll handle in the
+		 * list has just been woken by it. A trigger that arrives after
+		 * this point re-posts the status semaphore, so it is not lost.
+		 */
+		if (suspend_seen && esdm_cuse_shm_status)
+			atomic_bool_set(&esdm_cuse_shm_status->suspend_trigger,
+					false);
+
 		mutex_w_unlock(&esdm_cuse_ph_lock);
 		esdm_cuse_shm_status_down();
 	}
@@ -1055,19 +1104,8 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 
 void esdm_cuse_release(fuse_req_t req, struct fuse_file_info *fi)
 {
-	unsigned int i;
-
 	mutex_w_lock(&esdm_cuse_ph_lock);
-	for (i = 0; i < ESDM_CUSE_MAX_PH; i++) {
-		if (esdm_cuse_polls[i].fh == fi->fh) {
-			fuse_notify_poll(esdm_cuse_polls[i].ph);
-			fuse_pollhandle_destroy(esdm_cuse_polls[i].ph);
-
-			esdm_cuse_polls[i].fh = 0;
-			esdm_cuse_polls[i].ph = NULL;
-			esdm_cuse_polls[i].poll_events = 0;
-		}
-	}
+	esdm_cuse_poll_remove_fh(fi->fh, true);
 	mutex_w_unlock(&esdm_cuse_ph_lock);
 
 	fuse_reply_err(req, 0);
