@@ -1,2 +1,21 @@
  .kdev4
 *.kdev4
+
+# meson / build artifacts
+/build/
+/builddir/
+
+# nix build results
+/result
+/result-*
+result
+result-*
+/addon/linux_esdm_es/result
+/addon/linux_esdm_es/result-*
+
+# caches and local test state
+/.cache/
+/.nixos-test-history
+
+# stray test output
+/out.bin
