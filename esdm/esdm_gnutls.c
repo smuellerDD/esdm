@@ -134,7 +134,6 @@ static int esdm_gnutls_hash_selftest(void)
 	else
 		ret = 0;
 
-	esdm_gnutls_hash_desc_zero(hd);
 	return ret;
 }
 
