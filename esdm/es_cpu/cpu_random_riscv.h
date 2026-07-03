@@ -24,7 +24,7 @@
 
 #include <stdint.h>
 
-#include "bool.h"
+#include <stdbool.h>
 
 #define ESDM_CPU_ES_IMPLEMENTED
 

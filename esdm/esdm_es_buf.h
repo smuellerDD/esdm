@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #include <stdatomic.h>
-#include "bool.h"
+#include <stdbool.h>
 #include "esdm_es_mgr_cb.h"
 
 enum esdm_es_buf_state {

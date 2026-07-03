@@ -24,7 +24,7 @@
 #include <time.h>
 
 #include <stdatomic.h>
-#include "bool.h"
+#include <stdbool.h>
 #include "config.h"
 #include "esdm.h"
 #include "esdm_crypto.h"

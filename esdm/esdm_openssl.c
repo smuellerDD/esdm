@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +31,6 @@
 #include <openssl/core_names.h>
 
 #include "config.h"
-#include "bool.h"
 #include "esdm_crypto.h"
 #include "esdm_openssl.h"
 #include "esdm_logger.h"

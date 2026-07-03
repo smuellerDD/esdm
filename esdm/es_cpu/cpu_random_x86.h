@@ -25,7 +25,7 @@
 #include <cpuid.h>
 #include <immintrin.h>
 
-#include "bool.h"
+#include <stdbool.h>
 #include "esdm_logger.h"
 
 #define ESDM_CPU_ES_IMPLEMENTED

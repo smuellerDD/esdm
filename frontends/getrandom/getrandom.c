@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 #include <stdatomic.h>
-#include "bool.h"
+#include <stdbool.h>
 #include "config.h"
 #include "constructor.h"
 #include "esdm_rpc_client.h"

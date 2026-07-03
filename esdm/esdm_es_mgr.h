@@ -6,7 +6,7 @@
 #ifndef _ESDM_ES_MGR_H
 #define _ESDM_ES_MGR_H
 
-#include "bool.h"
+#include <stdbool.h>
 #include "esdm_es_mgr_cb.h"
 
 /*************************** General ESDM parameter ***************************/

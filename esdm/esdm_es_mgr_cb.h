@@ -26,7 +26,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#include "bool.h"
+#include <stdbool.h>
 #include "config.h"
 #include "esdm.h"
 #include "esdm_definitions.h"

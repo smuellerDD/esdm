@@ -20,7 +20,7 @@
 #ifndef FIPS_H
 #define FIPS_H
 
-#include "bool.h"
+#include <stdbool.h>
 #include "config.h"
 
 #ifdef __cplusplus

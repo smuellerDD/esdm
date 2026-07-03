@@ -30,7 +30,7 @@
 #include <unistd.h>
 
 #include <stdatomic.h>
-#include "bool.h"
+#include <stdbool.h>
 #include "cuse_device.h"
 #include "cuse_helper.h"
 #include "esdm_rpc_client.h"

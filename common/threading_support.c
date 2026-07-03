@@ -28,7 +28,7 @@
 #include <unistd.h>
 
 #include <stdatomic.h>
-#include "bool.h"
+#include <stdbool.h>
 #include "config.h"
 #include "esdm_logger.h"
 #include "helper.h"

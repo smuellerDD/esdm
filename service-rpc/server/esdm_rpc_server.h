@@ -22,7 +22,7 @@
 
 #include <protobuf-c/protobuf-c.h>
 
-#include "bool.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
