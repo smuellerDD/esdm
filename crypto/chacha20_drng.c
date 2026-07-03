@@ -22,8 +22,8 @@
 #include <sys/mman.h>
 
 #include "conv_be_le.h"
-#include "lc_chacha20_drng.h"
-#include "lc_chacha20_private.h"
+#include "esdm_chacha20_drng.h"
+#include "esdm_chacha20_private.h"
 #include "math_helper.h"
 #include "visibility.h"
 
@@ -33,20 +33,20 @@
  * the key part of the state. This shall ensure backtracking resistance as well
  * as a proper mix of the ChaCha20 state once the key is injected.
  */
-static inline void lc_cc20_drng_update(struct lc_chacha20_drng_ctx *cc20_ctx,
+static inline void esdm_cc20_drng_update(struct esdm_chacha20_drng_ctx *cc20_ctx,
 				       uint32_t *buf, size_t used_words)
 {
-	struct lc_sym_ctx *sym_ctx = &cc20_ctx->cc20;
-	struct lc_sym_state *chacha20_state = sym_ctx->sym_state;
-	uint32_t i, tmp[LC_CC20_BLOCK_SIZE_WORDS];
+	struct esdm_sym_ctx *sym_ctx = &cc20_ctx->cc20;
+	struct esdm_sym_state *chacha20_state = sym_ctx->sym_state;
+	uint32_t i, tmp[ESDM_CC20_BLOCK_SIZE_WORDS];
 
-	if (used_words > LC_CC20_KEY_SIZE_WORDS) {
+	if (used_words > ESDM_CC20_KEY_SIZE_WORDS) {
 		cc20_block(chacha20_state, tmp);
-		for (i = 0; i < LC_CC20_KEY_SIZE_WORDS; i++)
+		for (i = 0; i < ESDM_CC20_KEY_SIZE_WORDS; i++)
 			chacha20_state->key.u[i] ^= le_bswap32(tmp[i]);
 		memset_secure(tmp, 0, sizeof(tmp));
 	} else {
-		for (i = 0; i < LC_CC20_KEY_SIZE_WORDS; i++) {
+		for (i = 0; i < ESDM_CC20_KEY_SIZE_WORDS; i++) {
 			chacha20_state->key.u[i] ^=
 				le_bswap32(buf[i + used_words]);
 		}
@@ -76,20 +76,20 @@ static inline void lc_cc20_drng_update(struct lc_chacha20_drng_ctx *cc20_ctx,
  * ChaCha20 CBC-MAC of the seed data is injected into the DRNG state.
  */
 DSO_PUBLIC
-void lc_cc20_drng_seed(struct lc_chacha20_drng_ctx *cc20_ctx,
+void esdm_cc20_drng_seed(struct esdm_chacha20_drng_ctx *cc20_ctx,
 		       const uint8_t *inbuf, size_t inbuflen)
 {
-	struct lc_sym_ctx *sym_ctx = &cc20_ctx->cc20;
-	struct lc_sym_state *chacha20_state = sym_ctx->sym_state;
+	struct esdm_sym_ctx *sym_ctx = &cc20_ctx->cc20;
+	struct esdm_sym_state *chacha20_state = sym_ctx->sym_state;
 
 	while (inbuflen) {
-		size_t i, todo = min_size(inbuflen, LC_CC20_KEY_SIZE);
+		size_t i, todo = min_size(inbuflen, ESDM_CC20_KEY_SIZE);
 
 		for (i = 0; i < todo; i++)
 			chacha20_state->key.b[i] ^= inbuf[i];
 
 		/* Break potential dependencies between the inbuf key blocks */
-		lc_cc20_drng_update(cc20_ctx, NULL, LC_CC20_BLOCK_SIZE_WORDS);
+		esdm_cc20_drng_update(cc20_ctx, NULL, ESDM_CC20_BLOCK_SIZE_WORDS);
 		inbuf += todo;
 		inbuflen -= todo;
 	}
@@ -109,19 +109,19 @@ void lc_cc20_drng_seed(struct lc_chacha20_drng_ctx *cc20_ctx,
  * overflown in this implementation.
  */
 DSO_PUBLIC
-void lc_cc20_drng_generate(struct lc_chacha20_drng_ctx *cc20_ctx,
+void esdm_cc20_drng_generate(struct esdm_chacha20_drng_ctx *cc20_ctx,
 			   uint8_t *outbuf, size_t outbuflen)
 {
-	struct lc_sym_ctx *sym_ctx = &cc20_ctx->cc20;
-	struct lc_sym_state *chacha20_state = sym_ctx->sym_state;
-	uint32_t aligned_buf[(LC_CC20_BLOCK_SIZE / sizeof(uint32_t))];
-	size_t used = LC_CC20_BLOCK_SIZE_WORDS;
+	struct esdm_sym_ctx *sym_ctx = &cc20_ctx->cc20;
+	struct esdm_sym_state *chacha20_state = sym_ctx->sym_state;
+	uint32_t aligned_buf[(ESDM_CC20_BLOCK_SIZE / sizeof(uint32_t))];
+	size_t used = ESDM_CC20_BLOCK_SIZE_WORDS;
 	int zeroize_buf = 0;
 
-	while (outbuflen >= LC_CC20_BLOCK_SIZE) {
+	while (outbuflen >= ESDM_CC20_BLOCK_SIZE) {
 		if ((unsigned long)outbuf & (sizeof(aligned_buf[0]) - 1)) {
 			cc20_block(chacha20_state, aligned_buf);
-			memcpy(outbuf, aligned_buf, LC_CC20_BLOCK_SIZE);
+			memcpy(outbuf, aligned_buf, ESDM_CC20_BLOCK_SIZE);
 			zeroize_buf = 1;
 		} else {
 #pragma GCC diagnostic push
@@ -130,8 +130,8 @@ void lc_cc20_drng_generate(struct lc_chacha20_drng_ctx *cc20_ctx,
 #pragma GCC diagnostic pop
 		}
 
-		outbuf += LC_CC20_BLOCK_SIZE;
-		outbuflen -= LC_CC20_BLOCK_SIZE;
+		outbuf += ESDM_CC20_BLOCK_SIZE;
+		outbuflen -= ESDM_CC20_BLOCK_SIZE;
 	}
 
 	if (outbuflen) {
@@ -142,28 +142,28 @@ void lc_cc20_drng_generate(struct lc_chacha20_drng_ctx *cc20_ctx,
 		zeroize_buf = 1;
 	}
 
-	lc_cc20_drng_update(cc20_ctx, aligned_buf, used);
+	esdm_cc20_drng_update(cc20_ctx, aligned_buf, used);
 
 	if (zeroize_buf)
 		memset_secure(aligned_buf, 0, sizeof(aligned_buf));
 }
 
 DSO_PUBLIC
-void lc_cc20_drng_zero_free(struct lc_chacha20_drng_ctx *cc20_ctx)
+void esdm_cc20_drng_zero_free(struct esdm_chacha20_drng_ctx *cc20_ctx)
 {
 	if (!cc20_ctx)
 		return;
 
-	lc_cc20_drng_zero(cc20_ctx);
+	esdm_cc20_drng_zero(cc20_ctx);
 	free(cc20_ctx);
 }
 
 DSO_PUBLIC
-int lc_cc20_drng_alloc(struct lc_chacha20_drng_ctx **cc20_ctx)
+int esdm_cc20_drng_alloc(struct esdm_chacha20_drng_ctx **cc20_ctx)
 {
-	struct lc_chacha20_drng_ctx *out_ctx;
+	struct esdm_chacha20_drng_ctx *out_ctx;
 	int ret = posix_memalign((void *)&out_ctx, sizeof(uint64_t),
-				 LC_CC20_DRNG_CTX_SIZE);
+				 ESDM_CC20_DRNG_CTX_SIZE);
 
 	if (ret)
 		return -ret;
@@ -177,8 +177,8 @@ int lc_cc20_drng_alloc(struct lc_chacha20_drng_ctx **cc20_ctx)
 		return -errsv;
 	}
 
-	LC_CC20_DRNG_SET_CTX(out_ctx);
-	lc_cc20_drng_zero(out_ctx);
+	ESDM_CC20_DRNG_SET_CTX(out_ctx);
+	esdm_cc20_drng_zero(out_ctx);
 
 	*cc20_ctx = out_ctx;
 
