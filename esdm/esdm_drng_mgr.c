@@ -273,14 +273,18 @@ int esdm_drng_mgr_initialize(void)
 		return 0;
 
 	/* Initialize the PR DRNG inside init lock as it guards esdm_avail. */
-	mutex_w_init(&esdm_drng_pr.lock, 1, 0);
+	ret = mutex_w_init(&esdm_drng_pr.lock, 1, 0);
+	if (ret)
+		goto out;
 	ret = esdm_drng_alloc_common(&esdm_drng_pr, esdm_default_drng_cb);
 	mutex_w_unlock(&esdm_drng_pr.lock);
 
 	if (!ret) {
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
 			    "DRNG with prediction resistance allocated\n");
-		mutex_w_init(&esdm_drng_init.lock, 1, 0);
+		ret = mutex_w_init(&esdm_drng_init.lock, 1, 0);
+		if (ret)
+			goto out;
 		ret = esdm_drng_alloc_common(&esdm_drng_init,
 					     esdm_default_drng_cb);
 		mutex_w_unlock(&esdm_drng_init.lock);
