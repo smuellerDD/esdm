@@ -425,7 +425,15 @@ static bool esdm_cuse_client_privileged(fuse_req_t req)
  * remains, a reader lock can be taken allowing concurrent unprivileged
  * operations.
  */
-static mutex_t esdm_cuse_priv = MUTEX_UNLOCKED;
+/*
+ * Writer-preferring: the unprivileged read/write paths hold the reader lock
+ * across a full server RPC, so with the default reader-preferring rwlock a
+ * flood of concurrent unprivileged read()/write() calls could starve the
+ * writer lock indefinitely and block every privileged ioctl (RNDADDENTROPY,
+ * RNDRESEEDCRNG, RNDCLEARPOOL) - an unprivileged denial of service against the
+ * admin control path.
+ */
+static mutex_t esdm_cuse_priv = MUTEX_UNLOCKED_PREFER_WRITER;
 static void esdm_cuse_raise_privilege_transient(fuse_req_t req)
 {
 	mutex_lock(&esdm_cuse_priv);
