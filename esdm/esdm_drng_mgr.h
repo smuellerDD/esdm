@@ -55,14 +55,13 @@ struct esdm_drng {
 	 */
 	atomic_int request_bits_since_fully_seeded;
 
-	struct timespec last_seeded; /* Last time it was seeded (under lock) */
 	/*
-	 * Seconds component of last_seeded, mirrored as an atomic so the
-	 * lock-free must_reseed() fast path can read the seed time without a
-	 * torn multi-word access of the struct timespec (which is only safe to
-	 * read/write whole under drng->lock).
+	 * Time of last seeding in whole seconds (CLOCK_MONOTONIC), atomic so
+	 * the lock-free must_reseed() fast path can read it without taking
+	 * drng->lock. No consumer needs sub-second resolution.
 	 */
 	atomic_llong last_seeded_time;
+
 	/*
 	 * These flags have no single owning lock: they are touched both under
 	 * drng->lock and from lock-free fast paths (must_reseed, force_reseed,
@@ -79,12 +78,12 @@ struct esdm_drng {
 
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
 	.drng = d, .drng_cb = d_cb, .hash_cb = h_cb,                           \
-	.requests = ESDM_DRNG_RESEED_THRESH,                      \
-	.requests_since_fully_seeded = 0,                         \
-	.request_bits_since_fully_seeded = 0,                     \
-	.last_seeded = { 0 }, .last_seeded_time = 0,          \
-	.fully_seeded = false,                              \
-	.force_reseed = true,                               \
+	.requests = ESDM_DRNG_RESEED_THRESH,                                   \
+	.requests_since_fully_seeded = 0,                                      \
+	.request_bits_since_fully_seeded = 0,                                  \
+	.last_seeded_time = 0,                                                 \
+	.fully_seeded = false,                                                 \
+	.force_reseed = true,                                                  \
 	.initiated = false
 
 struct esdm_drng *esdm_drng_init_instance(void);

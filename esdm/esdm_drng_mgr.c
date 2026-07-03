@@ -148,17 +148,13 @@ struct esdm_drng *esdm_drng_node_instance(void)
 	return esdm_drng_init_instance();
 }
 
-/*
- * Record the seed time. last_seeded (the full timespec) is only valid to read
- * under drng->lock; last_seeded_time mirrors its seconds component as an atomic
- * so the lock-free must_reseed() fast path can read it without a torn access.
- * Caller holds drng->lock.
- */
+/* Record the seed time (whole seconds, CLOCK_MONOTONIC). */
 static void esdm_drng_set_seeded_now(struct esdm_drng *drng)
 {
-	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
-	atomic_store(&drng->last_seeded_time,
-		      (long long)drng->last_seeded.tv_sec);
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	atomic_store(&drng->last_seeded_time, (long long)now.tv_sec);
 }
 
 /*
@@ -369,29 +365,15 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 
 /************************* Random Number Generation ***************************/
 
-static bool esdm_time_after(struct timespec *curr, struct timespec *timeout)
-{
-	if (curr == NULL || timeout == NULL)
-		return false;
-
-	if (curr->tv_sec > timeout->tv_sec)
-		return true;
-	if (curr->tv_sec == timeout->tv_sec && curr->tv_nsec > timeout->tv_nsec)
-		return true;
-
-	return false;
-}
-
-static time_t esdm_time_after_now(struct timespec *timeout)
+/* Seconds elapsed since timeout_sec (CLOCK_MONOTONIC), 0 if not yet reached */
+static time_t esdm_time_after_now(time_t timeout_sec)
 {
 	struct timespec curr;
 
 	if (clock_gettime(CLOCK_MONOTONIC, &curr) == -1)
 		return 0;
 
-	return esdm_time_after(&curr, timeout) ?
-		       (curr.tv_sec - timeout->tv_sec) :
-		       0;
+	return (curr.tv_sec > timeout_sec) ? (curr.tv_sec - timeout_sec) : 0;
 }
 
 /* Inject a data buffer into the DRNG - caller must hold its lock */
@@ -415,7 +397,10 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
 			"%s DRNG stats since last seeding: %lu secs; generate calls: %d\n",
-			drng_type, esdm_time_after_now(&drng->last_seeded), gc);
+			drng_type,
+			esdm_time_after_now(
+				(time_t)atomic_load(&drng->last_seeded_time)),
+			gc);
 
 		/* Count the numbers of generate ops and output bits
 		 * since last fully seeded. The DRNG can be configured
@@ -570,11 +555,9 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	if (node > 0) {
 		/* Prevent reseed storm: stagger re-seed times across nodes */
 		mutex_w_lock(&drng->lock);
-		if (atomic_load(&drng->fully_seeded)) {
-			drng->last_seeded.tv_sec += node * 60;
-			atomic_store(&drng->last_seeded_time,
-				      (long long)drng->last_seeded.tv_sec);
-		}
+		if (atomic_load(&drng->fully_seeded))
+			atomic_fetch_add(&drng->last_seeded_time,
+					 (long long)node * 60);
 		mutex_w_unlock(&drng->lock);
 	}
 }
@@ -723,16 +706,7 @@ out:
 
 static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 {
-	/*
-	 * Read the seed time from the atomic seconds mirror rather than copying
-	 * the (multi-word, lock-protected) struct timespec lock-free, which
-	 * would be a torn read / C11 data race. The time-based check only uses
-	 * whole seconds, so dropping the sub-second component is immaterial.
-	 */
-	struct timespec check_time = {
-		.tv_sec = (time_t)atomic_load(&drng->last_seeded_time),
-		.tv_nsec = 0,
-	};
+	time_t check_time = (time_t)atomic_load(&drng->last_seeded_time);
 	bool request_bits_since_fully_seeded_reached =
 		(ESDM_DRNG_RESEED_THRESH_BITS != UINT32_MAX) &&
 		(atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
@@ -745,11 +719,11 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 
 	if (dec_requests)
 		requests_check |= (atomic_fetch_sub(&drng->requests, 1) == 1);
-	check_time.tv_sec += esdm_drng_reseed_max_time;
+	check_time += esdm_drng_reseed_max_time;
 
 	return (requests_check || atomic_load(&drng->force_reseed) ||
 		request_bits_since_fully_seeded_reached ||
-		esdm_time_after_now(&check_time));
+		esdm_time_after_now(check_time));
 }
 
 /**
