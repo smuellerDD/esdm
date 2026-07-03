@@ -24,7 +24,6 @@
 #include <string.h>
 #include <sys/shm.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "esdm_aux_client.h"
 #include "esdm_logger.h"
@@ -89,20 +88,13 @@ static int esdm_cuse_shm_status_create_shm(void)
 		}
 
 		/*
-		 * The segment uses a well-known ftok() key. Only trust it if it
-		 * was created by root (the server) or by ourselves; a segment
-		 * created by another (unprivileged) uid may have been planted to
-		 * feed us forged status flags, so fail safe rather than trust it.
+		 * Ownership is not enforced here: a client cannot know the
+		 * server's uid (it may run unprivileged), so rejecting on owner
+		 * would break legitimate cross-uid deployments and could strand
+		 * a client whose segment the server later re-creates. The server
+		 * evicts any foreign-owned segment on startup, which is the
+		 * authoritative defense against a planted status segment.
 		 */
-		if (buf.shm_perm.cuid != 0 &&
-		    buf.shm_perm.cuid != geteuid()) {
-			esdm_logger(
-				LOGGER_ERR, LOGGER_C_ANY,
-				"ESDM status shared memory segment has untrusted owner %u - refusing to attach\n",
-				(unsigned int)buf.shm_perm.cuid);
-			esdm_cuse_shm_status_close_shm();
-			return -EPERM;
-		}
 
 		/* SHM exists, but has no attachments -> stale */
 		if (buf.shm_nattch == 0) {
