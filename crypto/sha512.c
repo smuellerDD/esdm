@@ -205,9 +205,13 @@ static void sha512_final(struct esdm_hash_state *ctx, uint8_t *digest)
 	/* Fill the unused part of the partial buffer with zeros */
 	memset(ctx->partial + partial, 0, ESDM_SHA512_SIZE_BLOCK - partial);
 
-	/* Add the message length in bits at the end of the partial buffer */
-	ctx->msg_len <<= 3;
-	be64_to_ptr(ctx->partial + (ESDM_SHA512_SIZE_BLOCK - 8), ctx->msg_len);
+	/*
+	 * Add the message length in bits at the end of the partial buffer.
+	 * Compute in 64 bits: msg_len is size_t, so shifting in place would
+	 * drop the top bits (wrong digest) for inputs >= 512 MiB on 32-bit.
+	 */
+	be64_to_ptr(ctx->partial + (ESDM_SHA512_SIZE_BLOCK - 8),
+		    (uint64_t)ctx->msg_len << 3);
 
 	/* Final transformation */
 	sha512_transform(ctx, ctx->partial);
