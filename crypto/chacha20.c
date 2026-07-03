@@ -22,21 +22,21 @@
 #include "bitshift.h"
 #include "conv_be_le.h"
 #include "rotate.h"
-#include "lc_chacha20.h"
-#include "lc_chacha20_private.h"
-#include "lc_sym.h"
+#include "esdm_chacha20.h"
+#include "esdm_chacha20_private.h"
+#include "esdm_sym.h"
 #include "math_helper.h"
 #include "visibility.h"
 #include "xor.h"
 
 /* ChaCha20 block function according to RFC 7539 section 2.3 */
 DSO_PUBLIC
-void cc20_block(struct lc_sym_state *state, uint32_t *stream)
+void cc20_block(struct esdm_sym_state *state, uint32_t *stream)
 {
 	uint32_t *state_w = &state->constants[0];
-	uint32_t i, ws[LC_CC20_BLOCK_SIZE_WORDS], *out = stream;
+	uint32_t i, ws[ESDM_CC20_BLOCK_SIZE_WORDS], *out = stream;
 
-	for (i = 0; i < LC_CC20_BLOCK_SIZE_WORDS; i++)
+	for (i = 0; i < ESDM_CC20_BLOCK_SIZE_WORDS; i++)
 		ws[i] = state_w[i];
 
 	for (i = 0; i < 10; i++) {
@@ -121,7 +121,7 @@ void cc20_block(struct lc_sym_state *state, uint32_t *stream)
 		ws[4] = rol32(ws[4] ^ ws[9], 7);
 	}
 
-	for (i = 0; i < LC_CC20_BLOCK_SIZE_WORDS; i++)
+	for (i = 0; i < ESDM_CC20_BLOCK_SIZE_WORDS; i++)
 		out[i] = le_bswap32(ws[i] + state_w[i]);
 
 	/*
@@ -130,12 +130,12 @@ void cc20_block(struct lc_sym_state *state, uint32_t *stream)
 	 * per-key limit of the construction: callers MUST rekey/reseed before
 	 * generating that much from a single key. The ESDM ChaCha20 DRNG
 	 * reseeds far below this bound, so the wrap is unreachable in practice;
-	 * any new generic lc_sym user must honor the same limit.
+	 * any new generic esdm_sym user must honor the same limit.
 	 */
 	state_w[12]++;
 }
 
-static void cc20_init(struct lc_sym_state *ctx)
+static void cc20_init(struct esdm_sym_state *ctx)
 {
 	/* String "expand 32-byte k" */
 	ctx->constants[0] = 0x61707865;
@@ -145,7 +145,7 @@ static void cc20_init(struct lc_sym_state *ctx)
 	ctx->counter = 1;
 }
 
-static int cc20_setkey(struct lc_sym_state *ctx, uint8_t *key, size_t keylen)
+static int cc20_setkey(struct esdm_sym_state *ctx, uint8_t *key, size_t keylen)
 {
 	if (keylen != 32)
 		return -EINVAL;
@@ -162,7 +162,7 @@ static int cc20_setkey(struct lc_sym_state *ctx, uint8_t *key, size_t keylen)
 	return 0;
 }
 
-static int cc20_setiv(struct lc_sym_state *ctx, uint8_t *iv, size_t ivlen)
+static int cc20_setiv(struct esdm_sym_state *ctx, uint8_t *iv, size_t ivlen)
 {
 	/* IV is counter + nonce */
 	if (ivlen != 12)
@@ -175,10 +175,10 @@ static int cc20_setiv(struct lc_sym_state *ctx, uint8_t *iv, size_t ivlen)
 	return 0;
 }
 
-static void cc20_crypt(struct lc_sym_state *ctx, const uint8_t *in,
+static void cc20_crypt(struct esdm_sym_state *ctx, const uint8_t *in,
 		       uint8_t *out, size_t len)
 {
-	uint32_t keystream[LC_CC20_BLOCK_SIZE_WORDS]
+	uint32_t keystream[ESDM_CC20_BLOCK_SIZE_WORDS]
 		__attribute__((aligned(sizeof(uint64_t))));
 
 	while (len) {
@@ -199,13 +199,13 @@ static void cc20_crypt(struct lc_sym_state *ctx, const uint8_t *in,
 	memset_secure(keystream, 0, sizeof(keystream));
 }
 
-static struct lc_sym _lc_chacha20 = {
+static struct esdm_sym _lc_chacha20 = {
 	.init = cc20_init,
 	.setkey = cc20_setkey,
 	.setiv = cc20_setiv,
 	.encrypt = cc20_crypt,
 	.decrypt = cc20_crypt,
-	.statesize = LC_CC20_BLOCK_SIZE,
-	.blocksize = LC_CC20_BLOCK_SIZE,
+	.statesize = ESDM_CC20_BLOCK_SIZE,
+	.blocksize = ESDM_CC20_BLOCK_SIZE,
 };
-DSO_PUBLIC const struct lc_sym *lc_chacha20 = &_lc_chacha20;
+DSO_PUBLIC const struct esdm_sym *esdm_chacha20 = &_lc_chacha20;
