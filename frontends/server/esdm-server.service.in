@@ -78,7 +78,8 @@ RemoveIPC=yes
 Restart=on-failure
 RestartSec=5s
 RestrictAddressFamilies=AF_UNIX
-# pid: the server forks itself into an isolating PID namespace at startup
+# pid: allow the server to fork itself into an isolating PID namespace when
+# it is started with --pid_namespace (disabled by default)
 RestrictNamespaces=mnt cgroup net pid
 RestrictRealtime=yes
 RestrictSUIDSGID=yes

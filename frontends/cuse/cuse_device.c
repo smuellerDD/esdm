@@ -1164,6 +1164,7 @@ struct esdm_cuse_param {
 	int is_help;
 	int disable_fallback;
 	int syslog;
+	int pid_namespace;
 };
 
 #define ESDM_CUSE_OPT(t, p) { t, offsetof(struct esdm_cuse_param, p), 1 }
@@ -1178,6 +1179,7 @@ static const char *usage =
 	"    --name=NAME|-n NAME     device name (mandatory)\n"
 	"    --verbosity=NUM|-v NUM  verbosity level\n"
 	"    --username=USER|-u USER unprivileged user name (default: \"nobody\")\n"
+	"    --pid_namespace         fork the daemon into an isolating PID namespace\n"
 	"    -d   -o debug           enable debug output (implies -f)\n"
 	"    -f                      foreground operation\n"
 	"    -s                      disable multi-threaded operation\n"
@@ -1200,6 +1202,7 @@ static const struct fuse_opt esdm_cuse_opts[] = {
 	ESDM_CUSE_OPT("--verbosity=%u", verbosity),
 	ESDM_CUSE_OPT("-u %s", username),
 	ESDM_CUSE_OPT("--username %s", username),
+	ESDM_CUSE_OPT("--pid_namespace", pid_namespace),
 #ifdef ESDM_TESTMODE
 	ESDM_CUSE_OPT("--disable_fallback=%d", disable_fallback),
 #endif
@@ -1236,7 +1239,7 @@ int main_common(const char *_devname, const char *target, const char *semname,
 		const struct cuse_lowlevel_ops *clop, int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0, 0 };
+	struct esdm_cuse_param param = { 0, 0, NULL, NULL, 1, 0, 0, 0, 0 };
 	char dev_name[128] = "DEVNAME=";
 	char devname[20];
 	const char *dev_info_argv[] = { dev_name };
@@ -1316,8 +1319,9 @@ int main_common(const char *_devname, const char *target, const char *semname,
 	CKINT_LOG(esdm_rpcc_init_priv_service(esdm_cuse_interrupt),
 		  "Initialization of dispatcher failed\n");
 
-	/* Enter PID namespace */
-	CKINT(linux_isolate_namespace_prefork(NULL));
+	/* Enter PID namespace (opt-in via --pid_namespace) */
+	if (param.pid_namespace)
+		CKINT(linux_isolate_namespace_prefork(NULL));
 
 	/* One thread group */
 	CKINT(thread_init(1));

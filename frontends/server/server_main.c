@@ -60,6 +60,7 @@ static const char *username = NULL;
 static const char *groupname = NULL;
 static unsigned int memlock = 0;
 static unsigned int small_memory = 0;
+static unsigned int pid_namespace = 0;
 
 /*******************************************************************
  * Forward Declarations
@@ -113,6 +114,10 @@ static void usage(void)
 	fprintf(stderr,
 		"\t\t\tsemaphores at shutdown (running CUSE clients survive a\n");
 	fprintf(stderr, "\t\t\tserver restart)\n");
+	fprintf(stderr,
+		"\t   --pid_namespace\tFork the daemon into an isolating PID namespace;\n");
+	fprintf(stderr,
+		"\t\t\tthe starting process remains as supervisor\n");
 	exit(1);
 }
 
@@ -139,6 +144,7 @@ static void parse_opts(int argc, char *argv[])
 			{ "memlock", 0, 0, 0 },
 			{ "small_memory", 0, 0, 0 },
 			{ "keep_ipc", 0, 0, 0 },
+			{ "pid_namespace", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "hvp:u:fisSPg:mM", opts, &opt_index);
@@ -217,6 +223,10 @@ static void parse_opts(int argc, char *argv[])
 			case 14:
 				/* keep_ipc */
 				esdm_config_ipc_cleanup_set(0);
+				break;
+			case 15:
+				/* pid_namespace */
+				pid_namespace = 1;
 				break;
 
 			default:
@@ -543,9 +553,10 @@ int main(int argc, char *argv[])
 	install_term();
 
 	/*
-	 * Fork into an isolating PID namespace: this process becomes a pure
-	 * supervisor that forwards daemon control signals and mirrors the
-	 * exit status, the child continues below as the actual daemon.
+	 * Fork into an isolating PID namespace (opt-in via --pid_namespace):
+	 * this process becomes a pure supervisor that forwards daemon control
+	 * signals and mirrors the exit status, the child continues below as
+	 * the actual daemon.
 	 *
 	 * The ordering around this call is deliberate:
 	 * - create_pid_file() must run before it so the PID file names the
@@ -560,7 +571,9 @@ int main(int argc, char *argv[])
 	 * the daemon permanently drops its privileges and can no longer remove
 	 * the root-owned sockets, SHM segment and semaphores itself.
 	 */
-	CKINT(linux_isolate_namespace_prefork(esdm_rpc_server_cleanup));
+	if (pid_namespace)
+		CKINT(linux_isolate_namespace_prefork(
+			esdm_rpc_server_cleanup));
 
 	if (memlock) {
 		/*
@@ -617,6 +630,15 @@ int main(int argc, char *argv[])
 out:
 	/* dealloc() performs the daemon_release() teardown itself. */
 	dealloc();
+
+	/*
+	 * Without the PID namespace supervisor there is no privileged process
+	 * left to remove the IPC resources - attempt it here. This is best
+	 * effort: the daemon permanently dropped its privileges, so removing
+	 * the root-owned sockets, SHM segment and semaphores may fail.
+	 */
+	if (!pid_namespace)
+		esdm_rpc_server_cleanup();
 
 	if (memlock) {
 		munlockall();
