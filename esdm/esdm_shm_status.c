@@ -278,6 +278,28 @@ static int esdm_shm_status_create_shm(void)
 			    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	errsv = errno;
 
+	/*
+	 * The status segment uses a well-known ftok() key, so any local user
+	 * could have pre-created it and would then own it and control the flags
+	 * the CUSE /dev/random poll path trusts. As the server runs privileged,
+	 * reject any pre-existing segment that was not created by root and force
+	 * a clean recreation. A prior server instance always has cuid == 0, so
+	 * this only evicts a hijacked segment.
+	 */
+	if (esdm_shmid >= 0) {
+		struct shmid_ds buf;
+
+		if (shmctl(esdm_shmid, IPC_STAT, &buf) < 0 ||
+		    buf.shm_perm.cuid != 0) {
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_SERVER,
+				"ESDM status shared memory segment not owned by root - removing and recreating\n");
+			shmctl(esdm_shmid, IPC_RMID, NULL);
+			esdm_shmid = -1;
+			errsv = ENOENT;
+		}
+	}
+
 	/* If we received EINVAL, the memory is too small, force a deletion. */
 	if (esdm_shmid < 0 && errsv == EINVAL) {
 		/* Try to get it with smallest size possible. */
