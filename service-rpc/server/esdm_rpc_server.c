@@ -608,6 +608,16 @@ static int esdm_rpcs_handler(void *args)
 	struct epoll_event events[ESDM_RPCS_MAX_EVENTS];
 	const size_t max_connections = 1024;
 	size_t num_connections = 0;
+	/*
+	 * The listening socket is level-triggered: while it is armed and a
+	 * connection is pending, epoll_wait keeps reporting it readable. Once the
+	 * per-worker connection cap is reached the accept branch below stops
+	 * accepting, so leaving it armed would spin the worker at 100% CPU. Track
+	 * the arm state and disarm/re-arm the listening FD as the cap is
+	 * crossed, which also gives real backpressure (pending clients stay
+	 * queued in the listen backlog instead of being dropped).
+	 */
+	bool listen_armed = true;
 	int epfd = -1;
 	int tfd = -1;
 	int ret = 0;
@@ -688,7 +698,27 @@ static int esdm_rpcs_handler(void *args)
 	}
 
 	while (atomic_read(&server_exit) == 0) {
-		int nfds = epoll_wait(epfd, events, ESDM_RPCS_MAX_EVENTS, -1);
+		int nfds;
+
+		/*
+		 * Reconcile the listening FD's armed state with the current
+		 * connection count before blocking. Disarm at the cap so a
+		 * pending connection cannot busy-spin epoll_wait; re-arm once a
+		 * slot frees up so new connections are served again.
+		 */
+		bool want_armed = (num_connections < max_connections);
+		if (want_armed != listen_armed) {
+			struct epoll_event lev = {
+				.events = want_armed ? EPOLLIN : 0,
+				.data.ptr = NULL,
+			};
+			if (epoll_ctl(epfd, EPOLL_CTL_MOD,
+				      thread->proto->server_listening_fd,
+				      &lev) == 0)
+				listen_armed = want_armed;
+		}
+
+		nfds = epoll_wait(epfd, events, ESDM_RPCS_MAX_EVENTS, -1);
 		/* signal? */
 		if (nfds < 0 && errno == EINTR) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
