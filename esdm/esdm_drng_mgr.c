@@ -900,6 +900,17 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			todo = min_uint32(todo, esdm_security_strength() >> 3);
 		}
 
+		/*
+		 * Guard against a concurrent esdm_drng_mgr_finalize(), which
+		 * deallocates drng->drng and NULLs it under drng->lock without
+		 * clearing esdm_avail. Without this check the generate below
+		 * would dereference a NULL DRNG state on the shutdown path.
+		 */
+		if (!drng->drng) {
+			mutex_w_unlock(&drng->lock);
+			return processed ? processed : -EOPNOTSUPP;
+		}
+
 		/* Now, generate random bits from the properly seeded DRNG. */
 		ret = drng->drng_cb->drng_generate(drng->drng,
 						   outbuf + processed, todo);
