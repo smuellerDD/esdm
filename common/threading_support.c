@@ -385,6 +385,14 @@ void thread_send_signal(uint32_t thread_group, int signal)
 	unsigned int i, upper;
 	unsigned int special_slot = thread_get_special_slot(thread_group);
 
+	/*
+	 * Reject an out-of-range thread group instead of indexing threads[]
+	 * past its end (mirrors thread_schedule()). Special slots live at the
+	 * top of the array and are addressed directly.
+	 */
+	if (thread_group >= threads_groups && !special_slot)
+		return;
+
 	/* Get the range of slots of the thread_group */
 	if (special_slot) {
 		i = special_slot;
@@ -396,10 +404,15 @@ void thread_send_signal(uint32_t thread_group, int signal)
 
 	for (; i < upper; i++) {
 		/*
-		 * Only send signal to thread if work is present and do not send
-		 * signal to ourselves.
+		 * Only signal a slot that still holds a live, working thread,
+		 * and never ourselves. thread_dirty() reads thread_pending
+		 * atomically; it stays true until thread_wait_all() joins the
+		 * thread, so gating on it avoids pthread_kill()ing a stale
+		 * thread_id whose thread was already joined (and whose id may
+		 * since have been recycled). A mutex cannot be taken here as
+		 * this may run from a signal-handling context.
 		 */
-		if (threads[i].start_routine &&
+		if (thread_dirty(i) && threads[i].start_routine &&
 		    !pthread_equal(threads[i].parent, self))
 			pthread_kill(threads[i].thread_id, signal);
 	}
