@@ -46,7 +46,7 @@ static void linux_pidns_forward_signal(int sig)
 		kill(child, sig);
 }
 
-int linux_isolate_namespace_prefork(void)
+int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 {
 	/*
 	 * Signals the supervisor relays to the daemon: the termination signals
@@ -135,6 +135,14 @@ int linux_isolate_namespace_prefork(void)
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	/*
+	 * The daemon is gone - let the caller perform teardown work that
+	 * needs the supervisor's retained privileges (e.g. removing
+	 * root-owned IPC resources after the daemon dropped privileges).
+	 */
+	if (supervisor_exit_cb)
+		supervisor_exit_cb();
 
 	if (WIFSIGNALED(status)) {
 		int sig = WTERMSIG(status);

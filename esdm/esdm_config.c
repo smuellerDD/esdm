@@ -57,6 +57,7 @@ struct esdm_config {
 	_Atomic bool esdm_es_irq_retry;
 	_Atomic bool esdm_es_sched_retry;
 	_Atomic bool esdm_jent_entropy_async_enable;
+	_Atomic bool esdm_ipc_cleanup;
 };
 
 static struct esdm_config esdm_config = {
@@ -139,6 +140,9 @@ static struct esdm_config esdm_config = {
 
 	/* Enable the Jitter RNG buffer filling */
 	.esdm_jent_entropy_async_enable = true,
+
+	/* Remove RPC sockets, status SHM segment and semaphores at shutdown */
+	.esdm_ipc_cleanup = true,
 };
 
 static uint32_t esdm_config_entropy_rate_max(uint32_t val)
@@ -184,6 +188,18 @@ DSO_PUBLIC
 void esdm_config_es_jent_async_enabled_set(int setting)
 {
 	esdm_config.esdm_jent_entropy_async_enable = !!setting;
+}
+
+DSO_PUBLIC
+uint32_t esdm_config_ipc_cleanup(void)
+{
+	return esdm_config.esdm_ipc_cleanup;
+}
+
+DSO_PUBLIC
+void esdm_config_ipc_cleanup_set(int setting)
+{
+	esdm_config.esdm_ipc_cleanup = !!setting;
 }
 
 DSO_PUBLIC

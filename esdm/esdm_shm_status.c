@@ -38,6 +38,7 @@
 #include "helper.h"
 #include "esdm_logger.h"
 #include "ret_checkers.h"
+#include "visibility.h"
 
 static struct esdm_shm_status *esdm_shm_status = NULL;
 static int esdm_shmid = -1;
@@ -189,22 +190,6 @@ static void _esdm_shm_status_delete_sem(sem_t **sem)
 		*sem = SEM_FAILED;
 		sem_close(tmp);
 	}
-
-	/*
-	 * TODO: we do not clean up the SEM as there could be a CUSE client that
-	 * looks at it. IF the server starts again, we want to attach to the
-	 * existing shared memory segment to ensure the client does not need
-	 * to be restarted too.
-	 */
-#if 0
-	if (sem_unlink(ESDM_SEM_NAME)) {
-		if (errno != ENOENT) {
-			esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
-			       "Cannot unlink semaphore: %s\n",
-			       strerror(errno));
-		}
-	}
-#endif
 }
 
 static void esdm_shm_status_delete_sem(void)
@@ -212,6 +197,44 @@ static void esdm_shm_status_delete_sem(void)
 	_esdm_shm_status_delete_sem(&esdm_semid_random);
 	_esdm_shm_status_delete_sem(&esdm_semid_urandom);
 	_esdm_shm_status_delete_sem(&esdm_semid_need_entropy_level);
+}
+
+static void esdm_shm_status_unlink_sem(const char *semname)
+{
+	if (sem_unlink(semname)) {
+		if (errno != ENOENT) {
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
+				    "Cannot unlink semaphore %s: %s\n", semname,
+				    strerror(errno));
+		}
+	} else {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+			    "ESDM semaphore %s deleted\n", semname);
+	}
+}
+
+DSO_PUBLIC
+void esdm_shm_status_cleanup_ipc(void)
+{
+	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
+	int shmid = shmget(key, sizeof(struct esdm_shm_status),
+			   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+	if (shmid >= 0) {
+		if (shmctl(shmid, IPC_RMID, NULL) < 0) {
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_ANY,
+				"ESDM shared memory segment cannot be deleted: %s\n",
+				strerror(errno));
+		} else {
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
+				    "ESDM shared memory segment deleted\n");
+		}
+	}
+
+	esdm_shm_status_unlink_sem(ESDM_SEM_RANDOM_NAME);
+	esdm_shm_status_unlink_sem(ESDM_SEM_URANDOM_NAME);
+	esdm_shm_status_unlink_sem(ESDM_SEM_NEED_ENTROPY_LEVEL);
 }
 
 static int esdm_shm_status_create_sem(const char *semname, sem_t **sem)
@@ -255,18 +278,7 @@ static void esdm_shm_status_delete_shm(void)
 		esdm_shm_status = NULL;
 	}
 
-	/*
-	 * TODO: we do not clean up the SHM as there could be a CUSE client that
-	 * looks at it. IF the server starts again, we want to attach to the
-	 * existing shared memory segment to ensure the client does not need
-	 * to be restarted too.
-	 */
-#if 0
-	if (esdm_shmid >= 0) {
-		shmctl(esdm_shmid, IPC_RMID, NULL);
-		esdm_shmid = -1;
-	}
-#endif
+	esdm_shmid = -1;
 }
 
 static int esdm_shm_status_create_shm(void)
@@ -421,6 +433,18 @@ void esdm_shm_status_exit(void)
 	esdm_shm_status_server_exit();
 	esdm_shm_status_delete_shm();
 	esdm_shm_status_delete_sem();
+
+	/*
+	 * The removal is configurable: clients (e.g. the CUSE daemons) monitor
+	 * the SHM segment and the semaphores, and keeping them allows the
+	 * clients to survive a server restart without being restarted too -
+	 * see esdm_config_ipc_cleanup_set(). Note that this in-process attempt
+	 * fails with EPERM once the server permanently dropped its privileges;
+	 * the esdm-server therefore repeats the cleanup in its (privileged)
+	 * PID namespace supervisor - see esdm_rpc_server_cleanup().
+	 */
+	if (esdm_config_ipc_cleanup())
+		esdm_shm_status_cleanup_ipc();
 }
 
 int esdm_shm_status_reinit(void)

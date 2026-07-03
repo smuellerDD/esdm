@@ -901,72 +901,6 @@ out_ret:
 }
 #endif /* ESDM_HAS_AUX_CLIENT */
 
-/* Cleanup the RPC server resources - this call needs root privilege. */
-static void esdm_rpcs_cleanup(void)
-{
-	/* Clean up all unprivileged Unix domain socket */
-	if (unlink(ESDM_RPC_UNPRIV_SOCKET) < 0) {
-		esdm_logger(
-			LOGGER_ERR, LOGGER_C_SERVER,
-			"ESDM Unix domain socket %s cannot be deleted: %s\n",
-			ESDM_RPC_UNPRIV_SOCKET, strerror(errno));
-	} else {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-			    "ESDM Unix domain socket %s deleted\n",
-			    ESDM_RPC_UNPRIV_SOCKET);
-	}
-
-	/* Clean up the privileged Unix domain socket */
-	if (unlink(ESDM_RPC_PRIV_SOCKET) < 0) {
-		esdm_logger(
-			LOGGER_ERR, LOGGER_C_SERVER,
-			"ESDM Unix domain socket %s cannot be deleted: %s\n",
-			ESDM_RPC_PRIV_SOCKET, strerror(errno));
-	} else {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-			    "ESDM Unix domain socket %s deleted\n",
-			    ESDM_RPC_PRIV_SOCKET);
-	}
-
-	/*
-	 * TODO: we do not clean up the SEM/SHM as there could be a CUSE client
-	 * that looks at it. IF the server starts again, we want to attach to
-	 * the existing shared memory segment to ensure the client does not need
-	 * to be restarted too.
-	 */
-#if 0
-	int esdm_shmid;
-	key_t key = esdm_ftok(ESDM_SHM_NAME, ESDM_SHM_STATUS);
-
-	/* Clean up the status shared memory segment */
-	esdm_shmid = shmget(key, sizeof(struct esdm_shm_status),
-			    S_IRUSR | S_IRGRP | S_IROTH);
-	if (esdm_shmid < 0) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-		       "ESDM shared memory segment attachment for deletion failed: %s\n",
-		       strerror(errno));
-	} else {
-		if (shmctl(esdm_shmid, IPC_RMID, NULL) < 0) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
-			       "ESDM shared memory segment cannot be deleted: %s\n",
-			       strerror(errno));
-		} else {
-			esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-			       "ESDM shared memory segment deleted\n");
-		}
-	}
-
-	/* Clean up the status semaphore */
-	if (sem_unlink(ESDM_SEM_NAME)) {
-		esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
-		       "Cannot unlink semaphore: %s\n", strerror(errno));
-	} else {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
-		       "ESDM semaphore deleted\n");
-	}
-#endif
-}
-
 int main(int argc, char **argv)
 {
 	int c = 0;
@@ -1009,7 +943,6 @@ int main(int argc, char **argv)
 	bool stress_fork = false;
 	char *fips_target_file = NULL;
 	char *fips_check_file = NULL;
-	bool cleanup_server = false;
 	bool set_pkcs11_config = false;
 	char *pkcs11_pin = NULL;
 	char *pkcs11_token_label = NULL;
@@ -1059,12 +992,11 @@ int main(int argc, char **argv)
 			{ "fips-targetfile", 1, 0, 0 },
 			{ "fips-checkfile", 1, 0, 0 },
 			{ "jent-status", 0, 0, 0 },
-			{ "cleanup", 0, 0, 0 },
 			{ "pkcs11-pin", 1, 0, 0 },
 			{ "pkcs11-token-label", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:Jc", opts,
+		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:J", opts,
 				&opt_index);
 		if (-1 == c)
 			break;
@@ -1270,10 +1202,6 @@ int main(int argc, char **argv)
 				jent_status = true;
 				break;
 			case 36:
-				/* cleanup server resources (needs root) */
-				cleanup_server = true;
-				break;
-			case 37:
 				/* pkcs11-pin: literal PIN, or "-" for stdin */
 				set_pkcs11_config = true;
 				if (pkcs11_pin) {
@@ -1287,7 +1215,7 @@ int main(int argc, char **argv)
 					goto out;
 				}
 				break;
-			case 38:
+			case 37:
 				/* pkcs11-token-label */
 				set_pkcs11_config = true;
 				free(pkcs11_token_label);
@@ -1378,10 +1306,6 @@ int main(int argc, char **argv)
 			/* display jitterentropy source status */
 			jent_status = true;
 			break;
-		case 'c':
-			/* cleanup server resources (needs root) */
-			cleanup_server = true;
-			break;
 		}
 	}
 
@@ -1395,8 +1319,7 @@ int main(int argc, char **argv)
 	/* check for privileged commands */
 	if (geteuid() &&
 	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os ||
-	     seed_via_os || endless_stress || cleanup_server ||
-	     set_pkcs11_config)) {
+	     seed_via_os || endless_stress || set_pkcs11_config)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -1436,8 +1359,6 @@ int main(int argc, char **argv)
 		handle_status();
 	} else if (jent_status) {
 		handle_jent_status();
-	} else if (cleanup_server) {
-		esdm_rpcs_cleanup();
 	} else if (is_fully_seeded) {
 		return_val = handle_is_fully_seeded();
 	} else if (get_random) {

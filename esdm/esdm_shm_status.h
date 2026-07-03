@@ -33,6 +33,14 @@ int esdm_shm_status_init(void);
 void esdm_shm_status_exit(void);
 int esdm_shm_status_reinit(void);
 
+/**
+ * @brief Remove the status SHM segment and its semaphores by key/name.
+ *
+ * Does not require esdm_shm_status_init() to have been called in this process
+ * and needs sufficient privilege to remove the root-created objects.
+ */
+void esdm_shm_status_cleanup_ipc(void);
+
 #ifdef __cplusplus
 }
 #endif
