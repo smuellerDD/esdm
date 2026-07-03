@@ -193,15 +193,14 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	char sev[10];
 	char c[30];
 	char thread_name[ESDM_THREAD_MAX_NAMELEN];
-
 	FILE *stream;
+
+	if (severity > esdm_logger_verbosity_level)
+		return;
 
 	if (!esdm_logger_stream)
 		esdm_logger_stream = stderr;
 	stream = esdm_logger_stream;
-
-	if (severity > esdm_logger_verbosity_level)
-		return;
 
 	va_start(args, fmt);
 	vsnprintf(msg, sizeof(msg), fmt, args);
