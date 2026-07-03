@@ -10,30 +10,48 @@ tester_esdm_env = [
 
 test('OpenSSL 3.x RNG Provider - simple random', openssl_rng_tester, 
 	args: [meson.project_build_root() + '/frontends/openssl-provider', 'random', 'rng'],
-	env: tester_esdm_env
+	env: tester_esdm_env,
+	# Each test forks its own esdm-server bound to a fixed RPC socket path,
+	# so they must not run concurrently with each other.
+	is_parallel: false,
 )
 
 test('OpenSSL 3.x RNG Provider - instance pr', openssl_rng_tester,
 	args: [meson.project_build_root() + '/frontends/openssl-provider', 'instantiate_pr', 'rng'],
-	env: tester_esdm_env
+	env: tester_esdm_env,
+	# Each test forks its own esdm-server bound to a fixed RPC socket path,
+	# so they must not run concurrently with each other.
+	is_parallel: false,
 )
 
 test('OpenSSL 3.x RNG Provider - instance full', openssl_rng_tester,
 	args: [meson.project_build_root() + '/frontends/openssl-provider', 'instantiate_full', 'rng'],
-	env: tester_esdm_env
+	env: tester_esdm_env,
+	# Each test forks its own esdm-server bound to a fixed RPC socket path,
+	# so they must not run concurrently with each other.
+	is_parallel: false,
 )
 
 test('OpenSSL 3.x SEED-SRC Provider - simple random', openssl_rng_tester,
 	args: [meson.project_build_root() + '/frontends/openssl-provider', 'random', 'seed-src'],
-	env: tester_esdm_env
+	env: tester_esdm_env,
+	# Each test forks its own esdm-server bound to a fixed RPC socket path,
+	# so they must not run concurrently with each other.
+	is_parallel: false,
 )
 
 test('OpenSSL 3.x SEED-SRC Provider - instance pr', openssl_rng_tester,
 	args: [meson.project_build_root() + '/frontends/openssl-provider', 'instantiate_pr', 'seed-src'],
-	env: tester_esdm_env
+	env: tester_esdm_env,
+	# Each test forks its own esdm-server bound to a fixed RPC socket path,
+	# so they must not run concurrently with each other.
+	is_parallel: false,
 )
 
 test('OpenSSL 3.x SEED-SRC Provider - instance full', openssl_rng_tester,
 	args: [meson.project_build_root() + '/frontends/openssl-provider', 'instantiate_full', 'seed-src'],
-	env: tester_esdm_env
+	env: tester_esdm_env,
+	# Each test forks its own esdm-server bound to a fixed RPC socket path,
+	# so they must not run concurrently with each other.
+	is_parallel: false,
 )
