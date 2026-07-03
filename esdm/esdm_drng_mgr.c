@@ -879,13 +879,19 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 				esdm_pool_unlock();
 
-				/* If no new entropy was received, stop now. */
-				if (!collected_ent_bits) {
+				/*
+				 * If less than a full byte of fresh entropy was
+				 * received, stop now: otherwise todo would be
+				 * capped to 0, drng_generate(0) fails, and the
+				 * bytes already produced in earlier iterations
+				 * would be discarded as -EFAULT.
+				 */
+				if (!(collected_ent_bits >> 3)) {
 					mutex_w_unlock(&drng->lock);
 					goto out;
 				}
 
-				/* If no new entropy was received, stop now. */
+				/* Cap output to the freshly collected entropy. */
 				todo = min_uint32(todo,
 						  collected_ent_bits >> 3);
 			}
