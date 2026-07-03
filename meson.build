@@ -54,6 +54,14 @@ if cc.has_argument('-fzero-call-used-regs=used-gpr')
 			     language: 'c')
 endif
 
+# Control-flow and stack-clash protection (architecture dependent, so probe
+# for support instead of assuming it).
+foreach hardening_arg : [ '-fstack-clash-protection', '-fcf-protection=full' ]
+	if cc.has_argument(hardening_arg)
+		add_global_arguments([ hardening_arg ], language: 'c')
+	endif
+endforeach
+
 if cc.has_argument('-ffat-lto-objects')
 	add_global_arguments([ '-ffat-lto-objects' ],
 			     language: 'c')
@@ -64,9 +72,34 @@ if cc.has_argument('-ffat-lto-objects')
 endif
 
 if get_option('optimization') != '0'
-	add_global_arguments([ '-D_FORTIFY_SOURCE=2' ], language: 'c')
+	# Undefine first to avoid a redefinition warning when the toolchain or
+	# distro CFLAGS already inject a _FORTIFY_SOURCE level.
+	add_global_arguments([ '-U_FORTIFY_SOURCE', '-D_FORTIFY_SOURCE=3' ],
+			     language: 'c')
 else
 	add_global_arguments([ '-DDEBUG' ], language: 'c')
+endif
+
+# Apply the same hardening to the C++ (botan) backend, which otherwise builds
+# with none of the flags above since those are added for language 'c' only.
+# The C++ compiler is not configured for the host machine at this point (the
+# project only declares 'c'), so do not call meson.get_compiler('cpp'); reuse
+# the C compiler probes instead - the same toolchain compiles both languages,
+# and add_global_arguments(language: 'cpp') is accepted here just like the
+# -ffat-lto-objects case above.
+if get_option('crypto_backend') == 'botan'
+	cpp_hardening = [ '-fstack-protector-strong', '-fwrapv',
+			  '--param', 'ssp-buffer-size=4', '-fvisibility=hidden' ]
+	if get_option('optimization') != '0'
+		cpp_hardening += [ '-U_FORTIFY_SOURCE', '-D_FORTIFY_SOURCE=3' ]
+	endif
+	foreach hardening_arg : [ '-fzero-call-used-regs=used-gpr',
+				 '-fstack-clash-protection', '-fcf-protection=full' ]
+		if cc.has_argument(hardening_arg)
+			cpp_hardening += hardening_arg
+		endif
+	endforeach
+	add_global_arguments(cpp_hardening, language: 'cpp')
 endif
 
 # Versioning information
