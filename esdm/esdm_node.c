@@ -130,7 +130,18 @@ void esdm_drngs_node_alloc(void)
 
 		drng->hash_cb = esdm_drng_init->hash_cb;
 
-		mutex_w_init(&drng->lock, 0, 0);
+		if (mutex_w_init(&drng->lock, 0, 0)) {
+			/*
+			 * The lock is unusable, so the standard dealloc helpers
+			 * (which take drng->lock) must not be used on this DRNG.
+			 * Tear it down directly before it is published into
+			 * drngs[], where esdm_drngs_node_dealloc would try to
+			 * lock it.
+			 */
+			drng->drng_cb->drng_dealloc(drng->drng);
+			free(drng);
+			goto err;
+		}
 
 		/*
 		 * No reseeding of node DRNGs from previous DRNGs as this
