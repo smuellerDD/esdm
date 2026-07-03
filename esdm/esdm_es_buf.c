@@ -88,9 +88,29 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf)
 	if (!buf || !buf->blocks)
 		return;
 
-	memset_secure(buf->blocks, 0, buf->num_blocks * sizeof(*buf->blocks));
-	for (i = 0; i < buf->num_blocks; i++)
-		buf->states[i] = esdm_es_buf_empty;
+	/*
+	 * Discard cached entropy without racing the lock-free consumers in
+	 * esdm_es_buf_try_get(). A plain memset + plain state store would tear
+	 * the state machine and could scribble over a block a consumer is
+	 * mid-memcpy on. Instead cooperate with the same protocol: only a slot
+	 * we can claim out of the "filled" state via CAS is ours to scrub. A
+	 * slot that is "filling" (owned by the monitor) or "reading" (owned by
+	 * a consumer that already won the CAS) is left to its owner, which
+	 * completes the transition and scrubs the block itself. "empty" slots
+	 * are already clear.
+	 */
+	for (i = 0; i < buf->num_blocks; i++) {
+		if (__sync_val_compare_and_swap(&buf->states[i],
+						esdm_es_buf_filled,
+						esdm_es_buf_reading) !=
+		    esdm_es_buf_filled)
+			continue;
+
+		memset_secure(&buf->blocks[i], 0, sizeof(buf->blocks[i]));
+
+		__sync_synchronize();
+		__sync_lock_test_and_set(&buf->states[i], esdm_es_buf_empty);
+	}
 
 	atomic_bool_set_false(&buf->monitor_initialized);
 }
