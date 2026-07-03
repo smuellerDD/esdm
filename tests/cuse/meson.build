@@ -45,6 +45,13 @@ if get_option('linux-devfiles').enabled()
 		link_with: esdm_common_static_lib,
 		)
 
+	ioctl_status_tester = executable(
+		'ioctl_status_tester',
+		[ cuse_tester_common, 'ioctl_status.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_common_static_lib,
+		)
+
 	poll_read_tester = executable(
 		'poll_read_tester',
 		[ cuse_tester_common, 'poll_read.c' ],
@@ -161,6 +168,17 @@ if get_option('linux-devfiles').enabled()
 		is_parallel: false,
 		suite: 'cuse')
 	test('IOCTL get info /dev/urandom', ioctl_getinfo_tester,
+		env: [ tester_cuse_env ],
+		args : ['urandom' ],
+		is_parallel: false,
+		suite: 'cuse')
+
+	test('IOCTL status /dev/random', ioctl_status_tester,
+		env: [ tester_cuse_env ],
+		args : ['random' ],
+		is_parallel: false,
+		suite: 'cuse')
+	test('IOCTL status /dev/urandom', ioctl_status_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
