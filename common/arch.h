@@ -24,12 +24,8 @@
 extern "C" {
 #endif
 
-#if defined(__linux__)
-
 #define _GNU_SOURCE
 #include <sched.h>
-#include <stdint.h>
-
 #include <stdint.h>
 
 #include "config.h"
@@ -44,12 +40,6 @@ static inline uint32_t esdm_arch_curr_node(void)
 		return 0;
 	return (uint32_t)cpu;
 }
-
-#else /* __linux__ */
-
-#error "Unknown Operating System"
-
-#endif /* __linux__ */
 
 #ifdef __cplusplus
 }

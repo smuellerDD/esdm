@@ -612,11 +612,7 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 		break;
 	}
 
-#ifdef __APPLE__
-	return -pthread_setname_np(name);
-#else
 	return -pthread_setname_np(pthread_self(), name);
-#endif
 }
 
 DSO_PUBLIC
@@ -804,14 +800,12 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 			    0) {
 			spawned[i] = true;
 
-#ifndef __APPLE__
 			/*
 			 * Give the worker a recognizable name in ps/top/htop.
 			 * Cosmetic and best effort, so ignore errors. Only the
 			 * genuinely spawned threads are named: the inline
 			 * fallback below runs on the caller's own thread, which
-			 * must keep its name. On Apple a thread can only rename
-			 * itself, so those workers keep the caller's name.
+			 * must keep its name.
 			 */
 			{
 				char name[ESDM_THREAD_MAX_NAMELEN];
@@ -820,7 +814,6 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 					 (unsigned int)(i % 1000));
 				pthread_setname_np(tids[i], name);
 			}
-#endif
 		} else {
 			spawned[i] = false;
 			start_routine(arg);

@@ -30,10 +30,6 @@
 #include <errno.h>
 #include <ctype.h>
 
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#endif
-
 #include "binhexbin.h"
 #include "fips_integrity.h"
 #include "esdm_hmac.h"
@@ -370,33 +366,8 @@ int fips_post_integrity(const char *pathname)
 		/* Integrity check of our application. */
 		memset(selfname, 0, sizeof(selfname));
 
-		/*
-		* Some OS-specific interfaces:
-		* Mac OS X: _NSGetExecutablePath() (man 3 dyld)
-		* Linux: readlink /proc/self/exe
-		* Solaris: getexecname()
-		* FreeBSD: sysctl CTL_KERN KERN_PROC KERN_PROC_PATHNAME -1
-		* FreeBSD if it has procfs: readlink /proc/curproc/file
-		* (FreeBSD doesn't have procfs by default)
-		* NetBSD: readlink /proc/curproc/exe
-		* DragonFly BSD: readlink /proc/curproc/file
-		* Windows: GetModuleFileName() with hModule = NULL
-		*/
-
-#ifdef __linux__
 		selfnamesize =
 			readlink("/proc/self/exe", selfname, BUFSIZE - 1);
-#elif __APPLE__
-		selfnamesize = BUFSIZE - 1;
-		if (_NSGetExecutablePath(selfname, (uint32_t *)&selfnamesize)) {
-			fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
-				"Buffer for executable too small\n");
-			ret = -ENAMETOOLONG;
-			goto out;
-		}
-#else
-		selfnamesize = -1;
-#endif
 
 		if (selfnamesize >= BUFSIZE || selfnamesize < 0) {
 			fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX

@@ -4,6 +4,7 @@ common_src = files([
 	'buffer.c',
 	'esdm_logger.c',
 	'helper.c',
+	'linux_support.c',
 	'threading_support.c',
 ])
 
@@ -17,10 +18,6 @@ endif
 
 if get_option('fips140')
 	common_src += files(['fips_integrity.c'])
-endif
-
-if host_machine.system() == 'linux'
-	common_src += files('linux_support.c')
 endif
 
 conf_data = configuration_data()
@@ -210,10 +207,6 @@ conf_data.set('ESDM_MAX_RX_TX_RETRIES', 5)
 conf_data.set('ESDM_RPC_MAX_PR_REQUEST_SIZE', 32)
 
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
-
-if build_machine.system() == 'linux'
-	conf_data.set('ESDM_LINUX', 1)
-endif
 
 conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'))
 
