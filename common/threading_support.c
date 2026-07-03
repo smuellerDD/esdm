@@ -618,6 +618,7 @@ int thread_wait_all(bool system_threads)
 {
 	unsigned int i, upper = system_threads ? THREADING_REALLY_ALL_THREADS :
 						 THREADING_MAX_THREADS;
+	bool join_me[THREADING_REALLY_ALL_THREADS];
 	int ret = 0;
 
 	mutex_w_lock(&threads_cleanup);
@@ -632,6 +633,16 @@ int thread_wait_all(bool system_threads)
 		 * hanging the pthread_join below.
 		 */
 		mutex_w_lock(&threads[i].inuse);
+		/*
+		 * Snapshot which slots have a live thread *before* requesting
+		 * shutdown. A worker that observes the flag self-terminates and
+		 * runs thread_cleanup_full(), clearing thread_pending; if that
+		 * wins the race against the join loop below, thread_dirty(i)
+		 * would read false there and the join would be skipped, leaking
+		 * the joinable thread. Deciding here, while still holding inuse
+		 * and before the flag is set, avoids that window.
+		 */
+		join_me[i] = thread_dirty(i);
 		atomic_bool_set_true(&threads[i].shutdown);
 		pthread_cond_broadcast(&threads[i].worker_cv);
 		mutex_w_unlock(&threads[i].inuse);
@@ -644,7 +655,7 @@ int thread_wait_all(bool system_threads)
 			ret = -ESHUTDOWN;
 			goto out;
 		}
-		if (thread_dirty(i)) {
+		if (join_me[i]) {
 			pthread_join(threads[i].thread_id, NULL);
 			ret |= threads[i].ret_ancestor;
 			thread_cleanup_full(&threads[i]);
