@@ -469,8 +469,16 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			if (!thread_dirty(j)) {
 				int ret = thread_create(&threads[j], j);
 
-				if (ret)
+				if (ret) {
+					/*
+					 * thread_create() failed with the slot's
+					 * inuse lock held - release it, otherwise
+					 * the slot is wedged forever and the pool
+					 * shrinks on every transient failure.
+					 */
+					mutex_w_unlock(&threads[j].inuse);
 					return ret;
+				}
 
 				esdm_logger(
 					LOGGER_VERBOSE, LOGGER_C_THREADING,
