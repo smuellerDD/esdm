@@ -696,6 +696,16 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 						     (size_t)rpi->buf_size };
 
 			fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
+		} else if (rpi->entropy_count < 0 ||
+			   (uint64_t)rpi->entropy_count >
+				   (uint64_t)rpi->buf_size * 8) {
+			/*
+			 * Reject a negative entropy_count (which would otherwise
+			 * become a huge value once cast to uint32_t) and any
+			 * claim of more entropy bits than the supplied buffer
+			 * can hold, mirroring the kernel's RNDADDENTROPY check.
+			 */
+			fuse_reply_err(req, EINVAL);
 		} else {
 			/*
 			 * This operation requires privileges. Thus, raise the
