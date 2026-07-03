@@ -29,7 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "atomic_64.h"
+#include <stdatomic.h>
 #include "bool.h"
 #include "cuse_device.h"
 #include "cuse_helper.h"
@@ -59,7 +59,7 @@ static char *mount_dst = NULL;
  ******************************************************************************/
 
 static struct esdm_shm_status *esdm_cuse_shm_status = NULL;
-static atomic_64_t next_fh = ATOMIC_64_INIT(1);
+static atomic_llong next_fh = 1;
 
 static int esdm_cuse_shm_status_avail(void)
 {
@@ -164,13 +164,13 @@ static int esdm_cuse_shm_status_create_shm(void)
  * Semaphore for shared memory segment
  ******************************************************************************/
 
-static atomic_bool_t esdm_cuse_poll_thread_shutdown = ATOMIC_BOOL_INIT(false);
+static atomic_bool esdm_cuse_poll_thread_shutdown = false;
 /*
  * Predicate for the init handshake below: without it, the checker's
  * thread_wake_all() can fire before esdm_cuse_init() reaches its wait, losing
  * the wakeup and hanging startup.
  */
-static atomic_bool_t esdm_cuse_poll_checker_ready = ATOMIC_BOOL_INIT(false);
+static atomic_bool esdm_cuse_poll_checker_ready = false;
 
 /*
  * Active FUSE session, published by main_common() while the session loop runs.
@@ -197,7 +197,7 @@ static void esdm_cuse_shm_status_down(void)
 		nanosleep(&ts, NULL);
 
 	/* The server is terminating, do not block any more */
-	if (atomic_bool_read(&esdm_cuse_poll_thread_shutdown))
+	if (atomic_load(&esdm_cuse_poll_thread_shutdown))
 		return;
 
 	if (sem_wait(esdm_cuse_semid))
@@ -255,7 +255,7 @@ static DECLARE_WAIT_QUEUE(esdm_cuse_poll_checker_wait);
 
 static void esdm_cuse_term(void)
 {
-	atomic_bool_set(&esdm_cuse_poll_thread_shutdown, true);
+	atomic_store(&esdm_cuse_poll_thread_shutdown, true);
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 	if (esdm_cuse_semid != SEM_FAILED)
 		sem_post(esdm_cuse_semid);
@@ -462,7 +462,7 @@ static void esdm_cuse_unpriv_call_end(void)
  ******************************************************************************/
 void esdm_cuse_open(fuse_req_t req, struct fuse_file_info *fi)
 {
-	fi->fh = (uint64_t)atomic_inc_64(&next_fh);
+	fi->fh = (uint64_t)(atomic_fetch_add(&next_fh, 1) + 1);
 	fuse_reply_open(req, fi);
 }
 
@@ -932,9 +932,9 @@ static void esdm_cuse_get_pollmask(unsigned int *outmask)
 	if (!esdm_cuse_shm_status)
 		return;
 
-	if (atomic_bool_read(&esdm_cuse_shm_status->operational))
+	if (atomic_load(&esdm_cuse_shm_status->operational))
 		*outmask |= ESDM_POLL_READER;
-	if (atomic_bool_read(&esdm_cuse_shm_status->need_entropy))
+	if (atomic_load(&esdm_cuse_shm_status->need_entropy))
 		*outmask |= ESDM_POLL_WRITER;
 
 	/*
@@ -945,11 +945,11 @@ static void esdm_cuse_get_pollmask(unsigned int *outmask)
 	 * The checker clears it once, after it has evaluated every registered
 	 * poll handle against it (see esdm_cuse_poll_checker()).
 	 */
-	if (atomic_bool_read(&esdm_cuse_shm_status->suspend_trigger))
+	if (atomic_load(&esdm_cuse_shm_status->suspend_trigger))
 		*outmask |= ESDM_POLL_READER | ESDM_POLL_WRITER;
 
 	/* Simply wake the poller no matter what it waits for. */
-	if (atomic_bool_read(&esdm_cuse_poll_thread_shutdown))
+	if (atomic_load(&esdm_cuse_poll_thread_shutdown))
 		*outmask |= ESDM_POLL_READER | ESDM_POLL_WRITER;
 }
 
@@ -1043,10 +1043,10 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 {
 	thread_set_name(cuse_poll, 0);
 
-	atomic_bool_set_true(&esdm_cuse_poll_checker_ready);
+	atomic_store(&esdm_cuse_poll_checker_ready, true);
 	thread_wake_all(&esdm_cuse_poll_checker_wait);
 
-	while (!atomic_bool_read(&esdm_cuse_poll_thread_shutdown)) {
+	while (!atomic_load(&esdm_cuse_poll_thread_shutdown)) {
 		unsigned int sysmask, mask;
 		bool sysmask_set = false, suspend_seen = false;
 		struct esdm_cuse_poll **pp;
@@ -1059,7 +1059,7 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 		 * has been evaluated against it.
 		 */
 		if (esdm_cuse_shm_status)
-			suspend_seen = atomic_bool_read(
+			suspend_seen = atomic_load(
 				&esdm_cuse_shm_status->suspend_trigger);
 
 		pp = &esdm_cuse_poll_list;
@@ -1092,7 +1092,7 @@ static int esdm_cuse_poll_checker(void __unused *unused)
 		 * this point re-posts the status semaphore, so it is not lost.
 		 */
 		if (suspend_seen && esdm_cuse_shm_status)
-			atomic_bool_set(&esdm_cuse_shm_status->suspend_trigger,
+			atomic_store(&esdm_cuse_shm_status->suspend_trigger,
 					false);
 
 		mutex_w_unlock(&esdm_cuse_ph_lock);
@@ -1144,8 +1144,8 @@ void esdm_cuse_init_done(void *userdata)
 
 	/* Wait until thread is fully initialized */
 	thread_wait_event(&esdm_cuse_poll_checker_wait,
-			  atomic_bool_read(&esdm_cuse_poll_checker_ready) ||
-				  atomic_bool_read(
+			  atomic_load(&esdm_cuse_poll_checker_ready) ||
+				  atomic_load(
 					  &esdm_cuse_poll_thread_shutdown));
 
 	return;

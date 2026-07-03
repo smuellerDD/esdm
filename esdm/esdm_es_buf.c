@@ -54,8 +54,8 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 	buf->num_blocks = num_blocks;
 	buf->mask = num_blocks - 1;
 	buf->name = name;
-	atomic_set(&buf->idx, -1);
-	atomic_bool_set_false(&buf->monitor_initialized);
+	atomic_store(&buf->idx, -1);
+	atomic_store(&buf->monitor_initialized, false);
 
 	return 0;
 }
@@ -78,7 +78,7 @@ void esdm_es_buf_free(struct esdm_es_buf *buf)
 	}
 	buf->num_blocks = 0;
 	buf->mask = 0;
-	atomic_bool_set_false(&buf->monitor_initialized);
+	atomic_store(&buf->monitor_initialized, false);
 }
 
 void esdm_es_buf_reset(struct esdm_es_buf *buf)
@@ -100,19 +100,19 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf)
 	 * are already clear.
 	 */
 	for (i = 0; i < buf->num_blocks; i++) {
-		if (__sync_val_compare_and_swap(&buf->states[i],
-						esdm_es_buf_filled,
-						esdm_es_buf_reading) !=
-		    esdm_es_buf_filled)
+		enum esdm_es_buf_state expected = esdm_es_buf_filled;
+
+		if (!atomic_compare_exchange_strong(&buf->states[i], &expected,
+						    esdm_es_buf_reading))
 			continue;
 
 		memset_secure(&buf->blocks[i], 0, sizeof(buf->blocks[i]));
 
-		__sync_synchronize();
-		__sync_lock_test_and_set(&buf->states[i], esdm_es_buf_empty);
+		atomic_thread_fence(memory_order_seq_cst);
+		atomic_store(&buf->states[i], esdm_es_buf_empty);
 	}
 
-	atomic_bool_set_false(&buf->monitor_initialized);
+	atomic_store(&buf->monitor_initialized, false);
 }
 
 int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
@@ -125,8 +125,8 @@ int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 
 	/* skip first run to be responsive on RPC interface
 	 * fast on ESDM startup */
-	if (!atomic_bool_read(&buf->monitor_initialized)) {
-		atomic_bool_set_true(&buf->monitor_initialized);
+	if (!atomic_load(&buf->monitor_initialized)) {
+		atomic_store(&buf->monitor_initialized, true);
 		return 0;
 	}
 
@@ -134,16 +134,16 @@ int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 		    "%s ES block filling started\n", buf->name);
 
 	for (i = 0; i < buf->num_blocks && esdm_es_mgr_running(); i++) {
-		if (__sync_val_compare_and_swap(&buf->states[i],
-						esdm_es_buf_empty,
-						esdm_es_buf_filling) !=
-		    esdm_es_buf_empty)
+		enum esdm_es_buf_state expected = esdm_es_buf_empty;
+
+		if (!atomic_compare_exchange_strong(&buf->states[i], &expected,
+						    esdm_es_buf_filling))
 			continue;
 
 		fill(&buf->blocks[i], requested_bits, ctx);
 
-		__sync_synchronize();
-		__sync_lock_test_and_set(&buf->states[i], esdm_es_buf_filled);
+		atomic_thread_fence(memory_order_seq_cst);
+		atomic_store(&buf->states[i], esdm_es_buf_filled);
 
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_ES,
@@ -178,28 +178,28 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 
 	/*
 	 * Advance the round-robin slot index, keeping it bounded in [0, mask]
-	 * at all times. A plain atomic_inc() lets the signed counter grow until
-	 * it overflows INT_MAX (signed integer overflow is undefined behavior),
+	 * at all times. A plain increment lets the signed counter grow until it
+	 * overflows INT_MAX (signed integer overflow is undefined behavior),
 	 * relying on wraparound semantics. As num_blocks is a power of two, the
 	 * masked value is reproduced by this CAS loop without ever letting the
 	 * stored counter leave the valid range. This path runs once per reseed,
 	 * so the compare-and-swap retry cost is negligible.
 	 */
 	{
-		int old_idx, new_idx;
+		int old_idx = atomic_load(&buf->idx);
+		int new_idx;
 
 		do {
-			old_idx = atomic_read(&buf->idx);
 			new_idx = (int)(((unsigned int)old_idx + 1) & buf->mask);
-		} while (__sync_val_compare_and_swap(&buf->idx.counter, old_idx,
-						     new_idx) != old_idx);
+		} while (!atomic_compare_exchange_weak(&buf->idx, &old_idx,
+						       new_idx));
 		slot = (unsigned int)new_idx;
 	}
 
-	if (__sync_val_compare_and_swap(&buf->states[slot],
-					esdm_es_buf_filled,
-					esdm_es_buf_reading) !=
-	    esdm_es_buf_filled) {
+	enum esdm_es_buf_state expected = esdm_es_buf_filled;
+
+	if (!atomic_compare_exchange_strong(&buf->states[slot], &expected,
+					    esdm_es_buf_reading)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "%s ES monitor: buffer slot %u exhausted\n",
 			    buf->name, slot);
@@ -219,8 +219,8 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 
 	memset_secure(&buf->blocks[slot], 0, sizeof(buf->blocks[slot]));
 
-	__sync_synchronize();
-	__sync_lock_test_and_set(&buf->states[slot], esdm_es_buf_empty);
+	atomic_thread_fence(memory_order_seq_cst);
+	atomic_store(&buf->states[slot], esdm_es_buf_empty);
 
 	if (!(slot % (buf->num_blocks / 4)) && slot)
 		esdm_es_mgr_monitor_wakeup();

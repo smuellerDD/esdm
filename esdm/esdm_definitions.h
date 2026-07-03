@@ -20,10 +20,10 @@
 #ifndef _ESDM_DEFINITIONS_H
 #define _ESDM_DEFINITIONS_H
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <time.h>
 
-#include "atomic.h"
 #include "config.h"
 #include "esdm_hash_common.h"
 #include "math_helper.h"
@@ -49,7 +49,7 @@
  * SP800-90A defines a maximum number of requests between reseeds of 2^48.
  * The given value is considered a much safer margin, balancing requests for
  * frequent reseeds with the need to conserve entropy. This value MUST NOT be
- * larger than INT_MAX because it is used in an atomic_t.
+ * larger than INT_MAX because it is used in an atomic_int.
  *
  * This value is allowed to be changed.
  */
@@ -144,9 +144,9 @@ static inline uint32_t esdm_data_to_entropy(uint32_t num, uint32_t entropy_rate)
 	return ((num * ESDM_DRNG_SECURITY_STRENGTH_BITS) / entropy_rate);
 }
 
-static inline uint32_t atomic_read_u32(atomic_t *v)
+static inline uint32_t atomic_read_u32(const atomic_int *v)
 {
-	return (uint32_t)atomic_read(v);
+	return (uint32_t)atomic_load(v);
 }
 
 #endif /* _ESDM_DEFINITIONS_H */

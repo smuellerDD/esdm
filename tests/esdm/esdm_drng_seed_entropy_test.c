@@ -61,12 +61,12 @@ static int esdm_drng_seed_entropy_test(void)
 		}
 	}
 
-	if (atomic_read(&seed_entropy_ptr) < 0) {
+	if (atomic_load(&seed_entropy_ptr) < 0) {
 		printf("No seed events detected\n");
 		goto err;
 	}
 
-	for (i = 0; i <= (unsigned int)atomic_read(&seed_entropy_ptr); i++) {
+	for (i = 0; i <= (unsigned int)atomic_load(&seed_entropy_ptr); i++) {
 		/* Do not look further for values */
 		if (reseed)
 			break;

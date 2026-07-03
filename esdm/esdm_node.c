@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include "atomic.h"
+#include <stdatomic.h>
 #include "esdm_crypto.h"
 #include "esdm_drng_mgr.h"
 #include "esdm_es_irq.h"
@@ -31,16 +31,16 @@
 #include "esdm_logger.h"
 #include "mutex.h"
 
-static struct esdm_drng **esdm_drng = NULL;
+static _Atomic(struct esdm_drng **) esdm_drng = NULL;
 static DEFINE_MUTEX_UNLOCKED(esdm_node_cleanup_lock);
 
 struct esdm_drng **esdm_drng_get_instances(void)
 {
 	/*
-	 * counterpart to __sync_val_compare_and_swap in
+	 * counterpart to the compare-and-exchange in
 	 * _esdm_drngs_node_alloc
 	 */
-	mb();
+	atomic_thread_fence(memory_order_seq_cst);
 
 	/*
 	 * Hold the cleanup lock for read while the caller works with the
@@ -157,7 +157,9 @@ void esdm_drngs_node_alloc(void)
 	}
 
 	/* counterpart to memory barrier in esdm_drng_get_instances */
-	if (!__sync_val_compare_and_swap(&esdm_drng, NULL, drngs)) {
+	struct esdm_drng **expected = NULL;
+
+	if (atomic_compare_exchange_strong(&esdm_drng, &expected, drngs)) {
 		esdm_pool_all_nodes_seeded(false);
 		esdm_es_add_entropy();
 		goto unlock;
@@ -175,7 +177,7 @@ void esdm_node_fini(void)
 	struct esdm_drng **drngs;
 
 	mutex_lock(&esdm_node_cleanup_lock);
-	drngs = __atomic_exchange_n(&esdm_drng, NULL, __ATOMIC_ACQUIRE);
+	drngs = atomic_exchange_explicit(&esdm_drng, NULL, memory_order_acquire);
 	esdm_drngs_node_dealloc(drngs);
 	mutex_unlock(&esdm_node_cleanup_lock);
 }

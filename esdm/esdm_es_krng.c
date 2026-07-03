@@ -29,7 +29,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "atomic.h"
+#include <stdatomic.h>
 #include "config.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
@@ -49,7 +49,7 @@ static uint32_t esdm_krng_properties_entropylevel(uint32_t entropylevel);
 
 #ifdef ESDM_KRNG_ES_SELECT
 static uint32_t krng_entropy = 0;
-static atomic_t esdm_krng_cancel = ATOMIC_INIT(0);
+static atomic_int esdm_krng_cancel = 0;
 
 static int esdm_krng_adjust_entropy(void)
 {
@@ -120,7 +120,7 @@ static int esdm_krng_init(void)
 			break;
 		}
 
-		if (atomic_read(&esdm_krng_cancel))
+		if (atomic_load(&esdm_krng_cancel))
 			break;
 
 	} while (errno == EINTR);
@@ -131,7 +131,7 @@ static int esdm_krng_init(void)
 
 static void esdm_krng_fini(void)
 {
-	atomic_set(&esdm_krng_cancel, 1);
+	atomic_store(&esdm_krng_cancel, 1);
 }
 
 #else /* ESDM_KRNG_ES_SELECT */

@@ -24,7 +24,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include "atomic_bool.h"
+#include <stdatomic.h>
 #include "bool.h"
 #include "config.h"
 #include "constructor.h"
@@ -50,7 +50,7 @@
  */
 #define GRND_FULLY_SEEDED 0x0020
 
-static atomic_bool_t is_initialized = ATOMIC_BOOL_INIT(false);
+static atomic_bool is_initialized = false;
 static DEFINE_MUTEX_UNLOCKED(getrandom_mutex);
 
 static void esdm_getrandom_lib_init(void)
@@ -58,7 +58,7 @@ static void esdm_getrandom_lib_init(void)
 	mutex_lock(&getrandom_mutex);
 
 	// are we may already initialized from another thread?
-	if (atomic_bool_read(&is_initialized)) {
+	if (atomic_load(&is_initialized)) {
 		goto out;
 	}
 
@@ -69,7 +69,7 @@ static void esdm_getrandom_lib_init(void)
 	/* Return code irrelevant due to fallback in functions below */
 	esdm_rpcc_init_unpriv_service(NULL);
 
-	atomic_bool_set_true(&is_initialized);
+	atomic_store(&is_initialized, true);
 
 out:
 	mutex_unlock(&getrandom_mutex);
@@ -117,7 +117,7 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 	if (length > INT_MAX)
 		length = INT_MAX;
 
-	if (!atomic_bool_read(&is_initialized)) {
+	if (!atomic_load(&is_initialized)) {
 		esdm_getrandom_lib_init();
 	}
 
@@ -194,7 +194,7 @@ static int getentropy_common(void *buffer, size_t length)
 	if (length > 256)
 		return -EIO;
 
-	if (!atomic_bool_read(&is_initialized)) {
+	if (!atomic_load(&is_initialized)) {
 		esdm_getrandom_lib_init();
 	}
 

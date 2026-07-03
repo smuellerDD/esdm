@@ -59,10 +59,10 @@ struct esdm_pool {
 	mutex_w_t lock;
 
 	/* tracks entropy estimate in this pool */
-	atomic_t aux_entropy_bits;
+	atomic_int aux_entropy_bits;
 
 	/* Digest size of used hash */
-	atomic_t digestsize;
+	atomic_int digestsize;
 
 	/* used for domain separation of inputs inserted into multiple pools */
 	uint16_t idx;
@@ -169,8 +169,8 @@ static int esdm_aux_init(void)
 	for (i = 0; i < (uint16_t)ESDM_NUM_AUX_POOLS; ++i) {
 		esdm_pools[i].aux_pool_state = NULL;
 		esdm_pools[i].aux_pool_out = NULL;
-		atomic_set(&esdm_pools[i].aux_entropy_bits, 0);
-		atomic_set(&esdm_pools[i].digestsize, ESDM_MAX_DIGESTSIZE);
+		atomic_store(&esdm_pools[i].aux_entropy_bits, 0);
+		atomic_store(&esdm_pools[i].digestsize, ESDM_MAX_DIGESTSIZE);
 		esdm_pools[i].initialized = false;
 		mutex_w_init(&esdm_pools[i].lock, 0, 0);
 		esdm_pools[i].idx = i;
@@ -230,7 +230,7 @@ uint32_t esdm_get_digestsize(void)
 static void esdm_pool_set_entropy_pool(struct esdm_pool *pool,
 				       uint32_t entropy_bits)
 {
-	atomic_set(&pool->aux_entropy_bits, (int)entropy_bits);
+	atomic_store(&pool->aux_entropy_bits, (int)entropy_bits);
 }
 
 /* Set entropy content in user-space controllable aux pool */
@@ -250,7 +250,7 @@ void esdm_pool_set_entropy(uint32_t entropy_bits)
 		 * Hold the pool lock so this absolute set stays consistent with
 		 * the lock-guarded read-modify-write sequences on aux_entropy_bits
 		 * in esdm_aux_pool_insert_locked() and esdm_aux_get_pool(); an
-		 * unlocked atomic_set() could otherwise clobber a concurrent
+		 * unlocked atomic_store() could otherwise clobber a concurrent
 		 * xchg/add and corrupt the entropy accounting.
 		 */
 		mutex_w_lock(&esdm_pools[i].lock);
@@ -503,14 +503,14 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 	/* Cap entropy with entropy counter from aux pool and the used digest */
 	collected_ent_bits =
 		min_uint32(digestsize_bits,
-			   (uint32_t)atomic_xchg(&pool->aux_entropy_bits, 0));
+			   (uint32_t)atomic_exchange(&pool->aux_entropy_bits, 0));
 
 	/* We collected too much entropy and put the overflow back */
 	if (collected_ent_bits > requested_bits_osr) {
 		/* Amount of bits we collected too much */
 		unused_bits = collected_ent_bits - requested_bits_osr;
 		/* Put entropy back */
-		atomic_add(&pool->aux_entropy_bits, (int)unused_bits);
+		atomic_fetch_add(&pool->aux_entropy_bits, (int)unused_bits);
 		/* Fix collected entropy */
 		collected_ent_bits = requested_bits_osr;
 	}
@@ -554,7 +554,7 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 	    hash_cb->hash_update(ohash, aux_state, digestsize)) {
 		/*
 		 * The hash chain failed after collected_ent_bits was already
-		 * drained from the pool by the atomic_xchg() above. As no output
+		 * drained from the pool by the atomic_exchange() above. As no output
 		 * is produced, return the consumed entropy to the pool instead
 		 * of losing it (the caller holds pool->lock, so this is the only
 		 * writer). Additionally drop the initialized flag: hash_final()
@@ -562,7 +562,7 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 		 * clean re-initialization on the next insert rather than
 		 * continuing to hash into a torn state.
 		 */
-		atomic_add(&pool->aux_entropy_bits, (int)collected_ent_bits);
+		atomic_fetch_add(&pool->aux_entropy_bits, (int)collected_ent_bits);
 		pool->initialized = false;
 		returned_ent_bits = 0;
 	} else {

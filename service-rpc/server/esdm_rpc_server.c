@@ -43,7 +43,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "atomic.h"
+#include <stdatomic.h>
 #include "buffer.h"
 #include "build_bug_on.h"
 #include "conv_be_le.h"
@@ -122,11 +122,11 @@ enum esdm_rpcs_init_state {
 	esdm_rpcs_state_perm_dropped,
 };
 
-static atomic_t esdm_rpc_init_state =
-	ATOMIC_INIT(esdm_rpcs_state_uninitialized);
+static atomic_int esdm_rpc_init_state =
+	esdm_rpcs_state_uninitialized;
 static DECLARE_WAIT_QUEUE(esdm_rpc_thread_init_wait);
 
-static atomic_t server_exit = ATOMIC_INIT(0);
+static atomic_int server_exit = 0;
 
 /* Remove a potentially left-over old Unix Domain socket. */
 static void esdm_rpcs_stale_socket(const char *path, struct sockaddr *addr,
@@ -697,7 +697,7 @@ static int esdm_rpcs_handler(void *args)
 		goto out;
 	}
 
-	while (atomic_read(&server_exit) == 0) {
+	while (atomic_load(&server_exit) == 0) {
 		int nfds;
 
 		/*
@@ -983,7 +983,7 @@ static int esdm_rpcs_workerloop(struct esdm_rpcs *proto)
 	}
 
 	thread_wait_event(&esdm_rpc_thread_init_wait,
-			  (atomic_read(&server_exit) != 0));
+			  (atomic_load(&server_exit) != 0));
 
 	for (t = 0; t < num_threads; ++t) {
 		uint64_t val = 1;
@@ -1188,18 +1188,18 @@ static int esdm_rpcs_unpriv_init(void *args)
 	}
 
 	/* Notify the mother that the unprivileged thread is initialized. */
-	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_unpriv_init);
+	atomic_store(&esdm_rpc_init_state, esdm_rpcs_state_unpriv_init);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 
-	if (atomic_read(&server_exit) != 0) {
+	if (atomic_load(&server_exit) != 0) {
 		goto out;
 	}
 
 	/* Wait for the mother to drop the privileges. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
-			  (atomic_read(&esdm_rpc_init_state) ==
+			  (atomic_load(&esdm_rpc_init_state) ==
 			   esdm_rpcs_state_perm_dropped) ||
-				  (atomic_read(&server_exit) != 0));
+				  (atomic_load(&server_exit) != 0));
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		    "Unprivileged server thread for %s available\n",
 		    ESDM_RPC_UNPRIV_SOCKET);
@@ -1260,22 +1260,22 @@ static int esdm_rpcs_interfaces_init(const char *username,
 			       ESDM_THREAD_RPC_UNPRIV_GROUP, NULL),
 		  "Starting server thread failed\n");
 
-	if (atomic_read(&server_exit) != 0) {
+	if (atomic_load(&server_exit) != 0) {
 		goto out;
 	}
 
 	/* Wait for the unprivileged thread to complete initialization. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
-			  (atomic_read(&esdm_rpc_init_state) ==
+			  (atomic_load(&esdm_rpc_init_state) ==
 			   esdm_rpcs_state_unpriv_init) ||
-				  (atomic_read(&server_exit) != 0));
+				  (atomic_load(&server_exit) != 0));
 
 	/* Permanently drop all privileges */
 	CKINT(drop_privileges_permanent(username ? username : "nobody",
 					groupname ? groupname : NULL));
 
 	/* Notify all unpriv handler threads that they can become active */
-	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_perm_dropped);
+	atomic_store(&esdm_rpc_init_state, esdm_rpcs_state_perm_dropped);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		    "Privileged server thread for %s available\n",
@@ -1297,13 +1297,13 @@ out:
 
 static void esdm_rpc_priv_init_complete(void)
 {
-	if (atomic_read(&esdm_rpc_init_state) != esdm_rpcs_state_uninitialized)
+	if (atomic_load(&esdm_rpc_init_state) != esdm_rpcs_state_uninitialized)
 		return;
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_SERVER,
 		    "Privileged initialization complete\n");
 	/* Notification that the privileged initialization is complete. */
-	atomic_set(&esdm_rpc_init_state, esdm_rpcs_state_priv_init_complete);
+	atomic_store(&esdm_rpc_init_state, esdm_rpcs_state_priv_init_complete);
 	thread_wake_all(&esdm_rpc_thread_init_wait);
 }
 
@@ -1348,15 +1348,15 @@ int esdm_rpc_server_init(const char *username, const char *groupname)
 		goto out;
 	}
 
-	if (atomic_read(&server_exit) != 0) {
+	if (atomic_load(&server_exit) != 0) {
 		goto out;
 	}
 
 	/* Wait for the privileged initialization to complete. */
 	thread_wait_event(&esdm_rpc_thread_init_wait,
-			  (atomic_read(&esdm_rpc_init_state) ==
+			  (atomic_load(&esdm_rpc_init_state) ==
 			   esdm_rpcs_state_priv_init_complete) ||
-				  (atomic_read(&server_exit) != 0));
+				  (atomic_load(&server_exit) != 0));
 
 	esdm_logger(LOGGER_WARN, LOGGER_C_RPC, "RPC server started\n");
 
@@ -1374,13 +1374,13 @@ out:
 void esdm_rpc_server_signal_exit_safe(void)
 {
 	/*
-	 * Async-signal-safe: atomic_set is just a barrier + store. No condvar
+	 * Async-signal-safe: the atomic store is just a barrier + store. No condvar
 	 * broadcast here - pthread_cond_broadcast is not async-signal-safe and
 	 * could self-deadlock if the interrupted thread held the condvar's
 	 * internal lock. thread_wait_event()'s bounded re-poll makes blocked
 	 * waiters observe server_exit within the backstop interval.
 	 */
-	atomic_set(&server_exit, 1);
+	atomic_store(&server_exit, 1);
 }
 
 void esdm_rpc_server_signal_exit(void)

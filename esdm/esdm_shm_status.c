@@ -104,8 +104,8 @@ void esdm_shm_status_set_operational(bool enabled)
 	if (!esdm_shm_status)
 		return;
 
-	if (atomic_bool_read(&esdm_shm_status->operational) != enabled) {
-		atomic_bool_set(&esdm_shm_status->operational, enabled);
+	if (atomic_load(&esdm_shm_status->operational) != enabled) {
+		atomic_store(&esdm_shm_status->operational, enabled);
 		esdm_shm_status_up();
 	}
 }
@@ -117,12 +117,12 @@ void esdm_shm_status_set_need_entropy(void)
 	if (!esdm_shm_status)
 		return;
 
-	curr = atomic_bool_read(&esdm_shm_status->need_entropy);
+	curr = atomic_load(&esdm_shm_status->need_entropy);
 
 	new = esdm_need_entropy();
 
 	if (curr != new) {
-		atomic_bool_set(&esdm_shm_status->need_entropy, new);
+		atomic_store(&esdm_shm_status->need_entropy, new);
 		esdm_shm_status_up();
 	}
 
@@ -139,7 +139,7 @@ static void esdm_shm_status_set_suspend(void)
 	if (!esdm_shm_status)
 		return;
 
-	atomic_bool_set(&esdm_shm_status->suspend_trigger, true);
+	atomic_store(&esdm_shm_status->suspend_trigger, true);
 
 	/* Wake up all waiters */
 	esdm_shm_wake_all();
@@ -359,7 +359,7 @@ static int esdm_shm_status_create_shm(void)
 	 * previous daemon), would expose torn/stale status to readers.
 	 */
 	esdm_shm_status->version = 0;
-	__sync_synchronize();
+	atomic_thread_fence(memory_order_seq_cst);
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY,
 		    "ESDM shared memory segment initialized\n");
@@ -404,13 +404,13 @@ int esdm_shm_status_init(void)
 	 * the ready version is guaranteed to also see the populated
 	 * info/infolen/unpriv_threads written above.
 	 */
-	__sync_synchronize();
+	atomic_thread_fence(memory_order_seq_cst);
 	esdm_shm_status->version = ESDM_SHM_STATUS_VERSION;
 
 	esdm_shm_status_set_operational(esdm_state_operational());
 	esdm_shm_status_set_need_entropy();
 	esdm_shm_status_install_signal_suspend();
-	atomic_bool_set(&esdm_shm_status->suspend_trigger, false);
+	atomic_store(&esdm_shm_status->suspend_trigger, false);
 
 	return 0;
 }

@@ -31,11 +31,11 @@
 #include "test_pertubation.h"
 
 uint32_t seed_entropy[7];
-atomic_t seed_entropy_ptr = ATOMIC_INIT(-1);
+atomic_int seed_entropy_ptr = -1;
 
 void esdm_test_seed_entropy(uint32_t ent)
 {
-	int idx = atomic_inc(&seed_entropy_ptr);
+	int idx = atomic_fetch_add(&seed_entropy_ptr, 1) + 1;
 
 	if (idx < 0 || idx >= (int)ARRAY_SIZE(seed_entropy))
 		return;

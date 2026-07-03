@@ -26,13 +26,13 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <stdatomic.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "bool.h"
 #include "buffer.h"
 #include "config.h"
-#include "atomic.h"
 #include "conv_be_le.h"
 #include "esdm_rpc_client_internal.h"
 #include "esdm_rpc_protocol.h"
@@ -656,7 +656,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	rpc_conn->fd = -1;
 	reset_conn_socket(rpc_conn);
 	mutex_w_init(&rpc_conn->lock, 0, 0);
-	atomic_set(&rpc_conn->state, esdm_rpcc_initialized);
+	atomic_store(&rpc_conn->state, esdm_rpcc_initialized);
 
 out:
 	return ret;
@@ -684,8 +684,8 @@ static uint32_t esdm_rpcc_curr_node(void)
 	return (esdm_curr_node() % esdm_rpcc_max_nodes);
 }
 
-static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
-				   uint32_t *num)
+static void esdm_rpcc_fini_service(
+	_Atomic(esdm_rpc_client_connection_t *) *rpc_conn, uint32_t *num)
 {
 	struct timespec abstime;
 	esdm_rpc_client_connection_t *rpc_conn_array;
@@ -699,7 +699,7 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 	 * CKNULL) or a stale-but-consistent count, never a non-NULL pointer with
 	 * a count it is about to modulo against.
 	 */
-	rpc_conn_array = __sync_lock_test_and_set(rpc_conn, NULL);
+	rpc_conn_array = atomic_exchange(rpc_conn, NULL);
 	*num = 0;
 	if (!rpc_conn_array)
 		return;
@@ -710,7 +710,7 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 
 	/* Tell everybody that the connection is about to terminate */
 	for (i = 0; i < num_conn; i++, rpc_conn_p++)
-		atomic_set(&rpc_conn_p->state, esdm_rpcc_in_termination);
+		atomic_store(&rpc_conn_p->state, esdm_rpcc_in_termination);
 
 	/*
 	 * Wait until the processing for a connection completed and then delete
@@ -740,10 +740,10 @@ static void esdm_rpcc_fini_service(esdm_rpc_client_connection_t **rpc_conn,
 static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 				  const char *socketname,
 				  esdm_rpcc_interrupt_func_t interrupt_func,
-				  esdm_rpc_client_connection_t **rpc_conn,
+				  _Atomic(esdm_rpc_client_connection_t *) *rpc_conn,
 				  uint32_t *num_conn)
 {
-	esdm_rpc_client_connection_t *tmp = *rpc_conn, *tmp_p;
+	esdm_rpc_client_connection_t *tmp = atomic_load(rpc_conn), *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
 	int ret = 0;
 
@@ -794,7 +794,7 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		 * stale non-NULL value, fails, and both discards the freshly
 		 * built array and leaves the global dangling (later double free).
 		 */
-		*rpc_conn = NULL;
+		atomic_store(rpc_conn, NULL);
 		*num_conn = 0;
 	}
 
@@ -808,7 +808,9 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 
 	CKINT(esdm_test_shm_status_init());
 
-	if (__sync_val_compare_and_swap(rpc_conn, NULL, tmp) != NULL) {
+	esdm_rpc_client_connection_t *cas_expected = NULL;
+
+	if (!atomic_compare_exchange_strong(rpc_conn, &cas_expected, tmp)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -887,7 +889,7 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 		found_unused_conn = true;
 	}
 
-	if (atomic_read(&rpc_conn_p->state) != esdm_rpcc_initialized) {
+	if (atomic_load(&rpc_conn_p->state) != esdm_rpcc_initialized) {
 		mutex_w_unlock(&rpc_conn_p->ref_cnt);
 
 		/* Safety measure */
@@ -914,7 +916,7 @@ static void esdm_rpcc_put_service(esdm_rpc_client_connection_t *rpc_conn)
 /******************************************************************************
  * Unprivileged connection
  ******************************************************************************/
-static esdm_rpc_client_connection_t *unpriv_rpc_conn = NULL;
+static _Atomic(esdm_rpc_client_connection_t *) unpriv_rpc_conn = NULL;
 static uint32_t unpriv_rpc_conn_num = 0;
 
 DSO_PUBLIC
@@ -950,7 +952,7 @@ void esdm_rpcc_fini_unpriv_service(void)
 /******************************************************************************
  * Privileged connection
  ******************************************************************************/
-static esdm_rpc_client_connection_t *priv_rpc_conn = NULL;
+static _Atomic(esdm_rpc_client_connection_t *) priv_rpc_conn = NULL;
 static uint32_t priv_rpc_conn_num = 0;
 
 DSO_PUBLIC

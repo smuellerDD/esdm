@@ -28,6 +28,7 @@
 #include <getopt.h>
 #include <linux/random.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -39,13 +40,12 @@
 #include <unistd.h>
 
 #include "config.h"
-#include "atomic_bool.h"
 #include "esdm_logger.h"
 #include "helper.h"
 #include "memset_secure.h"
 #include "systemd_support.h"
 
-static atomic_bool_t should_run = ATOMIC_BOOL_INIT(true);
+static atomic_bool should_run = true;
 static int notify_fd = -1; /* event fd used to notify in case of termination */
 static bool force_pr =
 	false; /* force seeding kernel from pr instance of esdm */
@@ -209,7 +209,7 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 
 	rpi->buf_size = ESDM_SERVER_LINUX_ENTROPY_BYTES;
 
-	while (atomic_bool_read(&should_run)) {
+	while (atomic_load(&should_run)) {
 		if (pr_mode()) {
 			ret = esdm_rpcc_get_random_bytes_pr(
 				(uint8_t *)rpi->buf, (size_t)rpi->buf_size);
@@ -296,7 +296,7 @@ static void sig_term(int sig)
 
 	(void)sig;
 
-	atomic_bool_set_false(&should_run);
+	atomic_store(&should_run, false);
 	if (notify_fd >= 0) {
 		ssize_t write_ret;
 

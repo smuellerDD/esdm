@@ -169,7 +169,7 @@ static int esdm_cuse_shm_status_down(struct timespec *ts)
 	 * If the ESDM server already indicates it needs entropy, return
 	 * immediately.
 	 */
-	if (atomic_bool_read(&esdm_cuse_shm_status->need_entropy))
+	if (atomic_load(&esdm_cuse_shm_status->need_entropy))
 		return 0;
 
 	/*

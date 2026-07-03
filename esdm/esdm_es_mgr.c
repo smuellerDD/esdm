@@ -29,7 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "atomic_bool.h"
+#include <stdatomic.h>
 #include "build_bug_on.h"
 #include "es_cpu/cpu_random.h"
 #include "esdm.h"
@@ -64,9 +64,9 @@ struct esdm_state {
 	 * holding a common lock, so they must be atomic to avoid data races
 	 * (especially on weakly-ordered architectures like ARM/RISC-V).
 	 */
-	atomic_bool_t esdm_operational; /* Is DRNG operational? */
-	atomic_bool_t esdm_fully_seeded; /* Is DRNG fully seeded? */
-	atomic_bool_t all_online_nodes_seeded; /* All DRNGs nodes seeded? */
+	atomic_bool esdm_operational; /* Is DRNG operational? */
+	atomic_bool esdm_fully_seeded; /* Is DRNG fully seeded? */
+	atomic_bool all_online_nodes_seeded; /* All DRNGs nodes seeded? */
 
 	/*
 	 * To ensure that external entropy providers cannot dominate the
@@ -77,15 +77,15 @@ struct esdm_state {
 	 * entropy pool has sufficient entropy.
 	 */
 
-	atomic_t boot_entropy_thresh; /* Reseed threshold */
+	atomic_int boot_entropy_thresh; /* Reseed threshold */
 	mutex_w_t reseed_in_progress; /* Flag for on executing reseed */
 };
 
 static struct esdm_state esdm_state = {
-	.esdm_operational = ATOMIC_BOOL_INIT(false),
-	.esdm_fully_seeded = ATOMIC_BOOL_INIT(false),
-	.all_online_nodes_seeded = ATOMIC_BOOL_INIT(false),
-	.boot_entropy_thresh = ATOMIC_INIT(ESDM_FULL_SEED_ENTROPY_BITS),
+	.esdm_operational = false,
+	.esdm_fully_seeded = false,
+	.all_online_nodes_seeded = false,
+	.boot_entropy_thresh = ESDM_FULL_SEED_ENTROPY_BITS,
 	.reseed_in_progress = MUTEX_W_UNLOCKED,
 };
 
@@ -96,7 +96,7 @@ static struct esdm_state esdm_state = {
  */
 uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
 
-static atomic_t esdm_es_mgr_terminate = ATOMIC_INIT(0);
+static atomic_int esdm_es_mgr_terminate = 0;
 
 /*
  * Serializes the ES monitor's active work against esdm_reinit(). The monitor
@@ -152,7 +152,7 @@ struct esdm_es_cb *esdm_es[] = {
 
 bool esdm_es_mgr_running(void)
 {
-	return atomic_read(&esdm_es_mgr_terminate) == 0;
+	return atomic_load(&esdm_es_mgr_terminate) == 0;
 }
 
 /* Restart the ES monitor if it is sleeping */
@@ -235,7 +235,7 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Full entropy monitor started\n");
 
-	while (!atomic_read(&esdm_es_mgr_terminate)) {
+	while (!atomic_load(&esdm_es_mgr_terminate)) {
 		unsigned int j;
 		int ret = 0;
 		bool priv_init_complete = true;
@@ -487,7 +487,7 @@ void esdm_pool_unlock(void)
 /* Set new entropy threshold for reseeding during boot */
 void esdm_set_entropy_thresh(uint32_t new_entropy_bits)
 {
-	atomic_set(&esdm_state.boot_entropy_thresh, (int)new_entropy_bits);
+	atomic_store(&esdm_state.boot_entropy_thresh, (int)new_entropy_bits);
 }
 
 /*
@@ -502,9 +502,9 @@ void esdm_reset_state(void)
 		if (esdm_es[i]->reset)
 			esdm_es[i]->reset();
 	}
-	atomic_bool_set_false(&esdm_state.esdm_operational);
-	atomic_bool_set_false(&esdm_state.esdm_fully_seeded);
-	atomic_bool_set_false(&esdm_state.all_online_nodes_seeded);
+	atomic_store(&esdm_state.esdm_operational, false);
+	atomic_store(&esdm_state.esdm_fully_seeded, false);
+	atomic_store(&esdm_state.all_online_nodes_seeded, false);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
 	/* Start the entropy monitor */
@@ -514,28 +514,28 @@ void esdm_reset_state(void)
 /* Set flag that all DRNGs are fully seeded */
 void esdm_pool_all_nodes_seeded(bool set)
 {
-	atomic_bool_set(&esdm_state.all_online_nodes_seeded, set);
+	atomic_store(&esdm_state.all_online_nodes_seeded, set);
 	if (set)
 		thread_wake_all(&esdm_init_wait);
 }
 
 bool esdm_pool_all_nodes_seeded_get(void)
 {
-	return atomic_bool_read(&esdm_state.all_online_nodes_seeded);
+	return atomic_load(&esdm_state.all_online_nodes_seeded);
 }
 
 /* Return boolean whether ESDM reached fully seed level */
 DSO_PUBLIC
 int esdm_state_fully_seeded(void)
 {
-	return atomic_bool_read(&esdm_state.esdm_fully_seeded);
+	return atomic_load(&esdm_state.esdm_fully_seeded);
 }
 
 /* Return boolean whether ESDM is considered fully operational */
 DSO_PUBLIC
 int esdm_state_operational(void)
 {
-	return atomic_bool_read(&esdm_state.esdm_operational);
+	return atomic_load(&esdm_state.esdm_operational);
 }
 
 static void esdm_init_wakeup(void)
@@ -552,7 +552,7 @@ static uint32_t esdm_avail_entropy_thresh(void)
 	 * we request a larger buffer from the ES.
 	 */
 	if (esdm_sp80090c_compliant() &&
-	    !atomic_bool_read(&esdm_state.all_online_nodes_seeded))
+	    !atomic_load(&esdm_state.all_online_nodes_seeded))
 		ent_thresh += ESDM_SEED_BUFFER_INIT_ADD_BITS;
 
 	return ent_thresh;
@@ -598,7 +598,7 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 /* Mark one DRNG as not fully seeded */
 void esdm_unset_fully_seeded(struct esdm_drng *drng)
 {
-	atomic_bool_set_false(&drng->fully_seeded);
+	atomic_store(&drng->fully_seeded, false);
 
 	/*
 	 * Clear all_online_nodes_seeded under the pool lock so it stays ordered
@@ -620,8 +620,8 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 	if (drng == esdm_drng_init_instance() && esdm_state_operational()) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "ESDM set to non-operational\n");
-		atomic_bool_set_false(&esdm_state.esdm_operational);
-		atomic_bool_set_false(&esdm_state.esdm_fully_seeded);
+		atomic_store(&esdm_state.esdm_operational, false);
+		atomic_store(&esdm_state.esdm_fully_seeded, false);
 
 		esdm_shm_status_set_operational(false);
 	}
@@ -640,8 +640,8 @@ static void esdm_set_operational(void)
 	 * sufficient entropy, or the SP800-90B startup test completed for
 	 * the internal ES to supply also entropy data.
 	 */
-	if (atomic_bool_read(&esdm_state.esdm_fully_seeded)) {
-		atomic_bool_set_true(&esdm_state.esdm_operational);
+	if (atomic_load(&esdm_state.esdm_fully_seeded)) {
+		atomic_store(&esdm_state.esdm_operational, true);
 		esdm_init_wakeup();
 		esdm_shm_status_set_operational(true);
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
@@ -729,11 +729,11 @@ void esdm_init_ops(struct entropy_buf *eb)
 	struct esdm_state *state = &esdm_state;
 	uint32_t i, requested_bits, seed_bits = 0;
 
-	if (atomic_bool_read(&state->esdm_operational))
+	if (atomic_load(&state->esdm_operational))
 		return;
 
 	requested_bits = esdm_init_entropy_level(
-		atomic_bool_read(&state->all_online_nodes_seeded));
+		atomic_load(&state->all_online_nodes_seeded));
 
 	if (eb) {
 		seed_bits = esdm_entropy_rate_eb(eb);
@@ -745,15 +745,15 @@ void esdm_init_ops(struct entropy_buf *eb)
 	}
 
 	/* DRNG is already seeded with full security strength */
-	if (atomic_bool_read(&state->esdm_fully_seeded)) {
+	if (atomic_load(&state->esdm_fully_seeded)) {
 		esdm_set_operational();
 		esdm_set_entropy_thresh(requested_bits);
 		return;
 	}
 
-	if (esdm_fully_seeded(!atomic_bool_read(&state->all_online_nodes_seeded),
+	if (esdm_fully_seeded(!atomic_load(&state->all_online_nodes_seeded),
 			      seed_bits, eb)) {
-		atomic_bool_set_true(&state->esdm_fully_seeded);
+		atomic_store(&state->esdm_fully_seeded, true);
 		esdm_set_operational();
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
 			    "ESDM fully seeded with %u bits of entropy\n",
@@ -876,7 +876,7 @@ void esdm_es_mgr_finalize(void)
 {
 	uint32_t i;
 
-	atomic_set(&esdm_es_mgr_terminate, 1);
+	atomic_store(&esdm_es_mgr_terminate, 1);
 	esdm_es_mgr_monitor_wakeup();
 
 	/* wait for monitor thread */
@@ -898,7 +898,7 @@ bool esdm_es_reseed_wanted(void)
 	 * Once all DRNGs are fully seeded, the system-triggered arrival of
 	 * entropy will not cause any reseeding any more.
 	 */
-	if (atomic_bool_read(&esdm_state.all_online_nodes_seeded))
+	if (atomic_load(&esdm_state.all_online_nodes_seeded))
 		return false;
 
 	/* Only trigger the DRNG reseed if we have collected entropy. */
@@ -934,7 +934,7 @@ void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
 	uint32_t i, req_ent = esdm_sp80090c_compliant() ?
 				      esdm_security_strength() :
 				      ESDM_FULL_SEED_ENTROPY_BITS;
-	bool fully_seeded = atomic_bool_read(&state->esdm_fully_seeded);
+	bool fully_seeded = atomic_load(&state->esdm_fully_seeded);
 	int ret;
 
 	/* Guarantee that requested bits is a multiple of bytes */

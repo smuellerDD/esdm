@@ -250,7 +250,7 @@ static int es_sched_reset(void)
 	uint32_t i = 0;
 	int ptr = -1;
 
-	atomic_set(&seed_entropy_ptr, -1);
+	atomic_store(&seed_entropy_ptr, -1);
 
 	if (es_sched_reset_check())
 		return 1;
@@ -259,7 +259,7 @@ static int es_sched_reset(void)
 
 	do {
 		esdm_es[esdm_int_es_sched]->monitor_es();
-		ptr = atomic_read(&seed_entropy_ptr);
+		ptr = atomic_load(&seed_entropy_ptr);
 		nanosleep(&ts, NULL);
 		i++;
 	} while (ptr < 1 && i < 60);
