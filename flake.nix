@@ -321,6 +321,7 @@
                   ]
                   ++ [
                     "-Des_jent_osr=4"
+		    "-Dbotan_drng_type=chacha20"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
