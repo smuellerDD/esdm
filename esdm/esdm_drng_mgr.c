@@ -58,7 +58,7 @@ static uint32_t esdm_drng_reseed_max_time = 600;
  * Is ESDM for general-purpose use (i.e. is at least the esdm_drng_init
  * fully allocated)?
  */
-static atomic_t esdm_avail = ATOMIC_INIT(0);
+static atomic_int esdm_avail = 0;
 
 /* Guard protecting all crypto callback update operation of all DRNGs. */
 DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
@@ -113,7 +113,7 @@ static struct esdm_drng esdm_drng_pr = { ESDM_DRNG_STATE_INIT(
 /* Wait queue to wait until the ESDM is initialized - can freely be used */
 DECLARE_WAIT_QUEUE(esdm_init_wait);
 
-static atomic_t esdm_drng_mgr_terminate = ATOMIC_INIT(0);
+static atomic_int esdm_drng_mgr_terminate = 0;
 
 /*
  * Single throttle shared by the blocking and non-blocking prediction-resistant
@@ -128,7 +128,7 @@ static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
 
 bool esdm_get_available(void)
 {
-	return (atomic_read(&esdm_avail) == 2);
+	return (atomic_load(&esdm_avail) == 2);
 }
 
 struct esdm_drng *esdm_drng_init_instance(void)
@@ -157,7 +157,7 @@ struct esdm_drng *esdm_drng_node_instance(void)
 static void esdm_drng_set_seeded_now(struct esdm_drng *drng)
 {
 	clock_gettime(CLOCK_MONOTONIC, &drng->last_seeded);
-	atomic_set_64(&drng->last_seeded_time,
+	atomic_store(&drng->last_seeded_time,
 		      (long long)drng->last_seeded.tv_sec);
 }
 
@@ -169,14 +169,14 @@ static void esdm_drng_set_seeded_now(struct esdm_drng *drng)
 void esdm_drng_reset(struct esdm_drng *drng)
 {
 	/* Ensure reseed during next call */
-	atomic_set(&drng->requests, 1);
-	atomic_set(&drng->requests_since_fully_seeded, 0);
-	atomic_set(&drng->request_bits_since_fully_seeded, 0);
+	atomic_store(&drng->requests, 1);
+	atomic_store(&drng->requests_since_fully_seeded, 0);
+	atomic_store(&drng->request_bits_since_fully_seeded, 0);
 	esdm_drng_set_seeded_now(drng);
-	atomic_bool_set_false(&drng->fully_seeded);
+	atomic_store(&drng->fully_seeded, false);
 	/* Do not set force, as this flag is used for the emergency reseeding */
-	atomic_bool_set_false(&drng->force_reseed);
-	atomic_bool_set_false(&drng->initiated);
+	atomic_store(&drng->force_reseed, false);
+	atomic_store(&drng->initiated, false);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG, "reset DRNG\n");
 }
 
@@ -269,7 +269,9 @@ int esdm_drng_mgr_initialize(void)
 	 * If the esdm_avail is not 0, either the DRNG is initialized, or the
 	 * initializiation process is in progress.
 	 */
-	if (atomic_cmpxchg(&esdm_avail, 0, 1) != 0)
+	int expected = 0;
+
+	if (!atomic_compare_exchange_strong(&esdm_avail, &expected, 1))
 		return 0;
 
 	/* Initialize the PR DRNG inside init lock as it guards esdm_avail. */
@@ -289,7 +291,7 @@ int esdm_drng_mgr_initialize(void)
 					     esdm_default_drng_cb);
 		mutex_w_unlock(&esdm_drng_init.lock);
 		if (!ret) {
-			atomic_set(&esdm_avail, 2);
+			atomic_store(&esdm_avail, 2);
 			esdm_logger(
 				LOGGER_VERBOSE, LOGGER_C_DRNG,
 				"DRNG without prediction resistance allocated\n");
@@ -307,14 +309,14 @@ out:
 	if (ret) {
 		esdm_drng_dealloc_common(esdm_drng_init_instance());
 		esdm_drng_dealloc_common(&esdm_drng_pr);
-		atomic_set(&esdm_avail, 0);
+		atomic_store(&esdm_avail, 0);
 	}
 	return ret;
 }
 
 void esdm_drng_mgr_finalize(void)
 {
-	atomic_set(&esdm_drng_mgr_terminate, 1);
+	atomic_store(&esdm_drng_mgr_terminate, 1);
 	esdm_drng_dealloc_common(esdm_drng_init_instance());
 	esdm_drng_dealloc_common(&esdm_drng_pr);
 }
@@ -406,9 +408,9 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 	if (drng->drng_cb->drng_seed(drng->drng, inbuf, inbuflen) < 0) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
 			    "seeding of %s DRNG failed\n", drng_type);
-		atomic_bool_set_true(&drng->force_reseed);
+		atomic_store(&drng->force_reseed, true);
 	} else {
-		int gc = ESDM_DRNG_RESEED_THRESH - atomic_read(&drng->requests);
+		int gc = ESDM_DRNG_RESEED_THRESH - atomic_load(&drng->requests);
 
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_DRNG,
@@ -421,19 +423,19 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		 * were produced, without full reseeding again.
 		 */
 		if (fully_seeded) {
-			atomic_set(&drng->requests_since_fully_seeded, 0);
-			atomic_set(&drng->request_bits_since_fully_seeded, 0);
+			atomic_store(&drng->requests_since_fully_seeded, 0);
+			atomic_store(&drng->request_bits_since_fully_seeded, 0);
 		} else
-			atomic_add(&drng->requests_since_fully_seeded, gc);
+			atomic_fetch_add(&drng->requests_since_fully_seeded, gc);
 
 		esdm_drng_set_seeded_now(drng);
-		atomic_set(&drng->requests, ESDM_DRNG_RESEED_THRESH);
-		atomic_bool_set_false(&drng->force_reseed);
+		atomic_store(&drng->requests, ESDM_DRNG_RESEED_THRESH);
+		atomic_store(&drng->force_reseed, false);
 
-		if (!atomic_bool_read(&drng->fully_seeded)) {
-			atomic_bool_set(&drng->fully_seeded, fully_seeded);
-			if (atomic_bool_read(&drng->fully_seeded)) {
-				atomic_bool_set_true(&drng->initiated);
+		if (!atomic_load(&drng->fully_seeded)) {
+			atomic_store(&drng->fully_seeded, fully_seeded);
+			if (atomic_load(&drng->fully_seeded)) {
+				atomic_store(&drng->initiated, true);
 				esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 					    "%s DRNG fully seeded\n",
 					    drng_type);
@@ -455,11 +457,11 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		collected_seedbuf;
 	uint32_t collected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
-	bool forced = atomic_bool_read(&drng->force_reseed);
+	bool forced = atomic_load(&drng->force_reseed);
 	unsigned int es_delivered_threshold = 1;
 	bool do_full_init =
-		(drng == &esdm_drng_pr && !atomic_bool_read(&drng->initiated)) ||
-		(drng != &esdm_drng_pr && !atomic_bool_read(&drng->fully_seeded));
+		(drng == &esdm_drng_pr && !atomic_load(&drng->initiated)) ||
+		(drng != &esdm_drng_pr && !atomic_load(&drng->fully_seeded));
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -530,9 +532,9 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	 * the entire operation is atomic which means that the DRNG is not
 	 * producing data while this is ongoing.
 	 */
-	} while (forced && !atomic_bool_read(&drng->fully_seeded) &&
+	} while (forced && !atomic_load(&drng->fully_seeded) &&
 		 num_es_delivered >= es_delivered_threshold &&
-		 !atomic_read(&esdm_drng_mgr_terminate));
+		 !atomic_load(&esdm_drng_mgr_terminate));
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 
@@ -568,9 +570,9 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	if (node > 0) {
 		/* Prevent reseed storm: stagger re-seed times across nodes */
 		mutex_w_lock(&drng->lock);
-		if (atomic_bool_read(&drng->fully_seeded)) {
+		if (atomic_load(&drng->fully_seeded)) {
 			drng->last_seeded.tv_sec += node * 60;
-			atomic_set_64(&drng->last_seeded_time,
+			atomic_store(&drng->last_seeded_time,
 				      (long long)drng->last_seeded.tv_sec);
 		}
 		mutex_w_unlock(&drng->lock);
@@ -616,30 +618,30 @@ static bool __esdm_drng_seed_work(bool force)
 			if (!drng)
 				continue;
 
-			if (drng && !atomic_bool_read(&drng->fully_seeded)) {
+			if (drng && !atomic_load(&drng->fully_seeded)) {
 				if (force)
-					atomic_bool_set_true(&drng->force_reseed);
+					atomic_store(&drng->force_reseed, true);
 				esdm_drng_seed_work_one(drng, node);
-				progress = atomic_bool_read(&drng->fully_seeded);
+				progress = atomic_load(&drng->fully_seeded);
 				goto out;
 			}
 		}
 	} else {
-		if (!atomic_bool_read(&esdm_drng_init.fully_seeded)) {
+		if (!atomic_load(&esdm_drng_init.fully_seeded)) {
 			if (force)
-				atomic_bool_set_true(&esdm_drng_init.force_reseed);
+				atomic_store(&esdm_drng_init.force_reseed, true);
 			esdm_drng_seed_work_one(&esdm_drng_init, 0);
 			progress =
-				atomic_bool_read(&esdm_drng_init.fully_seeded);
+				atomic_load(&esdm_drng_init.fully_seeded);
 			goto out;
 		}
 	}
 
-	if (!atomic_bool_read(&esdm_drng_pr.fully_seeded)) {
+	if (!atomic_load(&esdm_drng_pr.fully_seeded)) {
 		if (force)
-			atomic_bool_set_true(&esdm_drng_pr.force_reseed);
+			atomic_store(&esdm_drng_pr.force_reseed, true);
 		esdm_drng_seed_work_one(&esdm_drng_pr, 0);
-		progress = atomic_bool_read(&esdm_drng_pr.fully_seeded);
+		progress = atomic_load(&esdm_drng_pr.fully_seeded);
 		goto out;
 	}
 
@@ -694,11 +696,11 @@ void esdm_drng_force_reseed(void)
 	 * must be kept seeded before all others to keep the ESDM operational.
 	 */
 	if (!esdm_drng || esdm_drng_check_disable_threshold(&esdm_drng_init)) {
-		atomic_bool_set(&esdm_drng_init.force_reseed,
-				atomic_bool_read(&esdm_drng_init.fully_seeded));
+		atomic_store(&esdm_drng_init.force_reseed,
+				atomic_load(&esdm_drng_init.fully_seeded));
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 			    "force reseed of initial DRNG = %i\n",
-			    atomic_bool_read(&esdm_drng_init.force_reseed));
+			    atomic_load(&esdm_drng_init.force_reseed));
 		goto out;
 	}
 
@@ -708,11 +710,11 @@ void esdm_drng_force_reseed(void)
 		if (!drng)
 			continue;
 
-		atomic_bool_set(&drng->force_reseed,
-				atomic_bool_read(&drng->fully_seeded));
+		atomic_store(&drng->force_reseed,
+				atomic_load(&drng->fully_seeded));
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 			    "force reseed of DRNG on CPU %u = %i\n", node,
-			    atomic_bool_read(&drng->force_reseed));
+			    atomic_load(&drng->force_reseed));
 	}
 
 out:
@@ -728,7 +730,7 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 	 * whole seconds, so dropping the sub-second component is immaterial.
 	 */
 	struct timespec check_time = {
-		.tv_sec = (time_t)atomic_read_64(&drng->last_seeded_time),
+		.tv_sec = (time_t)atomic_load(&drng->last_seeded_time),
 		.tv_nsec = 0,
 	};
 	bool request_bits_since_fully_seeded_reached =
@@ -736,16 +738,16 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 		(atomic_read_u32(&drng->request_bits_since_fully_seeded) >=
 		 ESDM_DRNG_RESEED_THRESH_BITS);
 	/*
-	 * atomic_dec_and_test will only trigger for zero, but we may also are
+	 * The decrement-and-test will only trigger for zero, but we may also are
 	 * already negative
 	 */
-	bool requests_check = atomic_read(&drng->requests) <= 0;
+	bool requests_check = atomic_load(&drng->requests) <= 0;
 
 	if (dec_requests)
-		requests_check |= atomic_dec_and_test(&drng->requests);
+		requests_check |= (atomic_fetch_sub(&drng->requests, 1) == 1);
 	check_time.tv_sec += esdm_drng_reseed_max_time;
 
-	return (requests_check || atomic_bool_read(&drng->force_reseed) ||
+	return (requests_check || atomic_load(&drng->force_reseed) ||
 		request_bits_since_fully_seeded_reached ||
 		esdm_time_after_now(&check_time));
 }
@@ -830,7 +832,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 				 * bits.
 				 */
 				mutex_w_lock(&drng->lock);
-				atomic_bool_set_true(&drng->force_reseed);
+				atomic_store(&drng->force_reseed, true);
 				mutex_w_unlock(&drng->lock);
 			} else { /* Perform synchronous reseed */
 				mutex_w_lock(&drng->lock);
@@ -858,7 +860,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		 */
 		if (pr) {
 			/* If async reseed did not deliver entropy, try now */
-			if (!atomic_bool_read(&drng->fully_seeded)) {
+			if (!atomic_load(&drng->fully_seeded)) {
 				uint32_t collected_ent_bits;
 
 				/* If we cannot get the pool lock, try again. */
@@ -929,9 +931,10 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		 * otherwise grow without bound. atomic_read_u32() already reads
 		 * it unsigned, so a saturated value still forces a reseed.
 		 */
-		if (atomic_add(&drng->request_bits_since_fully_seeded,
-			       (int)ret << 3) < 0)
-			atomic_set(&drng->request_bits_since_fully_seeded,
+		if ((atomic_fetch_add(&drng->request_bits_since_fully_seeded,
+				      (int)ret << 3) +
+		     ((int)ret << 3)) < 0)
+			atomic_store(&drng->request_bits_since_fully_seeded,
 				   INT_MAX);
 		processed += ret;
 		outbuflen -= (size_t)ret;
@@ -979,7 +982,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 			if (esdm_drng[j] &&
 			    mutex_w_trylock(&esdm_drng[j]->lock) == 0) {
 				bool seeded =
-					atomic_bool_read(&esdm_drng[j]->fully_seeded);
+					atomic_load(&esdm_drng[j]->fully_seeded);
 
 				mutex_w_unlock(&esdm_drng[j]->lock);
 				if (!seeded)
@@ -1090,7 +1093,7 @@ void esdm_force_fully_seeded_all_drbgs(void)
 		if (!__esdm_drng_seed_work(true))
 			break;
 	} while (esdm_es_reseed_wanted() &&
-		 !atomic_read(&esdm_drng_mgr_terminate));
+		 !atomic_load(&esdm_drng_mgr_terminate));
 	esdm_pool_unlock();
 }
 
@@ -1103,7 +1106,7 @@ static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 		return -EAGAIN;
 	thread_wait_event(&esdm_init_wait,
 			  esdm_pool_all_nodes_seeded_get() ||
-				  atomic_read(&esdm_drng_mgr_terminate));
+				  atomic_load(&esdm_drng_mgr_terminate));
 	return 0;
 }
 
@@ -1116,7 +1119,7 @@ static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 		return -EAGAIN;
 	thread_wait_event(&esdm_init_wait,
 			  esdm_state_operational() ||
-				  atomic_read(&esdm_drng_mgr_terminate));
+				  atomic_load(&esdm_drng_mgr_terminate));
 	return 0;
 }
 
@@ -1178,7 +1181,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		    /* ... a DRNG becomes unseeded, give DRNG precedence, ... */
 		    !esdm_pool_all_nodes_seeded_get() ||
 		    /* ... when the DRNG manager terminates, or ... */
-		    atomic_read(&esdm_drng_mgr_terminate) ||
+		    atomic_load(&esdm_drng_mgr_terminate) ||
 		    /* ... if the caller does not want a blocking behavior. */
 		    (flags & ESDM_GET_SEED_NONBLOCK))
 			break;

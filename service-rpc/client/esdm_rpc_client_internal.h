@@ -23,7 +23,7 @@
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 
-#include "atomic.h"
+#include <stdatomic.h>
 #include "mutex_w.h"
 #include "queue.h"
 
@@ -54,7 +54,7 @@ struct esdm_rpc_client_connection {
 
 	mutex_w_t lock;
 	mutex_w_t ref_cnt;
-	atomic_t state;
+	atomic_int state;
 
 	/*
 	 * The request/response and unpack scratch buffers are not stored per

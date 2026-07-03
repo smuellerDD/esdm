@@ -22,8 +22,7 @@
 
 #include <stdint.h>
 
-#include "atomic.h"
-#include "atomic_bool.h"
+#include <stdatomic.h>
 #include "bool.h"
 #include "esdm_es_mgr_cb.h"
 
@@ -43,11 +42,11 @@ typedef void (*esdm_es_buf_fill_t)(struct entropy_es *eb_es,
 
 struct esdm_es_buf {
 	struct entropy_es *blocks;
-	volatile enum esdm_es_buf_state *states;
+	_Atomic enum esdm_es_buf_state *states;
 	unsigned int num_blocks;
 	unsigned int mask;
-	atomic_t idx;
-	atomic_bool_t monitor_initialized;
+	atomic_int idx;
+	atomic_bool monitor_initialized;
 	const char *name;
 };
 

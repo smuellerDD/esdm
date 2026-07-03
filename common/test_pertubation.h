@@ -30,12 +30,12 @@ extern "C" {
 
 #ifdef ESDM_TESTMODE
 
-#include "atomic.h"
+#include <stdatomic.h>
 
 #define TESTMODE_STR "TEST MODE CONFIGURATION ESDM "
 
 extern uint32_t seed_entropy[];
-extern atomic_t seed_entropy_ptr;
+extern atomic_int seed_entropy_ptr;
 void esdm_test_seed_entropy(uint32_t ent);
 
 void esdm_test_disable_fallback(int disable);

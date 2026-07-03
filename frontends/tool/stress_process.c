@@ -18,8 +18,8 @@
  */
 
 #include "tool.h"
-#include "atomic_bool.h"
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <signal.h>
 #include <esdm_rpc_client.h>
@@ -32,7 +32,7 @@
 #include <assert.h>
 
 static pid_t *processes = NULL;
-static atomic_bool_t should_terminate = ATOMIC_BOOL_INIT(false);
+static atomic_bool should_terminate = false;
 
 static void process_fn(double timeout_sec, long id, int sock_fd,
 		       uint32_t request_size)
@@ -51,9 +51,11 @@ static void handle_sigint(int signal)
 	long cores = sysconf(_SC_NPROCESSORS_ONLN);
 	long i;
 
+	bool expected = false;
+
 	(void)signal;
 
-	if (atomic_bool_cmpxchg(&should_terminate, false, true)) {
+	if (atomic_compare_exchange_strong(&should_terminate, &expected, true)) {
 		for (i = 0; i < cores; ++i) {
 			/*
 			 * Only signal real children. A not-yet-forked entry is 0

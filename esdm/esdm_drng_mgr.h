@@ -23,8 +23,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#include "atomic_64.h"
-#include "atomic_bool.h"
+#include <stdatomic.h>
 #include "bool.h"
 #include "config.h"
 #include "esdm.h"
@@ -43,8 +42,8 @@ struct esdm_drng {
 	void *drng; /* DRNG handle */
 	const struct esdm_drng_cb *drng_cb; /* DRNG callbacks */
 	const struct esdm_hash_cb *hash_cb; /* Hash callbacks */
-	atomic_t requests; /* Number of DRNG requests */
-	atomic_t requests_since_fully_seeded; /* Number DRNG requests since
+	atomic_int requests; /* Number of DRNG requests */
+	atomic_int requests_since_fully_seeded; /* Number DRNG requests since
 						 * last fully seeded
 						 */
 	/* tracks number of bits this DRNG has output since beeing fully seeded for
@@ -54,7 +53,7 @@ struct esdm_drng {
 	 * requests without overestimating by a large margin (alway maximum request size)
 	 * and therefore reseeding way too often.
 	 */
-	atomic_t request_bits_since_fully_seeded;
+	atomic_int request_bits_since_fully_seeded;
 
 	struct timespec last_seeded; /* Last time it was seeded (under lock) */
 	/*
@@ -63,16 +62,16 @@ struct esdm_drng {
 	 * torn multi-word access of the struct timespec (which is only safe to
 	 * read/write whole under drng->lock).
 	 */
-	atomic_64_t last_seeded_time;
+	atomic_llong last_seeded_time;
 	/*
 	 * These flags have no single owning lock: they are touched both under
 	 * drng->lock and from lock-free fast paths (must_reseed, force_reseed,
 	 * unset_fully_seeded), so they are atomic to avoid torn reads / C11 data
 	 * races, mirroring the esdm_state flags in esdm_es_mgr.c.
 	 */
-	atomic_bool_t fully_seeded; /* Is DRNG fully seeded? */
-	atomic_bool_t force_reseed; /* Force a reseed */
-	atomic_bool_t initiated; /* Was DRNG initiated once? (used for pr drng) */
+	atomic_bool fully_seeded; /* Is DRNG fully seeded? */
+	atomic_bool force_reseed; /* Force a reseed */
+	atomic_bool initiated; /* Was DRNG initiated once? (used for pr drng) */
 
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
 	mutex_w_t lock; /* Non-atomic DRNG operation */
@@ -80,13 +79,13 @@ struct esdm_drng {
 
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
 	.drng = d, .drng_cb = d_cb, .hash_cb = h_cb,                           \
-	.requests = ATOMIC_INIT(ESDM_DRNG_RESEED_THRESH),                      \
-	.requests_since_fully_seeded = ATOMIC_INIT(0),                         \
-	.request_bits_since_fully_seeded = ATOMIC_INIT(0),                     \
-	.last_seeded = { 0 }, .last_seeded_time = ATOMIC_64_INIT(0),          \
-	.fully_seeded = ATOMIC_BOOL_INIT(false),                              \
-	.force_reseed = ATOMIC_BOOL_INIT(true),                               \
-	.initiated = ATOMIC_BOOL_INIT(false)
+	.requests = ESDM_DRNG_RESEED_THRESH,                      \
+	.requests_since_fully_seeded = 0,                         \
+	.request_bits_since_fully_seeded = 0,                     \
+	.last_seeded = { 0 }, .last_seeded_time = 0,          \
+	.fully_seeded = false,                              \
+	.force_reseed = true,                               \
+	.initiated = false
 
 struct esdm_drng *esdm_drng_init_instance(void);
 struct esdm_drng *esdm_drng_node_instance(void);

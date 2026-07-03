@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include "atomic_bool.h"
+#include <stdatomic.h>
 #include "bool.h"
 #include "config.h"
 #include "esdm_logger.h"
@@ -63,9 +63,9 @@ struct thread_ctx {
 	int (*start_routine)(void *); /* Thread code to be executed */
 	void *data; /* Parameters used by the thread code */
 
-	atomic_bool_t thread_pending; /* Is thread associated with structure? */
+	atomic_bool thread_pending; /* Is thread associated with structure? */
 	mutex_w_t inuse; /* Is thread data structure used? */
-	atomic_bool_t shutdown; /* Shall the thread be shut down? */
+	atomic_bool shutdown; /* Shall the thread be shut down? */
 	bool scheduled; /* Is/was a job executed and return code
 					 * is ready for pickup? */
 
@@ -94,7 +94,7 @@ static size_t pthread_stacksize = 0;
  * Indicator to prevent spawning of new threads while the cleanup / garbage
  * collector functions execute.
  */
-static atomic_bool_t threads_in_cancel = ATOMIC_BOOL_INIT(false);
+static atomic_bool threads_in_cancel = false;
 
 /*
  * Lock whether the cleanup / garbage collector for threads executes. As we
@@ -155,7 +155,7 @@ static inline void thread_block(pthread_cond_t *cv, pthread_mutex_t *lock)
 
 static inline bool thread_dirty(unsigned int slot)
 {
-	return (atomic_bool_read(&threads[slot].thread_pending));
+	return (atomic_load(&threads[slot].thread_pending));
 }
 
 /* Thread structure cleanup after execution when thread is kept alive. */
@@ -176,7 +176,7 @@ static inline void thread_cleanup_full(struct thread_ctx *tctx)
 {
 	thread_cleanup(tctx);
 	tctx->thread_num = 0;
-	atomic_bool_set_false(&tctx->thread_pending);
+	atomic_store(&tctx->thread_pending, false);
 	tctx->scheduled = false;
 	tctx->ret_ancestor = 0;
 	/*
@@ -259,9 +259,9 @@ int thread_init(uint32_t groups)
 	pthread_cond_init(&thread_wait_cv, &cattr);
 
 	for (i = 0; i < THREADING_REALLY_ALL_THREADS; i++) {
-		atomic_bool_set_false(&threads[i].thread_pending);
+		atomic_store(&threads[i].thread_pending, false);
 		mutex_w_init(&threads[i].inuse, false, 0);
-		atomic_bool_set_false(&threads[i].shutdown);
+		atomic_store(&threads[i].shutdown, false);
 		pthread_cond_init(&threads[i].worker_cv, &cattr);
 	}
 	pthread_condattr_destroy(&cattr);
@@ -317,7 +317,7 @@ static void *thread_worker(void *arg)
 		mutex_w_lock(&tctx->inuse);
 
 	locked:
-		if (atomic_bool_read(&tctx->shutdown)) {
+		if (atomic_load(&tctx->shutdown)) {
 			/* Request for termination */
 			mutex_w_unlock(&tctx->inuse);
 			/*
@@ -370,7 +370,7 @@ static int thread_create(struct thread_ctx *tctx, unsigned int slot)
 	 * it before the create let them operate on an uninitialized/stale
 	 * thread_id when a create was still in flight.
 	 */
-	atomic_bool_set_true(&tctx->thread_pending);
+	atomic_store(&tctx->thread_pending, true);
 
 	return 0;
 
@@ -447,7 +447,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 	num_elements = upper - lower;
 
 	for (k = 0; k < num_elements; ++k) {
-		if (atomic_bool_read(&threads_in_cancel))
+		if (atomic_load(&threads_in_cancel))
 			return -ESHUTDOWN;
 
 		j = lower + k % num_elements;
@@ -458,7 +458,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			 * kick the worker.
 			 */
 			if (threads[j].start_routine ||
-			    atomic_bool_read(&threads[j].shutdown)) {
+			    atomic_load(&threads[j].shutdown)) {
 				mutex_w_unlock(&threads[j].inuse);
 				pthread_cond_broadcast(&threads[j].worker_cv);
 				continue;
@@ -541,7 +541,7 @@ int thread_wait(bool ignore_shutdown)
 		/* Only wait for our children */
 		for (i = 0; i < THREADING_MAX_THREADS; i++) {
 			if (!ignore_shutdown &&
-			    atomic_bool_read(&threads[i].shutdown))
+			    atomic_load(&threads[i].shutdown))
 				return -ESHUTDOWN;
 
 			/* Thread is not initialized, skip */
@@ -656,7 +656,7 @@ int thread_wait_all(bool system_threads)
 		 * and before the flag is set, avoids that window.
 		 */
 		join_me[i] = thread_dirty(i);
-		atomic_bool_set_true(&threads[i].shutdown);
+		atomic_store(&threads[i].shutdown, true);
 		pthread_cond_broadcast(&threads[i].worker_cv);
 		mutex_w_unlock(&threads[i].inuse);
 	}
@@ -664,7 +664,7 @@ int thread_wait_all(bool system_threads)
 
 	/* Wait for all worker threads. */
 	for (i = 0; i < upper; i++) {
-		if (atomic_bool_read(&threads_in_cancel)) {
+		if (atomic_load(&threads_in_cancel)) {
 			ret = -ESHUTDOWN;
 			goto out;
 		}
@@ -679,7 +679,7 @@ int thread_wait_all(bool system_threads)
 
 	/* Allow new threads being spawned */
 	for (i = 0; i < upper; i++)
-		atomic_bool_set_false(&threads[i].shutdown);
+		atomic_store(&threads[i].shutdown, false);
 
 out:
 	mutex_w_unlock(&threads_cleanup);
@@ -694,7 +694,7 @@ static void thread_cancel(bool system_threads)
 	unsigned int i, upper = system_threads ? THREADING_REALLY_ALL_THREADS :
 						 THREADING_MAX_THREADS;
 
-	atomic_bool_set_true(&threads_in_cancel);
+	atomic_store(&threads_in_cancel, true);
 	mutex_w_lock(&threads_cleanup);
 	/*
 	 * Ensure that no new thread is spawned.
@@ -707,7 +707,7 @@ static void thread_cancel(bool system_threads)
 	 * worker, so the write is redundant as well as unsafe.
 	 */
 	for (i = 0; i < upper; i++) {
-		atomic_bool_set_true(&threads[i].shutdown);
+		atomic_store(&threads[i].shutdown, true);
 		pthread_cond_broadcast(&threads[i].worker_cv);
 	}
 	pthread_cond_broadcast(&thread_wait_cv);
@@ -752,7 +752,7 @@ int thread_start(int (*start_routine)(void *), void *tdata,
 
 void thread_stop_spawning(void)
 {
-	atomic_bool_set_true(&threads_in_cancel);
+	atomic_store(&threads_in_cancel, true);
 }
 
 void thread_fork_join(void *(*start_routine)(void *), void *args,
@@ -767,7 +767,7 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 	 * them while they still write into the caller's stack frame.
 	 */
 	bool have_parallelism = num > 1 && esdm_online_nodes() > 1 &&
-				!atomic_bool_read(&threads_in_cancel);
+				!atomic_load(&threads_in_cancel);
 	pthread_t tids[num];
 	bool spawned[num];
 	char *arg_base = args;
@@ -847,7 +847,7 @@ int thread_release(bool force, bool system_threads)
 	 * In case someone intends to wait and we are in cancel mode, force
 	 * cancellation.
 	 */
-	if (atomic_bool_read(&threads_in_cancel))
+	if (atomic_load(&threads_in_cancel))
 		force = true;
 
 	if (force)

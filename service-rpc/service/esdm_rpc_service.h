@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <sys/ipc.h>
 
-#include "atomic_bool.h"
+#include <stdatomic.h>
 #include "config.h"
 #include "esdm_rpc_protocol.h"
 #include "priv_access.pb-c.h"
@@ -83,11 +83,11 @@ struct esdm_shm_status {
 	uint32_t unpriv_threads;
 
 	/* Is the ESDM operational? */
-	atomic_bool_t operational;
+	atomic_bool operational;
 	/* Do we need new entropy? */
-	atomic_bool_t need_entropy;
+	atomic_bool need_entropy;
 	/* Wake up due to suspend/hibernate trigger */
-	atomic_bool_t suspend_trigger;
+	atomic_bool suspend_trigger;
 };
 
 static inline key_t esdm_ftok(const char *pathname, int proj_id)

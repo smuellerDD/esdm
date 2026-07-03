@@ -22,7 +22,7 @@
 #include <jitterentropy.h>
 #include <stdio.h>
 
-#include "atomic.h"
+#include <stdatomic.h>
 #include "config.h"
 #include "esdm_config.h"
 #include "esdm_definitions.h"
@@ -44,7 +44,7 @@
  */
 static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
 
-static atomic_t esdm_jent_initialized = ATOMIC_INIT(0);
+static atomic_int esdm_jent_initialized = 0;
 static struct rand_data *esdm_jent_state = NULL;
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
@@ -68,7 +68,7 @@ int esdm_jent_status(char *buf, size_t buf_length)
 
 #if JENT_VERSION >= 3070000
 	mutex_w_lock(&esdm_jent_lock);
-	if (atomic_read(&esdm_jent_initialized) && esdm_jent_state) {
+	if (atomic_load(&esdm_jent_initialized) && esdm_jent_state) {
 		ret = jent_status(esdm_jent_state, buf, buf_length);
 	} else {
 		ret = -EAGAIN;
@@ -101,7 +101,7 @@ bool esdm_jent_ntg1(void)
 static uint32_t esdm_jent_entropylevel(uint32_t requested_bits)
 {
 	return esdm_fast_noise_entropylevel(
-		atomic_read(&esdm_jent_initialized) ?
+		atomic_load(&esdm_jent_initialized) ?
 			esdm_config_es_jent_entropy_rate() :
 			0,
 		requested_bits);
@@ -124,7 +124,7 @@ static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
 	ssize_t ret;
 	uint32_t ent_bits;
 
-	if (!atomic_read(&esdm_jent_initialized))
+	if (!atomic_load(&esdm_jent_initialized))
 		goto err;
 
 	ret = jent_read_entropy_safe(ec, (char *)eb_es->e, requested_bits >> 3);
@@ -280,10 +280,10 @@ static inline void esdm_jent_async_fini(void)
  */
 static void esdm_jent_finalize_internal(bool free_async)
 {
-	if (!atomic_read(&esdm_jent_initialized))
+	if (!atomic_load(&esdm_jent_initialized))
 		return;
 
-	atomic_set(&esdm_jent_initialized, 0);
+	atomic_store(&esdm_jent_initialized, 0);
 	esdm_es_mgr_monitor_wakeup();
 
 	mutex_w_lock(&esdm_jent_lock);
@@ -455,7 +455,7 @@ static int esdm_jent_initialize(void)
 		goto out;
 	}
 
-	atomic_set(&esdm_jent_initialized, 1);
+	atomic_store(&esdm_jent_initialized, 1);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG working on current system\n");
 
