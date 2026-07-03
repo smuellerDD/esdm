@@ -31,15 +31,27 @@ extern "C" {
 
 #ifdef ESDM_LINUX
 int linux_isolate_namespace(void);
-int linux_isolate_namespace_prefork(void);
+/**
+ * @brief Fork the daemon into an isolating PID namespace.
+ *
+ * The calling process becomes a pure supervisor that forwards signals and
+ * mirrors the daemon's exit status; only the child returns from this call.
+ *
+ * @param [in] supervisor_exit_cb Optional callback (may be NULL) the
+ *	       supervisor invokes - with its retained privileges - after the
+ *	       daemon terminated and before it exits itself.
+ */
+int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void));
 int linux_personalization_string(char **ptr, size_t *length);
 #else
 static inline int linux_isolate_namespace(void)
 {
 	return 0;
 }
-static inline int linux_isolate_namespace_prefork(void)
+static inline int
+linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 {
+	(void)supervisor_exit_cb;
 	return 0;
 }
 static inline int linux_personalization_string(char **ptr, size_t *length)

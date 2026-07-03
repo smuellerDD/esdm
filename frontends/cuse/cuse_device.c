@@ -1317,7 +1317,7 @@ int main_common(const char *_devname, const char *target, const char *semname,
 		  "Initialization of dispatcher failed\n");
 
 	/* Enter PID namespace */
-	CKINT(linux_isolate_namespace_prefork());
+	CKINT(linux_isolate_namespace_prefork(NULL));
 
 	/* One thread group */
 	CKINT(thread_init(1));

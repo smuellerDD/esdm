@@ -45,6 +45,18 @@ int esdm_rpc_server_init(const char *username, const char *groupname);
 void esdm_rpc_server_fini(void);
 
 /**
+ * @brief Remove the server IPC resources: both RPC Unix domain sockets, the
+ *	  status SHM segment and its semaphores.
+ *
+ * Honors esdm_config_ipc_cleanup() and skips the socket removal when the
+ * sockets are managed by systemd (socket activation). The removal of the
+ * root-owned objects requires privileges the daemon no longer has after its
+ * permanent privilege drop - the esdm-server therefore invokes this from its
+ * privileged PID namespace supervisor once the daemon terminated.
+ */
+void esdm_rpc_server_cleanup(void);
+
+/**
  * @brief Shutdown trigger for normal (non-signal) context
  *
  * Sets the exit flag and wakes waiting threads via a condvar broadcast. The

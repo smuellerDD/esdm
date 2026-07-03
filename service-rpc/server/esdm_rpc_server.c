@@ -50,6 +50,7 @@
 #include "config.h"
 #include "esdm.h"
 #include "esdm_config.h"
+#include "esdm_shm_status.h"
 #include "esdm_rpc_protocol.h"
 #include "esdm_rpc_protocol_helper.h"
 #include "esdm_rpc_server.h"
@@ -1393,4 +1394,36 @@ void esdm_rpc_server_fini(void)
 
 	/* Terminate test pertubation support */
 	esdm_test_shm_status_fini();
+}
+
+static void esdm_rpcs_cleanup_socket(const char *path)
+{
+	if (unlink(path) < 0) {
+		if (errno != ENOENT) {
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_RPC,
+				"ESDM Unix domain socket %s cannot be deleted: %s\n",
+				path, strerror(errno));
+		}
+	} else {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
+			    "ESDM Unix domain socket %s deleted\n", path);
+	}
+}
+
+void esdm_rpc_server_cleanup(void)
+{
+	if (!esdm_config_ipc_cleanup())
+		return;
+
+	/*
+	 * Sockets passed in by systemd socket activation are created and
+	 * removed by systemd - leave their lifecycle to it.
+	 */
+	if (systemd_listen_fds() <= 0) {
+		esdm_rpcs_cleanup_socket(ESDM_RPC_UNPRIV_SOCKET);
+		esdm_rpcs_cleanup_socket(ESDM_RPC_PRIV_SOCKET);
+	}
+
+	esdm_shm_status_cleanup_ipc();
 }

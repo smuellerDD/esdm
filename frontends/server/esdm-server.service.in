@@ -46,7 +46,11 @@ DeviceAllow=/dev/null rw
 DeviceAllow=/dev/random r
 DeviceAllow=/dev/tpmrm0 rw
 DevicePolicy=strict
-ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock -vvv
+# --keep_ipc: the CUSE daemons are not coupled to this unit (only Wants=), so
+# they must survive a server restart; hence do not remove the status SHM
+# segment and semaphores they monitor at shutdown. (The RPC sockets are
+# systemd-managed via socket activation and never removed by the server.)
+ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock --keep_ipc -vvv
 IPAddressDeny=any
 LimitMEMLOCK=infinity
 LockPersonality=yes

@@ -64,6 +64,25 @@ uint32_t esdm_config_es_jent_async_enabled(void);
 void esdm_config_es_jent_async_enabled_set(int setting);
 
 /**
+ * @brief Shall the server IPC resources (RPC sockets, status SHM segment and
+ *	  its semaphores) be removed at shutdown?
+ *
+ * @return boolean whether to clean up or not
+ */
+uint32_t esdm_config_ipc_cleanup(void);
+
+/**
+ * @brief Configure whether the server IPC resources (RPC sockets, status SHM
+ *	  segment and its semaphores) are removed at shutdown.
+ *
+ * Disabling the cleanup keeps the objects alive so that running clients (e.g.
+ * the CUSE daemons) survive a server restart without being restarted too.
+ *
+ * @param [in] setting Boolean to enable the behavior
+ */
+void esdm_config_ipc_cleanup_set(int setting);
+
+/**
  * @brief JENT ES configuration: get the entropy rate
  *
  * @return Entropy rate in bits

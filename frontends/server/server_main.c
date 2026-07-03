@@ -108,6 +108,11 @@ static void usage(void)
 		"\t-m --memlock\tLock all memory from being swapped out and disable core dumps\n");
 	fprintf(stderr,
 		"\t-M --small_memory\tReduce memory consumption (1 MiB thread stacks, single DRNG node)\n");
+	fprintf(stderr,
+		"\t   --keep_ipc\tDo not remove the RPC sockets, status SHM segment and\n");
+	fprintf(stderr,
+		"\t\t\tsemaphores at shutdown (running CUSE clients survive a\n");
+	fprintf(stderr, "\t\t\tserver restart)\n");
 	exit(1);
 }
 
@@ -133,6 +138,7 @@ static void parse_opts(int argc, char *argv[])
 			{ "groupname", 1, 0, 0 },
 			{ "memlock", 0, 0, 0 },
 			{ "small_memory", 0, 0, 0 },
+			{ "keep_ipc", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "hvp:u:fisSPg:mM", opts, &opt_index);
@@ -207,6 +213,10 @@ static void parse_opts(int argc, char *argv[])
 			case 13:
 				/* small_memory */
 				small_memory = 1;
+				break;
+			case 14:
+				/* keep_ipc */
+				esdm_config_ipc_cleanup_set(0);
 				break;
 
 			default:
@@ -545,8 +555,12 @@ int main(int argc, char *argv[])
 	 *   has a handler installed, so the daemon must inherit the handlers;
 	 * - the memlock setup must run after it (in the child) because
 	 *   mlockall() is not inherited across fork().
+	 *
+	 * The supervisor performs the IPC cleanup after the daemon terminated:
+	 * the daemon permanently drops its privileges and can no longer remove
+	 * the root-owned sockets, SHM segment and semaphores itself.
 	 */
-	CKINT(linux_isolate_namespace_prefork());
+	CKINT(linux_isolate_namespace_prefork(esdm_rpc_server_cleanup));
 
 	if (memlock) {
 		/*
