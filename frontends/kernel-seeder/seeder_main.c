@@ -41,6 +41,7 @@
 
 #include "config.h"
 #include "esdm_logger.h"
+#include "esdm_rpc_service.h"
 #include "helper.h"
 #include "memset_secure.h"
 #include "systemd_support.h"
@@ -74,7 +75,7 @@ static int64_t parse_int64_arg(const char *str, const char *name)
  */
 #define ESDM_SERVER_LINUX_ENTROPY_BYTES (2 * 32)
 
-static bool pr_mode()
+static bool pr_mode(void)
 {
 #if defined(ESDM_AIS2031_NTG1_SEEDING_STRATEGY) || defined(ESDM_JENT_NTG1)
 	return true;
@@ -91,19 +92,17 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi,
 	int esdm_rpcs_linux_fd = -1;
 	int errsv = 0;
 
-	/* TODO: The name "esdm" must be synchronized with cuse_random.c */
-
 	/*
-	 * First we attempt to access /dev/esdm. If this exists, we know
-	 * that the CUSE /dev/random server is active. In this case we
+	 * First we attempt to access the CUSE device node. If this exists, we
+	 * know that the CUSE /dev/random server is active. In this case we
 	 * give the data to the CUSE /dev/random server which sends the
 	 * data to the kernel. Otherwise we use /dev/random directly.
 	 */
-	if (stat("/dev/esdm", &statfs) < 0) {
+	if (stat(ESDM_CUSE_RANDOM_DEVICE, &statfs) < 0) {
 		if (errno == ENOENT) {
 			/*
-			 * If /dev/esdm does not exist, we assume we can open
-			 * /dev/random directly.
+			 * If the CUSE device node does not exist, we assume we
+			 * can open /dev/random directly.
 			 */
 			if (stat("/dev/random", &statfs) < 0) {
 				errsv = errno;
@@ -131,22 +130,25 @@ static int esdm_rpcs_linux_insert_entropy(struct rand_pool_info *rpi,
 			errsv = errno;
 
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
-				    "Error in accessing /dev/esdm: %s\n",
+				    "Error in accessing " ESDM_CUSE_RANDOM_DEVICE
+				    ": %s\n",
 				    strerror(errsv));
 			return -errsv;
 		}
 	} else {
-		esdm_rpcs_linux_fd = open("/dev/esdm", O_WRONLY);
+		esdm_rpcs_linux_fd = open(ESDM_CUSE_RANDOM_DEVICE, O_WRONLY);
 		if (esdm_rpcs_linux_fd < 0) {
 			errsv = errno;
 
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
-				    "Error in opening /dev/esdm: %s\n",
+				    "Error in opening " ESDM_CUSE_RANDOM_DEVICE
+				    ": %s\n",
 				    strerror(errsv));
 			return -errsv;
 		}
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_SEEDER,
-			    "/dev/esdm opened to insert entropy\n");
+			    ESDM_CUSE_RANDOM_DEVICE
+			    " opened to insert entropy\n");
 
 		/* Use the special IOCTL from the CUSE server */
 		esdm_rpcs_linux_ioctl = 43;

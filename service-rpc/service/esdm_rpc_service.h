@@ -68,6 +68,20 @@ extern "C" {
 
 #endif /* ESDM_TESTMODE */
 
+/*
+ * Name under which the esdm-cuse-random frontend registers its CUSE device -
+ * the kernel creates the device node of that name below /dev - and the
+ * resulting device path. The name is identical in test mode: only the
+ * bind-mount target (/dev/random -> /dev/tst-random) is prefixed, not the
+ * CUSE device itself.
+ */
+#define ESDM_CUSE_RANDOM_DEVNAME "esdm"
+#define ESDM_CUSE_RANDOM_DEVICE "/dev/" ESDM_CUSE_RANDOM_DEVNAME
+
+/* Same for the esdm-cuse-urandom frontend */
+#define ESDM_CUSE_URANDOM_DEVNAME "uesdm"
+#define ESDM_CUSE_URANDOM_DEVICE "/dev/" ESDM_CUSE_URANDOM_DEVNAME
+
 #define ESDM_SHM_STATUS_VERSION 1
 #define ESDM_SHM_STATUS_INFO_SIZE 1536
 

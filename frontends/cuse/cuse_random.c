@@ -91,8 +91,8 @@ int main(int argc, char *argv[])
 	}
 
 	CKINT(esdm_cuse_dev_file(devfile, sizeof(devfile), "random"));
-	ret = main_common("esdm", devfile, ESDM_SEM_RANDOM_NAME, &esdm_dev_clop,
-			  argc, argv);
+	ret = main_common(ESDM_CUSE_RANDOM_DEVNAME, devfile,
+			  ESDM_SEM_RANDOM_NAME, &esdm_dev_clop, argc, argv);
 
 out:
 	close(random_fd);

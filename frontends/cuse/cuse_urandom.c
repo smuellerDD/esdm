@@ -92,8 +92,8 @@ int main(int argc, char *argv[])
 	}
 
 	CKINT(esdm_cuse_dev_file(devfile, sizeof(devfile), "urandom"));
-	ret = main_common("uesdm", devfile, ESDM_SEM_URANDOM_NAME,
-			  &esdm_dev_clop, argc, argv);
+	ret = main_common(ESDM_CUSE_URANDOM_DEVNAME, devfile,
+			  ESDM_SEM_URANDOM_NAME, &esdm_dev_clop, argc, argv);
 
 out:
 	close(urandom_fd);
