@@ -45,3 +45,39 @@ if get_option('es_sched').enabled()
 
 	test('ES Scheduler', es_sched_tester, timeout: 70)
 endif
+
+if get_option('es_sched_ebpf').enabled()
+	es_sched_ebpf_tester = executable(
+		'es_sched_ebpf_tester',
+		[ 'es_sched_ebpf_test.c' ],
+		dependencies: dependencies_server,
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+	)
+
+	test('ES Scheduler eBPF', es_sched_ebpf_tester, timeout: 120)
+endif
+
+if get_option('es_irq_ebpf').enabled()
+	es_irq_ebpf_tester = executable(
+		'es_irq_ebpf_tester',
+		[ 'es_irq_ebpf_test.c' ],
+		dependencies: dependencies_server,
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+	)
+
+	test('ES Interrupt eBPF', es_irq_ebpf_tester, timeout: 120)
+endif
+
+if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
+	es_ebpf_health_tester = executable(
+		'es_ebpf_health_tester',
+		[ 'es_ebpf_health_test.c' ],
+		dependencies: dependencies_server,
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+	)
+
+	test('ES eBPF health cutoffs', es_ebpf_health_tester)
+endif

@@ -37,6 +37,7 @@ After=systemd-modules-load.service
 
 [Service]
 @SERVICE_TYPE@
+@EBPF_UNIT_SNIPPET@
 AmbientCapabilities=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL CAP_SYS_RESOURCE
 CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SETGID CAP_SETUID CAP_KILL CAP_SYS_RESOURCE
 DeviceAllow=/dev/esdm r

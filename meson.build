@@ -141,6 +141,19 @@ if get_option('es_jent_kernel').enabled()
 	dependencies_server += [ dependency('libkcapi', required: true) ]
 endif
 
+if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
+	dependencies_server += [ dependency('libbpf', version: '>= 1.2',
+					    required: true) ]
+endif
+
+if get_option('es_ebpf_testing').enabled()
+	if get_option('es_sched_ebpf').disabled() and \
+	   get_option('es_irq_ebpf').disabled()
+		error('es_ebpf_testing requires es_sched_ebpf or es_irq_ebpf to be enabled')
+	endif
+	subdirs += [ 'addon/es_ebpf_testing' ]
+endif
+
 if get_option('esdm-server').enabled()
 	subdirs += [ 'frontends/server', 'frontends/server-signal-helper', 'frontends/kernel-seeder' ]
 endif

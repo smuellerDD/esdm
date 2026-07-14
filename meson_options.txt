@@ -288,6 +288,121 @@ the source delivers data synchronously.
 ''')
 
 ################################################################################
+# eBPF-based entropy source configuration
+################################################################################
+
+# Option for: ESDM_ES_SCHED_EBPF
+option('es_sched_ebpf', type: 'feature', value: 'disabled',
+       description: '''Enable support for eBPF-based scheduler entropy source.
+
+The ESDM models an entropy source based on the timing of the
+occurrence of scheduler-triggered context switches. In contrast
+to the es_sched entropy source which requires a patched kernel,
+this entropy source obtains the context switch timing by
+attaching an eBPF program to the stable sched_switch tracepoint
+of a stock Linux kernel (BTF/CO-RE required, i.e. the kernel
+must be built with CONFIG_DEBUG_INFO_BTF).
+
+The event timestamps are health-tested (SP800-90B RCT and APT)
+inside the eBPF program, folded into per-CPU collection buffers
+and delivered to the ESDM server via a BPF ring buffer where
+they are conditioned with the configured hash into an entropy
+pool.
+
+This entropy source is mutually exclusive with the es_sched
+and es_irq entropy sources with respect to entropy crediting:
+at most one of the scheduler/interrupt-based entropy sources
+may have an entropy rate greater than zero.
+
+The BPF programs are loaded during the privileged
+initialization phase of the ESDM server (root or
+CAP_BPF + CAP_PERF_MON required).
+''')
+
+# Option for: ESDM_SCHED_EBPF_ENTROPY_RATE
+option('es_sched_ebpf_entropy_rate', type: 'integer', min: 0, max: 256,
+       value: 0,
+       description:'''eBPF scheduler-based entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256 bits of
+data obtained from the eBPF scheduler entropy source, i.e. the entropy
+credited per 256 context switch events. The ESDM enforces the limit that
+this value must be between 0 and 256 bits.
+
+The default of 0 means the entropy source is not credited with any
+entropy until the entropy rate of the deployment environment has been
+measured with the es_ebpf_testing support and a suitable rate has been
+determined.
+
+Note: The events for the interrupt-based and scheduler-based entropy
+sources have dependencies. Thus it is not permissible to award more than
+one of the es_irq, es_sched, es_irq_ebpf and es_sched_ebpf entropy
+sources an entropy rate greater than zero.
+''')
+
+# Option for: ESDM_ES_IRQ_EBPF
+option('es_irq_ebpf', type: 'feature', value: 'disabled',
+       description: '''Enable support for eBPF-based interrupt entropy source.
+
+The ESDM models an entropy source based on the timing of the
+occurrence of interrupts. In contrast to the es_irq entropy
+source which requires a patched kernel, this entropy source
+obtains the interrupt timing by attaching eBPF programs to the
+stable irq_handler_entry and softirq_entry tracepoints of a
+stock Linux kernel (BTF/CO-RE required, i.e. the kernel must be
+built with CONFIG_DEBUG_INFO_BTF).
+
+Note: unlike the es_irq entropy source, this entropy source
+does not divert the interrupt timings from the kernel RNG - it
+only observes them. Both the kernel RNG and this entropy source
+therefore process the same events. For that reason the entropy
+rate of the kernel RNG entropy source is capped when this
+entropy source is credited with entropy, and the default
+entropy rate is 0 (the data is mixed in as uncredited bonus
+data).
+
+This entropy source is mutually exclusive with the es_sched
+and es_irq entropy sources with respect to entropy crediting:
+at most one of the scheduler/interrupt-based entropy sources
+may have an entropy rate greater than zero.
+''')
+
+# Option for: ESDM_IRQ_EBPF_ENTROPY_RATE
+option('es_irq_ebpf_entropy_rate', type: 'integer', min: 0, max: 256,
+       value: 0,
+       description:'''eBPF interrupt-based entropy source entropy rate.
+
+The option defines the amount of entropy the ESDM applies to 256 bits of
+data obtained from the eBPF interrupt entropy source, i.e. the entropy
+credited per 256 interrupt events. The ESDM enforces the limit that this
+value must be between 0 and 256 bits.
+
+The default of 0 means the data of this entropy source is mixed in as
+uncredited bonus data. This is the recommended setting because the
+kernel RNG processes the same interrupt events.
+
+Note: The events for the interrupt-based and scheduler-based entropy
+sources have dependencies. Thus it is not permissible to award more than
+one of the es_irq, es_sched, es_irq_ebpf and es_sched_ebpf entropy
+sources an entropy rate greater than zero.
+''')
+
+# Option for: ESDM_ES_EBPF_TESTING
+option('es_ebpf_testing', type: 'feature', value: 'disabled',
+       description: '''Enable raw measurement support of the eBPF entropy sources.
+
+This option enables the raw event timestamp recording support in the
+eBPF programs and builds the esdm-ebpf-collect tool that gathers raw,
+unconditioned event timestamps for SP800-90B / AIS 20/31 entropy
+assessment.
+
+THIS OPTION IS FOR MEASUREMENT AND VALIDATION ONLY - DO NOT ENABLE IN
+PRODUCTION BUILDS. The collection tool refuses to operate when the
+kernel FIPS mode is enabled. The ESDM server itself never records raw
+data.
+''')
+
+################################################################################
 # /dev/hwrand-based Entropy Source configuration options
 ################################################################################
 

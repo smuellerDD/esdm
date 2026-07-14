@@ -42,6 +42,26 @@ else
 
 	server_conf_data.set('SERVICE_TYPE', '')
 endif
+
+if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
+	# The eBPF entropy sources load their programs during the privileged
+	# initialization phase (as root, before the privilege drop). The
+	# bpf(2) and perf_event_open(2) syscalls are not part of
+	# @system-service and must be allowed explicitly; the capability
+	# check is satisfied by CAP_SYS_ADMIN which is already in the
+	# bounding set, CAP_BPF/CAP_PERF_MON are added for environments
+	# starting the server as a non-root user with ambient capabilities.
+	server_conf_data.set('EBPF_UNIT_SNIPPET', '''
+# EBPF ENTROPY SOURCES BEGIN
+CapabilityBoundingSet=CAP_BPF CAP_PERF_MON
+SystemCallFilter=bpf perf_event_open
+# EBPF ENTROPY SOURCES END
+'''
+	)
+else
+	server_conf_data.set('EBPF_UNIT_SNIPPET', '')
+endif
+
 esdm_server_service = configure_file(
 	input : 'esdm-server.service.in',
 	output : 'esdm-server.service',
