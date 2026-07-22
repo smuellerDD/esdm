@@ -132,7 +132,15 @@ static void esdm_sched_reset(void)
 	/* Trigger GCD calculation anew. */
 	esdm_gcd_set(0);
 
-	for_each_online_cpu (cpu) {
+	/*
+	 * Iterate the possible mask, not the online mask: the per-CPU arrays
+	 * exist for every possible CPU, and a CPU that is offline right now
+	 * keeps its collected events and pointers otherwise. Reset is invoked
+	 * to invalidate ALL prior entropy (VM fork via the vmgenid notifier,
+	 * SP800-90B failure), so pre-reset events must not survive a later
+	 * CPU online and get credited as fresh.
+	 */
+	for_each_possible_cpu (cpu) {
 		smp_store_release(per_cpu_ptr(&esdm_sched_array_rp, cpu), 0);
 		smp_store_release(per_cpu_ptr(&esdm_sched_array_wp, cpu), 0);
 		memzero_explicit(*per_cpu_ptr(&esdm_sched_array, cpu),
