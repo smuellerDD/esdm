@@ -6,6 +6,7 @@
 #ifndef _ESDM_ES_MGR_H
 #define _ESDM_ES_MGR_H
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include "esdm_es_mgr_cb.h"
 
@@ -23,7 +24,12 @@ extern struct esdm_es_cb *esdm_es[];
 
 #define for_each_esdm_es(ctr) for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
 
-extern uint32_t esdm_write_wakeup_bits;
+/*
+ * _Atomic: written via the RPC set_write_wakeup_thresh handler and aux-pool
+ * (re)init while read concurrently on the CUSE poll and avail-entropy paths;
+ * plain accesses of the _Atomic object are seq_cst, so no call site changes.
+ */
+extern _Atomic uint32_t esdm_write_wakeup_bits;
 void esdm_set_entropy_thresh(uint32_t new);
 void esdm_reset_state(void);
 

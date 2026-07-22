@@ -94,7 +94,7 @@ static struct esdm_state esdm_state = {
  * should wake up processes which are selecting or polling on write
  * access to /dev/random.
  */
-uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
+_Atomic uint32_t esdm_write_wakeup_bits = (ESDM_WRITE_WAKEUP_ENTROPY << 3);
 
 static atomic_int esdm_es_mgr_terminate = 0;
 
