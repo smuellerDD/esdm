@@ -74,12 +74,24 @@ static inline bool arm_id_aa64isar0_el1_feature(unsigned long feature)
  * The ACLE intrinsic __rndrrs returns 0 on success (a genuine random number
  * was produced) and non-zero on failure.
  */
+/*
+ * RNDRRS may transiently fail while the immediate reseed from the TRNG cannot
+ * complete (e.g. under load from other consumers) - the same failure class
+ * RDSEED exhibits on x86. Retry a bounded number of times with a yield hint
+ * before giving up, mirroring RDSEED_RETRY_LOOPS in cpu_random_x86.h.
+ */
+#define RNDRRS_RETRY_LOOPS 1024
+
 __attribute__((target("+rng"))) static inline bool arm_seed(unsigned long *data)
 {
+	unsigned int retry = 0;
 	uint64_t val;
 
-	if (__rndrrs(&val) != 0)
-		return false;
+	while (__rndrrs(&val) != 0) {
+		if (retry++ >= RNDRRS_RETRY_LOOPS)
+			return false;
+		__asm__ __volatile__("yield");
+	}
 
 	*data = (unsigned long)val;
 	return true;
