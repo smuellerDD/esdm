@@ -525,6 +525,15 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 				"Use fallback to provide data due to RPC error code %zd\n",
 				ret);
 			ret = read(fallback_fd, tmpbuf_p + read_bytes, todo);
+
+			/*
+			 * A 0-byte read (EOF - e.g. a regular-file fallback in
+			 * test setups; a device never EOFs) would loop forever
+			 * as read_bytes stops advancing. Fail the request
+			 * instead.
+			 */
+			if (ret == 0)
+				ret = -EIO;
 		}
 
 		if (ret < 0)
