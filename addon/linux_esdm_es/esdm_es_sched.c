@@ -55,6 +55,28 @@ static DEFINE_PER_CPU(u32, esdm_sched_array_wp) = 0;
 static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data_0);
 static DEFINE_PER_CPU(struct drbg_string, esdm_sched_seed_data_1);
 
+/*
+ * Read-pointer values computed during list building but not yet published.
+ * Publishing rp marks the slots free for the producer, so it must only
+ * happen after the DRBG consumed the referenced ring data - otherwise the
+ * producer may overwrite a region mid-hash and the event written into the
+ * "freed" slot is absorbed now and consumed again later. Extraction is
+ * serialized (single caller), so plain statics suffice.
+ */
+static DEFINE_PER_CPU(u32, esdm_sched_array_rp_pending);
+static cpumask_t esdm_sched_rp_pending_mask;
+
+static void esdm_sched_release_pending_rp(void)
+{
+	int cpu;
+
+	for_each_cpu (cpu, &esdm_sched_rp_pending_mask)
+		smp_store_release(
+			per_cpu_ptr(&esdm_sched_array_rp, cpu),
+			*per_cpu_ptr(&esdm_sched_array_rp_pending, cpu));
+	cpumask_clear(&esdm_sched_rp_pending_mask);
+}
+
 void __init esdm_sched_es_init(bool highres_timer)
 {
 	/* 25 is arbitrary, but will never the less be far to
@@ -250,9 +272,9 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 			}
 		}
 
-		smp_store_release(per_cpu_ptr(&esdm_sched_array_rp, cpu),
-				  (r_pos + used_events) &
-					  ESDM_DATA_NUM_VALUES_MASK);
+		*per_cpu_ptr(&esdm_sched_array_rp_pending, cpu) =
+			(r_pos + used_events) & ESDM_DATA_NUM_VALUES_MASK;
+		cpumask_set_cpu(cpu, &esdm_sched_rp_pending_mask);
 
 		pr_debug(
 			"%u scheduler-based events used from entropy array of CPU %d, %u scheduler-based events remain unused\n",
@@ -300,6 +322,7 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 	}
 
 out:
+	esdm_sched_release_pending_rp();
 	return ok;
 }
 
