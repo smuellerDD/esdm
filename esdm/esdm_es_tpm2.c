@@ -156,34 +156,43 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 			tpm2_fd = -1;
 			goto out;
 		}
-		if (safe_ret > 0 &&
-		    safe_ret != (ssize_t)(sizeof(struct TPM2ResponseHeader) +
-					  rsp_buffer_len)) {
-			continue;
-		}
-
+		/*
+		 * Parse the header before judging the length: a TPM error
+		 * response is header-only (10 bytes), so requiring the full
+		 * expected response length up front made every error response
+		 * - including the retryable RC_RETRY/RC_YIELDED/RC_TESTING -
+		 * an unparsed instant retry with the backoff below dead.
+		 */
 		memcpy(rsp, buf, sizeof(struct TPM2ResponseHeader));
 		rsp->tag = ptr_to_be16((uint8_t *)&rsp->tag);
 		rsp->responseSize = ptr_to_be32((uint8_t *)&rsp->responseSize);
 		rsp->responseCode = ptr_to_be32((uint8_t *)&rsp->responseCode);
 
-		/*
-		 * Copy only the payload bytes (responseSize includes the
-		 * header), and guard against a NULL rsp_buffer.
-		 */
-		if (rsp_buffer && rsp_buffer_len > 0) {
-			size_t payload_len = 0;
-
-			if (rsp->responseSize >
-			    sizeof(struct TPM2ResponseHeader))
-				payload_len = rsp->responseSize -
-					      sizeof(struct TPM2ResponseHeader);
-			memcpy(rsp_buffer,
-			       buf + sizeof(struct TPM2ResponseHeader),
-			       min_size(payload_len, rsp_buffer_len));
-		}
-
 		if (rsp->responseCode == TPM2_RC_SUCCESS) {
+			/* A success response must carry the full payload. */
+			if (safe_ret !=
+			    (ssize_t)(sizeof(struct TPM2ResponseHeader) +
+				      rsp_buffer_len)) {
+				continue;
+			}
+
+			/*
+			 * Copy only the payload bytes (responseSize includes
+			 * the header), and guard against a NULL rsp_buffer.
+			 */
+			if (rsp_buffer && rsp_buffer_len > 0) {
+				size_t payload_len = 0;
+
+				if (rsp->responseSize >
+				    sizeof(struct TPM2ResponseHeader))
+					payload_len =
+						rsp->responseSize -
+						sizeof(struct TPM2ResponseHeader);
+				memcpy(rsp_buffer,
+				       buf + sizeof(struct TPM2ResponseHeader),
+				       min_size(payload_len, rsp_buffer_len));
+			}
+
 			ret = 0;
 			break;
 		}
