@@ -903,11 +903,15 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		 * value: it is only reset on a full-entropy reseed, so with a
 		 * finite reseed threshold but disabled max-reseed it would
 		 * otherwise grow without bound. atomic_read_u32() already reads
-		 * it unsigned, so a saturated value still forces a reseed.
+		 * it unsigned, so a saturated value still forces a reseed. The
+		 * overflow test runs in unsigned arithmetic: old + delta as a
+		 * signed int would be undefined behavior at exactly the
+		 * saturation point this check exists to catch.
 		 */
-		if ((atomic_fetch_add(&drng->request_bits_since_fully_seeded,
-				      (int)ret << 3) +
-		     ((int)ret << 3)) < 0)
+		if (((unsigned int)atomic_fetch_add(
+			     &drng->request_bits_since_fully_seeded,
+			     (int)ret << 3) +
+		     ((unsigned int)ret << 3)) > INT_MAX)
 			atomic_store(&drng->request_bits_since_fully_seeded,
 				   INT_MAX);
 		processed += ret;
