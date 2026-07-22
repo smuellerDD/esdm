@@ -119,7 +119,7 @@ static bool esdm_testing_store(struct esdm_testing *data, u64 value, u32 *boot)
 	 * is filled.
 	 */
 	if (*boot) {
-		if (((u32)atomic_read(&data->rb_writer)) >
+		if (((u32)atomic_read(&data->rb_writer)) >=
 		    ESDM_TESTING_RINGBUFFER_SIZE) {
 			*boot = 2;
 			pr_warn_once(
