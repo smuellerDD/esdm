@@ -934,7 +934,13 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	struct esdm_drng *drng = &esdm_drng_init;
-	uint32_t num_nodes = esdm_config_online_nodes();
+	/*
+	 * Bound by the published array size, not only the live config:
+	 * raising max_nodes via the public API after allocation grows
+	 * esdm_config_online_nodes() but never the array.
+	 */
+	uint32_t num_nodes = min_uint32(esdm_config_online_nodes(),
+					esdm_drng_node_count_get());
 	uint32_t node = esdm_config_curr_node();
 	uint32_t offset = arc4random();
 	bool found_drng = false;

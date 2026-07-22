@@ -30,6 +30,7 @@ struct esdm_drng **esdm_drng_get_instances(void);
 void esdm_drng_put_instances(void);
 void esdm_drngs_node_alloc(void);
 void esdm_node_fini(void);
+uint32_t esdm_drng_node_count_get(void);
 
 #define for_each_online_node(cpu)                                              \
 	for (cpu = 0; cpu < esdm_config_online_nodes(); cpu++)
@@ -47,6 +48,10 @@ static inline void esdm_drngs_node_alloc(void)
 }
 static inline void esdm_node_fini(void)
 {
+}
+static inline uint32_t esdm_drng_node_count_get(void)
+{
+	return 0;
 }
 
 #define for_each_online_node(cpu) for (cpu = 0; cpu < 1; cpu++)
