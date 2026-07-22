@@ -202,7 +202,7 @@ int thread_init(uint32_t groups)
 	static uint32_t thread_initialized = 0;
 	pthread_condattr_t cattr;
 	unsigned int i;
-	int ret;
+	int ret = 0;
 
 	if (groups > (THREADING_MAX_THREADS)) {
 		esdm_logger(
@@ -217,11 +217,14 @@ int thread_init(uint32_t groups)
 
 	if (thread_initialized)
 		goto out;
-	thread_initialized = 1;
 
-	mutex_w_init(&threads_cleanup, 0, 0);
+	CKINT(mutex_w_init(&threads_cleanup, 0, 0));
 
-	CKINT(pthread_attr_init(&pthread_attr));
+	/*
+	 * pthread functions return positive errno values, so negate them for
+	 * CKINT (which branches on ret < 0 only).
+	 */
+	CKINT(-pthread_attr_init(&pthread_attr));
 
 	/*
 	 * Optionally reduce the per-thread stack size to keep the memory
@@ -253,18 +256,23 @@ int thread_init(uint32_t groups)
 	 * from clock_gettime() + a relative offset, so a wall-clock step (NTP /
 	 * settimeofday) must not be able to stretch the bound into a long hang.
 	 */
-	CKINT(pthread_condattr_init(&cattr));
-	CKINT(pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC));
-	pthread_cond_init(&thread_schedule_cv, &cattr);
-	pthread_cond_init(&thread_wait_cv, &cattr);
+	CKINT(-pthread_condattr_init(&cattr));
+	ret = -pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+	if (!ret)
+		ret = -pthread_cond_init(&thread_schedule_cv, &cattr);
+	if (!ret)
+		ret = -pthread_cond_init(&thread_wait_cv, &cattr);
 
-	for (i = 0; i < THREADING_REALLY_ALL_THREADS; i++) {
+	for (i = 0; !ret && i < THREADING_REALLY_ALL_THREADS; i++) {
 		atomic_store(&threads[i].thread_pending, false);
-		mutex_w_init(&threads[i].inuse, false, 0);
+		ret = mutex_w_init(&threads[i].inuse, false, 0);
 		atomic_store(&threads[i].shutdown, false);
-		pthread_cond_init(&threads[i].worker_cv, &cattr);
+		if (!ret)
+			ret = -pthread_cond_init(&threads[i].worker_cv, &cattr);
 	}
 	pthread_condattr_destroy(&cattr);
+	if (ret)
+		goto out;
 
 	threads_groups = groups;
 	threads_per_threadgroup = THREADING_MAX_THREADS / threads_groups;
@@ -279,8 +287,11 @@ int thread_init(uint32_t groups)
 				    (threads_per_threadgroup * threads_groups));
 	}
 
+	/* Mark initialized only after everything above succeeded. */
+	thread_initialized = 1;
+
 out:
-	return 0;
+	return ret;
 }
 
 /* Worker loop of a thread */
