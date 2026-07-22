@@ -21,6 +21,7 @@
 
 #include "build_bug_on.h"
 #include "bitshift_le.h"
+#include "conv_be_le.h"
 #include "esdm_sha3.h"
 #include "memset_secure.h"
 #include "visibility.h"
@@ -277,7 +278,13 @@ static inline void sha3_fill_state_aligned(struct esdm_hash_state *ctx,
 	unsigned int i;
 
 	for (i = 0; i < ctx->rword; i++) {
-		ctx->state[i] ^= *in;
+		/*
+		 * Keccak absorbs the input as little-endian lanes; convert like
+		 * sha3_fill_state() does (a no-op on LE). A raw host-endian
+		 * load produced different digests on the aligned path than on
+		 * the unaligned path on big-endian machines.
+		 */
+		ctx->state[i] ^= le_bswap64(*in);
 		in++;
 	}
 }
