@@ -40,7 +40,17 @@
 #include "ret_checkers.h"
 #include "visibility.h"
 
-static struct esdm_shm_status *esdm_shm_status = NULL;
+/*
+ * Atomic pointer: the setters below run on RPC/monitor threads and in the
+ * suspend signal handler while esdm_shm_status_reinit()/_exit() (library API)
+ * may detach concurrently. Each accessor loads the pointer exactly once; the
+ * detach path publishes NULL before shmdt() so late readers see NULL rather
+ * than a pointer into an unmapped segment. (A reader that loaded the pointer
+ * just before the exchange can still touch the mapping during the detach
+ * window - full quiescence is not provided, this narrows the race to that
+ * in-flight dereference.)
+ */
+static struct esdm_shm_status *_Atomic esdm_shm_status = NULL;
 static int esdm_shmid = -1;
 static sem_t *esdm_semid_random = SEM_FAILED;
 static sem_t *esdm_semid_urandom = SEM_FAILED;
@@ -102,28 +112,31 @@ static void esdm_shm_wake_all(void)
 
 void esdm_shm_status_set_operational(bool enabled)
 {
-	if (!esdm_shm_status)
+	struct esdm_shm_status *status = esdm_shm_status;
+
+	if (!status)
 		return;
 
-	if (atomic_load(&esdm_shm_status->operational) != enabled) {
-		atomic_store(&esdm_shm_status->operational, enabled);
+	if (atomic_load(&status->operational) != enabled) {
+		atomic_store(&status->operational, enabled);
 		esdm_shm_status_up();
 	}
 }
 
 void esdm_shm_status_set_need_entropy(void)
 {
+	struct esdm_shm_status *status = esdm_shm_status;
 	bool new, curr;
 
-	if (!esdm_shm_status)
+	if (!status)
 		return;
 
-	curr = atomic_load(&esdm_shm_status->need_entropy);
+	curr = atomic_load(&status->need_entropy);
 
 	new = esdm_need_entropy();
 
 	if (curr != new) {
-		atomic_store(&esdm_shm_status->need_entropy, new);
+		atomic_store(&status->need_entropy, new);
 		esdm_shm_status_up();
 	}
 
@@ -137,10 +150,12 @@ void esdm_shm_status_set_need_entropy(void)
 
 static void esdm_shm_status_set_suspend(void)
 {
-	if (!esdm_shm_status)
+	struct esdm_shm_status *status = esdm_shm_status;
+
+	if (!status)
 		return;
 
-	atomic_store(&esdm_shm_status->suspend_trigger, true);
+	atomic_store(&status->suspend_trigger, true);
 
 	/* Wake up all waiters */
 	esdm_shm_wake_all();
@@ -292,10 +307,10 @@ err:
 
 static void esdm_shm_status_delete_shm(void)
 {
-	if (esdm_shm_status) {
-		shmdt(esdm_shm_status);
-		esdm_shm_status = NULL;
-	}
+	struct esdm_shm_status *status = atomic_exchange(&esdm_shm_status, NULL);
+
+	if (status)
+		shmdt(status);
 
 	esdm_shmid = -1;
 }
