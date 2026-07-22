@@ -19,6 +19,7 @@
  * DAMAGE.
  */
 
+#include <stdatomic.h>
 #include <stdio.h>
 
 #include "build_bug_on.h"
@@ -35,6 +36,16 @@
 #include "ret_checkers.h"
 
 static uint32_t esdm_cpu_data_multiplier = 0;
+
+/*
+ * Tracks whether the last read from the CPU RNG failed (e.g. a transient
+ * RDSEED/RNDRRS starvation that outlasted the bounded retry loop). While set,
+ * no entropy is claimed; the next successful read clears it. This deliberately
+ * leaves the configured entropy rate untouched: zeroing the rate on a
+ * transient failure would disable the source for the daemon's lifetime with no
+ * recovery path. Mirrors esdm_hwrand_read_failed.
+ */
+static atomic_bool esdm_cpu_read_failed = false;
 
 static int esdm_cpu_init(void)
 {
@@ -55,6 +66,9 @@ static int esdm_cpu_init(void)
 
 static uint32_t esdm_cpu_entropylevel(uint32_t requested_bits)
 {
+	if (atomic_load(&esdm_cpu_read_failed))
+		return 0;
+
 	return esdm_fast_noise_entropylevel(esdm_config_es_cpu_entropy_rate(),
 					    requested_bits);
 }
@@ -83,7 +97,7 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 #pragma GCC diagnostic ignored "-Wcast-align"
 		if (!cpu_es_get((unsigned long *)(outbuf + i))) {
 #pragma GCC diagnostic pop
-			esdm_config_es_cpu_entropy_rate_set(0);
+			atomic_store(&esdm_cpu_read_failed, true);
 			/*
 			 * Wipe any partial CPU-ES output already written so it
 			 * does not linger in the caller's buffer, consistent
@@ -96,6 +110,7 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 		}
 	}
 
+	atomic_store(&esdm_cpu_read_failed, false);
 	return requested_bits;
 }
 
