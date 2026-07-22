@@ -863,7 +863,16 @@ static int esdm_rpcs_handler(void *args)
 				}
 
 				ret = esdm_rpcs_read(rpc_conn);
-				if (ret && errno != EAGAIN) {
+				/*
+				 * Decide on the returned code, not the global
+				 * errno: intermediate logger/handler calls may
+				 * have clobbered errno since the failing read,
+				 * and e.g. a stale EAGAIN would leave a
+				 * half-torn connection (child_fd already
+				 * closed on the EPIPE path) linger in the list
+				 * until the idle timeout reaps it.
+				 */
+				if (ret && ret != -EAGAIN) {
 					esdm_logger(
 						LOGGER_DEBUG, LOGGER_C_RPC,
 						"Closing incoming connection for FD %d\n",
