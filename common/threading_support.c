@@ -171,13 +171,27 @@ static inline void thread_cleanup(struct thread_ctx *tctx)
 		tctx->scheduled = false;
 }
 
-/* Thread structure cleanup when thread is terminated. */
-static inline void thread_cleanup_full(struct thread_ctx *tctx)
+/*
+ * Cleanup performed by an exiting worker itself: identical to
+ * thread_cleanup_full() except that ret_ancestor is preserved. The joiner in
+ * thread_wait_all() reads it after pthread_join() to deliver the documented
+ * "all return codes ORed together" and zeroes it via thread_cleanup_full()
+ * afterwards; zeroing it in the worker made that read always observe 0. A
+ * self-terminating worker is always joined and fully cleaned by the shutdown
+ * requester, so the slot never re-enters scheduling with a stale value.
+ */
+static inline void thread_cleanup_exit(struct thread_ctx *tctx)
 {
 	thread_cleanup(tctx);
 	tctx->thread_num = 0;
 	atomic_store(&tctx->thread_pending, false);
 	tctx->scheduled = false;
+}
+
+/* Thread structure cleanup when thread is terminated. */
+static inline void thread_cleanup_full(struct thread_ctx *tctx)
+{
+	thread_cleanup_exit(tctx);
 	tctx->ret_ancestor = 0;
 	/*
 	 * Deliberately do NOT destroy tctx->inuse here: the mutex lives in
@@ -336,9 +350,10 @@ static void *thread_worker(void *arg)
 			 * terminate as well - clean up our structure in case
 			 * the signal handler wants to cancel all threads.
 			 * In this case, it has to identify that this thread
-			 * does not exist any more.
+			 * does not exist any more. ret_ancestor is kept for
+			 * the joiner (see thread_cleanup_exit).
 			 */
-			thread_cleanup_full(tctx);
+			thread_cleanup_exit(tctx);
 			pthread_exit(NULL);
 			break;
 		} else if (tctx->start_routine) {
