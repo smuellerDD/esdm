@@ -41,6 +41,7 @@
 #include "helper.h"
 #include "esdm_logger.h"
 #include "math_helper.h"
+#include "mutex.h"
 #include "memset_secure.h"
 #include "ptr_err.h"
 #include "ret_checkers.h"
@@ -667,6 +668,18 @@ out:
  ******************************************************************************/
 static uint32_t esdm_rpcc_max_nodes = UINT32_MAX;
 
+/*
+ * Guards the pairing of a connection-array pointer and its count across
+ * init/fini versus concurrent getters. A getter holds the reader side from
+ * loading the array pointer until it owns a connection's ref_cnt, so a
+ * concurrent fini (which takes the writer side for the pointer swap and only
+ * then waits on each ref_cnt) can no longer destroy and free the array
+ * between the getter's pointer load and its ref_cnt acquisition. The same
+ * writer side serializes concurrent init calls against each other.
+ * Writer-preferring so init/fini cannot be starved by a flood of getters.
+ */
+static mutex_t esdm_rpcc_conn_lock = MUTEX_UNLOCKED_PREFER_WRITER;
+
 DSO_PUBLIC
 int esdm_rpcc_set_max_online_nodes(uint32_t nodes)
 {
@@ -694,13 +707,16 @@ static void esdm_rpcc_fini_service(
 	int lock_res;
 
 	/*
-	 * Atomic exchange. Null the array pointer first, then clear the count:
-	 * a concurrent getter then either sees the NULL pointer (rejected by its
-	 * CKNULL) or a stale-but-consistent count, never a non-NULL pointer with
-	 * a count it is about to modulo against.
+	 * Swap out the pointer/count pair under the writer side of the
+	 * connection lock: getters read both and acquire their connection's
+	 * ref_cnt under the reader side, so after this critical section every
+	 * getter either sees NULL or already owns a ref_cnt that the timedlock
+	 * loop below waits for.
 	 */
+	mutex_lock(&esdm_rpcc_conn_lock);
 	rpc_conn_array = atomic_exchange(rpc_conn, NULL);
 	*num = 0;
+	mutex_unlock(&esdm_rpcc_conn_lock);
 	if (!rpc_conn_array)
 		return;
 
@@ -743,9 +759,13 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 				  _Atomic(esdm_rpc_client_connection_t *) *rpc_conn,
 				  uint32_t *num_conn)
 {
-	esdm_rpc_client_connection_t *tmp = atomic_load(rpc_conn), *tmp_p;
+	esdm_rpc_client_connection_t *tmp, *tmp_p;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
 	int ret = 0;
+
+	/* Serialize against concurrent init/fini and exclude getters. */
+	mutex_lock(&esdm_rpcc_conn_lock);
+	tmp = atomic_load(rpc_conn);
 
 	/*
 	 * It is a legitimate scenario that this function is called twice for
@@ -763,7 +783,7 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		 * more.
 		 */
 		if (*num_conn >= nodes)
-			return 0;
+			goto out;
 
 		/*
 		 * The caller wants more ESDM connections now - release all
@@ -796,6 +816,12 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		 */
 		atomic_store(rpc_conn, NULL);
 		*num_conn = 0;
+		/*
+		 * Reset the loop counter: on an allocation failure below, the
+		 * error path unwinds i connections of the new array - with the
+		 * old count left in i and tmp NULL it would dereference NULL.
+		 */
+		i = 0;
 	}
 
 	tmp = calloc(nodes, sizeof(*tmp));
@@ -822,42 +848,56 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		nodes, socketname);
 
 out:
-	if (ret) {
+	if (ret && tmp) {
 		uint32_t j;
 
 		for (j = 0, tmp_p = tmp; j < i; j++, tmp_p++)
 			esdm_fini_proto_service(tmp_p);
 
-		if (tmp)
-			free(tmp);
+		free(tmp);
 	}
+	mutex_unlock(&esdm_rpcc_conn_lock);
 	return ret;
 }
 
-static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
-				 uint32_t num_conn,
-				 esdm_rpc_client_connection_t **ret_rpc_conn,
-				 void *int_data)
+static int esdm_rpcc_get_service(
+	_Atomic(esdm_rpc_client_connection_t *) *rpc_conn_array_ptr,
+	uint32_t *num_conn_ptr, esdm_rpc_client_connection_t **ret_rpc_conn,
+	void *int_data)
 {
-	esdm_rpc_client_connection_t *rpc_conn_p;
-	/* Protection against client programming errors */
-	uint32_t node = min_uint32(esdm_rpcc_curr_node(), num_conn);
+	esdm_rpc_client_connection_t *rpc_conn_array, *rpc_conn_p;
+	uint32_t node, num_conn;
 	bool found_unused_conn = false;
 	int ret = 0;
 	uint32_t i;
 
-	CKNULL(rpc_conn_array, -EFAULT);
-	CKNULL(ret_rpc_conn, -EFAULT);
+	if (!ret_rpc_conn)
+		return -EFAULT;
 
 	/*
-	 * num_conn can transiently be observed as 0 by a caller racing a
-	 * concurrent init/fini: the connection array pointer and its count are
-	 * published (init) / cleared (fini) as two separate stores, so a window
-	 * exists where the pointer is non-NULL but the count is 0. The modulo
-	 * operations below would then be a divide-by-zero (SIGFPE), so bail.
+	 * Hold the reader side from the pointer load until the connection's
+	 * ref_cnt is owned: fini swaps the pointer under the writer side and
+	 * only then waits on each ref_cnt, so it cannot destroy and free the
+	 * array between our load and the ref_cnt acquisition. The lock also
+	 * makes the pointer and count a consistent pair (no transient
+	 * non-NULL pointer with count 0 and its modulo-by-zero SIGFPE).
 	 */
-	if (!num_conn)
-		return -ESHUTDOWN;
+	mutex_reader_lock(&esdm_rpcc_conn_lock);
+
+	rpc_conn_array = atomic_load(rpc_conn_array_ptr);
+	num_conn = *num_conn_ptr;
+
+	if (!rpc_conn_array) {
+		ret = -EFAULT;
+		goto out;
+	}
+	if (!num_conn) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
+
+	/* Protection against client programming errors */
+	node = min_uint32(esdm_rpcc_curr_node(), num_conn);
 
 	/*
 	 * Always using a fixed connection based on the current
@@ -895,13 +935,15 @@ static int esdm_rpcc_get_service(esdm_rpc_client_connection_t *rpc_conn_array,
 		/* Safety measure */
 		*ret_rpc_conn = NULL;
 
-		return -ESHUTDOWN;
+		ret = -ESHUTDOWN;
+		goto out;
 	}
 
 	*ret_rpc_conn = rpc_conn_p;
 	rpc_conn_p->interrupt_data = int_data;
 
 out:
+	mutex_reader_unlock(&esdm_rpcc_conn_lock);
 	return ret;
 }
 
@@ -923,7 +965,7 @@ DSO_PUBLIC
 int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
 				 void *int_data)
 {
-	return esdm_rpcc_get_service(unpriv_rpc_conn, unpriv_rpc_conn_num,
+	return esdm_rpcc_get_service(&unpriv_rpc_conn, &unpriv_rpc_conn_num,
 				     rpc_conn, int_data);
 }
 
@@ -959,8 +1001,8 @@ DSO_PUBLIC
 int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
 			       void *int_data)
 {
-	return esdm_rpcc_get_service(priv_rpc_conn, priv_rpc_conn_num, rpc_conn,
-				     int_data);
+	return esdm_rpcc_get_service(&priv_rpc_conn, &priv_rpc_conn_num,
+				     rpc_conn, int_data);
 }
 
 DSO_PUBLIC
