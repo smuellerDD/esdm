@@ -208,7 +208,14 @@ int linux_personalization_string(char **ptr, size_t *length)
 	}
 
 	if (!fgets(buf, sizeof(buf), f)) {
-		int errsv = errno;
+		/*
+		 * fgets() returns NULL without setting errno at EOF (empty
+		 * product_uuid, e.g. restricted DMI in a VM or container).
+		 * Map that to ENODATA: returning -errno would yield 0
+		 * (success with *ptr == NULL, violating the contract) or a
+		 * stale error code.
+		 */
+		int errsv = ferror(f) && errno ? errno : ENODATA;
 
 		esdm_logger(LOGGER_WARN, LOGGER_C_SERVER,
 			    "Unable to read product_uuid file: %s\n",
