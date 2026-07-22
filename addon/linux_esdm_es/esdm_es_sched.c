@@ -167,7 +167,7 @@ static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
 	/* init returned bits with 0, increase, if generate successful */
 	*returned_bits = 0;
 
-	if ((partial_len >> 3) >
+	if ((partial_len << 3) >
 	    esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state)) {
 		pr_warn("more bits than DRBG security strength requested\n");
 		goto out;
