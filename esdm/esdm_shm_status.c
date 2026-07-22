@@ -221,6 +221,25 @@ void esdm_shm_status_cleanup_ipc(void)
 			   S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
 	if (shmid >= 0) {
+		struct shmid_ds buf;
+
+		/*
+		 * Skip the removal while other processes are still attached:
+		 * the CUSE daemons and aux clients only attach at startup, so
+		 * removing the segment under them and recreating it later
+		 * strands them on the orphaned mapping forever. The caller of
+		 * this cleanup is never attached itself at this point (the
+		 * server detaches first, the PID namespace supervisor never
+		 * attaches), so a non-zero count is always someone else.
+		 */
+		if (shmctl(shmid, IPC_STAT, &buf) == 0 && buf.shm_nattch > 0) {
+			esdm_logger(
+				LOGGER_VERBOSE, LOGGER_C_ANY,
+				"ESDM shared memory segment still attached by %lu process(es) - skipping IPC cleanup\n",
+				(unsigned long)buf.shm_nattch);
+			return;
+		}
+
 		if (shmctl(shmid, IPC_RMID, NULL) < 0) {
 			esdm_logger(
 				LOGGER_VERBOSE, LOGGER_C_ANY,
