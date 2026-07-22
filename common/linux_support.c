@@ -51,11 +51,14 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 {
 	/*
 	 * Signals the supervisor relays to the daemon: the termination signals
-	 * handled by the server and CUSE frontends plus SIGUSR1/SIGUSR2 used
-	 * by esdm-server-signal-helper for suspend/resume.
+	 * handled by the server and CUSE frontends plus SIGUSR1 used by
+	 * esdm-server-signal-helper for the suspend trigger. SIGUSR2 is
+	 * deliberately not relayed: nothing in the daemon installs a handler
+	 * for it, so forwarding it would hit the child's default disposition
+	 * and terminate the daemon on a stray external SIGUSR2.
 	 */
-	static const int fwd_signals[] = { SIGHUP,  SIGINT,  SIGQUIT,
-					   SIGTERM, SIGUSR1, SIGUSR2 };
+	static const int fwd_signals[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM,
+					   SIGUSR1 };
 	struct sigaction sa;
 	unsigned int i;
 	pid_t pid;
