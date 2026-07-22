@@ -191,8 +191,11 @@ static int getentropy_common(void *buffer, size_t length)
 {
 	ssize_t ret = -EFAULT;
 
-	if (length > 256)
-		return -EIO;
+	/* getentropy(3) semantics: 0 on success, -1 with errno on error. */
+	if (length > 256) {
+		errno = EIO;
+		return -1;
+	}
 
 	if (!atomic_load(&is_initialized)) {
 		esdm_getrandom_lib_init();
