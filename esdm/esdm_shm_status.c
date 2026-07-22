@@ -427,7 +427,7 @@ int esdm_shm_status_init(void)
 	return 0;
 }
 
-void esdm_shm_status_exit(void)
+static void esdm_shm_status_exit_common(bool cleanup_ipc)
 {
 	/* Notify the client to inform that the server exists */
 	esdm_shm_status_server_exit();
@@ -443,8 +443,13 @@ void esdm_shm_status_exit(void)
 	 * the esdm-server therefore repeats the cleanup in its (privileged)
 	 * PID namespace supervisor - see esdm_rpc_server_cleanup().
 	 */
-	if (esdm_config_ipc_cleanup())
+	if (cleanup_ipc && esdm_config_ipc_cleanup())
 		esdm_shm_status_cleanup_ipc();
+}
+
+void esdm_shm_status_exit(void)
+{
+	esdm_shm_status_exit_common(true);
 }
 
 int esdm_shm_status_reinit(void)
@@ -460,8 +465,14 @@ int esdm_shm_status_reinit(void)
 	 * recreated under the reduced uid. This is benign - exit() already
 	 * detaches and the recreated segment is immediately republished - but
 	 * it does churn the segment and momentarily resets it to version 0.
+	 *
+	 * Never run the IPC cleanup here: reinit means the process keeps
+	 * serving, so destroying the segment/semaphores would recreate them
+	 * under the same names while already-attached clients keep their
+	 * orphaned mapping and wait on the unlinked semaphores forever.
+	 * Detach/reattach only; full cleanup belongs to the final exit.
 	 */
-	esdm_shm_status_exit();
+	esdm_shm_status_exit_common(false);
 	CKINT(esdm_shm_status_init());
 
 out:
