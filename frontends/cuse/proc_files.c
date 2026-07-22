@@ -630,8 +630,13 @@ static int esdm_proc_write(const char *path, const char *buf, size_t size,
 			if (!file->write_data)
 				return -EOPNOTSUPP;
 
-			CKINT(file->write_data(file, buf + offset,
-					       size - (size_t)offset));
+			/*
+			 * FUSE passes buf already positioned at the file
+			 * offset; size is the length of that data. Indexing
+			 * buf by the offset again would feed the wrong bytes
+			 * for any write at a non-zero offset.
+			 */
+			CKINT(file->write_data(file, buf, size));
 			return (int)size;
 		}
 	}
