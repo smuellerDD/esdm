@@ -683,7 +683,13 @@ static mutex_t esdm_rpcc_conn_lock = MUTEX_UNLOCKED_PREFER_WRITER;
 DSO_PUBLIC
 int esdm_rpcc_set_max_online_nodes(uint32_t nodes)
 {
-	esdm_rpcc_max_nodes = min_uint32(esdm_rpcc_max_nodes, nodes);
+	/*
+	 * Clamp to at least one node: esdm_rpcc_curr_node() divides by this
+	 * value, so accepting 0 would turn every later service lookup into a
+	 * SIGFPE.
+	 */
+	esdm_rpcc_max_nodes =
+		min_uint32(esdm_rpcc_max_nodes, max_uint32(nodes, 1));
 	return 0;
 }
 
