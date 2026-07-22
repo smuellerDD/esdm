@@ -24,6 +24,7 @@
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "build_bug_on.h"
@@ -166,11 +167,14 @@ static uint32_t esdm_hwrand_poolsize(void)
 static ssize_t esdm_hwrand_read_bounded(int fd, uint8_t *buf, size_t buflen)
 {
 	struct pollfd pfd = { .fd = fd, .events = POLLIN };
+	struct timespec start, now;
 	size_t bytes_read = 0;
-	int waited_ms = 0;
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
 
 	while (bytes_read < buflen) {
 		ssize_t ret = read(fd, buf + bytes_read, buflen - bytes_read);
+		int64_t elapsed_ms;
 		int pret;
 
 		if (ret > 0) {
@@ -184,8 +188,19 @@ static ssize_t esdm_hwrand_read_bounded(int fd, uint8_t *buf, size_t buflen)
 		if (errno != EAGAIN && errno != EWOULDBLOCK)
 			return -errno;
 
-		/* No data ready: wait for it, bounded by the total budget. */
-		if (waited_ms >= ESDM_ES_HWRAND_READ_TIMEOUT_MS)
+		/*
+		 * No data ready: wait for it, bounded by the total budget. The
+		 * budget must be tracked with a real clock: the kernel hwrng
+		 * character device implements no poll op, so poll() on it
+		 * returns instantly claiming readiness and its timeout never
+		 * elapses. Counting only poll timeouts would therefore never
+		 * advance the budget and a backend persistently returning
+		 * EAGAIN would busy-spin this loop forever.
+		 */
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		elapsed_ms = (int64_t)(now.tv_sec - start.tv_sec) * 1000 +
+			     (now.tv_nsec - start.tv_nsec) / 1000000;
+		if (elapsed_ms >= ESDM_ES_HWRAND_READ_TIMEOUT_MS)
 			return -ETIMEDOUT;
 
 		pfd.revents = 0;
@@ -195,8 +210,20 @@ static ssize_t esdm_hwrand_read_bounded(int fd, uint8_t *buf, size_t buflen)
 				continue;
 			return -errno;
 		}
-		if (pret == 0)
-			waited_ms += ESDM_ES_HWRAND_POLL_SLICE_MS;
+		if (pret > 0) {
+			/*
+			 * Readiness claimed right after an EAGAIN read: either
+			 * data really arrived (the next read consumes it), or
+			 * this is the no-poll-op device answering instantly.
+			 * Pace the retry so the latter cannot busy-spin at
+			 * 100% CPU for the whole budget.
+			 */
+			const struct timespec pace = { .tv_sec = 0,
+						       .tv_nsec = 10 * 1000 *
+								  1000 };
+
+			nanosleep(&pace, NULL);
+		}
 	}
 
 	return (ssize_t)bytes_read;
