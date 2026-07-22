@@ -88,12 +88,25 @@ static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
 	free(drngs);
 }
 
+/*
+ * Number of entries in the published esdm_drng array. The array is sized
+ * exactly once; esdm_config_online_nodes() is recomputed live and grows if
+ * the DSO_PUBLIC esdm_config_max_nodes_set() is raised afterwards, so
+ * consumers must bound their indexing by this count, not by the config.
+ */
+static _Atomic uint32_t esdm_drng_node_count = 0;
+
+uint32_t esdm_drng_node_count_get(void)
+{
+	return atomic_load(&esdm_drng_node_count);
+}
+
 /* Allocate the data structures for the per-node DRNGs */
 void esdm_drngs_node_alloc(void)
 {
 	struct esdm_drng **drngs;
 	struct esdm_drng *esdm_drng_init = esdm_drng_init_instance();
-	uint32_t node;
+	uint32_t node, nodes;
 	bool init_drng_used = false;
 
 	mutex_w_lock(&esdm_crypto_cb_update);
@@ -106,11 +119,17 @@ void esdm_drngs_node_alloc(void)
 	if (esdm_drng_mgr_initialize())
 		goto unlock;
 
-	drngs = calloc(esdm_config_online_nodes(), sizeof(struct esdm_drng *));
+	/*
+	 * Snapshot the node count once: it sizes the array, bounds the fill
+	 * loop and is published for consumers. for_each_online_node() would
+	 * re-evaluate the config on every iteration.
+	 */
+	nodes = esdm_config_online_nodes();
+	drngs = calloc(nodes, sizeof(struct esdm_drng *));
 	if (!drngs)
 		goto unlock;
 
-	for_each_online_node (node) {
+	for (node = 0; node < nodes; node++) {
 		struct esdm_drng *drng;
 
 		if (!init_drng_used) {
@@ -158,6 +177,12 @@ void esdm_drngs_node_alloc(void)
 
 	/* counterpart to memory barrier in esdm_drng_get_instances */
 	struct esdm_drng **expected = NULL;
+
+	/*
+	 * Publish the count before the array: the seq_cst CAS orders both, so
+	 * a reader observing the array also observes its size.
+	 */
+	atomic_store(&esdm_drng_node_count, nodes);
 
 	if (atomic_compare_exchange_strong(&esdm_drng, &expected, drngs)) {
 		esdm_pool_all_nodes_seeded(false);
