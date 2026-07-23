@@ -8,6 +8,8 @@
 #ifndef _ESDM_ES_TIMER_COMMON_H
 #define _ESDM_ES_TIMER_COMMON_H
 
+#include "esdm_es_mgr_cb.h"
+
 /************************** Configuration parameters **************************/
 /*
 choice
@@ -82,6 +84,20 @@ u64 esdm_gcd_get(void);
 u64 esdm_gcd_analyze(u64 *history, size_t nelem);
 void esdm_gcd_add_value(u64 time);
 bool esdm_highres_timer(void);
+
+struct esdm_es_ring;
+
+/*
+ * Hot-path timestamp handling shared by the interrupt and scheduler entropy
+ * sources: take a timestamp, fold in the GCD, run the health test and, on
+ * success, append the event to the source's per-CPU @ring. @es selects the
+ * health-test instance; @raw_hires_store and @perf_time are the source's
+ * testing hooks (compiled to no-ops unless the respective testing option is
+ * enabled).
+ */
+void esdm_time_process(struct esdm_es_ring *ring, enum esdm_internal_es es,
+		       bool (*raw_hires_store)(u64 value),
+		       bool (*perf_time)(u64 start));
 
 /*
  * Number of time values to store in the array - in small environments

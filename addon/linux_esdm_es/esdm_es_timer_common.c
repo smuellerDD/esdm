@@ -9,8 +9,10 @@
 
 #include <linux/gcd.h>
 #include <linux/module.h>
+#include <linux/random.h>
 
 #include "esdm_es_irq.h"
+#include "esdm_es_ring.h"
 #include "esdm_es_sched.h"
 #include "esdm_es_timer_common.h"
 #include "esdm_health.h"
@@ -110,6 +112,63 @@ void esdm_gcd_add_value(u64 time)
 		esdm_gcd_set_check(gcd);
 		atomic_set(&esdm_gcd_history_ptr, 0);
 	}
+}
+
+static void esdm_time_process_common(struct esdm_es_ring *ring,
+				     enum esdm_internal_es es,
+				     bool (*raw_hires_store)(u64 value),
+				     u64 time)
+{
+	enum esdm_health_res health_test;
+	u64 *last_timestamp = &this_cpu_ptr(ring->cpu)->last_timestamp;
+	u64 delta = time - *last_timestamp;
+
+	if (*last_timestamp == 0) {
+		*last_timestamp = time;
+		return;
+	}
+
+	*last_timestamp = time;
+
+	if (raw_hires_store(delta))
+		return;
+
+	health_test = esdm_health_test(time, es);
+	if (health_test > esdm_health_fail_use)
+		return;
+
+	if (health_test == esdm_health_pass)
+		esdm_es_ring_add(ring, time);
+}
+
+/*
+ * Batching up of entropy in a per-CPU ring before injecting into the entropy
+ * pool. Shared hot path for the interrupt and scheduler entropy sources.
+ */
+void esdm_time_process(struct esdm_es_ring *ring, enum esdm_internal_es es,
+		       bool (*raw_hires_store)(u64 value),
+		       bool (*perf_time)(u64 start))
+{
+	u64 now_time = random_get_entropy();
+	/*
+	 * Snapshot the GCD once: a concurrent esdm_gcd_set(0) on another CPU
+	 * (reset / health failure / vmgenid notifier) between a separate
+	 * "tested" check and the divide would otherwise turn the divisor into 0
+	 * and oops in the hot path.
+	 */
+	u64 gcd = esdm_gcd_get();
+
+	if (unlikely(!gcd)) {
+		/* When GCD is unknown, we process the full time stamp */
+		esdm_time_process_common(ring, es, raw_hires_store, now_time);
+		esdm_gcd_add_value(now_time);
+	} else {
+		/* GCD is known and applied */
+		esdm_time_process_common(ring, es, raw_hires_store,
+					 now_time / gcd);
+	}
+
+	perf_time(now_time);
 }
 
 /* Return boolean whether ESDM identified presence of high-resolution timer */

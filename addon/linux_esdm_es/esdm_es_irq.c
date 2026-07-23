@@ -279,65 +279,11 @@ out:
 	return;
 }
 
-static void esdm_irq_array_add(u64 data)
-{
-	esdm_es_ring_add(&esdm_irq_ring, data);
-}
-
-static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
-{
-	enum esdm_health_res health_test;
-	u64 *last_timestamp = &this_cpu_ptr(esdm_irq_ring.cpu)->last_timestamp;
-	u64 delta = time - *last_timestamp;
-
-	if (*last_timestamp == 0) {
-		*last_timestamp = time;
-		return;
-	}
-
-	*last_timestamp = time;
-
-	if (esdm_raw_hires_entropy_store(delta))
-		return;
-
-	health_test = esdm_health_test(time, esdm_int_es_irq);
-	if (health_test > esdm_health_fail_use)
-		return;
-
-	if (health_test == esdm_health_pass)
-		add_time(time);
-}
-
-/*
- * Batching up of entropy in per-CPU array before injecting into entropy pool.
- */
-static void esdm_time_process(void)
-{
-	u64 now_time = random_get_entropy();
-	/*
-	 * Snapshot the GCD once: a concurrent esdm_gcd_set(0) on another CPU
-	 * (reset / health failure / vmgenid notifier) between a separate
-	 * "tested" check and the divide would otherwise turn the divisor into 0
-	 * and oops in IRQ context.
-	 */
-	u64 gcd = esdm_gcd_get();
-
-	if (unlikely(!gcd)) {
-		/* When GCD is unknown, we process the full time stamp */
-		esdm_time_process_common(now_time, esdm_irq_array_add);
-		esdm_gcd_add_value(now_time);
-	} else {
-		/* GCD is known and applied */
-		esdm_time_process_common(now_time / gcd, esdm_irq_array_add);
-	}
-
-	esdm_irq_perf_time(now_time);
-}
-
 /* Hot code path - Callback for interrupt handler */
 static void esdm_add_interrupt_randomness(int irq)
 {
-	esdm_time_process();
+	esdm_time_process(&esdm_irq_ring, esdm_int_es_irq,
+			  esdm_raw_hires_entropy_store, esdm_irq_perf_time);
 }
 
 static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
