@@ -17,6 +17,7 @@ ccflags-y += -DESDM_ES_OSR=$(ESDM_ES_OSR)
 
 obj-m				+= esdm_es.o
 esdm_es-y			= esdm_es_mgr.o esdm_es_timer_common.o 	\
+				  esdm_es_ring.o			\
 				  esdm_drbg_kcapi.o esdm_health.o
 
 #

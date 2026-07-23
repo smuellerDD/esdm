@@ -16,6 +16,7 @@
 
 #include "esdm_es_mgr_cb.h"
 #include "esdm_es_irq.h"
+#include "esdm_es_ring.h"
 #include "esdm_es_timer_common.h"
 #include "esdm_drbg_kcapi.h"
 #include "esdm_health.h"
@@ -43,39 +44,12 @@ MODULE_PARM_DESC(
 	"How many interrupts must be collected for obtaining 256 bits of entropy\n");
 #endif
 
-/* Per-CPU array holding concatenated IRQ entropy events */
-static DEFINE_PER_CPU(u64 *, esdm_irq_array) __aligned(ESDM_KCAPI_ALIGN);
-/* prev. timestamp for delta calculation */
-static DEFINE_PER_CPU(u64, esdm_irq_last_timestamp) = 0;
-/* ring buffer read ptr */
-static DEFINE_PER_CPU(u32, esdm_irq_array_rp) = 0;
-/* ring buffer write ptr */
-static DEFINE_PER_CPU(u32, esdm_irq_array_wp) = 0;
-/* two seed buffers, in case wp < rp, one if wp > rp */
-static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data_0);
-static DEFINE_PER_CPU(struct drbg_string, esdm_irq_seed_data_1);
-
-/*
- * Read-pointer values computed during list building but not yet published.
- * Publishing rp marks the slots free for the producer, so it must only
- * happen after the DRBG consumed the referenced ring data - otherwise the
- * producer may overwrite a region mid-hash and the event written into the
- * "freed" slot is absorbed now and consumed again later. Extraction is
- * serialized (single caller), so plain statics suffice.
- */
-static DEFINE_PER_CPU(u32, esdm_irq_array_rp_pending);
-static cpumask_t esdm_irq_rp_pending_mask;
-
-static void esdm_irq_release_pending_rp(void)
-{
-	int cpu;
-
-	for_each_cpu (cpu, &esdm_irq_rp_pending_mask)
-		smp_store_release(
-			per_cpu_ptr(&esdm_irq_array_rp, cpu),
-			*per_cpu_ptr(&esdm_irq_array_rp_pending, cpu));
-	cpumask_clear(&esdm_irq_rp_pending_mask);
-}
+/* Per-CPU ring buffer holding concatenated IRQ entropy events */
+static DEFINE_PER_CPU(struct esdm_es_ring_cpu, esdm_irq_ring_cpu);
+static struct esdm_es_ring esdm_irq_ring = {
+	.cpu = &esdm_irq_ring_cpu,
+	.name = "interrupt",
+};
 
 void __init esdm_irq_es_init(bool highres_timer)
 {
@@ -107,26 +81,10 @@ void __init esdm_irq_es_init(bool highres_timer)
  */
 static void esdm_irq_reset(void)
 {
-	int cpu;
-
 	/* Trigger GCD calculation anew. */
 	esdm_gcd_set(0);
 
-	/*
-	 * Iterate the possible mask, not the online mask: the per-CPU arrays
-	 * exist for every possible CPU, and a CPU that is offline right now
-	 * keeps its collected events and pointers otherwise. Reset is invoked
-	 * to invalidate ALL prior entropy (VM fork via the vmgenid notifier,
-	 * SP800-90B failure), so pre-reset events must not survive a later
-	 * CPU online and get credited as fresh.
-	 */
-	for_each_possible_cpu (cpu) {
-		smp_store_release(per_cpu_ptr(&esdm_irq_array_rp, cpu), 0);
-		smp_store_release(per_cpu_ptr(&esdm_irq_array_wp, cpu), 0);
-		memzero_explicit(*per_cpu_ptr(&esdm_irq_array, cpu),
-				 ESDM_DATA_NUM_VALUES * sizeof(u64));
-		*per_cpu_ptr(&esdm_irq_last_timestamp, cpu) = 0;
-	}
+	esdm_es_ring_reset(&esdm_irq_ring);
 
 	/* keep DRBG state, as it will not output anything, until a reseed
 	 * as the counters were set to zero */
@@ -146,22 +104,13 @@ static u32 esdm_irq_avail_pool_size(void)
 /* Return entropy of unused IRQs present in all per-CPU pools. */
 static u32 esdm_irq_avail_entropy(u32 __unused)
 {
-	u32 events = 0;
-	u32 r_pos, w_pos;
-	int cpu;
+	u32 events;
 
 	/* Only deliver entropy when SP800-90B self test is completed */
 	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq))
 		return 0;
 
-	for_each_online_cpu (cpu) {
-		r_pos = READ_ONCE(*per_cpu_ptr(&esdm_irq_array_rp, cpu));
-		w_pos = READ_ONCE(*per_cpu_ptr(&esdm_irq_array_wp, cpu));
-
-		events += (w_pos >= r_pos) ?
-				  w_pos - r_pos :
-				  ESDM_DATA_NUM_VALUES - r_pos + w_pos;
-	}
+	events = esdm_es_ring_avail_events(&esdm_irq_ring);
 
 	if (esdm_sp80090c_compliant()) {
 		return esdm_reduce_by_osr(
@@ -177,11 +126,11 @@ static u32 esdm_irq_avail_entropy(u32 __unused)
 static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 					u32 *returned_bits)
 {
-	u32 found_events, collected_events = 0, collected_ent_bits,
-			  requested_events, returned_ent_bits, requested_bits;
+	u32 collected_events, collected_ent_bits, requested_events,
+		returned_ent_bits, requested_bits;
 	LIST_HEAD(seedlist);
 	bool ok = false;
-	int ret, cpu;
+	int ret;
 
 	/* init returned bits with 0, increase, if generate successful */
 	*returned_bits = 0;
@@ -205,76 +154,8 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 			esdm_irq_entropy_bits);
 	}
 
-	for_each_online_cpu (cpu) {
-		struct drbg_string *seed_string_0;
-		struct drbg_string *seed_string_1;
-		u32 used_events = 0;
-		u32 r_pos, w_pos;
-
-		if (collected_events >= requested_events)
-			break;
-
-		/*
-		 * Acquire the producer's write pointer so the array reads below
-		 * are ordered after the producer's data store that precedes its
-		 * smp_store_release(wp); a plain READ_ONCE could observe the
-		 * advanced wp but stale slot data on weak-memory architectures.
-		 */
-		w_pos = smp_load_acquire(per_cpu_ptr(&esdm_irq_array_wp, cpu));
-		r_pos = smp_load_acquire(per_cpu_ptr(&esdm_irq_array_rp, cpu));
-
-		found_events = (w_pos >= r_pos) ?
-				       w_pos - r_pos :
-				       ESDM_DATA_NUM_VALUES - r_pos + w_pos;
-
-		/* Cap to maximum amount of data we can hold in array */
-		found_events = min_t(u32, found_events, ESDM_DATA_NUM_VALUES);
-
-		if (!found_events)
-			continue;
-
-		used_events = min_t(u32, requested_events - collected_events,
-				    found_events);
-		collected_events += used_events;
-		seed_string_0 = per_cpu_ptr(&esdm_irq_seed_data_0, cpu);
-		seed_string_1 = per_cpu_ptr(&esdm_irq_seed_data_1, cpu);
-
-		/* can use a consecutive block as seed chunk */
-		if (w_pos > r_pos) {
-			drbg_string_fill(
-				seed_string_0,
-				(u8 *)(*per_cpu_ptr(&esdm_irq_array, cpu) +
-				       r_pos),
-				used_events * sizeof(u64));
-			list_add_tail(&seed_string_0->list, &seedlist);
-		} else { /* need to skip parts in the 'middle' of the event array */
-			u32 used_at_end = ESDM_DATA_NUM_VALUES - r_pos;
-
-			drbg_string_fill(
-				seed_string_0,
-				(u8 *)(*per_cpu_ptr(&esdm_irq_array, cpu) +
-				       r_pos),
-				used_at_end * sizeof(u64));
-			list_add_tail(&seed_string_0->list, &seedlist);
-
-			if (used_at_end < used_events) {
-				drbg_string_fill(seed_string_1,
-						 (u8 *)*per_cpu_ptr(
-							 &esdm_irq_array, cpu),
-						 (used_events - used_at_end) *
-							 sizeof(u64));
-				list_add_tail(&seed_string_1->list, &seedlist);
-			}
-		}
-
-		*per_cpu_ptr(&esdm_irq_array_rp_pending, cpu) =
-			(r_pos + used_events) & ESDM_DATA_NUM_VALUES_MASK;
-		cpumask_set_cpu(cpu, &esdm_irq_rp_pending_mask);
-
-		pr_debug(
-			"%u interrupt-based events used from entropy array of CPU %d, %u interrupt-based events remain unused\n",
-			used_events, cpu, found_events - used_events);
-	}
+	collected_events =
+		esdm_es_ring_collect(&esdm_irq_ring, requested_events, &seedlist);
 
 	collected_ent_bits =
 		esdm_data_to_entropy(collected_events, esdm_irq_entropy_bits);
@@ -314,7 +195,7 @@ static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
 	}
 
 out:
-	esdm_irq_release_pending_rp();
+	esdm_es_ring_release(&esdm_irq_ring);
 	return ok;
 }
 
@@ -400,24 +281,13 @@ out:
 
 static void esdm_irq_array_add(u64 data)
 {
-	u64 *irq_array = READ_ONCE(*this_cpu_ptr(&esdm_irq_array));
-	u32 w_pos = smp_load_acquire(this_cpu_ptr(&esdm_irq_array_wp));
-	u32 r_pos = READ_ONCE(*this_cpu_ptr(&esdm_irq_array_rp));
-
-	// full?
-	if (((w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK) == r_pos) {
-		return;
-	}
-
-	irq_array[w_pos] = data;
-	smp_store_release(this_cpu_ptr(&esdm_irq_array_wp),
-			  (w_pos + 1) & ESDM_DATA_NUM_VALUES_MASK);
+	esdm_es_ring_add(&esdm_irq_ring, data);
 }
 
 static void esdm_time_process_common(u64 time, void (*add_time)(u64 data))
 {
 	enum esdm_health_res health_test;
-	u64 *last_timestamp = this_cpu_ptr(&esdm_irq_last_timestamp);
+	u64 *last_timestamp = &this_cpu_ptr(esdm_irq_ring.cpu)->last_timestamp;
 	u64 delta = time - *last_timestamp;
 
 	if (*last_timestamp == 0) {
@@ -520,7 +390,6 @@ static atomic_t esdm_es_irq_init_state = ATOMIC_INIT(esdm_es_init_unused);
 static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 {
 	int ret;
-	int cpu;
 
 	/*
 	 * We wait until the Linux-RNG is fully initialized and received
@@ -553,14 +422,8 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 		goto err;
 	}
 
-	for_each_possible_cpu(cpu)
-	{
-		u64 **irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
-		*irq_array_cpu =
-			kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u64), GFP_KERNEL);
-		if (!(*irq_array_cpu))
-			goto free_arrays;
-	}
+	if (esdm_es_ring_alloc(&esdm_irq_ring))
+		goto err;
 
 	ret = esdm_irq_register(esdm_add_interrupt_randomness);
 	if (ret) {
@@ -573,12 +436,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	return;
 
 free_arrays:
-	for_each_possible_cpu(cpu)
-	{
-		u64 **irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
-		kfree_sensitive(*irq_array_cpu);
-		*irq_array_cpu = NULL;
-	}
+	esdm_es_ring_free(&esdm_irq_ring);
 
 err:
 	if (esdm_irq_drbg_state) {
@@ -611,8 +469,6 @@ int __init esdm_es_irq_module_init(void)
 
 void esdm_es_irq_module_exit(void)
 {
-	int cpu;
-
 	if (atomic_read(&esdm_es_irq_init_state) == esdm_es_init_unused)
 		return;
 
@@ -650,12 +506,7 @@ void esdm_es_irq_module_exit(void)
 
 	esdm_irq_reset();
 
-	for_each_possible_cpu(cpu)
-	{
-		u64 **irq_array_cpu = per_cpu_ptr(&esdm_irq_array, cpu);
-		kfree_sensitive(*irq_array_cpu);
-		*irq_array_cpu = NULL;
-	}
+	esdm_es_ring_free(&esdm_irq_ring);
 
 	pr_info("ESDM IRQ ES unregistered\n");
 
