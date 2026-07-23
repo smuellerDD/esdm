@@ -14,6 +14,7 @@
 #include <linux/random.h>
 
 #include "esdm_es_mgr_cb.h"
+#include "esdm_es_drbg.h"
 #include "esdm_es_sched.h"
 #include "esdm_es_ring.h"
 #include "esdm_es_timer_common.h"
@@ -21,7 +22,6 @@
 #include "esdm_health.h"
 #include "esdm_testing.h"
 
-static void *esdm_sched_drbg_state = NULL;
 static const char esdm_sched_drbg_domain_separation[] = "ESDM_SCH_DRBG";
 
 /*
@@ -32,9 +32,6 @@ static const char esdm_sched_drbg_domain_separation[] = "ESDM_SCH_DRBG";
  *	 sources are unavailable.
  */
 #define ESDM_SCHED_ENTROPY_BITS CONFIG_ESDM_SCHED_ENTROPY_RATE
-
-/* Number of events required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
-static u32 esdm_sched_entropy_bits = ESDM_SCHED_ENTROPY_BITS;
 
 static u32 sched_entropy __read_mostly = ESDM_SCHED_ENTROPY_BITS;
 #ifdef CONFIG_ESDM_RUNTIME_ES_CONFIG
@@ -51,6 +48,16 @@ static struct esdm_es_ring esdm_sched_ring = {
 	.name = "scheduler",
 };
 
+/* DRBG post-processing description for the scheduler entropy source */
+static struct esdm_es_drbg esdm_sched_drbg = {
+	.ring = &esdm_sched_ring,
+	.domain_separation = esdm_sched_drbg_domain_separation,
+	.domain_separation_len = sizeof(esdm_sched_drbg_domain_separation) - 1,
+	.es = esdm_int_es_sched,
+	.entropy_bits = ESDM_SCHED_ENTROPY_BITS,
+	.name = "scheduler",
+};
+
 void __init esdm_sched_es_init(bool highres_timer)
 {
 	/* 25 is arbitrary, but will never the less be far to
@@ -63,12 +70,12 @@ void __init esdm_sched_es_init(bool highres_timer)
 	/* Set a minimum number of scheduler events that must be collected */
 	sched_entropy = max_t(u32, ESDM_SCHED_ENTROPY_BITS, sched_entropy);
 
-	esdm_sched_entropy_bits = sched_entropy;
+	esdm_sched_drbg.entropy_bits = sched_entropy;
 
 	/* One pool should hold sufficient entropy for a single request from
 	 * user-space */
 	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
-					   esdm_sched_entropy_bits);
+					   esdm_sched_drbg.entropy_bits);
 	if (max_ent < esdm_security_strength()) {
 		pr_devel(
 			"Scheduler entropy source will never provide %u bits of entropy required for fully seeding the DRNG all by itself\n",
@@ -90,22 +97,7 @@ static u32 esdm_sched_avail_pool_size(void)
 /* Return entropy of unused scheduler events present in all per-CPU pools. */
 static u32 esdm_sched_avail_entropy(u32 __unused)
 {
-	u32 events;
-
-	/* Only deliver entropy when SP800-90B self test is completed */
-	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_sched))
-		return 0;
-
-	events = esdm_es_ring_avail_events(&esdm_sched_ring);
-
-	if (esdm_sp80090c_compliant()) {
-		/* reading >= 256 bit will use two DRBG extractions
-		 * with ESDM_OVERSAMPLE_ES_BITS additionally used in each */
-		return esdm_reduce_by_osr(esdm_reduce_by_osr(
-			esdm_data_to_entropy(events, esdm_sched_entropy_bits)));
-	} else {
-		return esdm_data_to_entropy(events, esdm_sched_entropy_bits);
-	}
+	return esdm_es_drbg_avail_entropy(&esdm_sched_drbg);
 }
 
 /*
@@ -123,167 +115,9 @@ static void esdm_sched_reset(void)
 	 * as the counters were set to zero */
 }
 
-/* process events and return one DRBG output block
- *
- * Length is capped with DRBG's security strength */
-static bool esdm_sched_pool_extract_block(uint8_t *block, size_t partial_len,
-					  u32 *returned_bits)
-{
-	u32 collected_events, collected_ent_bits, requested_events,
-		returned_ent_bits, requested_bits;
-	LIST_HEAD(seedlist);
-	bool ok = false;
-	int ret;
-
-	/* init returned bits with 0, increase, if generate successful */
-	*returned_bits = 0;
-
-	if ((partial_len << 3) >
-	    esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state)) {
-		pr_warn("more bits than DRBG security strength requested\n");
-		goto out;
-	}
-
-	/* Always request DRBG security strength for each block, generate less
-	 * bytes with DRBG, if advised by partial_len */
-	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state);
-	if (!esdm_drbg_cb->drbg_is_initialized(esdm_sched_drbg_state)) {
-		requested_events =
-			esdm_entropy_to_data(requested_bits + esdm_init_osr(),
-					     esdm_sched_entropy_bits);
-	} else {
-		requested_events = esdm_entropy_to_data(
-			requested_bits + esdm_compress_osr(),
-			esdm_sched_entropy_bits);
-	}
-
-	collected_events = esdm_es_ring_collect(&esdm_sched_ring,
-						requested_events, &seedlist);
-
-	collected_ent_bits =
-		esdm_data_to_entropy(collected_events, esdm_sched_entropy_bits);
-	/* Apply oversampling: discount requested oversampling rate */
-	if (!esdm_drbg_cb->drbg_is_initialized(esdm_sched_drbg_state)) {
-		returned_ent_bits = esdm_reduce_by_init_osr(collected_ent_bits);
-	} else {
-		returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
-	}
-
-	pr_debug(
-		"obtained %u bits by collecting %u bits of entropy from scheduler-based noise source\n",
-		returned_ent_bits, collected_ent_bits);
-
-	if (esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state) >
-	    returned_ent_bits) {
-		pr_warn("returned bits too small in scheduler-based noise source: %u\n",
-			returned_ent_bits);
-		goto out;
-	}
-
-	/* insert gathered entropy as additional input, HMAC-DRBG will insert this
-	 * into his state before generating output! */
-	ret = esdm_drbg_cb->drbg_seed(esdm_sched_drbg_state, &seedlist);
-	if (ret) {
-		pr_warn("unable to seed drbg in scheduler-based noise source\n");
-		goto out;
-	}
-
-	ret = esdm_drbg_cb->drbg_generate(
-		esdm_sched_drbg_state, block, partial_len,
-		(u8 *)esdm_sched_drbg_domain_separation,
-		sizeof(esdm_sched_drbg_domain_separation) - 1);
-	if (ret != partial_len) {
-		pr_warn("unable to generate drbg output in scheduler-based noise source: %i\n",
-			ret);
-	} else {
-		*returned_bits = min(requested_bits, 8 * partial_len);
-		ok = true;
-	}
-
-out:
-	esdm_es_ring_release(&esdm_sched_ring);
-	return ok;
-}
-
-/*
- * Collect all per-CPU pools, process with internal DRBG and return the output
- * to be used as seed data for seeding a DRNG.
- * The caller must not guarantee backtracking resistance, as the internal
- * cryptographic post-processing with a DRBG is always used.
- * The function will only copy as much data as entropy is available into the
- * caller-provided output buffer (further restricted by the internal DRBG's
- * security strength).
- *
- * This function handles the translation from the number of received scheduler
- * events into an entropy statement. The conversion depends on
- * ESDM_SCHED_ENTROPY_BITS which defines how many scheduler events must be
- * received to obtain 256 bits of entropy. With this value, the function
- * esdm_data_to_entropy converts a given data size (received scheduler events,
- * requested amount of data, etc.) into an entropy statement.
- * esdm_entropy_to_data does the reverse.
- *
- * With DRBG-based cryptographic post-processing only full blocks can be read.
- * This is done in esdm_sched_pool_extract_block.
- *
- * @eb: entropy buffer to store entropy
- * @requested_bits: Requested amount of entropy
- * @fully_seeded: indicator whether ESDM is fully seeded
- */
 static void esdm_sched_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 {
-	const u32 esdm_security_strength =
-		esdm_drbg_cb->drbg_sec_strength(esdm_sched_drbg_state);
-	const u32 full_blocks =
-		esdm_full_blocks(requested_bits, esdm_security_strength);
-	u32 done;
-
-	/* only set entropy, when generate was successful */
-	eb->e_bits = 0;
-
-	/*
-	 * Defense in depth: the extraction loop below writes requested_bits/8
-	 * bytes into the fixed-size eb->e. The es-manager validates
-	 * requested_bits against the allowed seed sizes, but guard locally so a
-	 * future manager change can never drive an overflow of eb->e here.
-	 */
-	if (requested_bits > ESDM_DRNG_INIT_SEED_SIZE_BITS)
-		return;
-
-	/* Only deliver entropy when SP800-90B self test is completed */
-	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_sched)) {
-		return;
-	}
-
-	/*
-	 * Only deliver, when at least all requested blocks are available, one compress osr for the
-	 * default case (no initialize with additional 64 Bit) is already counted in esdm_sched_avail_entropy()
-	 * add additional 64 bit in order to match 128 extra bit on full init
-	 */
-	if (esdm_sched_avail_entropy(0) <
-	    full_blocks * esdm_security_strength +
-		    full_blocks * esdm_compress_osr()) {
-		return;
-	}
-
-	done = 0;
-	while (done < requested_bits) {
-		u32 bits_returned;
-		bool ok = esdm_sched_pool_extract_block(
-			eb->e + (done >> 3),
-			min(esdm_security_strength, requested_bits - done) >> 3,
-			&bits_returned);
-		if (!ok) {
-			pr_warn("DRBG block extract failed, bits returned: %u!\n",
-				bits_returned);
-			memzero_explicit(eb->e, sizeof(eb->e));
-			goto out;
-		}
-		done += esdm_security_strength;
-	}
-	eb->e_bits = requested_bits;
-
-out:
-	return;
+	esdm_es_drbg_pool_extract(&esdm_sched_drbg, eb, requested_bits);
 }
 
 static void esdm_sched_randomness(const struct task_struct *p, int cpu)
@@ -315,7 +149,7 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 
 static void esdm_sched_set_entropy_rate(u32 rate)
 {
-	esdm_sched_entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS, rate);
+	esdm_sched_drbg.entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS, rate);
 }
 
 struct esdm_es_cb esdm_es_sched = {
@@ -343,7 +177,7 @@ int __init esdm_es_sched_module_init(void)
 		return -ENOMEM;
 
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_sched_drbg_state = esdm_drbg_cb->drbg_alloc(
+	esdm_sched_drbg.drbg_state = esdm_drbg_cb->drbg_alloc(
 		(u8 *)esdm_sched_drbg_domain_separation,
 		sizeof(esdm_sched_drbg_domain_separation) - 1);
 	/*
@@ -352,8 +186,8 @@ int __init esdm_es_sched_module_init(void)
 	 * dereference / kfree it. Normalize to NULL so the teardown and the
 	 * NULL-guarded sec_strength/is_initialized helpers stay safe.
 	 */
-	if (IS_ERR_OR_NULL(esdm_sched_drbg_state)) {
-		esdm_sched_drbg_state = NULL;
+	if (IS_ERR_OR_NULL(esdm_sched_drbg.drbg_state)) {
+		esdm_sched_drbg.drbg_state = NULL;
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto free_mem;
 	}
@@ -362,8 +196,8 @@ int __init esdm_es_sched_module_init(void)
 	ret = esdm_sched_register(esdm_sched_randomness);
 	if (ret) {
 		pr_warn("Unable to register ESDM scheduler ES\n");
-		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg_state);
-		esdm_sched_drbg_state = NULL;
+		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg.drbg_state);
+		esdm_sched_drbg.drbg_state = NULL;
 		goto free_mem;
 	}
 
@@ -389,9 +223,9 @@ void esdm_es_sched_module_exit(void)
 	esdm_sched_unregister(esdm_sched_randomness);
 	preempt_enable();
 
-	if (esdm_sched_drbg_state) {
-		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg_state);
-		esdm_sched_drbg_state = NULL;
+	if (esdm_sched_drbg.drbg_state) {
+		esdm_drbg_cb->drbg_dealloc(esdm_sched_drbg.drbg_state);
+		esdm_sched_drbg.drbg_state = NULL;
 	} else {
 		pr_warn("ESDM Scheduler ES DRBG state was never registered!\n");
 	}
