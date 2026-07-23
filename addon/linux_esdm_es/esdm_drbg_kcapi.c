@@ -14,6 +14,7 @@
 
 #include <crypto/drbg.h>
 #include <linux/init.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 
 #include "esdm_drbg_kcapi.h"
@@ -110,7 +111,7 @@ static void *esdm_drbg_alloc(u8 *personalization, u32 perslen)
 	if (coreref < 0)
 		return ERR_PTR(-EFAULT);
 
-	drbg_s = kzalloc(sizeof(struct drbg_state), GFP_KERNEL);
+	drbg_s = kvzalloc(sizeof(struct drbg_state), GFP_KERNEL);
 	if (!drbg_s)
 		return ERR_PTR(-ENOMEM);
 
@@ -152,7 +153,7 @@ dealloc:
 		drbg_s->d_ops->crypto_fini(drbg_s);
 	drbg_dealloc_state(drbg_s);
 err:
-	kfree(drbg_s);
+	kvfree(drbg_s);
 	return ERR_PTR(-EINVAL);
 }
 
@@ -163,7 +164,7 @@ static void esdm_drbg_dealloc(void *drbg)
 	if (drbg && drbg_s->d_ops)
 		drbg_s->d_ops->crypto_fini(drbg_s);
 	drbg_dealloc_state(drbg);
-	kfree_sensitive(drbg);
+	kvfree_sensitive(drbg, sizeof(struct drbg_state));
 	pr_info("DRBG deallocated\n");
 }
 

@@ -10,6 +10,7 @@
 #include <linux/atomic.h>
 #include <linux/bug.h>
 #include <linux/debugfs.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/security.h>
 #include <linux/sched.h>
@@ -243,7 +244,7 @@ static int esdm_testing_extract_user(struct file *file, char __user *buf,
 	 * by the user. Hence, we allocate sufficient memory to always hold
 	 * that amount of data.
 	 */
-	tmp = kmalloc(ESDM_TESTING_RINGBUFFER_SIZE + sizeof(u64), GFP_KERNEL);
+	tmp = kvzalloc(ESDM_TESTING_RINGBUFFER_SIZE + sizeof(u64), GFP_KERNEL);
 	if (!tmp)
 		return -ENOMEM;
 
@@ -278,7 +279,7 @@ static int esdm_testing_extract_user(struct file *file, char __user *buf,
 		ret += i;
 	}
 
-	kfree_sensitive(tmp);
+	kvfree_sensitive(tmp, ESDM_TESTING_RINGBUFFER_SIZE + sizeof(u64));
 
 	if (ret > 0)
 		*ppos += ret;
