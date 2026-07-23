@@ -15,6 +15,7 @@
 #include <linux/random.h>
 
 #include "esdm_es_mgr_cb.h"
+#include "esdm_es_drbg.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_ring.h"
 #include "esdm_es_timer_common.h"
@@ -22,7 +23,6 @@
 #include "esdm_health.h"
 #include "esdm_testing.h"
 
-static void *esdm_irq_drbg_state = NULL;
 static const char esdm_irq_drbg_domain_separation[] = "ESDM_IRQ_DRBG";
 /*
  * Number of interrupts to be recorded to assume that DRNG security strength
@@ -32,9 +32,6 @@ static const char esdm_irq_drbg_domain_separation[] = "ESDM_IRQ_DRBG";
  *	 sources are unavailable.
  */
 #define ESDM_IRQ_ENTROPY_BITS CONFIG_ESDM_IRQ_ENTROPY_RATE
-
-/* Number of interrupts required for ESDM_DRNG_SECURITY_STRENGTH_BITS entropy */
-static u32 esdm_irq_entropy_bits = ESDM_IRQ_ENTROPY_BITS;
 
 static u32 irq_entropy __read_mostly = ESDM_IRQ_ENTROPY_BITS;
 #ifdef CONFIG_ESDM_RUNTIME_ES_CONFIG
@@ -51,6 +48,16 @@ static struct esdm_es_ring esdm_irq_ring = {
 	.name = "interrupt",
 };
 
+/* DRBG post-processing description for the interrupt entropy source */
+static struct esdm_es_drbg esdm_irq_drbg = {
+	.ring = &esdm_irq_ring,
+	.domain_separation = esdm_irq_drbg_domain_separation,
+	.domain_separation_len = sizeof(esdm_irq_drbg_domain_separation) - 1,
+	.es = esdm_int_es_irq,
+	.entropy_bits = ESDM_IRQ_ENTROPY_BITS,
+	.name = "interrupt",
+};
+
 void __init esdm_irq_es_init(bool highres_timer)
 {
 	/* 25 is arbitrary, but will never the less be far to
@@ -63,11 +70,11 @@ void __init esdm_irq_es_init(bool highres_timer)
 	/* Set a minimum number of interrupts that must be collected */
 	irq_entropy = max_t(u32, ESDM_IRQ_ENTROPY_BITS, irq_entropy);
 
-	esdm_irq_entropy_bits = irq_entropy;
+	esdm_irq_drbg.entropy_bits = irq_entropy;
 
 	/* One pool should hold sufficient entropy for a single request from user-space */
 	u32 max_ent = esdm_data_to_entropy(ESDM_DATA_NUM_VALUES,
-					   esdm_irq_entropy_bits);
+					   esdm_irq_drbg.entropy_bits);
 	if (max_ent < esdm_security_strength()) {
 		pr_devel(
 			"interrupt entropy source will never provide %u bits of entropy required for fully seeding the DRNG all by itself\n",
@@ -104,179 +111,12 @@ static u32 esdm_irq_avail_pool_size(void)
 /* Return entropy of unused IRQs present in all per-CPU pools. */
 static u32 esdm_irq_avail_entropy(u32 __unused)
 {
-	u32 events;
-
-	/* Only deliver entropy when SP800-90B self test is completed */
-	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq))
-		return 0;
-
-	events = esdm_es_ring_avail_events(&esdm_irq_ring);
-
-	if (esdm_sp80090c_compliant()) {
-		return esdm_reduce_by_osr(
-			esdm_data_to_entropy(events, esdm_irq_entropy_bits));
-	} else {
-		return esdm_data_to_entropy(events, esdm_irq_entropy_bits);
-	}
+	return esdm_es_drbg_avail_entropy(&esdm_irq_drbg);
 }
 
-/* process events and return one DRBG output block
- *
- * Length is capped with DRBG's security strength */
-static bool esdm_irq_pool_extract_block(uint8_t *block, size_t partial_len,
-					u32 *returned_bits)
-{
-	u32 collected_events, collected_ent_bits, requested_events,
-		returned_ent_bits, requested_bits;
-	LIST_HEAD(seedlist);
-	bool ok = false;
-	int ret;
-
-	/* init returned bits with 0, increase, if generate successful */
-	*returned_bits = 0;
-
-	if ((partial_len << 3) >
-	    esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state)) {
-		pr_warn("more bits than DRBG security strength requested\n");
-		goto out;
-	}
-
-	/* Always request DRBG security strength for each block, generate less
-	 * bytes with DRBG, if advised by partial_len */
-	requested_bits = esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
-	if (!esdm_drbg_cb->drbg_is_initialized(esdm_irq_drbg_state)) {
-		requested_events =
-			esdm_entropy_to_data(requested_bits + esdm_init_osr(),
-					     esdm_irq_entropy_bits);
-	} else {
-		requested_events = esdm_entropy_to_data(
-			requested_bits + esdm_compress_osr(),
-			esdm_irq_entropy_bits);
-	}
-
-	collected_events =
-		esdm_es_ring_collect(&esdm_irq_ring, requested_events, &seedlist);
-
-	collected_ent_bits =
-		esdm_data_to_entropy(collected_events, esdm_irq_entropy_bits);
-	/* Apply oversampling: discount requested oversampling rate */
-	if (!esdm_drbg_cb->drbg_is_initialized(esdm_irq_drbg_state)) {
-		returned_ent_bits = esdm_reduce_by_init_osr(collected_ent_bits);
-	} else {
-		returned_ent_bits = esdm_reduce_by_osr(collected_ent_bits);
-	}
-
-	pr_debug(
-		"obtained %u bits by collecting %u bits of entropy from entropy pool noise source\n",
-		returned_ent_bits, collected_ent_bits);
-
-	if (esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state) >
-	    returned_ent_bits) {
-		pr_warn("returned bits too small in interrupt-based noise source: %u\n",
-			returned_ent_bits);
-		goto out;
-	}
-
-	ret = esdm_drbg_cb->drbg_seed(esdm_irq_drbg_state, &seedlist);
-	if (ret) {
-		pr_warn("unable to seed drbg in interrupt-based noise source\n");
-		goto out;
-	}
-
-	ret = esdm_drbg_cb->drbg_generate(
-		esdm_irq_drbg_state, block, partial_len,
-		(u8 *)esdm_irq_drbg_domain_separation,
-		sizeof(esdm_irq_drbg_domain_separation) - 1);
-	if (ret != partial_len) {
-		pr_warn("unable to generate drbg output in interrupt-based noise source\n");
-	} else {
-		*returned_bits = min(requested_bits, 8 * partial_len);
-		ok = true;
-	}
-
-out:
-	esdm_es_ring_release(&esdm_irq_ring);
-	return ok;
-}
-
-/*
- * Collect all per-CPU pools, process with internal DRBG and return the output
- * to be used as seed data for seeding a DRNG.
- * The caller must not guarantee backtracking resistance, as the internal
- * cryptographic post-processing with a DRBG is always used.
- * The function will only copy as much data as entropy is available into the
- * caller-provided output buffer (further restricted by the internal DRBG's
- * security strength).
- *
- * This function handles the translation from the number of received interrupts
- * into an entropy statement. The conversion depends on ESDM_IRQ_ENTROPY_BITS
- * which defines how many interrupts must be received to obtain 256 bits of
- * entropy. With this value, the function esdm_data_to_entropy converts a given
- * data size (received interrupts, requested amount of data, etc.) into an
- * entropy statement. esdm_entropy_to_data does the reverse.
- *
- * With DRBG-based cryptographic post-processing only full blocks can be read.
- * This is done in esdm_irq_pool_extract_block.
- *
- * @eb: entropy buffer to store entropy
- * @requested_bits: Requested amount of entropy
- * @fully_seeded: indicator whether ESDM is fully seeded
- */
 static void esdm_irq_pool_extract(struct entropy_buf *eb, u32 requested_bits)
 {
-	const u32 esdm_security_strength =
-		esdm_drbg_cb->drbg_sec_strength(esdm_irq_drbg_state);
-	const u32 full_blocks =
-		esdm_full_blocks(requested_bits, esdm_security_strength);
-	u32 done;
-
-	/* only set entropy, when generate was successful */
-	eb->e_bits = 0;
-
-	/*
-	 * Defense in depth: the extraction loop below writes requested_bits/8
-	 * bytes into the fixed-size eb->e. The es-manager validates
-	 * requested_bits against the allowed seed sizes, but guard locally so a
-	 * future manager change can never drive an overflow of eb->e here.
-	 */
-	if (requested_bits > ESDM_DRNG_INIT_SEED_SIZE_BITS)
-		return;
-
-	/* Only deliver entropy when SP800-90B self test is completed */
-	if (!esdm_sp80090b_startup_complete_es(esdm_int_es_irq)) {
-		return;
-	}
-
-	/*
-	 * Only deliver, when at least all requested blocks are available, one compress osr for the
-	 * default case (no initialize with additional 64 Bit) is already counted in esdm_irq_avail_entropy()
-	 * add additional 64 bit in order to match 128 extra bit on full init
-	 */
-	if (esdm_irq_avail_entropy(0) <
-	    full_blocks * esdm_security_strength +
-		    full_blocks * esdm_compress_osr()) {
-		return;
-	}
-
-	done = 0;
-	while (done < requested_bits) {
-		u32 bits_returned;
-		bool ok = esdm_irq_pool_extract_block(
-			eb->e + (done >> 3),
-			min(esdm_security_strength, requested_bits - done) >> 3,
-			&bits_returned);
-		if (!ok) {
-			pr_warn("DRBG block extract failed, bits returned: %u!\n",
-				bits_returned);
-			memzero_explicit(eb->e, sizeof(eb->e));
-			goto out;
-		}
-		done += esdm_security_strength;
-	}
-	eb->e_bits = requested_bits;
-
-out:
-	return;
+	esdm_es_drbg_pool_extract(&esdm_irq_drbg, eb, requested_bits);
 }
 
 /* Hot code path - Callback for interrupt handler */
@@ -309,7 +149,7 @@ static void esdm_irq_es_state(unsigned char *buf, size_t buflen)
 
 static void esdm_irq_set_entropy_rate(u32 rate)
 {
-	esdm_irq_entropy_bits = max_t(u32, ESDM_IRQ_ENTROPY_BITS, rate);
+	esdm_irq_drbg.entropy_bits = max_t(u32, ESDM_IRQ_ENTROPY_BITS, rate);
 }
 
 struct esdm_es_cb esdm_es_irq = {
@@ -353,7 +193,7 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	}
 
 	/* switch to XDRBG, if upstream in the kernel */
-	esdm_irq_drbg_state = esdm_drbg_cb->drbg_alloc(
+	esdm_irq_drbg.drbg_state = esdm_drbg_cb->drbg_alloc(
 		(u8 *)esdm_irq_drbg_domain_separation,
 		sizeof(esdm_irq_drbg_domain_separation) - 1);
 	/*
@@ -362,8 +202,8 @@ static void esdm_es_irq_set_callbackfn(struct work_struct *work)
 	 * dereference / kfree it. Normalize to NULL so the teardown and the
 	 * NULL-guarded sec_strength/is_initialized helpers stay safe.
 	 */
-	if (IS_ERR_OR_NULL(esdm_irq_drbg_state)) {
-		esdm_irq_drbg_state = NULL;
+	if (IS_ERR_OR_NULL(esdm_irq_drbg.drbg_state)) {
+		esdm_irq_drbg.drbg_state = NULL;
 		pr_warn("could not alloc DRBG for post-processing\n");
 		goto err;
 	}
@@ -385,9 +225,9 @@ free_arrays:
 	esdm_es_ring_free(&esdm_irq_ring);
 
 err:
-	if (esdm_irq_drbg_state) {
-		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
-		esdm_irq_drbg_state = NULL;
+	if (esdm_irq_drbg.drbg_state) {
+		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg.drbg_state);
+		esdm_irq_drbg.drbg_state = NULL;
 	}
 	atomic_set(&esdm_es_irq_init_state, esdm_es_init_unused);
 }
@@ -443,9 +283,9 @@ void esdm_es_irq_module_exit(void)
 	esdm_irq_unregister(esdm_add_interrupt_randomness);
 	local_bh_enable();
 
-	if (esdm_irq_drbg_state) {
-		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg_state);
-		esdm_irq_drbg_state = NULL;
+	if (esdm_irq_drbg.drbg_state) {
+		esdm_drbg_cb->drbg_dealloc(esdm_irq_drbg.drbg_state);
+		esdm_irq_drbg.drbg_state = NULL;
 	} else {
 		pr_warn("ESDM IRQ ES DRBG state was never registered!\n");
 	}
