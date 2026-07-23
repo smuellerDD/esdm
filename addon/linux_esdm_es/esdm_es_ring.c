@@ -8,6 +8,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/minmax.h>
+#include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/string.h>
@@ -19,8 +20,14 @@ int esdm_es_ring_alloc(struct esdm_es_ring *ring)
 	int cpu;
 
 	for_each_possible_cpu (cpu) {
-		u64 *array = kmalloc(ESDM_DATA_NUM_VALUES * sizeof(u64),
-				     GFP_KERNEL);
+		/*
+		 * The per-CPU event array is sizeable (ESDM_DATA_NUM_VALUES
+		 * u64s, 32 KiB by default) and holds no DMA/hardware-visible
+		 * data, so allow a vmalloc() fallback instead of demanding a
+		 * physically contiguous high-order allocation.
+		 */
+		u64 *array = kvzalloc(ESDM_DATA_NUM_VALUES * sizeof(u64),
+				      GFP_KERNEL);
 
 		if (!array)
 			goto free;
@@ -42,7 +49,7 @@ void esdm_es_ring_free(struct esdm_es_ring *ring)
 	for_each_possible_cpu (cpu) {
 		struct esdm_es_ring_cpu *rc = per_cpu_ptr(ring->cpu, cpu);
 
-		kfree_sensitive(rc->array);
+		kvfree_sensitive(rc->array, ESDM_DATA_NUM_VALUES * sizeof(u64));
 		rc->array = NULL;
 	}
 }
