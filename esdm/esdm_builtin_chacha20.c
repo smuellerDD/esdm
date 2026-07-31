@@ -28,11 +28,14 @@
 #include "esdm_builtin_chacha20.h"
 #include "esdm_logger.h"
 
-static int esdm_chacha20_seed(void *drng, const uint8_t *inbuf, size_t inbuflen)
+static int esdm_chacha20_seed(void *drng, const uint8_t *inbuf, size_t inbuflen,
+			      const uint8_t *addtl, size_t addtllen)
 {
 	struct esdm_chacha20_drng_ctx *cc20 = (struct esdm_chacha20_drng_ctx *)drng;
 
 	esdm_cc20_drng_seed(cc20, inbuf, inbuflen);
+	if (addtl)
+		esdm_cc20_drng_seed(cc20, addtl, addtllen);
 	return 0;
 }
 

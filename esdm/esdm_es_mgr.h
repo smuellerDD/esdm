@@ -43,9 +43,11 @@ bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 		       struct entropy_buf *eb);
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb);
 void esdm_unset_fully_seeded(struct esdm_drng *drng);
-void esdm_fill_seed_buffer(struct entropy_buf *eb, uint32_t requested_bits,
-			   bool force);
 void esdm_init_ops(struct entropy_buf *eb);
+void esdm_get_entropy_bitstring(struct entropy_buf *eb, uint32_t requested_bits,
+				bool force);
+void esdm_get_additional_data(struct entropy_buf *eb, uint32_t requested_bits,
+			      bool force);
 
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);

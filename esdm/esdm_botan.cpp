@@ -264,7 +264,8 @@ struct esdm_botan_drng_state {
 };
 
 static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
-				size_t inbuflen)
+				size_t inbuflen, const uint8_t *addtl,
+				size_t addtllen)
 {
 	struct esdm_botan_drng_state *state =
 		reinterpret_cast<esdm_botan_drng_state *>(drng);
@@ -291,6 +292,8 @@ static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
 		}
 
 		state->drbg->initialize_with(inbuf, inbuflen);
+		if (addtl)
+			state->drbg->add_entropy(addtl, addtllen);
 		state->initialized = true;
 
 		return 0;

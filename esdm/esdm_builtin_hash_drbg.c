@@ -27,11 +27,12 @@
 #include "esdm_logger.h"
 
 static int esdm_hash_drbg_seed(void *drng, const uint8_t *inbuf,
-			       size_t inbuflen)
+			       size_t inbuflen, const uint8_t *addtl,
+			       size_t addtllen)
 {
 	struct esdm_drbg_state *drbg = (struct esdm_drbg_state *)drng;
 
-	return esdm_drbg_seed(drbg, inbuf, inbuflen, NULL, 0);
+	return esdm_drbg_seed(drbg, inbuf, inbuflen, addtl, addtllen);
 }
 
 static ssize_t esdm_hash_drbg_generate(void *drng, uint8_t *outbuf,

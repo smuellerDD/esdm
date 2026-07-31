@@ -44,7 +44,8 @@ struct esdm_drng_cb {
 	int (*drng_selftest)(void);
 	int (*drng_alloc)(void **drng, uint32_t sec_strength);
 	void (*drng_dealloc)(void *drng);
-	int (*drng_seed)(void *drng, const uint8_t *inbuf, size_t inbuflen);
+	int (*drng_seed)(void *drng, const uint8_t *inbuf, size_t inbuflen,
+			 const uint8_t *addtl, size_t addtllen);
 	ssize_t (*drng_generate)(void *drng, uint8_t *outbuf, size_t outbuflen);
 };
 

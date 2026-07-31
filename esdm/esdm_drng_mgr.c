@@ -377,8 +377,10 @@ static time_t esdm_time_after_now(time_t timeout_sec)
 }
 
 /* Inject a data buffer into the DRNG - caller must hold its lock */
-void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
-		      size_t inbuflen, bool fully_seeded, const char *drng_type)
+static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
+			     size_t inbuflen, const uint8_t *addtl,
+			     size_t addtllen, bool fully_seeded,
+			     const char *drng_type)
 {
 	BUILD_BUG_ON(ESDM_DRNG_RESEED_THRESH > INT_MAX);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
@@ -387,7 +389,8 @@ void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 	if (!drng->drng)
 		return;
 
-	if (drng->drng_cb->drng_seed(drng->drng, inbuf, inbuflen) < 0) {
+	if (drng->drng_cb->drng_seed(drng->drng, inbuf, inbuflen, addtl,
+				     addtllen) < 0) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
 			    "seeding of %s DRNG failed\n", drng_type);
 		atomic_store(&drng->force_reseed, true);
@@ -439,14 +442,15 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 					 const char *drng_type)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
+			   addtl __aligned(ESDM_KCAPI_ALIGN),
 		collected_seedbuf;
-	uint32_t collected_entropy = 0;
+	uint32_t requested_bits, collected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
-	bool forced = atomic_load(&drng->force_reseed);
 	unsigned int es_delivered_threshold = 1;
 	bool do_full_init =
 		(drng == &esdm_drng_pr && !atomic_load(&drng->initiated)) ||
 		(drng != &esdm_drng_pr && !atomic_load(&drng->fully_seeded));
+	bool forced = atomic_load(&drng->force_reseed) | do_full_init;
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -456,6 +460,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	 * valgrind.
 	 */
 	memset(&seedbuf, 0, sizeof(seedbuf));
+	memset(&addtl, 0, sizeof(addtl));
 
 	if (esdm_ntg1_2024_compliant() && do_full_init)
 		es_delivered_threshold = 2;
@@ -471,17 +476,22 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 				drng_type);
 		}
 
+		requested_bits = esdm_get_seed_entropy_osr(
+			do_full_init, !do_full_init && drng == &esdm_drng_pr);
+
 		/*
+		 * Get entropy
+		 *
 		 * The PR DRNG should be a RBG3(RS) if properly seeded, therefore
 		 * oversample ES by 64 bit, when seeding this DRNG instance.
 		 * See SP800-90C sec. 6.5.1.2.
 		 */
-		esdm_fill_seed_buffer(&seedbuf,
-				      esdm_get_seed_entropy_osr(
-					      do_full_init,
-					      !do_full_init &&
-						      drng == &esdm_drng_pr),
-				      forced && do_full_init);
+		esdm_get_entropy_bitstring(&seedbuf, requested_bits, forced);
+
+		/*
+		 * Get additional data
+		 */
+		esdm_get_additional_data(&addtl, requested_bits, forced);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
@@ -492,8 +502,23 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 			num_es_delivered += !!seedbuf.entropy_es[i].e_bits;
 		}
 
-		/* Inject seed data into DRNG */
+		/*
+		 * Inject seed data into DRNG
+		 *
+		 * NOTE: SP800-90C mandates that the "Get_entropy_bitstring
+		 * process shall not provide output for RBG operations unless
+		 * the bit string contains sufficient entropy to fulfill that
+		 * request." This is achieved by the fact that the output
+		 * of esdm_fully_seeded (full entropy or not) defines whether
+		 * the DRBG is considered seeded at all. During start-up time
+		 * the DRBG remains unseeded until sufficient entropy is
+		 * provided. Although several entropy gather/seed operations
+		 * can take place in this loop, it is still an atomic seeding
+		 * process from the DRBG perspective as the DRBG is locked
+		 * during that time and cannot produce output.
+		 */
 		esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
+				 (uint8_t *)&addtl, sizeof(addtl),
 				 esdm_fully_seeded(do_full_init,
 						   collected_entropy,
 						   &collected_seedbuf),
@@ -522,6 +547,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 !atomic_load(&esdm_drng_mgr_terminate));
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
+	memset_secure(&addtl, 0, sizeof(addtl));
 
 	return collected_entropy;
 }
@@ -1115,6 +1141,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	struct entropy_buf *eb = (struct entropy_buf *)(buf + 2);
 	uint64_t buflen = sizeof(struct entropy_buf) + 2 * sizeof(uint64_t);
 	uint64_t collected_bits = 0;
+	uint32_t requested_bits;
 	int ret = 0;
 
 	/* Ensure buffer is aligned as required */
@@ -1153,11 +1180,12 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	 * esdm_init_ops.
 	 */
 	for (;;) {
-		esdm_fill_seed_buffer(
-			eb,
-			esdm_get_seed_entropy_osr(
-				!(flags & ESDM_GET_SEED_FULLY_SEEDED), false),
-			false);
+		requested_bits = esdm_get_seed_entropy_osr(
+			!(flags & ESDM_GET_SEED_FULLY_SEEDED), false);
+		/* Get entropy */
+		esdm_get_entropy_bitstring(eb, requested_bits, false);
+		/* Also fill in the additional data */
+		esdm_get_additional_data(eb, requested_bits, false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */

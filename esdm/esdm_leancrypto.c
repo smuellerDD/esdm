@@ -103,11 +103,12 @@ const struct esdm_hash_cb esdm_leancrypto_hash_cb = {
 };
 
 static int esdm_leancrypto_drbg_seed(void *drng, const uint8_t *inbuf,
-				     size_t inbuflen)
+				     size_t inbuflen, const uint8_t *addtl,
+				     size_t addtllen)
 {
 	struct lc_rng_ctx *ctx = drng;
 
-	return lc_rng_seed(ctx, inbuf, inbuflen, NULL, 0);
+	return lc_rng_seed(ctx, inbuf, inbuflen, addtl, addtllen);
 }
 
 static ssize_t esdm_leancrypto_drbg_generate(void *drng, uint8_t *outbuf,

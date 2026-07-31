@@ -5,6 +5,8 @@ Changes 1.2.4
 
 * Add PKCS11 entropy source
 
+* SP800-90C compliance: all ES with zero entropy are inserted into DRBG as "additional info" or "personalization string" (compliance to section 2.6)
+
 Changes 1.2.3
 * Fix handling of non-blocking server response
 

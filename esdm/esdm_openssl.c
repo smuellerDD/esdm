@@ -171,7 +171,9 @@ struct esdm_openssl_drng_state {
 };
 
 static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
-					   size_t inbuflen, bool test_mode)
+					   size_t inbuflen,
+					   const uint8_t *addtl,
+					   size_t addtllen bool test_mode)
 {
 	struct esdm_openssl_drng_state *state = drng;
 	struct timespec current_time = { 0 };
@@ -208,9 +210,15 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		 */
 		params[0] = OSSL_PARAM_construct_octet_string(
 			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
-		params[1] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_NONCE, (void *)&current_time,
-			sizeof(current_time));
+		if (addtl) {
+			params[1] = OSSL_PARAM_construct_octet_string(
+				OSSL_RAND_PARAM_TEST_NONCE, (void *)addtl,
+				addtllen);
+		} else {
+			params[1] = OSSL_PARAM_construct_octet_string(
+				OSSL_RAND_PARAM_TEST_NONCE,
+				(void *)&current_time, sizeof(current_time));
+		}
 		params[2] = OSSL_PARAM_construct_end();
 
 		if (!EVP_RAND_instantiate(state->seed_source, state->strength,
@@ -236,7 +244,14 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 	} else {
 		params[0] = OSSL_PARAM_construct_octet_string(
 			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
-		params[1] = OSSL_PARAM_construct_end();
+		if (addtl) {
+			params[1] = OSSL_PARAM_construct_octet_string(
+				OSSL_RAND_PARAM_TEST_NONCE, (void *)addtl,
+				addtllen);
+			params[2] = OSSL_PARAM_construct_end();
+		} else {
+			params[1] = OSSL_PARAM_construct_end();
+		}
 
 		if (!EVP_RAND_CTX_set_params(state->seed_source, params)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
@@ -260,9 +275,11 @@ out:
 }
 
 static int esdm_openssl_drbg_seed(void *drng, const uint8_t *inbuf,
-				  size_t inbuflen)
+				  size_t inbuflen, const uint8_t *addtl,
+				  size_t addtllen)
 {
-	return esdm_openssl_drbg_seed_internal(drng, inbuf, inbuflen, false);
+	return esdm_openssl_drbg_seed_internal(drng, inbuf, inbuflen, addtl,
+					       addtllen, false);
 }
 
 static ssize_t esdm_openssl_drbg_generate_w_additional_data(void *drng,

@@ -171,17 +171,19 @@ int drbg_aes_generate(struct drbg_aes_ctx *ctx, unsigned length, uint8_t *dst,
 		      unsigned add_size, const uint8_t *add);
 
 static int esdm_gnutls_drbg_seed(void *drng, const uint8_t *inbuf,
-				 size_t inbuflen)
+				 size_t inbuflen, const uint8_t *addtl,
+			         size_t addtllen)
 {
 	struct drbg_aes_ctx *drbg = (struct drbg_aes_ctx *)drng;
 
 	if (drbg->seeded)
-		return drbg_aes_reseed(drbg, (unsigned int)inbuflen, inbuf, 0,
-				       NULL) ?
+		return drbg_aes_reseed(drbg, (unsigned int)inbuflen, inbuf,
+				       (unsigned int)addtllen, addtl) ?
 			       0 :
 			       -EFAULT;
 
-	return drbg_aes_init(drbg, (unsigned int)inbuflen, inbuf, 0, NULL) ?
+	return drbg_aes_init(drbg, (unsigned int)inbuflen, inbuf,
+			     (unsigned int)addtllen, addtl) ?
 		       0 :
 		       -EFAULT;
 }
