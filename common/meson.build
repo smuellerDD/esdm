@@ -218,12 +218,12 @@ if get_option('sp80090c') or get_option('ais2031')
 	max_reseed = get_option('drng_max_reseed_bits')
 
 	# SP800-90C defines that
-	if reseed_thresh > 131072
-		reseed_thresh = 131072
+	if reseed_thresh > 65536
+		reseed_thresh = 65536
 	endif
 
-	if max_reseed > 65536
-		max_reseed = 65536
+	if max_reseed > 131072
+		max_reseed = 131072
 	endif
 
 	conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', reseed_thresh)
