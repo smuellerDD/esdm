@@ -590,6 +590,10 @@ option('drng_reseed_threshold_bits', type: 'integer', value: 0xffffffff,
        Set this setting to anything lower than 131072 (2**17) to enforce
        DRG.4.10 of AIS 20/31 Version 3.0. E.g. 65536 (2**16) and
        'drng_max_reseed_bits' to 131072 (2**17).
+
+       Both specified limits of 2**17 and 2**16 are applied unless smaller
+       values are configured when the options sp80090c and/or ais2031 are
+       defined.
        ''')
 
 option('drng_max_reseed_bits', type: 'integer', value: 0xffffffff,
