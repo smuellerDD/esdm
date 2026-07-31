@@ -1182,10 +1182,16 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	for (;;) {
 		requested_bits = esdm_get_seed_entropy_osr(
 			!(flags & ESDM_GET_SEED_FULLY_SEEDED), false);
+		/*
+		 * Fill in the additional data
+		 *
+		 * This call must come first as it clears all entropy estimator
+		 * for non-collected data.
+		 */
+		esdm_get_additional_data(eb, requested_bits, false);
+
 		/* Get entropy */
 		esdm_get_entropy_bitstring(eb, requested_bits, false);
-		/* Also fill in the additional data */
-		esdm_get_additional_data(eb, requested_bits, false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */
