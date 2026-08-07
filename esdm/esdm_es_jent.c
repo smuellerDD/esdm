@@ -480,7 +480,7 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 		 " Entropy Rate per 256 data bits: %u\n"
 		 " Oversampling Rate: %u\n",
 		 esdm_jent_poolsize(), jent_version(),
-		 (esdm_sp80090c_compliant() || esdm_config_fips_enabled() ||
+		 (esdm_es_oversampling() || esdm_config_fips_enabled() ||
 		  esdm_ntg1_2024_compliant() || esdm_jent_ntg1()) ?
 			 "SP800-90B " :
 			 "",

@@ -320,15 +320,31 @@ void esdm_drng_mgr_finalize(void)
 	esdm_drng_dealloc_common(&esdm_drng_pr);
 }
 
-DSO_PUBLIC
-int esdm_sp80090c_compliant(void)
+int esdm_es_oversampling(void)
 {
 #ifndef ESDM_OVERSAMPLE_ENTROPY_SOURCES
 	return false;
 #else
-	/* Check whether SP80-90C compliance is requested. */
+	/* Check whether the oversampling is requested. */
 	return esdm_config_sp80090c_compliant();
 #endif
+}
+
+DSO_PUBLIC
+int esdm_sp80090c_compliant(void)
+{
+	/*
+	 * A build to DRG.3 applies the oversampling without claiming SP800-90C
+	 * with it. DRG.4 satisfies DRG.3 and so answers esdm_drg3_compliant()
+	 * too, but the two options cannot both be set - which is what makes
+	 * "satisfies DRG.3 and is not DRG.4" the test for the DRG.3 option
+	 * alone. A DRG.4 build applies no oversampling of its own and answers
+	 * here whenever SP800-90C was configured next to it.
+	 */
+	if (esdm_drg3_compliant() && !esdm_drg4_compliant())
+		return false;
+
+	return esdm_es_oversampling();
 }
 
 DSO_PUBLIC
@@ -343,6 +359,30 @@ int esdm_ntg1_2024_compliant(void)
 {
 	return
 #ifdef ESDM_AIS2031_NTG1_SEEDING_STRATEGY
+		true
+#else
+		false
+#endif
+		;
+}
+
+DSO_PUBLIC
+int esdm_drg3_compliant(void)
+{
+	return
+#if defined(ESDM_AIS2031_DRG3) || defined(ESDM_AIS2031_DRG4)
+		true
+#else
+		false
+#endif
+		;
+}
+
+DSO_PUBLIC
+int esdm_drg4_compliant(void)
+{
+	return
+#ifdef ESDM_AIS2031_DRG4
 		true
 #else
 		false

@@ -334,9 +334,25 @@ int esdm_state_operational(void);
 /**
  * @brief Indicator whether ESDM operates SP800-90C compliant
  *
+ * A build to one of the AIS 20/31 DRG classes is not claiming SP800-90C and
+ * answers 0 here even where it applies the same entropy source oversampling.
+ * Whether that oversampling is in effect is esdm_es_oversampling().
+ *
  * @return 1 if SP800-90C compliant, 0 if not SP800-90C compliant
  */
 int esdm_sp80090c_compliant(void);
+
+/**
+ * @brief Is the SP800-90C entropy source oversampling in effect?
+ *
+ * The mechanism rather than the compliance claim: the DRG.3 option applies it
+ * without the request size based reseeding limits, and such a build answers 1
+ * here while answering 0 to esdm_sp80090c_compliant(). Everything that has to
+ * act on the oversampling reads this.
+ *
+ * @return 1 if the oversampling is applied, 0 if not
+ */
+int esdm_es_oversampling(void);
 
 /**
  * @brief Indicator whether ESDM operates NTG.1 compliant
@@ -352,6 +368,36 @@ int esdm_ntg1_compliant(void);
  * @return 1 if NTG.1 compliant, 0 if not NTG.1 compliant
  */
 int esdm_ntg1_2024_compliant(void);
+
+/**
+ * @brief Indicator whether ESDM satisfies the DRG.3 class of AIS 20/31
+ *	  from 2024
+ *
+ * DRG.4 is the stronger class and satisfies DRG.3 with it, so a build to either
+ * class answers here.
+ *
+ * A build to DRG.3 applies the entropy source oversampling without the request
+ * size based reseeding limits, and so answers esdm_sp80090c_compliant() too.
+ * The status reports the class rather than SP800-90C for it. A DRG.4 build
+ * applies no oversampling of its own, so there esdm_sp80090c_compliant()
+ * answers only where SP800-90C was configured separately, and both are
+ * reported.
+ *
+ * @return 1 if DRG.3 is satisfied, 0 if not
+ */
+int esdm_drg3_compliant(void);
+
+/**
+ * @brief Indicator whether ESDM is built to the DRG.4 class of AIS 20/31
+ *	  from 2024
+ *
+ * The class adds the request size based reseeding limits of DRG.4.10, and
+ * nothing else - the entropy source oversampling is configured on its own, so a
+ * build may report both.
+ *
+ * @return 1 if DRG.4, 0 if not DRG.4
+ */
+int esdm_drg4_compliant(void);
 
 /**
  * @brief Indicator whether at least one DRNG is fully seeded

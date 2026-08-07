@@ -111,7 +111,7 @@ void esdm_force_fully_seeded_all_drbgs(void);
 
 static inline uint32_t esdm_compress_osr(void)
 {
-	return esdm_sp80090c_compliant() ? ESDM_OVERSAMPLE_ES_BITS : 0;
+	return esdm_es_oversampling() ? ESDM_OVERSAMPLE_ES_BITS : 0;
 }
 
 static inline uint32_t esdm_reduce_by_osr(uint32_t entropy_bits)

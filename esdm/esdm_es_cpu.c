@@ -150,7 +150,7 @@ static uint32_t esdm_get_cpu_data_compress(uint8_t *outbuf,
 	full_chunks = multiplier;
 
 	/* Calculate oversampling for SP800-90C */
-	if (esdm_sp80090c_compliant()) {
+	if (esdm_es_oversampling()) {
 		/* Complete amount of bits to be pulled */
 		full_bits += ESDM_OVERSAMPLE_ES_BITS * multiplier;
 		/* Full blocks that will be pulled */
