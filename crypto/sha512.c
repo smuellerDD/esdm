@@ -142,7 +142,13 @@ static inline void sha512_transform(struct esdm_hash_state *ctx,
 static void sha512_update(struct esdm_hash_state *ctx, const uint8_t *in,
 			  size_t inlen)
 {
-	unsigned int partial = ctx->msg_len % ESDM_SHA512_SIZE_BLOCK;
+	unsigned int partial;
+
+	/* See the corresponding guard in sha256_update() */
+	if (!inlen)
+		return;
+
+	partial = ctx->msg_len % ESDM_SHA512_SIZE_BLOCK;
 
 	ctx->msg_len += inlen;
 

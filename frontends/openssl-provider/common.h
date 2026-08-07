@@ -32,6 +32,21 @@
 #define ESDM_PROV_VERSION VERSION
 #define ESDM_PROV_BUILDINFO VERSION
 
+/*
+ * Provider specific reason codes reported into the OpenSSL error stack and
+ * resolved to text by esdm_get_reason_strings().
+ *
+ * libcrypto reserves the low numbers for the ERR_R_* reasons shared by all
+ * libraries, so start at 100 like OpenSSL's own providers do.
+ */
+#define ESDM_R_INIT_FAILED 100
+#define ESDM_R_MALLOC_FAILURE 101
+#define ESDM_R_RPC_FAILURE 102
+#define ESDM_R_SHORT_RANDOM_DATA 103
+#define ESDM_R_INVALID_ARGUMENT 104
+#define ESDM_R_SEED_LENGTH_UNSUPPORTED 105
+#define ESDM_R_LOCK_FAILURE 106
+
 struct esdm_provider_ctx {
 	const OSSL_CORE_HANDLE *core;
 	OSSL_LIB_CTX *libctx;
