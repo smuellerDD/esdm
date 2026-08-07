@@ -23,6 +23,7 @@
 #include "env.h"
 #include "esdm_rpc_client.h"
 #include "test_pertubation.h"
+#include "accounting_probe.h"
 
 int main(int argc, char *argv[])
 {
@@ -45,6 +46,18 @@ int main(int argc, char *argv[])
 	}
 
 	memset(zero, 0, sizeof(zero));
+
+#ifdef ESDM_TESTMODE
+	/*
+	 * Attribute an accounting mismatch to a request shape before the
+	 * loop below mixes all of them into one megabyte-sized request.
+	 */
+	if (probe_accounting(esdm_rpcc_get_random_bytes_full, "get_random_bytes_full")) {
+		ret = 1;
+		goto out;
+	}
+	esdm_test_shm_status_reset();
+#endif
 
 	while (len) {
 		ssize_t rc;
@@ -77,9 +90,9 @@ int main(int argc, char *argv[])
 		}
 
 		if (len != esdm_test_shm_status_get_rpc_server_written()) {
-			printf("ERROR: amount of generated server data (%zu) does not match received data (%zu)\n",
-			       esdm_test_shm_status_get_rpc_server_written(),
-			       len);
+			report_accounting_mismatch(
+				"generated server data", len,
+				esdm_test_shm_status_get_rpc_server_written());
 			ret = 1;
 			goto out;
 		} else {
