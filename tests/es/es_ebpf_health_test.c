@@ -31,7 +31,7 @@
 #include "es_ebpf/esdm_es_ebpf.h"
 
 struct cutoff_kat {
-	uint32_t entropy_rate;
+	uint32_t osr;
 	uint32_t rct_cutoff;
 	uint32_t rct_cutoff_permanent;
 	uint32_t apt_cutoff;
@@ -40,22 +40,18 @@ struct cutoff_kat {
 };
 
 static const struct cutoff_kat kats[] = {
-	/* Full entropy per event: OSR 1 */
-	{ 256, 30, 60, 325, 355, "rate 256 (OSR 1)" },
-	/* Half a bit per event: OSR 2 */
-	{ 128, 60, 120, 422, 447, "rate 128 (OSR 2)" },
-	/* Rounded down to OSR 2 (conservative) */
-	{ 100, 60, 120, 422, 447, "rate 100 (OSR 2)" },
-	/* OSR 4 */
-	{ 64, 120, 240, 477, 494, "rate 64 (OSR 4)" },
-	/* OSR 8 */
-	{ 32, 240, 480, 502, 512, "rate 32 (OSR 8)" },
-	/* OSR 16: APT cutoff clamped to the window size per FIPS IG */
-	{ 16, 480, 960, 512, 512, "rate 16 (OSR 16, APT clamp)" },
-	/* OSR 256: RCT scales, APT clamped */
-	{ 1, 7680, 15360, 512, 512, "rate 1 (OSR 256, APT clamp)" },
-	/* Uncredited source: strictest cutoffs (OSR 1) */
-	{ 0, 30, 60, 325, 355, "rate 0 (uncredited, OSR 1)" },
+	/* Full entropy per event */
+	{ 1, 30, 60, 325, 355, "OSR 1" },
+	/* Half a bit per event */
+	{ 2, 60, 120, 422, 447, "OSR 2" },
+	{ 4, 120, 240, 477, 494, "OSR 4" },
+	{ 8, 240, 480, 502, 512, "OSR 8" },
+	/* APT cutoff clamped to the window size per FIPS IG */
+	{ 16, 480, 960, 512, 512, "OSR 16 (APT clamp)" },
+	/* RCT scales, APT clamped */
+	{ 256, 7680, 15360, 512, 512, "OSR 256 (APT clamp)" },
+	/* Unconfigured OSR: strictest cutoffs of OSR 1 */
+	{ 0, 30, 60, 325, 355, "OSR 0 (treated as OSR 1)" },
 };
 
 int main(int argc, char *argv[])
@@ -70,7 +66,7 @@ int main(int argc, char *argv[])
 		const struct cutoff_kat *kat = &kats[i];
 		struct esdm_ebpf_config cfg = { 0 };
 
-		esdm_ebpf_health_cutoffs(kat->entropy_rate, &cfg);
+		esdm_ebpf_health_cutoffs(kat->osr, &cfg);
 
 		if (cfg.rct_cutoff != kat->rct_cutoff ||
 		    cfg.rct_cutoff_permanent != kat->rct_cutoff_permanent ||

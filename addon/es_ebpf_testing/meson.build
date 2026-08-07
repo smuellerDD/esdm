@@ -6,4 +6,5 @@ esdm_ebpf_collect = executable(
 	[ 'esdm_ebpf_collect.c', esdm_ebpf_skel_hdrs ],
 	dependencies: [ libbpf_dep ],
 	include_directories: [ include_dirs_server, include_dirs_esdm_ebpf ],
+	install: true,
 )

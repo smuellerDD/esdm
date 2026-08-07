@@ -1,11 +1,11 @@
-extractlsb = executable(
-	'extractlsb',
-	[ 'extractlsb.c' ],
+esdm_extractlsb = executable(
+	'esdm-extractlsb',
+	[ 'esdm_extractlsb.c' ],
 	install: true
 )
 
-getrawentropy = executable(
-	'getrawentropy',
-	[ 'getrawentropy.c' ],
+esdm_getrawentropy = executable(
+	'esdm-getrawentropy',
+	[ 'esdm_getrawentropy.c' ],
 	install: true
 )

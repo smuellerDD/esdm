@@ -59,6 +59,11 @@ static inline uint32_t max_uint32(uint32_t a, uint32_t b)
 	return max(a, b);
 }
 
+static inline uint64_t max_uint64(uint64_t a, uint64_t b)
+{
+	return max(a, b);
+}
+
 static inline size_t max_size(size_t a, size_t b)
 {
 	return max(a, b);

@@ -62,9 +62,10 @@ static int es_sched_ebpf_getstate(void)
 	memset(buf, 0, sizeof(buf));
 	esdm_es[esdm_int_es_sched_ebpf]->state(buf, sizeof(buf));
 
-	if (!strstr(buf, "Available: true") ||
-	    !strstr(buf, "Available entropy") || !strstr(buf, "Total events") ||
-	    !strstr(buf, "Entropy Rate per 256 events")) {
+	if (!strstr(buf, "eBPF programs loaded: true") ||
+	    !strstr(buf, "Available entropy") ||
+	    !strstr(buf, "Oversampling Rate") ||
+	    !strstr(buf, "Entropy Rate per 256 data bits")) {
 		printf("ES SchedulerEBPF - fail: state information contains unexpected content: %s\n",
 		       buf);
 		return 1;

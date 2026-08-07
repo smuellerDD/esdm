@@ -30,6 +30,7 @@
 
 struct bpf_map;
 struct bpf_object;
+struct bpf_program;
 struct ring_buffer;
 struct entropy_es;
 
@@ -40,20 +41,51 @@ struct esdm_ebpf_es {
 	/* Entropy rate in bits per 256 events, from the ESDM configuration */
 	uint32_t (*entropy_rate)(void);
 
+	/*
+	 * SP800-90B oversampling rate of this source: the events required per
+	 * bit of entropy (H = 1 / OSR), configured at build time. It
+	 * parameterizes the health test cutoffs of the eBPF program.
+	 */
+	uint32_t osr;
+
 	/* Borrowed from the source-specific skeleton, owned by the glue */
 	struct bpf_object *obj;
 	struct ring_buffer *rb;
+	/* Size of the ring buffer, i.e. what a wipe of it has to cover */
+	uint32_t rb_size;
+	/*
+	 * Program overwriting the ring buffer on zeroization, NULL if the
+	 * kernel does not support it. While it runs, the consumption of the
+	 * ring buffer discards what it finds: the entropy source is being torn
+	 * down, and the filler records are of no interest either.
+	 */
+	struct bpf_program *wipe_prog;
+	bool wiping;
 	struct bpf_map *status_map;
+	/* Per-CPU state of the programs, read whole into ->cpu_state */
+	struct bpf_map *state_map;
+	struct esdm_ebpf_percpu_state *cpu_state;
+	size_t cpu_state_sz;
+	unsigned int nr_cpus;
 
 	bool loaded;
 
-	/* Per-CPU cycle counter perf event fds (tier 2), -1 if unused */
-	int *perf_fds;
-	unsigned int nr_cpus;
-	/* Timestamp tier: 2 = CPU cycle counter, 3 = monotonic clock */
-	int tier;
-	/* Is the in-program flush timer active? */
-	bool flush_timer;
+	/* Events the running fetch inserted into the pool, and its bound */
+	uint32_t ingested;
+	uint64_t fetch_target;
+
+	/*
+	 * Events fetched from the ring buffer over the lifetime of the source,
+	 * and the ones the programs deposited but nobody has fetched yet - the
+	 * entropy the source can still extract without waiting for new events.
+	 */
+	uint64_t consumed_events;
+	uint64_t pending_events;
+	/* Events the programs deposited over that lifetime, as last read */
+	uint64_t submitted_events;
+
+	/* CPUs whose SP800-90B startup test has completed */
+	unsigned int startup_done_cpus;
 
 	/* SP800-90B health state */
 	bool health_enabled;
@@ -68,42 +100,59 @@ struct esdm_ebpf_es {
 
 	/* Events whose entropy is present in the conditioning pool */
 	uint64_t credited_events;
-
-	/* Statistics maintained on ring buffer ingest */
-	uint64_t total_events;
-	uint64_t batches_dropped;
 };
+
+/*
+ * Oversampling rate of the entropy source, guarding against an unset value:
+ * an OSR of 0 is no meaningful assessment and is treated as the strictest
+ * setting of 1, just as the health test cutoff computation does.
+ */
+static inline uint32_t esdm_ebpf_osr(const struct esdm_ebpf_es *es)
+{
+	return es->osr ? es->osr : 1;
+}
 
 /* Is the kernel exposing BTF data required for CO-RE program loading? */
 bool esdm_ebpf_btf_available(void);
+
+/*
+ * Does the monotonic clock read by the eBPF programs offer a high resolution?
+ * Without one the collected time stamps carry no entropy, so the entropy
+ * sources are not enabled at all.
+ */
+bool esdm_ebpf_highres_timer(void);
 
 /* Route libbpf log output into the ESDM logger (idempotent) */
 void esdm_ebpf_setup_logging(void);
 
 /*
- * Compute the SP800-90B RCT and APT cutoff values for the given entropy rate
- * (entropy bits per 256 events). An entropy rate of 0 (uncredited source)
- * yields the most conservative cutoffs.
+ * Compute the SP800-90B RCT and APT cutoff values for the given oversampling
+ * rate, i.e. for a min-entropy of 1 / OSR bits per event. An OSR of 0 is
+ * treated as the most conservative OSR of 1.
  */
-void esdm_ebpf_health_cutoffs(uint32_t entropy_rate,
-			      struct esdm_ebpf_config *cfg);
+void esdm_ebpf_health_cutoffs(uint32_t osr, struct esdm_ebpf_config *cfg);
 
 /*
  * Fill the eBPF program configuration prior to loading the program: health
- * test enablement and cutoffs, timestamp mechanism and flush deadline.
+ * test enablement and cutoffs.
  */
 void esdm_ebpf_fill_config(struct esdm_ebpf_es *es,
 			   struct esdm_ebpf_config *cfg);
 
 /*
  * Prepare an opened but not yet loaded eBPF object: fill the configuration,
- * probe the CPU cycle counter availability (tier 2) and size the per-CPU
- * maps. When enable_flush_timer is false, the bpf_timer based flushing of
- * partial batches is compiled out (fallback for kernels rejecting bpf_timer
- * usage in tracing programs).
+ * bring in the ring buffer wipe and size the ring buffer and the per-CPU timer
+ * map.
+ *
+ * Everything this touches is a property of the object itself or the kernel's
+ * support for the wipe, so a failure here is not the "kernel too old, run
+ * without this entropy source" case the load and attach steps have to allow
+ * for. It means the source could only run in a state where the raw samples it
+ * collects cannot be erased again - the caller must fail its initialization
+ * and let that take the ESDM down, rather than carrying on without the source.
  */
 int esdm_ebpf_prepare(struct esdm_ebpf_es *es, struct bpf_object *obj,
-		      struct esdm_ebpf_config *cfg, bool enable_flush_timer);
+		      struct esdm_ebpf_config *cfg);
 
 /*
  * Complete the initialization of an eBPF entropy source whose skeleton has
@@ -112,8 +161,20 @@ int esdm_ebpf_prepare(struct esdm_ebpf_es *es, struct bpf_object *obj,
  */
 int esdm_ebpf_init_es(struct esdm_ebpf_es *es, struct bpf_object *obj);
 
-/* Drain all pending ring buffer records (non-blocking) */
+/*
+ * Ingest deposited events, up to the number the conditioning pool still has
+ * room to credit. Never blocks and never drains more than that, so the events
+ * beyond it stay in the ring buffer for the next call.
+ */
 int esdm_ebpf_consume(struct esdm_ebpf_es *es);
+
+/*
+ * Fetch the collected events only while the source has room for their entropy.
+ * This is the periodic variant for the seed monitor: it stops asking once the
+ * conditioning pool delivers all one extraction can yield, so a source nobody
+ * draws from stops moving events into user space altogether.
+ */
+int esdm_ebpf_refill(struct esdm_ebpf_es *es);
 
 /* Currently available entropy in bits */
 uint32_t esdm_ebpf_avail_entropy(struct esdm_ebpf_es *es);
@@ -130,6 +191,16 @@ void esdm_ebpf_get_ent(struct esdm_ebpf_es *es, struct entropy_es *eb_es,
 
 /* Drop all collected entropy */
 void esdm_ebpf_pool_reset(struct esdm_ebpf_es *es);
+
+/*
+ * Erase every raw sample the entropy source holds: the collection buffers of
+ * the eBPF programs, the events they handed over but nobody fetched, and the
+ * user space copy of the per-CPU state.
+ *
+ * The caller must have detached the programs beforehand - a program still
+ * collecting would refill what this erases. Called by esdm_ebpf_fini_es().
+ */
+void esdm_ebpf_zeroize(struct esdm_ebpf_es *es);
 
 /* Release all user space resources; the skeleton is destroyed by the glue */
 void esdm_ebpf_fini_es(struct esdm_ebpf_es *es);
