@@ -308,8 +308,11 @@ testdirs = [
 	'tests/getrandom',
 	'tests/kernel-seeder',
 	#'tests/misc',
+	'tests/proc',
 	'tests/rpc_client',
 	'tests/rpc_service',
+	'tests/server',
+	'tests/server-signal-helper',
 	'tests/aux-client',
 	'tests/tool',
 	]

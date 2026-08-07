@@ -128,6 +128,21 @@ static bool performTest(char *test, char *type)
 			goto out;
 	}
 
+	/*
+	 * The EGD provider reaches the ESDM over the EGD protocol instead of
+	 * the RPC interface, so it is the one variant that works without the
+	 * RPC client library at all - env_init() has the server serve EGD and
+	 * points the client at that socket.
+	 */
+	if (strncmp(type, "egd", strlen("egd")) == 0) {
+		prov_esdm = OSSL_PROVIDER_load(NULL, "libesdm-egd-provider");
+		if (prov_esdm == NULL)
+			return false;
+		prov_default = OSSL_PROVIDER_load(NULL, "default");
+		if (prov_default == NULL)
+			goto out;
+	}
+
 	if (strncmp(test, "random", strlen("random")) == 0)
 		result = test_random();
 	else if (strncmp(test, "instantiate_pr", strlen("instantiate_pr")) == 0)

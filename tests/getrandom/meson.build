@@ -14,6 +14,22 @@ if get_option('linux-getrandom').enabled()
 			dependencies: esdm_getrandom_dep
 		)
 
+	# What the library decides for itself: the flag combinations it refuses,
+	# and the fallback to the kernel that every request takes when no ESDM
+	# answers it. Neither needs a server, so this one is not privileged.
+	getrandom_api_test = executable(
+			'getrandom_api_test',
+			[ 'getrandom_api_test.c' ],
+			include_directories: [ include_dirs_server,
+					       include_directories('../common') ],
+			dependencies: esdm_getrandom_dep
+		)
+
+	test('getrandom library API', getrandom_api_test,
+		# Each request the ESDM cannot answer waits out the RPC
+		# client's connection attempts before it reaches the kernel.
+		timeout: 120)
+
 	# Available test targets:
 	#	esdm-server: esdm_server
 	#	esdm-cuse-random: esdm_cuse_random

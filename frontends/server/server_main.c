@@ -72,11 +72,19 @@ static void daemon_raise_sched_priority(void);
  * General helper functions
  *******************************************************************/
 
+/*
+ * Room for what esdm_version() produces. A test mode build prefixes the line
+ * with TESTMODE_STR, which is longer than the line itself - a buffer sized for
+ * the production string silently truncates it, and what got cut off is the
+ * version number the caller asked for.
+ */
+#define ESDM_SERVER_VERSION_BUFLEN 128
+
 static void usage(void)
 {
-	char version[50];
+	char version[ESDM_SERVER_VERSION_BUFLEN];
 
-	memset(version, 0, 50);
+	memset(version, 0, sizeof(version));
 	esdm_version(version, sizeof(version));
 
 	fprintf(stderr, "\nESDM RPC server\n\n");
@@ -134,7 +142,7 @@ static void usage(void)
 static void parse_opts(int argc, char *argv[])
 {
 	int c = 0;
-	char version[30];
+	char version[ESDM_SERVER_VERSION_BUFLEN];
 
 	while (1) {
 		int opt_index = 0;

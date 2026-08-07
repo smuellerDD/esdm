@@ -1,4 +1,25 @@
 if get_option('linux-devfiles').enabled()
+	# The handlers on their own, without a mounted device: what they do with
+	# a malformed request, a caller that may not make it, and an ESDM that
+	# does not answer. The translation unit is compiled into the test so the
+	# handlers can be called directly, and the libfuse reply functions are
+	# provided by the test itself - so this needs neither root nor /dev/fuse
+	# and runs in an ordinary unprivileged run.
+	cuse_device_test = executable(
+			'cuse_device_test',
+			[ files('../test_ipc_ns.c'), 'cuse_device_test.c' ],
+			include_directories: [
+				include_dirs_client,
+				include_dirs_server,
+				include_directories('../../frontends/cuse'),
+				include_directories('../common') ],
+			dependencies: [ dependencies_client, cuse_deps ],
+			link_with: [ esdm_common_static_lib,
+				     esdm_rpc_client_lib ],
+		)
+
+	test('CUSE device handlers', cuse_device_test)
+
 	cuse_tester_common = files([
 		'env.c'
 		])

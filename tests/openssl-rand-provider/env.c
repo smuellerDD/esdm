@@ -32,6 +32,10 @@
 #include "../test_wait.h"
 #include "esdm_rpc_service.h"
 
+/* Where this test has the server serve EGD, see env_init() */
+#define ESDM_TEST_EGD_SOCKET "/tmp/esdm-egd-openssl-test.socket"
+#define ESDM_EGD_SOCKET_ENV "ESDM_EGD_SOCKET"
+
 static pid_t server_pid = 0;
 
 void env_fini(void)
@@ -93,13 +97,24 @@ int env_init(void)
 	if (ret)
 		goto out;
 
+	/*
+	 * The EGD provider does not use the RPC interface at all - it speaks
+	 * the EGD protocol over a socket of its own - so the server is given
+	 * one and the client is pointed at it. Doing this unconditionally
+	 * costs the RPC based providers nothing and keeps one server startup
+	 * for every provider under test. /tmp is private to this test, so the
+	 * fixed name cannot collide with another one.
+	 */
+	setenv(ESDM_EGD_SOCKET_ENV, ESDM_TEST_EGD_SOCKET, 1);
+
 	/* Server forking */
 	pid = fork();
 	if (pid < 0)
 		return errno;
 	if (pid == 0) {
 		char buf[FILENAME_MAX];
-		char *server_argv[] = { buf, "-vvvvv", NULL };
+		char *server_argv[] = { buf,	    "-vvvvv", "--egd_socket",
+					(char *)ESDM_TEST_EGD_SOCKET, NULL };
 
 		snprintf(buf, sizeof(buf), "%s", server);
 		execve(server, server_argv, NULL);
@@ -110,6 +125,9 @@ int env_init(void)
 	server_pid = pid;
 	/* The server is up once it has bound its unprivileged RPC socket */
 	test_wait_for_type(ESDM_RPC_UNPRIV_SOCKET, S_IFSOCK,
+			   TEST_WAIT_TIMEOUT_MS);
+	/* and serving EGD once that socket is there as well */
+	test_wait_for_type(ESDM_TEST_EGD_SOCKET, S_IFSOCK,
 			   TEST_WAIT_TIMEOUT_MS);
 
 out:
