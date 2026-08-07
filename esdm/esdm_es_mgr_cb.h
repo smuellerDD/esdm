@@ -39,6 +39,12 @@ enum esdm_internal_es {
 #ifdef ESDM_ES_SCHED
 	esdm_int_es_sched, /* Scheduler entropy source */
 #endif
+#ifdef ESDM_ES_IRQ_EBPF
+	esdm_int_es_irq_ebpf, /* IRQ-based entropy source via eBPF */
+#endif
+#ifdef ESDM_ES_SCHED_EBPF
+	esdm_int_es_sched_ebpf, /* Scheduler entropy source via eBPF */
+#endif
 	esdm_int_es_last, /* MUST be the last entry */
 };
 

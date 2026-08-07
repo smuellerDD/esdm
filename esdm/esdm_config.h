@@ -168,6 +168,48 @@ void esdm_config_es_sched_entropy_rate_set(uint32_t ent);
 uint32_t esdm_config_es_sched_entropy_rate(void);
 
 /**
+ * @brief eBPF interrupt ES configuration: set the entropy rate
+ *
+ * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
+ *	 than the security strength of the the applied DRNG.
+ *
+ * NOTE: Setting a non-zero entropy rate zeroes the entropy rates of the other
+ *	 interrupt/scheduler-based entropy sources due to the dependencies
+ *	 between their events.
+ *
+ * @param [in] ent Entropy rate in bits.
+ */
+void esdm_config_es_irq_ebpf_entropy_rate_set(uint32_t ent);
+
+/**
+ * @brief eBPF interrupt ES configuration: get the entropy rate
+ *
+ * @return Entropy rate in bits
+ */
+uint32_t esdm_config_es_irq_ebpf_entropy_rate(void);
+
+/**
+ * @brief eBPF scheduler ES configuration: set the entropy rate
+ *
+ * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
+ *	 than the security strength of the the applied DRNG.
+ *
+ * NOTE: Setting a non-zero entropy rate zeroes the entropy rates of the other
+ *	 interrupt/scheduler-based entropy sources due to the dependencies
+ *	 between their events.
+ *
+ * @param [in] ent Entropy rate in bits.
+ */
+void esdm_config_es_sched_ebpf_entropy_rate_set(uint32_t ent);
+
+/**
+ * @brief eBPF scheduler ES configuration: get the entropy rate
+ *
+ * @return Entropy rate in bits
+ */
+uint32_t esdm_config_es_sched_ebpf_entropy_rate(void);
+
+/**
  * @brief Scheduler ES configuration: shall the ESDM retry to access the
  *	  kernel?
  *

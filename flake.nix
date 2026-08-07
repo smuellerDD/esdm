@@ -143,7 +143,10 @@
         # this file. Keyed by the suffix used for the generated outputs, e.g.
         # "6_6" -> live_6_6 / esdm_es_6_6. The rolling "latest" alias is added
         # on top for convenience.
-        kernels =
+        # Stock (unpatched) `linuxPackages_<major>_<minor>` sets nixpkgs
+        # currently exposes, restricted to the versions ESDM supports
+        # (>= minKernel). Keyed by the suffix used for the generated outputs.
+        stockKernels =
           let
             versioned = builtins.listToAttrs (
               builtins.concatMap (
@@ -161,12 +164,63 @@
                   in
                   lib.optional supported {
                     name = "${toString major}_${toString minor}";
-                    value = pkgs.${name}.extend addEsdmToKernel;
+                    value = pkgs.${name};
                   }
               ) (builtins.attrNames pkgs)
             );
           in
-          versioned // { latest = pkgs.linuxPackages_latest.extend addEsdmToKernel; };
+          versioned // { latest = pkgs.linuxPackages_latest; };
+
+        # The same kernels with the esdm_es patches applied.
+        kernels = lib.mapAttrs (name: lp: lp.extend addEsdmToKernel) stockKernels;
+
+        # VM check of the eBPF entropy sources: the ESDM server (built with
+        # es_sched_ebpf/es_irq_ebpf) must load the eBPF programs and report
+        # both sources as available on every supported kernel. The check
+        # deliberately runs on the stock (unpatched) kernel - not requiring
+        # kernel patches is the point of the eBPF entropy sources.
+        mkEbpfCheck =
+          kernel:
+          let
+            esdm-ebpf = self.packages.${system}.esdm-ebpf;
+          in
+          pkgs.testers.nixosTest {
+            name = "eBPF entropy source test";
+
+            nodes.machine =
+              { ... }:
+              {
+                boot.kernelPackages = kernel;
+
+                environment.systemPackages = [ esdm-ebpf ];
+
+                virtualisation = {
+                  memorySize = 2048;
+                  cores = 4;
+                };
+              };
+
+            # Note, esdm-tool prints the status through the ESDM logger
+            # which writes to stderr.
+            testScript = ''
+              machine.wait_for_unit("multi-user.target")
+              machine.succeed(
+                  "${esdm-ebpf}/bin/esdm-server -f --pid /run/esdm-server.pid --syslog -vvv >/dev/null 2>&1 & echo started"
+              )
+              machine.wait_until_succeeds(
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -q SchedulerEBPF", 60
+              )
+              machine.succeed(
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -q InterruptEBPF"
+              )
+              machine.wait_until_succeeds(
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 SchedulerEBPF | grep -q 'Available: true'", 60
+              )
+              machine.wait_until_succeeds(
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 InterruptEBPF | grep -q 'Available: true'", 60
+              )
+            '';
+          };
 
         mkCheck =
           kernel:
@@ -274,7 +328,11 @@
         # One check per defined kernel version, e.g.:
         #   nix run .#checks.x86_64-linux.live_6_18.driverInteractive
         #   nix flake check
-        checks = lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck kernel)) kernels;
+        checks =
+          lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck kernel)) kernels
+          // lib.mapAttrs' (
+            name: kernel: lib.nameValuePair "ebpf_${name}" (mkEbpfCheck kernel)
+          ) stockKernels;
 
         packages = {
           jitterentropy = pkgs.jitterentropy.overrideAttrs (_: {
@@ -340,6 +398,22 @@
                   builtins.head (builtins.head matches);
                 dontStrip = debugEsdm;
               });
+
+          # ESDM with the eBPF-based scheduler and interrupt entropy sources
+          # (plus the raw measurement tooling). The eBPF programs only use
+          # UAPI headers, so no kernel BTF is needed at build time.
+          esdm-ebpf = self.packages.${system}.esdm.overrideAttrs (prev: {
+            buildInputs = prev.buildInputs ++ [ pkgs.libbpf ];
+            nativeBuildInputs = prev.nativeBuildInputs ++ [
+              pkgs.clang
+              pkgs.bpftools
+            ];
+            mesonFlags = prev.mesonFlags ++ [
+              "-Des_sched_ebpf=enabled"
+              "-Des_irq_ebpf=enabled"
+              "-Des_ebpf_testing=enabled"
+            ];
+          });
 
           openssl-config =
             let
@@ -427,6 +501,7 @@
               botan3
               fuse3
               gnutls
+              libbpf
               libkcapi
               libselinux
               openssl
@@ -434,6 +509,8 @@
               self.packages.${system}.jitterentropy
             ];
             nativeBuildInputs = with pkgs; [
+              bpftools
+              clang
               cmake
               meson
               ninja

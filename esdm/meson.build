@@ -12,6 +12,21 @@ esdm_src = files([
 ])
 
 dependencies_esdm_lib = [ ]
+include_dirs_esdm_lib = [ include_dirs_server ]
+
+if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
+	subdir('es_ebpf')
+	dependencies_esdm_lib += libbpf_dep
+	include_dirs_esdm_lib += include_dirs_esdm_ebpf
+	esdm_src += files('es_ebpf/esdm_es_ebpf.c')
+	esdm_src += esdm_ebpf_skel_hdrs
+	if get_option('es_sched_ebpf').enabled()
+		esdm_src += files('es_ebpf/esdm_es_sched_ebpf.c')
+	endif
+	if get_option('es_irq_ebpf').enabled()
+		esdm_src += files('es_ebpf/esdm_es_irq_ebpf.c')
+	endif
+endif
 
 if get_option('es_jent').enabled()
 	jitterentropy_dep = cc.find_library('jitterentropy')
@@ -112,14 +127,14 @@ esdm_common_static_lib = static_library('esdm_common_static',
 
 esdm_static_lib = static_library('esdm_static',
 	[ crypto_src, esdm_src ],
-	 include_directories: include_dirs_server,
+	 include_directories: include_dirs_esdm_lib,
 	 dependencies: [ dependencies_esdm_lib ],
 	 link_with: esdm_common_static_lib,
 	)
 
 esdm_lib = library('esdm',
 	[ common_src, crypto_src, esdm_src ],
-	 include_directories: [ include_dirs_client, include_dirs_server ],
+	 include_directories: [ include_dirs_client, include_dirs_esdm_lib ],
 	 dependencies: [ dependencies_client, dependencies_esdm_lib ],
 	 version: meson.project_version(),
 	 soversion: version_array[0],

@@ -1,4 +1,8 @@
 Changes 1.2.4
+* Add eBPF-based scheduler and interrupt entropy sources (es_sched_ebpf,
+es_irq_ebpf): no kernel patches required, in-program SP800-90B health tests,
+raw entropy measurement tooling in addon/es_ebpf_testing
+
 * Centralize asynchronous buffer management to collect entropy from slow entropy sources
 
 * Add TPM2 entropy source
