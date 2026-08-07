@@ -44,10 +44,19 @@ bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb);
 void esdm_unset_fully_seeded(struct esdm_drng *drng);
 void esdm_init_ops(struct entropy_buf *eb);
-void esdm_get_entropy_bitstring(struct entropy_buf *eb, uint32_t requested_bits,
-				bool force);
-void esdm_get_additional_data(struct entropy_buf *eb, uint32_t requested_bits,
-			      bool force);
+/*
+ * Collect from every entropy source in one pass, splitting the result over the
+ * two buffers a reseed needs: @seedbuf takes the sources that may be credited
+ * with entropy, @addtl the rest. Pass the same buffer twice to gather
+ * everything into one.
+ *
+ * One pass rather than two: no source belongs in both buffers, so filling them
+ * separately meant walking the sources twice and, where the fetch runs in
+ * parallel, waiting out two rounds of the slowest one.
+ */
+void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
+			   struct entropy_buf *addtl, uint32_t requested_bits,
+			   bool force);
 
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
