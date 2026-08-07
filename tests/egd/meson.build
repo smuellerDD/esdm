@@ -41,14 +41,14 @@ if get_option('esdm-server').enabled()
 	# while it is not.
 	egd_server_raw_test = executable(
 			'egd_server_raw_test',
-			[ egd_server_src, 'egd_server_raw_test.c' ],
+			[ egd_server_src, files('../test_ipc_ns.c'),
+			  'egd_server_raw_test.c' ],
 			include_directories: include_dirs_server,
 			dependencies: [ dependencies_server, egd_test_deps ],
 			link_with: esdm_static_lib
 		)
 
-	test('EGD server raw protocol', egd_server_raw_test, timeout: 300,
-		is_parallel: false)
+	test('EGD server raw protocol', egd_server_raw_test, timeout: 300)
 
 	egd_server_test = executable(
 			'egd_server_test',
@@ -59,9 +59,10 @@ if get_option('esdm-server').enabled()
 		)
 
 	# Skipped (77) unless it is run as root: the esdm-server refuses to
-	# start otherwise.
+	# start otherwise. The daemon it starts claims the fixed socket,
+	# semaphore and IPC names, so the test puts itself in namespaces of its
+	# own - which is what lets it run next to the rest.
 	test('EGD server interface', egd_server_test,
 		env: [ 'ESDM_SERVER=' + esdm_server.full_path() ],
-		timeout: 300,
-		is_parallel: false)
+		timeout: 300)
 endif

@@ -28,6 +28,9 @@
 #include <unistd.h>
 
 #include "env.h"
+#include "../test_namespace.h"
+#include "../test_wait.h"
+#include "esdm_rpc_service.h"
 
 static pid_t server_pid = 0;
 
@@ -65,7 +68,6 @@ static int env_check_file(const char *path)
 
 int env_init(void)
 {
-	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
 	const char *server = getenv("ESDM_SERVER");
 	const char *lib = getenv("ESDM_LIB_GETRANDOM");
 	pid_t pid;
@@ -74,6 +76,18 @@ int env_init(void)
 	if (getuid()) {
 		printf("Program must be started as root\n");
 		return 77;
+	}
+
+	/*
+	 * Run in namespaces of our own so the fixed socket, semaphore and
+	 * IPC names this test needs cannot collide with another test using
+	 * the same ones - see tests/test_namespace.h.
+	 */
+	ret = test_isolate_namespaces();
+	if (ret) {
+		printf("Cannot isolate the test namespaces: %s\n",
+		       strerror(-ret));
+		return -ret;
 	}
 
 	ret = env_check_file(server);
@@ -98,7 +112,9 @@ int env_init(void)
 		return EFAULT;
 	}
 	server_pid = pid;
-	nanosleep(&ts, NULL);
+	/* The server is up once it has bound its unprivileged RPC socket */
+	test_wait_for_type(ESDM_RPC_UNPRIV_SOCKET, S_IFSOCK,
+			   TEST_WAIT_TIMEOUT_MS);
 
 out:
 	return ret;

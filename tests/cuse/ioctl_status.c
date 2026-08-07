@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include "env.h"
+#include "esdm_rpc_service.h"
 #include "privileges.h"
 
 /**
@@ -38,13 +39,26 @@
  */
 static int status_ioctl(int fd)
 {
-	char status[1024];
+	/*
+	 * The buffer must hold the largest status the ioctl can ever produce.
+	 * Request 42 carries no _IOC size and the size argument of ioctl(2) is
+	 * discarded by its variadic wrapper, so the handler has no way to learn
+	 * how much room the caller has: it hands the kernel the full status
+	 * length and the kernel copies exactly that much here. A smaller buffer
+	 * is therefore overrun by the kernel, where no userspace guard can
+	 * catch it. The one extra byte lets this terminate the result before
+	 * printing it, which the handler does not promise to do.
+	 */
+	char status[ESDM_SHM_STATUS_INFO_SIZE + 1];
 
-	if (ioctl(fd, 42, status, sizeof(status)) < 0) {
+	memset(status, 0, sizeof(status));
+
+	if (ioctl(fd, 42, status, ESDM_SHM_STATUS_INFO_SIZE) < 0) {
 		printf("Status IOCTL failed with %d\n", errno);
 		return 1;
 	}
 
+	status[ESDM_SHM_STATUS_INFO_SIZE] = '\0';
 	printf("Status information:\n%s", status);
 
 	return 0;

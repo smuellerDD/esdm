@@ -29,6 +29,9 @@
 
 #include "config.h"
 #include "env.h"
+#include "../test_namespace.h"
+#include "../test_wait.h"
+#include "esdm_rpc_service.h"
 #include "privileges.h"
 #include "ret_checkers.h"
 #include "test_pertubation.h"
@@ -95,7 +98,7 @@ static int env_check_file(const char *path)
 
 int env_init(int disable_fallback)
 {
-	struct timespec ts = { .tv_sec = 1, .tv_nsec = 0 };
+	char devfile[64];
 	const char *random = getenv("ESDM_CUSE_RANDOM");
 	const char *urandom = getenv("ESDM_CUSE_URANDOM");
 	const char *server = getenv("ESDM_SERVER");
@@ -105,6 +108,18 @@ int env_init(int disable_fallback)
 	if (getuid()) {
 		printf("Program must be started as root\n");
 		return 77;
+	}
+
+	/*
+	 * Run in namespaces of our own so the fixed socket, semaphore and
+	 * IPC names this test needs cannot collide with another test using
+	 * the same ones - see tests/test_namespace.h.
+	 */
+	ret = test_isolate_namespaces();
+	if (ret) {
+		printf("Cannot isolate the test namespaces: %s\n",
+		       strerror(-ret));
+		return -ret;
 	}
 
 #ifndef ESDM_TESTMODE
@@ -133,7 +148,9 @@ int env_init(int disable_fallback)
 		return EFAULT;
 	}
 	server_pid = pid;
-	nanosleep(&ts, NULL);
+	/* The server is up once it has bound its unprivileged RPC socket */
+	test_wait_for_type(ESDM_RPC_UNPRIV_SOCKET, S_IFSOCK,
+			   TEST_WAIT_TIMEOUT_MS);
 
 	/* random forking */
 	pid = fork();
@@ -157,7 +174,9 @@ int env_init(int disable_fallback)
 		return EFAULT;
 	}
 	random_pid = pid;
-	nanosleep(&ts, NULL);
+	/* ... and a CUSE frontend once its device node is in place */
+	esdm_cuse_dev_file(devfile, sizeof(devfile), "random");
+	test_wait_for_type(devfile, S_IFCHR, TEST_WAIT_TIMEOUT_MS);
 
 	/* urandom forking */
 	pid = fork();
@@ -182,7 +201,8 @@ int env_init(int disable_fallback)
 		return EFAULT;
 	}
 	urandom_pid = pid;
-	nanosleep(&ts, NULL);
+	esdm_cuse_dev_file(devfile, sizeof(devfile), "urandom");
+	test_wait_for_type(devfile, S_IFCHR, TEST_WAIT_TIMEOUT_MS);
 
 out:
 	return ret;
