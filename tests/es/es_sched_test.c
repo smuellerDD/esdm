@@ -39,11 +39,19 @@ static void create_sched_entropy(void)
 {
 	unsigned int i;
 
+	/*
+	 * The children inherit whatever this process has buffered on stdout,
+	 * which is block buffered into the test log rather than to a terminal.
+	 * exit() would flush that copy and print the run so far again, once per
+	 * child - so leave without running the exit handlers.
+	 */
+	fflush(NULL);
+
 	for (i = 0; i < 2000; i++) {
 		pid_t pid = fork();
 
 		if (pid == 0)
-			exit(0);
+			_exit(0);
 		else if (pid > 0)
 			waitpid(pid, NULL, 0);
 	}
@@ -65,7 +73,12 @@ static int es_sched_getstate(void)
 	if (!strncmp(buf, "disabled", 8))
 		return -ENOENT;
 
-	if (!strstr(buf, "Hash for operating entropy pool") ||
+	/*
+	 * The labels come from the kernel module (esdm_sched_es_state() of
+	 * addon/linux_esdm_es/esdm_es_sched.c), which post-processes with a
+	 * DRBG rather than a hash since commit 1dd63ca.
+	 */
+	if (!strstr(buf, "DRBG for operating entropy pool") ||
 	    !strstr(buf, "Available entropy") ||
 	    !strstr(buf, "per-CPU scheduler event collection size") ||
 	    !strstr(buf, "Standards compliance") ||
@@ -133,22 +146,24 @@ static int es_sched_poolsize(void)
 		return 1;
 	}
 
+	/*
+	 * Both report what the collected events are worth. With the DRBG post-
+	 * processing that grows with the ring buffer instead of capping at one
+	 * digest per CPU, so the former bound of 512 * online nodes no longer
+	 * describes this source - it is the invariant between the two that is
+	 * checked: a request cannot be worth more than the source has.
+	 */
 	ret = esdm_es[esdm_int_es_sched]->max_entropy();
-	/* Maximum digest size is 512 bits */
-	if (ret > 512 * esdm_online_nodes()) {
-		printf("ES Scheduler - fail: max_entropy too large: %d\n", ret);
-		return 1;
-	}
-	printf("ES Scheduler - pass: max_entropy: %d\n", ret);
-
 	ret2 = esdm_es[esdm_int_es_sched]->curr_entropy(
 		esdm_security_strength());
-	if (ret2 > 512 * esdm_online_nodes()) {
-		printf("ES Scheduler - fail: curr_entropy too large: %u\n",
-		       ret2);
+
+	if (ret2 > ret) {
+		printf("ES Scheduler - fail: curr_entropy %u exceeds max_entropy %u\n",
+		       ret2, ret);
 		return 1;
 	}
-	printf("ES Scheduler - pass: curr_entropy: %d\n", ret2);
+	printf("ES Scheduler - pass: max_entropy: %u, curr_entropy: %u\n", ret,
+	       ret2);
 
 	return 0;
 }

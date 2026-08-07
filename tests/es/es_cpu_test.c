@@ -132,6 +132,132 @@ static int es_cpu_poolsize(uint32_t expected_ent_level)
 	return 0;
 }
 
+/*
+ * The state string is written with snprintf into whatever the caller offers,
+ * and the JSON status document hands it a share of a fixed buffer. Check that a
+ * buffer too small for the full text is truncated rather than run over, and
+ * that what is written stays a NUL terminated string.
+ */
+static int es_cpu_getstate_truncated(void)
+{
+	char buf[sizeof(" Hash for compressing data: ") + 8];
+	char canary[16];
+
+	memset(buf, 0x5a, sizeof(buf));
+	memset(canary, 0x5a, sizeof(canary));
+
+	esdm_es[esdm_ext_es_cpu]->state(buf, sizeof(buf) - sizeof(canary));
+
+	if (memcmp(buf + sizeof(buf) - sizeof(canary), canary,
+		   sizeof(canary))) {
+		printf("ES CPU - fail: state wrote past the end of the buffer\n");
+		return 1;
+	}
+
+	if (buf[sizeof(buf) - sizeof(canary) - 1] != '\0') {
+		printf("ES CPU - fail: state did not terminate the truncated string\n");
+		return 1;
+	}
+
+	printf("ES CPU - pass: state truncates into a short buffer: %s\n", buf);
+
+	return 0;
+}
+
+/*
+ * Two pulls in a row must not deliver the same bytes. The entropy source hands
+ * its buffer to the ES manager without looking at it, so a CPU instruction that
+ * stopped producing new values - or a gather loop that stopped writing - would
+ * otherwise be credited at the full rate for a repeat of the previous seed.
+ */
+static int es_cpu_getdata_differs(void)
+{
+	struct entropy_es first, second;
+
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+
+	memset(&first, 0, sizeof(first));
+	memset(&second, 0, sizeof(second));
+
+	esdm_es[esdm_ext_es_cpu]->get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS,
+					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&second,
+					  ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+
+	if (!memcmp(first.e, second.e, ESDM_DRNG_INIT_SEED_SIZE_BYTES)) {
+		printf("ES CPU - fail: two successive pulls delivered identical data\n");
+		return 1;
+	}
+	printf("ES CPU - pass: successive pulls deliver different data\n");
+
+	return 0;
+}
+
+/*
+ * A partial request: the gather loop runs over full machine words, so the
+ * smaller of the two sizes the ES manager asks for must come back with exactly
+ * the entropy that was requested and no bytes written beyond it.
+ */
+static int es_cpu_getdata_partial(void)
+{
+	struct entropy_es eb_es;
+	uint8_t zero[ESDM_DRNG_INIT_SEED_SIZE_BYTES];
+	const uint32_t requested = ESDM_DRNG_SECURITY_STRENGTH_BITS;
+
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+
+	memset(&eb_es, 0, sizeof(eb_es));
+	memset(zero, 0, sizeof(zero));
+
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, requested, true);
+
+	if (eb_es.e_bits !=
+	    esdm_fast_noise_entropylevel(ESDM_DRNG_SECURITY_STRENGTH_BITS,
+					 requested)) {
+		printf("ES CPU - fail: partial request credited %u bits\n",
+		       eb_es.e_bits);
+		return 1;
+	}
+
+	if (!memcmp(eb_es.e, zero, requested >> 3)) {
+		printf("ES CPU - fail: partial request delivered no data\n");
+		return 1;
+	}
+
+	if (ESDM_DRNG_INIT_SEED_SIZE_BYTES > (requested >> 3) &&
+	    memcmp(eb_es.e + (requested >> 3), zero,
+		   ESDM_DRNG_INIT_SEED_SIZE_BYTES - (requested >> 3))) {
+		printf("ES CPU - fail: partial request wrote beyond the requested %u bits\n",
+		       requested);
+		return 1;
+	}
+	printf("ES CPU - pass: partial request of %u bits honoured\n",
+	       requested);
+
+	return 0;
+}
+
+/*
+ * The source is compiled in for this architecture - the test would have been
+ * skipped otherwise - so it must say so. The ES manager skips every callback of
+ * a source that reports itself inactive.
+ */
+static int es_cpu_active(void)
+{
+	if (!esdm_es[esdm_ext_es_cpu]->active) {
+		printf("ES CPU - fail: active callback missing\n");
+		return 1;
+	}
+
+	if (!esdm_es[esdm_ext_es_cpu]->active()) {
+		printf("ES CPU - fail: source delivers data but reports itself inactive\n");
+		return 1;
+	}
+	printf("ES CPU - pass: active\n");
+
+	return 0;
+}
+
 static int es_cpu_name(void)
 {
 	const char *name = esdm_es[esdm_ext_es_cpu]->name;
@@ -218,13 +344,22 @@ int main(int argc, char *argv[])
 	}
 
 	ret += es_cpu_name();
+	ret += es_cpu_active();
 
-	for (i = 1; i <= ESDM_DRNG_SECURITY_STRENGTH_BITS; i++) {
+	/*
+	 * From 0 on: a rate of 0 is what the default build configures for this
+	 * source, and it must still deliver data - the rate says what the output
+	 * is credited with, not whether there is any.
+	 */
+	for (i = 0; i <= ESDM_DRNG_SECURITY_STRENGTH_BITS; i++) {
 		ret += es_cpu_poolsize(i);
 		ret += es_cpu_getdata(i);
 	}
 
+	ret += es_cpu_getdata_differs();
+	ret += es_cpu_getdata_partial();
 	ret += es_cpu_getstate();
+	ret += es_cpu_getstate_truncated();
 
 	return ret;
 }
