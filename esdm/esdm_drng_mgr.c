@@ -488,18 +488,14 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 			do_full_init, !do_full_init && drng == &esdm_drng_pr);
 
 		/*
-		 * Get entropy
+		 * Get the entropy and the additional data in one pass over the
+		 * entropy sources.
 		 *
 		 * The PR DRNG should be a RBG3(RS) if properly seeded, therefore
 		 * oversample ES by 64 bit, when seeding this DRNG instance.
 		 * See SP800-90C sec. 6.5.1.2.
 		 */
-		esdm_get_entropy_bitstring(&seedbuf, requested_bits, forced);
-
-		/*
-		 * Get additional data
-		 */
-		esdm_get_additional_data(&addtl, requested_bits, forced);
+		esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits, forced);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
@@ -1191,15 +1187,12 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		requested_bits = esdm_get_seed_entropy_osr(
 			!(flags & ESDM_GET_SEED_FULLY_SEEDED), false);
 		/*
-		 * Fill in the additional data
-		 *
-		 * This call must come first as it clears all entropy estimator
-		 * for non-collected data.
+		 * Entropy and additional data both go into the one buffer the
+		 * caller gets, so the same buffer is passed for both: every
+		 * source ends up in it and none of the estimators is left
+		 * carrying a value from a source that did not run.
 		 */
-		esdm_get_additional_data(eb, requested_bits, false);
-
-		/* Get entropy */
-		esdm_get_entropy_bitstring(eb, requested_bits, false);
+		esdm_get_seed_buffers(eb, eb, requested_bits, false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */
