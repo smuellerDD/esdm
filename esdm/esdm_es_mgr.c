@@ -1035,15 +1035,20 @@ static bool esdm_es_approved(uint32_t es)
 }
 
 /*
- * The slot @es writes into, with its slot in the other buffer cleared: a
- * source contributes to exactly one of the two, and the entropy estimator of
- * the buffer it does not contribute to has to read zero for it. Only the
- * estimator is cleared, as the previous content is still hashed in - credited
- * with no entropy, which is what the two buffers are separated for.
+ * The slot @es writes into, or NULL if @es is not to be collected at all.
  *
- * @seedbuf and @addtl may be one and the same: esdm_get_seed() collects
- * everything into a single buffer. Every source then writes into it and there
- * is no other slot to clear.
+ * With both buffers given, a source contributes to exactly one of them and the
+ * entropy estimator of the other has to read zero for it. Only the estimator is
+ * cleared there, as the previous content is still hashed in - credited with no
+ * entropy, which is what the two buffers are separated for.
+ *
+ * @addtl NULL asks for the sources that may be credited with entropy and for
+ * nothing else: the rest are not fetched, and their slot in @seedbuf is cleared
+ * outright. The caller of esdm_get_seed() hands in a buffer of its own, and
+ * leaving a skipped slot untouched would hand its own bytes back to it.
+ *
+ * @addtl must be distinct from @seedbuf: passing one buffer twice would have
+ * every source clear the estimator it just filled.
  */
 static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 					    struct entropy_buf *addtl,
@@ -1051,12 +1056,20 @@ static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 {
 	bool approved = esdm_es_approved(es);
 
-	if (seedbuf != addtl) {
-		if (approved)
-			addtl->entropy_es[es].e_bits = 0;
-		else
-			seedbuf->entropy_es[es].e_bits = 0;
+	if (!addtl) {
+		if (!approved) {
+			memset(&seedbuf->entropy_es[es], 0,
+			       sizeof(seedbuf->entropy_es[es]));
+			return NULL;
+		}
+
+		return &seedbuf->entropy_es[es];
 	}
+
+	if (approved)
+		addtl->entropy_es[es].e_bits = 0;
+	else
+		seedbuf->entropy_es[es].e_bits = 0;
 
 	return approved ? &seedbuf->entropy_es[es] : &addtl->entropy_es[es];
 }
@@ -1082,7 +1095,8 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 	ret = clock_gettime(CLOCK_MONOTONIC, &seedbuf->now);
 	assert(ret == 0);
 	(void)ret;
-	addtl->now = seedbuf->now;
+	if (addtl)
+		addtl->now = seedbuf->now;
 
 	/*
 	 * Require at least 256 bits of entropy for any reseed. If the ESDM is
@@ -1092,7 +1106,8 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 	if (!force && fully_seeded && (esdm_avail_entropy() < req_ent)) {
 		for_each_esdm_es (i) {
 			seedbuf->entropy_es[i].e_bits = 0;
-			addtl->entropy_es[i].e_bits = 0;
+			if (addtl)
+				addtl->entropy_es[i].e_bits = 0;
 		}
 
 		goto wakeup;
@@ -1110,15 +1125,20 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 	 * slowest approved source and then for the slowest of the rest; taken
 	 * together it is the slowest source there is, and a machine whose
 	 * jitter RNG and whose TPM each cost milliseconds pays for one of them
-	 * rather than for both.
+	 * rather than for both. A NULL slot is a source to skip, which is what
+	 * esdm_es_get_ent_thread() does with it.
 	 */
 	thread_fork_join(esdm_es_get_ent_thread, args, sizeof(args[0]),
 			 esdm_ext_es_last);
 #else
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {
-		esdm_es[i]->get_ent(esdm_es_seed_slot(seedbuf, addtl, i),
-				    requested_bits, fully_seeded);
+		struct entropy_es *eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
+
+		if (!eb_es)
+			continue;
+
+		esdm_es[i]->get_ent(eb_es, requested_bits, fully_seeded);
 	}
 #endif
 

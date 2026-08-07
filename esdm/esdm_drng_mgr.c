@@ -1375,12 +1375,12 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		requested_bits = esdm_get_seed_entropy_osr(
 			!(flags & ESDM_GET_SEED_FULLY_SEEDED), false);
 		/*
-		 * Entropy and additional data both go into the one buffer the
-		 * caller gets, so the same buffer is passed for both: every
-		 * source ends up in it and none of the estimators is left
-		 * carrying a value from a source that did not run.
+		 * What this hands back is seed material with an entropy count
+		 * against it, so only the sources that count are asked: the
+		 * others contribute nothing to collected_bits below and their
+		 * output would be carried out to the caller uncredited.
 		 */
-		esdm_get_seed_buffers(eb, eb, requested_bits, false);
+		esdm_get_seed_buffers(eb, NULL, requested_bits, false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */
