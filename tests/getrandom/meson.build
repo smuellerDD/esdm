@@ -38,14 +38,12 @@ if get_option('linux-getrandom').enabled()
 	tester_getrandom_env = [
 		'ESDM_SERVER=' + esdm_server.full_path(),
 		'ESDM_LIB_GETRANDOM=' + esdm_getrandom_lib.full_path(),
-		# These two tests interpose the getrandom library with
-		# LD_PRELOAD, so on a sanitizer build it is loaded ahead of the
-		# ASan runtime that it pulls in itself. ASan refuses to start in
-		# that situation ("ASan runtime does not come first in initial
-		# library list"), which is exactly how this library is meant to
-		# be used and cannot be fixed by relinking - so turn the check
-		# off. The rest of the value restates what meson would set,
-		# because naming the variable here replaces its default.
+		# These tests LD_PRELOAD the getrandom library, so on a sanitizer
+		# build it loads ahead of the ASan runtime it pulls in itself and
+		# ASan refuses to start ("ASan runtime does not come first").
+		# That is how this library is meant to be used and relinking
+		# cannot fix it, so turn the check off. The rest restates what
+		# meson would set, as naming the variable replaces its default.
 		'ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_summary=1' +
 			':verify_asan_link_order=0'
 		]

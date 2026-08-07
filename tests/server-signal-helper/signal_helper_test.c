@@ -20,16 +20,13 @@
 /*
  * Tests for esdm-server-signal-helper.
  *
- * The helper is what the suspend and resume systemd units run, so a
- * regression here is only noticed on the next suspend of a deployed system -
- * and then as "the ESDM did not reseed after resume", far away from the cause.
- * Everything it does is decided before any RPC happens: which mode the command
- * line selected, and whether the pidfile it was pointed at holds something
- * worth sending a signal to.
- *
- * The translation unit is compiled into the test so its static functions can
- * be called directly; the build renames its main() out of the way, and the
- * tests below call the renamed one to cover the argument parsing as well.
+ * The helper is what the suspend and resume systemd units run, so a regression
+ * here surfaces only on the next suspend of a deployed system, as "the ESDM did
+ * not reseed after resume". Everything it does is decided before any RPC: which
+ * mode the command line selected, and whether the pidfile holds something worth
+ * signalling. The translation unit is compiled into the test so its static
+ * functions can be called directly; the build renames its main() out of the
+ * way, and the tests call the renamed one to cover the argument parsing too.
  */
 
 #define _GNU_SOURCE

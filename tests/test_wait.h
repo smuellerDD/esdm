@@ -28,19 +28,16 @@
  * Wait for a daemon the test just forked to be ready, by watching for the path
  * it creates once it is - and for that path to be of the right kind.
  *
- * The type check is the point, not a nicety. A CUSE frontend creates its
- * bind mount target as an ordinary file first and only then mounts the device
- * over it, so a test that waits for mere existence opens the placeholder and
- * every ioctl on it fails with ENOTTY.
+ * The type check is the point: a CUSE frontend creates its bind mount target as
+ * an ordinary file and only then mounts the device over it, so a test waiting
+ * for mere existence opens the placeholder and every ioctl fails with ENOTTY.
  *
- * This replaces a fixed one second sleep per daemon. That sleep was both slower
- * than it needed to be - three of them put a floor of three seconds under every
- * CUSE test, most of a minute across the suite - and less reliable, because a
- * loaded machine can take longer than a second and the test would then race the
- * daemon it just started rather than fail cleanly.
+ * This replaces a fixed one second sleep per daemon, which was both slower than
+ * needed - most of a minute across the suite - and less reliable, as a loaded
+ * machine can take longer and the test would then race the daemon.
  *
  * Returns 1 once the path exists, 0 if it did not appear within the timeout.
- * The caller carries on either way: the operation that follows produces a far
+ * The caller carries on either way: the operation that follows gives a far
  * better diagnostic than a bare timeout here would.
  */
 static inline int test_wait_for_type(const char *path, mode_t type,

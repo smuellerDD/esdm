@@ -166,11 +166,10 @@ void esdm_server_remove_stale_socket(const char *path, int socktype)
 
 	/*
 	 * Only ECONNREFUSED proves that nothing is listening. Any other error
-	 * leaves the question open - most notably EAGAIN, which a listening
-	 * socket returns once its backlog is full. That is exactly what a
-	 * systemd managed socket looks like while it queues up clients for a
-	 * pending activation, and removing it would break the socket for all
-	 * of its users and every future activation.
+	 * leaves the question open - notably EAGAIN, which a listening socket
+	 * returns once its backlog is full. That is what a systemd managed
+	 * socket looks like while it queues clients for a pending activation,
+	 * and removing it would break every future activation.
 	 */
 	if (errsv != ECONNREFUSED)
 		return;
@@ -1169,14 +1168,12 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 }
 
 /*
- * Set to true once any socket had to be bound by us despite a socket
- * activation environment being present. In that case the sockets are ours and
- * have to be removed at shutdown just like in a non-activated run.
- *
- * Note that a PID namespace supervisor forked before the sockets are set up
- * never observes this and therefore keeps treating the sockets as
- * systemd-owned - deliberately the conservative choice, as removing a socket
- * systemd still listens on would break every future activation.
+ * Set to true once a socket had to be bound by us despite a socket activation
+ * environment being present: the sockets are then ours and have to be removed
+ * at shutdown like in a non-activated run. A PID namespace supervisor forked
+ * before the sockets were set up never observes this and keeps treating them as
+ * systemd-owned - the conservative choice, as removing a socket systemd still
+ * listens on would break every future activation.
  */
 static atomic_bool esdm_rpcs_self_bound_socket = false;
 

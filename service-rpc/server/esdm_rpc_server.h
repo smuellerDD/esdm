@@ -47,11 +47,10 @@ void esdm_rpc_server_fini(void);
 /**
  * @brief Remove a left-over Unix domain socket of a previous server instance
  *
- * The socket is only removed when nothing is listening on it, which is probed
- * by connecting to it. The check is deliberately conservative: only a refused
- * connection proves the socket is dead, and the file is re-validated right
- * before the removal so a symlink or a replaced inode cannot be unlinked
- * instead.
+ * The socket is only removed when nothing is listening on it, probed by
+ * connecting. Deliberately conservative: only a refused connection proves the
+ * socket is dead, and the file is re-validated right before the removal so a
+ * symlink or a replaced inode cannot be unlinked instead.
  *
  * @param [in] path Path of the socket to examine
  * @param [in] socktype Socket type used for the probe (SOCK_SEQPACKET,

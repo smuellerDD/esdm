@@ -21,25 +21,20 @@
  * Tests for the esdm-tool command line handling - everything that can be
  * observed without a running esdm-server, and without privileges.
  *
- * Three layers are covered here, all of them ones a user meets before the tool
- * does any work at all:
+ * Three layers, all of them met before the tool does any work:
  *
- * - what it makes of its arguments, and what it says when they are wrong. An
- *   option that is silently ignored, or a refusal with no explanation, is a bug
- *   they cannot work around.
- * - the refusal of the commands that need root. The check sits in front of
- *   every one of them, so a command that slips past it would fail much later
- *   and much less clearly.
- * - what each command does when nothing answers it. This is the ordinary case
- *   of "the server is not running", and it is the only way to reach the error
- *   branch of each handler.
+ * - what it makes of its arguments and what it says when they are wrong. A
+ *   silently ignored option, or a refusal with no explanation, is a bug a user
+ *   cannot work around.
+ * - the refusal of the commands needing root, checked in front of every one of
+ *   them, so a command slipping past would fail much later and less clearly.
+ * - what each command does when nothing answers it - the ordinary "server is
+ *   not running" case, and the only way to reach each handler's error branch.
  *
- * The FIPS check file creation is covered as well. It needs no server either
- * and is what the packaging calls to sign the installed binaries, so a
- * regression there breaks an install rather than a command.
- *
- * What the tool does with a server behind it is tests/tool/tool_server_test.c,
- * which needs root to start one.
+ * The FIPS check file creation is covered as well: it needs no server and is
+ * what the packaging calls to sign the installed binaries, so a regression
+ * there breaks an install rather than a command. What the tool does with a
+ * server behind it is tests/tool/tool_server_test.c.
  */
 
 #define _GNU_SOURCE

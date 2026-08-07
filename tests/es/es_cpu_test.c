@@ -294,15 +294,11 @@ static int es_cpu_init(void)
 
 /*
  * The CPU entropy source is compiled in for this architecture, but the CPU
- * actually running the test may not implement the instruction behind it. An
- * arm64 part without FEAT_RNG (RNDRRS) is the common case - including the
- * virtualized arm64 CI runners - and on x86 a hypervisor may withhold
- * RDSEED just as well. esdm_es_cpu.c then credits 0 bits and wipes the
- * buffer, which is correct behavior of an absent source rather than a test
- * failure, so the test is skipped instead.
- *
- * The ->active() callback cannot be used for this: it only reports whether the
- * source was compiled in for the architecture, not whether this CPU serves it.
+ * running the test may not implement the instruction behind it - an arm64 part
+ * without FEAT_RNG, or an x86 hypervisor withholding RDSEED. esdm_es_cpu.c then
+ * credits 0 bits and wipes the buffer, which is correct behaviour of an absent
+ * source rather than a failure, so the test is skipped. ->active() cannot
+ * answer this: it only reports whether the source was compiled in.
  */
 static bool es_cpu_data_available(void)
 {

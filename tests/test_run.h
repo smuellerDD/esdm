@@ -20,19 +20,13 @@
 /*
  * Running one of the installed binaries from a test.
  *
- * They are driven the way a user drives them - executed, with arguments -
- * rather than by linking their code, because what is under test is what a user
- * and a script get: the exit status, the message and the bytes on stdout.
- *
- * stdout and stderr are captured separately. Results go to stdout and
- * everything the logger produces to stderr, and a test that wants to parse the
- * result (the JSON status document, the hex bytes) must not have the log mixed
- * into it.
- *
- * Starting and collecting are separate calls so that runs which spend their
- * time waiting - the ones with no server to answer them, where the RPC client
- * spends seconds on its connection attempts - can be done at once rather than
- * one after the other.
+ * They are executed with arguments rather than linked, because what is under
+ * test is what a user and a script get: the exit status, the message and the
+ * bytes on stdout. stdout and stderr are captured separately - results go to
+ * stdout and the logger to stderr, and a test parsing the result must not have
+ * the log mixed into it. Starting and collecting are separate calls so runs
+ * that spend their time waiting - those with no server, where the RPC client
+ * spends seconds connecting - can be done at once.
  */
 
 #ifndef TEST_RUN_H
@@ -74,13 +68,11 @@ static char test_run_dir[384];
 static unsigned int test_run_seq;
 
 /*
- * @binary is what every run below executes. A directory of its own is created
- * for the captures, which keeps concurrent runs of the same test apart.
- *
- * $TMPDIR is preferred but not trusted: a test that isolated itself first has
- * replaced /tmp with a private one, and the build's $TMPDIR may be a path that
- * no longer exists there. /tmp is what remains in that case, and it is the one
- * directory such a test is certain to have.
+ * @binary is what every run below executes. The captures get a directory of
+ * their own, which keeps concurrent runs of the same test apart. $TMPDIR is
+ * preferred but not trusted: a test that isolated itself has replaced /tmp with
+ * a private one, where the build's $TMPDIR may no longer exist - /tmp is then
+ * the one directory such a test is certain to have.
  */
 static inline int test_run_init(const char *binary)
 {

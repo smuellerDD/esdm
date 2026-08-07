@@ -21,13 +21,11 @@
  * Tests for common/test_pertubation.c - the instrumentation a test mode build
  * carries so the test suite can observe and steer the ESDM from the outside.
  *
- * The shared memory accounting is what needs the attention here. Several
- * independent users attach to the one process-global segment - the privileged
- * and the unprivileged RPC client each on their own, plus the server - so the
- * reference count is the only thing keeping the first of them to shut down from
- * pulling the mapping out from under the others. That is exercised below by
- * nesting init/fini and checking that the data survives until the last user is
- * gone.
+ * The shared memory accounting needs the attention here: several independent
+ * users attach to the one process-global segment - both RPC clients plus the
+ * server - so the reference count is all that keeps the first to shut down from
+ * pulling the mapping out from under the others. Exercised below by nesting
+ * init/fini and checking the data survives until the last user is gone.
  */
 
 #include <errno.h>
@@ -207,11 +205,10 @@ static void test_shm_status_refcount(void)
 
 	/*
 	 * And the accounting can be set up again afterwards. Whether that
-	 * reattaches to the very same segment or creates a fresh one is not
-	 * asserted: the key is machine global, so a test mode esdm-server
-	 * running next to this test owns it, and then the removal on the last
-	 * detach above is refused - which is correct, it is not ours to
-	 * destroy.
+	 * reattaches to the same segment or creates a fresh one is not asserted:
+	 * the key is machine global, so a test mode esdm-server running next to
+	 * this test owns it and the removal above is refused - correctly, as it
+	 * is not ours to destroy.
 	 */
 	CHECK_EQ(esdm_test_shm_status_init(), 0);
 	esdm_test_shm_status_reset();

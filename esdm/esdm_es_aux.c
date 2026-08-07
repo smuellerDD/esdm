@@ -188,16 +188,14 @@ static int esdm_aux_init(void)
 		struct esdm_pool *pool = &esdm_pools[i];
 
 		/*
-		 * Allow the init function to be called multiple times: this is
-		 * also the reinit callback (esdm_es_mgr_reinitialize()), and
-		 * there the pool already carries the two hash states of the
-		 * previous round plus a live lock. Release the states instead
-		 * of overwriting the pointers - the latter leaks them on every
-		 * esdm_reinit() - and touch the lock only once, as re-running
-		 * mutex_w_init() on an initialized mutex is undefined
-		 * behaviour. The lock outlives esdm_aux_fini(), so an init
-		 * after a fini takes the same path with the states already
-		 * NULL, which the deallocation tolerates.
+		 * Allow this to be called multiple times: it is also the reinit
+		 * callback (esdm_es_mgr_reinitialize()), where the pool still
+		 * carries the previous round's hash states and a live lock.
+		 * Release the states rather than overwriting the pointers, which
+		 * leaks them on every esdm_reinit(), and touch the lock only
+		 * once, as re-running mutex_w_init() on an initialized mutex is
+		 * undefined. The lock outlives esdm_aux_fini(), so an init after
+		 * a fini takes the same path with the states already NULL.
 		 */
 		if (pool->lock_initialized) {
 			mutex_w_lock(&pool->lock);

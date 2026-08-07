@@ -31,13 +31,11 @@ extern "C" {
 #endif
 
 /*
- * A peer for the EGD client tests: it speaks the protocol of
- * esdm_egd_protocol.h on a Unix domain socket of its own, which the esdm-server
- * cannot stand in for here. What is under test is how the client behaves when
- * the other side answers in ways a correct server never would - a short
- * answer, more data than was asked for, a connection that goes away mid
- * stream - and the answers have to be deterministic for the client's framing
- * to be checkable at all.
+ * A peer for the EGD client tests, speaking the protocol of
+ * esdm_egd_protocol.h on a Unix domain socket of its own. The esdm-server
+ * cannot stand in for it: under test is how the client behaves when the other
+ * side answers as a correct server never would - short, overlong, or vanishing
+ * mid stream - deterministically enough for the framing to be checkable.
  */
 enum egd_peer_mode {
 	/* Serve every command as the protocol prescribes. */

@@ -60,35 +60,22 @@
 #define ESDM_EGD_BUFSIZE (2 * ESDM_EGD_MAX_CMD_SIZE)
 
 /*
- * Upper bound of concurrently served clients. EGD clients hold their
- * connection open for their entire lifetime, so this is a limit on clients,
- * not on requests. Once it is reached, further connections stay queued in the
- * listen backlog instead of being accepted.
- *
- * It is generous because that lifetime is what makes a low limit expensive: an
- * EGD consumer is typically a long running daemon which connects once at its
- * start - see the note on confined consumers in the client header - so a system
- * with many of them holds many connections open at the same time without any of
- * them being busy. Nothing is preallocated for them; a connection costs its
- * structure and its descriptor once it exists. The descriptors are the actual
- * constraint: serving this many clients needs a RLIMIT_NOFILE above it, and an
- * accept that fails for want of one merely leaves the client queued.
+ * Upper bound of concurrently served clients. EGD clients hold their connection
+ * open for their entire lifetime, so this limits clients, not requests; beyond
+ * it, connections stay queued in the listen backlog. Generous because such
+ * consumers are typically idle long running daemons and nothing is preallocated
+ * for them. Serving this many needs a RLIMIT_NOFILE above it; an accept failing
+ * for want of a descriptor merely leaves the client queued.
  */
 #define ESDM_EGD_MAX_CONNECTIONS 2048
 
 /*
  * Connections that may wait to be accepted, matched to the number that may be
- * served: the two together are what a burst of clients starting at once - a
- * boot, a mass restart - runs into, and a backlog well below the limit above
- * would turn such a burst into connect failures long before the limit that is
- * actually meant to bound things is anywhere near.
- *
- * The kernel silently caps this at net.core.somaxconn, so asking for more than
- * a system allows costs nothing.
- *
- * A socket handed over by systemd is listening before the ESDM sees it and is
- * unaffected: its depth is the Backlog= of its .socket unit, which defaults to
- * SOMAXCONN and thus needs no setting of its own.
+ * served: a backlog well below the limit above would turn a burst of clients
+ * starting at once into connect failures long before that limit is reached.
+ * The kernel silently caps this at net.core.somaxconn. A socket handed over by
+ * systemd is already listening and unaffected - its depth is the Backlog= of
+ * its .socket unit.
  */
 #define ESDM_EGD_LISTEN_BACKLOG ESDM_EGD_MAX_CONNECTIONS
 
@@ -110,12 +97,10 @@
 
 /*
  * Time a response may stay undelivered before the connection is considered
- * stuck and torn down.
- *
- * Generous, because it is no longer a stall: a client that does not read holds
- * up nothing but its own connection, the worker having moved on the moment its
- * socket buffer was full. All this reclaims is the slot of a peer that is not
- * coming back for its answer.
+ * stuck and torn down. Generous, because a client that does not read holds up
+ * nothing but its own connection - the worker moved on the moment its socket
+ * buffer was full. This only reclaims the slot of a peer that is not coming
+ * back for its answer.
  */
 #define ESDM_EGD_WRITE_TIMEOUT_MS 30000
 
@@ -139,11 +124,9 @@ struct esdm_egd_conn {
 	/*
 	 * The response of the command in flight, and how much of it the client
 	 * has taken. Only ever one: the next command is processed once this is
-	 * empty, which is what keeps a client that asks faster than it reads
-	 * from making the server buffer without bound - the unread commands
-	 * stay in the socket instead. Sized for the largest single response,
-	 * which is the one of a non-blocking read: its length byte and the
-	 * data.
+	 * empty, so a client asking faster than it reads is backed up in its own
+	 * socket rather than buffered for. Sized for the largest single response
+	 * - a non-blocking read: its length byte and the data.
 	 */
 	uint8_t out[1 + ESDM_EGD_MAX_TRANSFER];
 	size_t out_len;
@@ -173,13 +156,10 @@ struct esdm_egd_conn {
 TAILQ_HEAD(esdm_egd_conn_list, esdm_egd_conn);
 
 /*
- * One served socket.
- *
- * The interface exists twice: once serving the ordinary fully seeded
- * generator, and once serving the prediction resistance one. The EGD protocol
- * has no way to ask for prediction resistance per request - it has no notion
- * of it at all - so which generator answers is a property of the socket a
- * client connects to, not of the request it sends.
+ * One served socket. The interface exists twice, once for the ordinary fully
+ * seeded generator and once for the prediction resistance one: the EGD protocol
+ * has no notion of prediction resistance, so which generator answers is a
+ * property of the socket a client connects to, not of its request.
  */
 struct esdm_egd_listener {
 	/* Name under which systemd hands this socket over. */
@@ -415,17 +395,12 @@ static int esdm_egd_listener_socket_init(struct esdm_egd_listener *listener)
 	}
 
 	/*
-	 * The EGD clients are ordinary applications running as arbitrary
-	 * users, so the socket is made available to everybody - just like the
-	 * unprivileged RPC socket. Note that the operations reachable through
-	 * it are all unprivileged: obtaining random numbers is what the
-	 * unprivileged RPC interface offers as well, and data written by an
-	 * unprivileged caller is inserted without any entropy credit (see
-	 * esdm_egd_cmd_write_entropy()).
-	 *
-	 * A socket handed over by systemd never reaches this point: its access
-	 * mode comes from the SocketMode= of its .socket unit, and overriding
-	 * that here would silently discard the administrator's configuration.
+	 * EGD clients are ordinary applications, so the socket is available to
+	 * everybody - like the unprivileged RPC socket, and everything reachable
+	 * through it is equally unprivileged (data from unprivileged callers is
+	 * inserted without entropy credit, see esdm_egd_cmd_write_entropy()).
+	 * A socket handed over by systemd never reaches this point: its mode
+	 * comes from the SocketMode= of its .socket unit.
 	 */
 	if (chmod(listener->socket_path, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
 						  S_IROTH | S_IWOTH) < 0) {
@@ -488,11 +463,10 @@ static bool esdm_egd_out_pending(const struct esdm_egd_conn *conn)
 /*
  * Push out what is left of the response.
  *
- * A socket that cannot take it all is not waited for: what is left stays in the
- * connection, the event loop arms EPOLLOUT for it, and the rest goes out when
- * the client has made room. Waiting here instead - which is what a poll for
- * POLLOUT amounts to - would hand every other client's latency to whichever one
- * is slowest to read.
+ * A socket that cannot take it all is not waited for: the rest stays in the
+ * connection, the event loop arms EPOLLOUT and it goes out once the client has
+ * made room. Waiting here would hand every other client's latency to whichever
+ * one is slowest to read.
  *
  * @return 0 when the connection remains usable, whether or not everything went
  *	   out, < 0 when it has to be closed
@@ -501,18 +475,13 @@ static int esdm_egd_flush(struct esdm_egd_conn *conn)
 {
 	while (esdm_egd_out_pending(conn)) {
 		/*
-		 * MSG_NOSIGNAL: a client that closed its end between asking and
-		 * being answered is an everyday event, and the write to it must
-		 * come back as an EPIPE for this connection rather than as a
-		 * SIGPIPE for the whole daemon. Nothing here may depend on the
-		 * disposition of that signal - the ESDM is a library as much as
-		 * a daemon, and what a host process does with SIGPIPE is its
-		 * business.
-		 *
-		 * The client library deliberately does not use this - the
-		 * sendto(2) it compiles to is answered with SECCOMP_RET_KILL in
-		 * OpenSSH's pre-authentication sandbox - but the server is not
-		 * the one running inside a confined consumer.
+		 * MSG_NOSIGNAL: a client closing its end between asking and
+		 * being answered is an everyday event and must come back as an
+		 * EPIPE for this connection, not a SIGPIPE for the whole daemon
+		 * - the ESDM is a library as much as a daemon, and the host
+		 * process owns that signal's disposition. The client library
+		 * deliberately does not use this, as the sendto(2) it compiles
+		 * to is killed by OpenSSH's pre-authentication sandbox.
 		 */
 		ssize_t ret = send(conn->fd, conn->out + conn->out_off,
 				   conn->out_len - conn->out_off,
@@ -544,9 +513,9 @@ static int esdm_egd_flush(struct esdm_egd_conn *conn)
 /*
  * Hand a complete response to the client.
  *
- * At most one response is outstanding per connection: a command is only ever
- * processed while the response of its predecessor is gone, which is what bounds
- * the buffer below to the largest single response the protocol can express.
+ * At most one response is outstanding per connection - a command is only
+ * processed once its predecessor's response is gone - which bounds the buffer
+ * below to the largest single response the protocol can express.
  *
  * @return 0 when the connection remains usable - the response may still be on
  *	   its way out then - < 0 when it has to be closed
@@ -577,20 +546,16 @@ static int esdm_egd_write(struct esdm_egd_conn *conn, const uint8_t *buf,
 /*
  * Fill @buf with data from the generator this connection's socket selects.
  *
- * Exactly one non-blocking generation is attempted, and whatever it had ready
- * is what the caller gets. A request that is not covered by it is not completed
- * by asking again here: it goes back to the event loop as a deferred request
- * (see esdm_egd_cmd_read_block()) and is picked up once entropy is available
- * again. Retrying in place would tie the worker - which serves every client of
- * both sockets - to a single request for as long as the entropy sources need to
- * deliver, which is precisely the blocking behaviour this interface must not
- * have.
+ * Exactly one non-blocking generation is attempted. A request it does not cover
+ * goes back to the event loop as a deferred request (see
+ * esdm_egd_cmd_read_block()) rather than being retried here, which would tie the
+ * worker - it serves every client of both sockets - to a single request for as
+ * long as the entropy sources need.
  *
  * @generated reports how much was produced, which matters for the prediction
- * resistance generator: it hands out no more than the entropy sources just
- * delivered, so a short - even empty - answer is its normal behaviour rather
- * than an error, and throwing that data away to start over would both waste
- * entropy and never converge on a large request.
+ * resistance generator: it hands out no more than was just delivered, so a
+ * short answer is normal, and discarding it to start over would waste entropy
+ * and never converge on a large request.
  *
  * @return 0 when @len bytes were produced, -EAGAIN when fewer were (the
  *	   caller decides whether to answer short or to come back for more),
@@ -721,12 +686,10 @@ out:
  * Command 0x03: insert caller provided data into the auxiliary pool.
  *
  * The protocol lets the caller claim an entropy content for the data. Honoring
- * that claim from an arbitrary local user would allow any of them to drive the
- * ESDM's entropy accounting, so the claim is only accepted from a privileged
- * caller - which is the same rule the RPC interface applies, where inserting
- * data with an entropy claim is reserved for the privileged interface. Data
- * from unprivileged callers is still mixed into the auxiliary pool, just
- * without any entropy credit.
+ * that from an arbitrary local user would let any of them drive the ESDM's
+ * entropy accounting, so the claim is only accepted from a privileged caller -
+ * the same rule the RPC interface applies. Unprivileged data is still mixed
+ * into the auxiliary pool, just without entropy credit.
  *
  * The command has no response.
  */
@@ -803,17 +766,14 @@ static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
 /*
  * Watch the connection for what it can currently make progress on.
  *
- * A response on its way out is waited for with EPOLLOUT, and nothing else: the
- * command behind it is not processed until it is delivered, so there is nothing
- * to read for.
+ * A response on its way out is waited for with EPOLLOUT and nothing else: the
+ * command behind it is not processed until it is delivered.
  *
- * A connection with a deferred request is watched for neither. Nothing of it is
- * read - see esdm_egd_read() - so a level-triggered EPOLLIN would report the
- * unread bytes of a client that pipelined behind its blocking read on every
- * single round, and the worker would spin at full speed for as long as the
- * request waits for entropy. EPOLLERR and EPOLLHUP are reported whatever is
- * asked for, so an unwatched connection is still torn down when its peer goes
- * away.
+ * A connection with a deferred request is watched for neither, since nothing of
+ * it is read (see esdm_egd_read()) and a level-triggered EPOLLIN would spin the
+ * worker on a pipelined client's unread bytes for as long as the request waits.
+ * EPOLLERR and EPOLLHUP are reported regardless, so an unwatched connection is
+ * still torn down when its peer goes away.
  */
 static void esdm_egd_conn_arm(int epfd, struct esdm_egd_conn *conn)
 {
@@ -851,9 +811,8 @@ static void esdm_egd_consume(struct esdm_egd_conn *conn, size_t len)
  * buffer holds.
  *
  * It stops at the first command whose response the client did not take right
- * away. That is what makes one response buffer enough - and it is the same
- * backpressure the read side applies: a client that asks faster than it reads
- * is slowed down by its own socket, not buffered for.
+ * away, which is what makes one response buffer enough: a client asking faster
+ * than it reads is slowed down by its own socket, not buffered for.
  *
  * @return 0 when the connection remains usable, < 0 when it has to be closed
  */
@@ -1097,12 +1056,10 @@ static int esdm_egd_handler(void __unused *args)
 	size_t deferred_requests = 0;
 	/*
 	 * Did a deferred request get any data in the last round? As long as one
-	 * makes progress, the next round follows immediately instead of after
-	 * the poll interval: the prediction resistance generator delivers a
-	 * large request in chunks, and waiting between them would turn its
-	 * latency into a multiple of the poll interval. Other clients are still
-	 * served in between - that is the whole point of doing it round by
-	 * round rather than in one uninterruptible sweep.
+	 * makes progress the next round follows immediately: the prediction
+	 * resistance generator delivers a large request in chunks, and waiting
+	 * the poll interval between them would multiply its latency. Other
+	 * clients are still served in between.
 	 */
 	bool deferred_progress = false;
 	/*
@@ -1187,12 +1144,11 @@ static int esdm_egd_handler(void __unused *args)
 		}
 
 		/*
-		 * A deferred request is not tied to any file descriptor event -
-		 * it completes once entropy is available again. Poll more
-		 * frequently while one is outstanding, and do not wait at all
-		 * while one is being filled round by round: the events of the
-		 * other clients are still collected and served in between, so
-		 * this shares the worker rather than monopolizing it.
+		 * A deferred request is not tied to any descriptor event - it
+		 * completes once entropy is available again. Poll more often
+		 * while one is outstanding, and not at all while one is being
+		 * filled round by round; the other clients' events are still
+		 * collected in between, so the worker stays shared.
 		 */
 		nfds = epoll_wait(epfd, events, ESDM_EGD_MAX_EVENTS,
 				  deferred_progress ?
@@ -1271,12 +1227,10 @@ static int esdm_egd_handler(void __unused *args)
 
 		/*
 		 * Whatever is not waiting for an event of its own: a deferred
-		 * request, which completes when entropy arrives rather than when
-		 * a descriptor becomes ready, and a response whose client has
-		 * not made room for it, which is retried here so a missed
+		 * request, which completes when entropy arrives, and a response
+		 * whose client has not made room, retried here so a missed
 		 * EPOLLOUT cannot strand it. The deferred requests are recounted
-		 * on the way - the loop above may have added, served or dropped
-		 * some.
+		 * on the way, as the loop above may have changed their number.
 		 */
 		deferred_requests = 0;
 		deferred_progress = false;
@@ -1325,14 +1279,11 @@ static int esdm_egd_handler(void __unused *args)
 			}
 
 			/*
-			 * Only a request waiting for entropy sets the pace of
-			 * the loop. A response waiting for its client does not:
-			 * it is woken by EPOLLOUT, and hurrying the rounds for
-			 * it would only spin against a socket that is full.
-			 *
-			 * The answer is reset once it was sent, so a change of
-			 * its length - or of the request it belongs to - means
-			 * this round produced something.
+			 * Only a request waiting for entropy sets the pace. A
+			 * response waiting for its client is woken by EPOLLOUT,
+			 * and hurrying for it would spin against a full socket.
+			 * The answer is reset once sent, so a change of its
+			 * length means this round produced something.
 			 */
 			if (deferred) {
 				if (conn->answer_len != collected ||
@@ -1408,10 +1359,9 @@ void esdm_egd_server_fini(void)
 	/*
 	 * Wait for the worker to leave its event loop before the ESDM is
 	 * finalized - it must not be inside esdm_get_random_bytes_full_noblock
-	 * or esdm_pool_insert_aux by then. The worker is a special thread and
-	 * therefore not covered by the thread_wait_all() of the RPC server.
-	 * The bound is generous compared to the loop's poll interval, but
-	 * shutdown must not hang if the worker never started.
+	 * or esdm_pool_insert_aux by then. It is a special thread and thus not
+	 * covered by the RPC server's thread_wait_all(). The bound is generous
+	 * against the poll interval, but shutdown must not hang either.
 	 */
 	for (i = 0; i < 100 && atomic_load(&esdm_egd_worker_running); i++) {
 		struct timespec ts = { .tv_sec = 0, .tv_nsec = 10000000 };
@@ -1436,19 +1386,15 @@ void esdm_egd_server_cleanup(void)
 			continue;
 
 		/*
-		 * A socket handed over by systemd is created and removed by
-		 * systemd - unlinking one it still listens on would leave its
-		 * .socket unit bound to an unlinked inode and break every
-		 * future activation.
-		 *
-		 * listener->systemd_socket alone does not answer the question
-		 * here: this function also runs in the privileged PID
-		 * namespace supervisor, which forked off before the sockets
-		 * were set up and therefore never observes it. Fall back to
-		 * the socket activation state latched before that fork, which
-		 * is conservative on purpose - at worst a self-bound socket is
-		 * left behind, and the stale socket check removes it at the
-		 * next start.
+		 * A systemd socket is created and removed by systemd -
+		 * unlinking one it still listens on leaves its .socket unit
+		 * bound to an unlinked inode. listener->systemd_socket alone
+		 * does not answer this: the privileged PID namespace supervisor
+		 * also runs here and forked before the sockets were set up, so
+		 * fall back to the activation state latched before that fork.
+		 * Conservative on purpose - at worst a self-bound socket is left
+		 * behind, and the stale socket check removes it at the next
+		 * start.
 		 */
 		if (listener->systemd_socket || systemd_listen_fds() > 0)
 			continue;

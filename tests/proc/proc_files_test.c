@@ -20,24 +20,21 @@
 /*
  * Tests for the esdm-proc filesystem handlers.
  *
- * Mounting it needs root and /dev/fuse, but the handlers themselves are
- * ordinary functions of a path and a mode - what they decide does not depend on
- * a session being up. The one that matters most is esdm_proc_open(): it is what
- * stands between an arbitrary user and the ESDM's tunables, and the answer must
- * come out the same whether the caller is root or not, and whether the file is
- * one of the writable ones or not.
+ * Mounting it needs root and /dev/fuse, but the handlers are ordinary functions
+ * of a path and a mode and decide nothing based on a live session. The one that
+ * matters most is esdm_proc_open(), which stands between an arbitrary user and
+ * the ESDM's tunables.
  *
- * The rest of the file is reached without a server as well, because that is
- * what the handlers have to survive: every one that produces content asks the
- * ESDM for it, and with nothing answering they must report an empty file rather
- * than a stale or an uninitialized one. The values a caller writes are refused
- * before any of that, so the whole input validation is reachable too.
+ * The rest is reached without a server as well, because that is what the
+ * handlers have to survive: every one producing content asks the ESDM for it,
+ * and with nothing answering they must report an empty file rather than a stale
+ * one. Written values are refused before any of that, so the input validation
+ * is reachable too.
  *
  * The translation unit is compiled into the test so the static handlers can be
- * called directly. Its main() is renamed out of the way by the build, and
- * fuse_get_context() is provided here - the real one returns nothing useful
- * outside a session, and controlling the caller's uid is the whole point of the
- * permission tests below.
+ * called directly; the build renames its main() out of the way, and
+ * fuse_get_context() is provided here, since controlling the caller's uid is
+ * the point of the permission tests below.
  */
 
 #define _GNU_SOURCE
@@ -419,11 +416,10 @@ static void test_pre_init(void)
 /*
  * The parts that change the process' credentials, in a child of their own.
  *
- * Setting one of the writable files raises to root for the duration of the RPC
- * and drops to "nobody" afterwards, and esdm_proc_init() drops for good. Run as
- * root - which is how the coverage run executes the suite - that would leave
- * everything after it running as nobody, so it happens where it cannot: in a
- * process that exits right after.
+ * Setting a writable file raises to root for the RPC and drops to "nobody"
+ * afterwards, and esdm_proc_init() drops for good. Run as root - as the
+ * coverage run does - that would leave everything after it running as nobody,
+ * so it happens in a process that exits right after.
  */
 static int privileged_transitions(void)
 {
@@ -461,13 +457,11 @@ static int privileged_transitions(void)
 }
 
 /*
- * The coverage counters are normally written by the exit handlers, and those
- * are exactly what the child must not run: it has dropped to "nobody" by then,
- * and LeakSanitizer - which a coverage build carries - cannot stop the threads
- * of a process that changed its credentials, so it aborts the child instead of
- * letting it exit. Write the counters explicitly and leave without running
- * anything else. __gcov_dump is only there in a coverage build, hence the weak
- * declaration.
+ * The coverage counters are normally written by the exit handlers, which this
+ * child must not run: it has dropped to "nobody", and LeakSanitizer cannot stop
+ * the threads of a process that changed its credentials, so it aborts the child
+ * instead of letting it exit. Write the counters explicitly and leave.
+ * __gcov_dump only exists in a coverage build, hence the weak declaration.
  */
 __attribute__((weak)) void __gcov_dump(void);
 

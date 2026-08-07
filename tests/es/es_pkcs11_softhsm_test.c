@@ -20,16 +20,13 @@
 /*
  * PKCS#11 entropy source against a real token.
  *
- * es_pkcs11_test.c only checks that the callbacks behave when there is no
- * token, which is the situation on most build machines - it passes with the
- * source permanently switched off, so nothing downstream of "a slot was
- * actually bound" is ever executed. SoftHSM provides a PKCS#11 module that
- * needs no hardware, so the interesting half can be tested too: discovering
- * the slot, selecting it by token label, logging in with a PIN, and pulling
- * bytes out of C_GenerateRandom.
- *
- * The token is created here, in a directory of this test's own, so the run
- * does not depend on - or disturb - any token configured on the machine.
+ * es_pkcs11_test.c only checks the callbacks without a token, which is the
+ * situation on most build machines: it passes with the source switched off, so
+ * nothing downstream of a bound slot is ever executed. SoftHSM needs no
+ * hardware, so the interesting half can be tested too - discovering the slot,
+ * selecting it by token label, logging in and pulling bytes out of
+ * C_GenerateRandom. The token is created in a directory of this test's own, so
+ * the run neither depends on nor disturbs any token on the machine.
  */
 
 #define _GNU_SOURCE

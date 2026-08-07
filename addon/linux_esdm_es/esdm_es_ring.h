@@ -4,9 +4,9 @@
  *
  * The interrupt and scheduler entropy sources both batch timestamp-derived
  * events into a lock-free per-CPU ring buffer before the internal DRBG
- * compresses them into seed material. This abstraction holds that ring and
- * the single-producer / single-consumer pointer handling that both sources
- * share; the entropy accounting and DRBG post-processing stay in each source.
+ * compresses them. This holds that ring and the shared single-producer /
+ * single-consumer pointer handling; entropy accounting and DRBG
+ * post-processing stay in each source.
  *
  * Copyright (C) 2022 - 2026, Stephan Mueller <smueller@chronox.de>
  */
@@ -35,11 +35,10 @@ struct esdm_es_ring_cpu {
 	u32 wp;
 	/*
 	 * Read pointer computed during list building but not yet published.
-	 * Publishing rp marks the slots free for the producer, so it must only
-	 * happen after the DRBG consumed the referenced ring data - otherwise
-	 * the producer may overwrite a region mid-hash and the event written
-	 * into the "freed" slot is absorbed now and consumed again later.
-	 * Extraction is serialized (single caller), so a plain field suffices.
+	 * Publishing rp frees the slots for the producer, so it must happen only
+	 * after the DRBG consumed the referenced ring data - otherwise the
+	 * producer may overwrite a region mid-hash. Extraction is serialized
+	 * (single caller), so a plain field suffices.
 	 */
 	u32 rp_pending;
 	/* two seed buffers, in case wp < rp, one if wp > rp */

@@ -21,14 +21,12 @@
  * Tests for the part of common/linux_support.c that does not need privileges:
  * the personalization string the server derives from the DMI product UUID.
  *
- * Whether that file can be read at all depends on the machine - it is root
- * only, and a VM or container may expose it empty - so the test asserts the
- * contract rather than a value. That contract is the interesting part: the
- * caller distinguishes "got a string" from "did not" by the return code alone,
- * so a failure that leaves *ptr NULL while reporting success would have the
- * caller feed a NULL personalization string into the DRNG. An empty
- * product_uuid used to do exactly that, because fgets() returns NULL at end of
- * file without setting errno and -errno was then 0.
+ * Whether that file can be read depends on the machine - it is root only and a
+ * VM may expose it empty - so the test asserts the contract rather than a
+ * value. The caller tells "got a string" from "did not" by the return code
+ * alone, so a failure leaving *ptr NULL while reporting success feeds a NULL
+ * personalization string into the DRNG. An empty product_uuid used to do just
+ * that: fgets() returns NULL at end of file without setting errno.
  */
 
 #define _GNU_SOURCE

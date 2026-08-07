@@ -23,19 +23,17 @@
  *
  * The interesting piece is the hand-rolled encoder/decoder for the
  * RandValResponse message, which bypasses the generated protobuf code on the
- * random hot paths. Two things have to hold for that to be safe, and both are
- * asserted here:
+ * random hot paths. Two things have to hold for that to be safe:
  *
  *   - it agrees byte for byte with what protobuf-c produces and accepts, and
  *   - it rejects every malformed input instead of walking off the buffer. The
  *     decoder parses attacker-reachable bytes straight from the receive buffer,
- *     so the truncated varints, over-long varints and length prefixes pointing
- *     past the end below are the point of the exercise, not an afterthought.
+ *     hence the truncated and over-long varints and the length prefixes
+ *     pointing past the end below.
  *
- * Also covered: the arena allocator protobuf-c is handed for the request
- * decoding, the descriptor lookup that turns a method index off the wire into a
- * message type, and the bounded append callback the server packs responses
- * through.
+ * Also covered: the arena allocator handed to protobuf-c for the request
+ * decoding, the descriptor lookup turning a wire method index into a message
+ * type, and the bounded append callback the server packs responses through.
  */
 
 #include <errno.h>

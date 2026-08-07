@@ -20,23 +20,19 @@
  */
 
 /*
- * The third of the EGD tests, and the one that reaches what the other two
- * cannot:
+ * The third of the EGD tests, reaching what the other two cannot:
  *
- * - It speaks the wire protocol byte by byte instead of going through the
- *   client library. Client and server were written against one description of
- *   the protocol, so a test that drives both through the library cannot tell
- *   whether that description was read correctly - only bytes on the socket can.
+ * - It speaks the wire protocol byte by byte rather than through the client
+ *   library. Both sides were written against one description of the protocol,
+ *   so only bytes on the socket can tell whether it was read correctly.
  *
  * - It runs the server in this process against an ESDM whose seeding it
- *   controls, which is what the blocking read command is about: the request is
- *   issued while the ESDM has no entropy to answer it with, the entropy arrives
- *   afterwards, and the answer has to arrive with it. Against the daemon of
- *   egd_server_test that moment has come and gone before a test can connect.
+ *   controls, which is what the blocking read command needs: the request is
+ *   issued while there is no entropy, and the answer has to arrive with it.
+ *   Against the daemon of egd_server_test that moment has long passed.
  *
- * The other property this checks is that waiting for entropy is not the same as
- * blocking: while one client's request waits, the server has to keep serving
- * everybody else.
+ * It also checks that waiting for entropy is not blocking: while one client's
+ * request waits, the server has to keep serving everybody else.
  */
 
 #define _GNU_SOURCE
@@ -64,12 +60,9 @@
 
 /*
  * Two helpers the EGD server shares with the RPC server, which is not linked
- * here - it would pull the entire RPC machinery, protobuf definitions and all,
- * into a test that speaks a different protocol entirely.
- *
- * They are declared rather than taken from esdm_rpc_server.h and
- * esdm_rpc_protocol.h for the same reason, so nothing but review keeps the
- * signatures in step with those headers.
+ * here - it would pull the entire RPC machinery into a test speaking a
+ * different protocol. Declared rather than included from esdm_rpc_server.h for
+ * the same reason, so only review keeps the signatures in step.
  */
 void esdm_server_remove_stale_socket(const char *path, int socktype);
 int set_fd_nonblocking(int fd);
@@ -578,11 +571,10 @@ static void test_unknown_command(void)
 /*
  * A client that keeps asking without ever reading the answers.
  *
- * Its socket buffer fills up, and the responses the server has for it stop
- * going out. That must cost it nothing but its own progress: the server has to
- * keep the undelivered response, stop reading the commands behind it - the
- * backpressure that bounds what it holds per connection - and go on serving
- * everybody else without a pause.
+ * Its socket buffer fills up and the responses stop going out, which must cost
+ * it nothing but its own progress: the server keeps the undelivered response,
+ * stops reading the commands behind it - the backpressure bounding what it
+ * holds per connection - and goes on serving everybody else.
  */
 static void test_unread_responses(void)
 {
@@ -675,23 +667,20 @@ static void test_unread_responses(void)
 /*
  * A client that asks and is gone before it is answered.
  *
- * The request is in the server's socket buffer and is served, but the peer it
- * is served to no longer exists. Writing to it is an EPIPE the server has to
- * take as the end of that one connection - and nothing more. Raising SIGPIPE
- * over it would, with the disposition a daemon has unless it says otherwise,
- * terminate the entire ESDM: an interface no one is obliged to use would then
- * be able to take down the entropy supply of the whole system.
+ * The request is in the server's socket buffer and is served, but its peer no
+ * longer exists. Writing to it is an EPIPE the server has to take as the end of
+ * that one connection and nothing more: raising SIGPIPE would, with a daemon's
+ * default disposition, let an optional interface take down the entropy supply
+ * of the whole system.
  */
 static void test_vanishing_client(void)
 {
 	/*
-	 * More connections than the server takes events for in one round, so
-	 * that the ones it does not get an event for are the ones it retries the
-	 * delivery of - into a peer that is gone by then. A client closing while
-	 * a response is on its way to it is otherwise reported as a hangup and
-	 * the connection is dropped before anything is written to it, which is
-	 * exactly the ordering this has to get out of the way to reach the
-	 * write.
+	 * More connections than the server takes events for in one round, so the
+	 * ones without an event are the ones whose delivery it retries - into a
+	 * peer gone by then. Otherwise a client closing while a response is on
+	 * its way is reported as a hangup and the connection dropped before
+	 * anything is written, which never reaches the write under test.
 	 */
 #define TEST_VANISHING_CLIENTS 96
 	uint8_t cmd[2] = { ESDM_EGD_CMD_READ_NONBLOCK, ESDM_EGD_MAX_TRANSFER };

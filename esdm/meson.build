@@ -132,17 +132,13 @@ esdm_static_lib = static_library('esdm_static',
 	 link_with: esdm_common_static_lib,
 	)
 
-# Symbol versioning for libesdm: Meson has no dedicated option for linker
-# version scripts, so the flag is passed through link_args. link_depends makes
-# Ninja relink the library when version.lds changes - without it an edit of
-# the script would go unnoticed.
-#
-# Version scripts are a GNU ld / LLD feature and are not universally
-# available, hence the probe. Since binutils 2.41 and LLD 17 the linker
-# defaults to --no-undefined-version, which turns a symbol that is listed in
-# the script but not built in the current configuration into a hard error; ask
-# for the lenient behaviour where the linker knows the option. Older linkers
-# are lenient anyway.
+# Symbol versioning for libesdm: Meson has no option for linker version scripts,
+# so the flag goes through link_args; link_depends makes Ninja relink when
+# version.lds changes. Version scripts are a GNU ld / LLD feature, hence the
+# probe. Since binutils 2.41 and LLD 17 the linker defaults to
+# --no-undefined-version, turning a symbol listed in the script but not built in
+# this configuration into a hard error, so ask for the lenient behaviour where
+# the option exists - older linkers are lenient anyway.
 esdm_version_lds = meson.current_source_dir() / 'version.lds'
 esdm_lib_link_args = [ '-Wl,--version-script,' + esdm_version_lds ]
 if cc.has_link_argument('-Wl,--undefined-version')

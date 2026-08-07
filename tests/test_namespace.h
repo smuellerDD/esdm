@@ -33,14 +33,12 @@
 
 /*
  * A build tree below /tmp would be hidden by the private /tmp mounted below,
- * taking with it the daemons the test still has to exec and the coverage
- * counters it writes on exit. Keep the top level /tmp directory such a path
- * belongs to: the names that have to become private - the RPC sockets - live
- * directly in /tmp, not inside it.
- *
- * The directory is pinned with an O_PATH descriptor taken before the mount, so
- * it can be bound back afterwards through /proc/self/fd without leaving a
- * helper mount point behind anywhere.
+ * taking with it the daemons still to be exec'd and the coverage counters
+ * written on exit. Keep the top level /tmp directory such a path belongs to -
+ * the names that have to become private, the RPC sockets, live directly in
+ * /tmp. The directory is pinned with an O_PATH descriptor taken before the
+ * mount and bound back through /proc/self/fd, so no helper mount point is left
+ * behind.
  */
 #define TEST_NS_KEEP_MAX 2
 
@@ -150,20 +148,18 @@ static inline int test_ns_restore(struct test_ns_keep *keep, unsigned int n)
  * Give a privileged test its own mount and IPC namespace.
  *
  * Everything the ESDM uses to find itself is a machine-global name: the RPC
- * sockets at fixed paths under /tmp, the POSIX semaphores in /dev/shm, and the
- * System V segments keyed by ftok(). Two tests running at once therefore fight
- * over the same names - the second server cannot bind, or worse, a client
- * silently talks to the other test's daemon - and a test that dies leaves those
- * names behind for whatever runs next.
+ * sockets under /tmp, the POSIX semaphores in /dev/shm and the System V
+ * segments keyed by ftok(). Two tests at once fight over them - the second
+ * server cannot bind, or worse, a client silently talks to the other test's
+ * daemon - and a test that dies leaves them behind.
  *
  * Unsharing the mount and IPC namespaces makes all of them private to the
- * process and the daemons it forks. That is what allows the privileged tests to
- * run in parallel, and it also stops a failed run from poisoning the machine:
- * the namespace and everything named in it is gone once the test exits.
+ * process and the daemons it forks, which is what allows the privileged tests
+ * to run in parallel and keeps a failed run from poisoning the machine.
  *
  * Requires real root - CLONE_NEWNS needs CAP_SYS_ADMIN, and a user namespace is
- * no substitute here because the ESDM drops privileges with setgroups(), which
- * is denied inside one.
+ * no substitute, as the ESDM drops privileges with setgroups(), which is denied
+ * inside one.
  */
 static inline int test_isolate_namespaces(void)
 {

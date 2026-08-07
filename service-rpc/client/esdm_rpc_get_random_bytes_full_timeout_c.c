@@ -145,15 +145,11 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 
 		/*
 		 * Our own interrupt handler firing means the deadline passed.
-		 * It surfaces differently depending on the phase it hit: the
-		 * write phase leaves the -ETIMEDOUT placeholder untouched (no
-		 * closure call, and esdm_rpcc_last_error() deliberately hides
-		 * the -EAGAIN behind it), while the read phase invokes the
-		 * closure with -EINTR. Report the deadline as -ETIMEDOUT in
-		 * both cases - propagating -EINTR would make the caller's
-		 * esdm_invoke() restart the request up to five more times, each
-		 * with a freshly computed deadline, so a call could block for
-		 * several times the requested timeout.
+		 * The write phase leaves the -ETIMEDOUT placeholder untouched
+		 * (no closure call), the read phase invokes the closure with
+		 * -EINTR. Report -ETIMEDOUT for both: propagating -EINTR would
+		 * make the caller's esdm_invoke() restart the request up to five
+		 * more times, each with a fresh deadline.
 		 */
 		if (interrupt_func_replaced && buffer.ret == -EINTR &&
 		    int_connection_after_timeout(&timeout)) {

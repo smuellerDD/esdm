@@ -20,19 +20,13 @@
 /*
  * Tests for the esdm-server command line.
  *
- * The suite starts the daemon in several places, but always the same way: with
- * no options, or with the one or two that particular test needs. Everything
- * else the command line accepts - and everything it says when it is given
- * something it does not accept - was never executed.
- *
- * None of it needs the daemon to come up. The options are parsed before the
- * check that refuses to run as anything but root, so an unprivileged run
- * reaches all of the parsing and stops immediately afterwards, which is exactly
- * the part under test here. What the daemon does after that is covered by every
- * test that starts one.
- *
- * Two of them are their own answer instead: --help prints the usage and
- * --version prints the version, and both exit before anything else happens.
+ * The suite starts the daemon in several places, but always with no options or
+ * the one or two a particular test needs, so everything else the command line
+ * accepts - and everything it says when given something it does not - was never
+ * executed. None of that needs the daemon to come up: the options are parsed
+ * before the check refusing to run as anything but root, so an unprivileged run
+ * reaches all of the parsing and stops right afterwards. --help and --version
+ * are their own answer, exiting before anything else happens.
  */
 
 #define _GNU_SOURCE

@@ -72,11 +72,10 @@
 /*
  * Returned by the record handler once the conditioning pool cannot credit
  * another event. libbpf aborts the ring buffer consumption on a negative
- * callback return without advancing past the record that produced it, so the
- * event and everything behind it stay buffered for the next fetch.
- *
- * ring_buffer__consume_n() would express this directly, but it is a libbpf
- * 1.5 API and the distributions this has to build on are still on 1.3.
+ * callback return without advancing past the record, so that event and
+ * everything behind it stay buffered for the next fetch.
+ * ring_buffer__consume_n() would say this directly, but it is a libbpf 1.5 API
+ * and the distributions this builds on are still on 1.3.
  */
 #define ESDM_EBPF_FETCH_DONE (-ECANCELED)
 
@@ -232,10 +231,9 @@ void esdm_ebpf_fill_config(struct esdm_ebpf_es *es,
 	 * The oversampling rate states the assessed min-entropy of one event
 	 * (H = 1 / OSR) while the entropy rate credits
 	 * rate * ESDM_EBPF_EVENT_DATA_BITS / ESDM_DRNG_SECURITY_STRENGTH_BITS
-	 * bits per event. A configuration crediting more than the assessment
-	 * supports claims entropy the health tests are not parameterized for -
-	 * the accounting caps it (esdm_ebpf_collected_entropy()), the
-	 * configuration still deserves a complaint.
+	 * bits per event. Crediting more than the assessment supports claims
+	 * entropy the health tests are not parameterized for; the accounting
+	 * caps it (esdm_ebpf_collected_entropy()), but say so anyway.
 	 */
 	if ((uint64_t)rate * ESDM_EBPF_EVENT_DATA_BITS * osr >
 	    ESDM_DRNG_SECURITY_STRENGTH_BITS)
@@ -254,16 +252,13 @@ void esdm_ebpf_fill_config(struct esdm_ebpf_es *es,
 /**************************** Timestamp mechanism *****************************/
 
 /*
- * Estimate whether the monotonic clock - the time source read by the eBPF
- * program via bpf_ktime_get_ns() (CLOCK_MONOTONIC) - provides a high
- * resolution. This mirrors the kernel add-on, which does not register its
- * hooks without a high-resolution timer either (esdm_es_sched_module_init()):
- * a coarse clock source leaves the low-order bits of the time stamp constant,
- * so no timing entropy can be collected at all.
- *
- * clock_getres() reports the nominal 1 ns on virtually all systems regardless
- * of the true granularity, so the resolution is estimated as the smallest
- * non-zero advance observed between successive reads.
+ * Estimate whether the monotonic clock read by the eBPF program via
+ * bpf_ktime_get_ns() has a high resolution. A coarse clock leaves the low-order
+ * time stamp bits constant, so no timing entropy can be collected at all - the
+ * kernel add-on refuses to register its hooks for the same reason (see
+ * esdm_es_sched_module_init()). clock_getres() reports the nominal 1 ns
+ * regardless of the true granularity, so estimate from the smallest non-zero
+ * advance between successive reads.
  */
 bool esdm_ebpf_highres_timer(void)
 {
@@ -321,17 +316,13 @@ static uint32_t esdm_ebpf_rb_size(struct esdm_ebpf_es *es)
 /*
  * Bring the ring buffer wipe into this load.
  *
- * The time deltas the programs collect are the samples of an SP800-90B noise
- * source, and the ring buffer is the one place holding them that user space
- * cannot overwrite itself - only this program can, as its data pages are
- * mapped read-only and just the producer side may write them. A source that
- * cannot erase them once it is unloaded therefore must not run at all: both
- * ways this can fail abort the initialization rather than leaving the source
- * collecting into a buffer nobody is able to clear again.
- *
- * The wipe is a BPF_PROG_TYPE_SYSCALL program (Linux 5.14). A program type
- * the kernel does not know would fail the load of the whole object anyway;
- * probing it here only turns that into a diagnosable message.
+ * The collected time deltas are the samples of an SP800-90B noise source, and
+ * the ring buffer is the one place holding them that user space cannot
+ * overwrite itself - its data pages are mapped read-only, so only this program
+ * can. A source unable to erase them on unload must not run at all, hence both
+ * failure paths abort the initialization. The wipe is a BPF_PROG_TYPE_SYSCALL
+ * program (Linux 5.14); an unknown program type would fail the object load
+ * anyway, probing only turns that into a diagnosable message.
  */
 static int esdm_ebpf_prepare_wipe(struct esdm_ebpf_es *es,
 				  struct bpf_object *obj)
@@ -356,16 +347,13 @@ static int esdm_ebpf_prepare_wipe(struct esdm_ebpf_es *es,
 	}
 
 	/*
-	 * The probe answers by loading a program of its own, so it fails for
-	 * want of privileges exactly as it does for want of kernel support,
-	 * and libbpf reports both as "not supported". Ask the same question
-	 * about raw tracepoints, which these objects need anyway and which
-	 * every kernel offering syscall programs has had for years: if that
-	 * one cannot be answered either, the obstacle is this process rather
-	 * than the kernel, and the load below fails in a way the caller may
-	 * turn into a disabled entropy source. Only a kernel that has raw
-	 * tracepoints but no syscall programs is genuinely too old to erase
-	 * what this source collects.
+	 * The probe loads a program of its own, so it fails for want of
+	 * privileges exactly as for want of kernel support - libbpf reports
+	 * both as "not supported". Ask the same about raw tracepoints, which
+	 * these objects need anyway and which every kernel with syscall
+	 * programs has: if that fails too, the obstacle is this process rather
+	 * than the kernel. Only a kernel with raw tracepoints but no syscall
+	 * programs is genuinely too old to erase what this source collects.
 	 */
 	control = libbpf_probe_bpf_prog_type(BPF_PROG_TYPE_RAW_TRACEPOINT,
 					     NULL);
@@ -467,10 +455,9 @@ static void esdm_ebpf_update_status(struct esdm_ebpf_es *es)
 
 	/*
 	 * The read hands out the whole per-CPU state, collection buffers
-	 * included, so this buffer holds a copy of the raw samples of every
-	 * CPU. What is of interest has been taken out of it above, so it is
-	 * erased right away rather than left to sit until the next status read
-	 * overwrites it. A read that fails leaves it as it is, which is what
+	 * included, so this holds a copy of every CPU's raw samples. What is of
+	 * interest was taken out above, so erase it right away rather than
+	 * leaving it until the next status read. A failing read leaves it as
 	 * this made it: empty.
 	 */
 	memset_secure(es->cpu_state, 0, es->cpu_state_sz);
@@ -683,11 +670,10 @@ static uint64_t esdm_ebpf_events_for_bits(struct esdm_ebpf_es *es,
  * in FIPS / SP800-90C / NTG.1 mode to emit one full digest of output, and an
  * event carries 1 / OSR bits of it.
  *
- * This is what an extraction fetches, and it is at the same time the ceiling
- * for the ingest: an extraction compresses everything the pool absorbed into
- * that single block, so events collected beyond it add data but no entropy -
- * a hash pool never carries more than its output size (SP800-90B section
- * 3.1.5.1 table 1), just as the auxiliary pool caps its counter on insert.
+ * This is what an extraction fetches and at the same time the ceiling for the
+ * ingest: everything absorbed is compressed into that one block, so events
+ * beyond it add data but no entropy - a hash pool never carries more than its
+ * output size (SP800-90B 3.1.5.1 table 1), like the auxiliary pool's counter.
  */
 static uint64_t esdm_ebpf_events_per_block(struct esdm_ebpf_es *es)
 {
@@ -733,16 +719,14 @@ static uint32_t esdm_ebpf_collected_entropy(struct esdm_ebpf_es *es)
 }
 
 /*
- * Entropy in bits the source can hand out: what an extraction would deliver if
- * it ran now. That is not only what the conditioning pool has already absorbed
- * but also what the eBPF programs deposited and nobody has fetched yet, as an
- * extraction fetches those events before it emits its block.
+ * Entropy in bits the source can hand out: what an extraction would deliver
+ * now, i.e. what the conditioning pool absorbed plus what the eBPF programs
+ * deposited and nobody fetched yet - an extraction fetches those first.
  *
- * An extraction emits one block, so the collected entropy counts up to what
- * one block costs - a digest plus the oversampling surcharge, which
- * esdm_reduce_by_osr() takes off again to arrive at the bits the digest
- * actually delivers. Capping at the digest alone would clip the surcharge and
- * leave the source unable to report the full digest it can produce.
+ * It emits one block, so the collected entropy counts up to what one block
+ * costs: a digest plus the oversampling surcharge esdm_reduce_by_osr() takes
+ * off again. Capping at the digest alone would clip the surcharge and leave the
+ * source unable to report the full digest it can produce.
  */
 uint32_t esdm_ebpf_avail_entropy(struct esdm_ebpf_es *es)
 {
@@ -806,17 +790,13 @@ void esdm_ebpf_get_ent(struct esdm_ebpf_es *es, struct entropy_es *eb_es,
 	esdm_ebpf_consume(es);
 
 	/*
-	 * Only requested_bits of the block are handed to the caller, so the
-	 * claim cannot exceed what those bits can hold: requested_bits plus the
-	 * oversampling surcharge, which esdm_reduce_by_osr() takes off again
-	 * below. Without this the source would claim a whole digest of entropy
-	 * for the partial one it handed out.
-	 *
-	 * This is the only ceiling needed. A request is capped at the digest
-	 * size above, and the ingest caps the pool at what one block costs
-	 * (esdm_ebpf_events_per_block()), which is that same digest plus the
-	 * same surcharge - so a full-size request meets neither limit before
-	 * this one.
+	 * Only requested_bits of the block reach the caller, so the claim cannot
+	 * exceed what those bits hold: requested_bits plus the oversampling
+	 * surcharge esdm_reduce_by_osr() takes off below. Without this the
+	 * source would claim a whole digest for the partial one it handed out.
+	 * It is also the only ceiling needed - the request is capped at the
+	 * digest size above and the ingest at what one block costs, which is
+	 * that same digest plus the same surcharge.
 	 */
 	collected_ent_bits = min_uint32(requested_bits_osr,
 					esdm_ebpf_collected_entropy(es));
@@ -994,15 +974,13 @@ static int esdm_ebpf_handle_record(void *ctx, void *data, size_t size)
 /******************************* Zeroization *********************************/
 
 /*
- * Clear the per-CPU state of the eBPF programs and the copy user space keeps
- * of it. That state holds the collection buffer of each CPU, i.e. the deltas
- * collected but not handed over yet, along with the predecessor time stamp and
- * the health test state derived from the collected samples.
+ * Clear the per-CPU state of the eBPF programs and user space's copy of it:
+ * each CPU's collection buffer (the deltas not handed over yet), the
+ * predecessor time stamp and the health test state.
  *
- * A CPU clears its own collection buffer when it hands a batch over and when it
- * observes a reset, so what this covers is the buffer of a CPU that fell quiet
- * before either - and, as the map is written as a whole, of the CPUs that are
- * not even online.
+ * A CPU clears its own buffer when it hands a batch over and when it observes a
+ * reset, so this covers the CPUs that fell quiet before either - and, as the
+ * map is written as a whole, those that are not even online.
  */
 static void esdm_ebpf_clear_state_map(struct esdm_ebpf_es *es)
 {
@@ -1200,14 +1178,12 @@ int esdm_ebpf_refill(struct esdm_ebpf_es *es)
 
 	/*
 	 * The pool holds all the entropy it can, so further events would be
-	 * fetched for nobody - the ingest could not credit them anyway. They
-	 * stay in the ring buffer until an extraction has made room in the pool
-	 * again, and the programs drop what no longer fits.
-	 *
-	 * The comparison is on the credited events rather than on
-	 * esdm_ebpf_avail_entropy() against esdm_ebpf_max_entropy(): the former
-	 * discounts the oversampling of an extraction while the latter
-	 * deliberately does not, so a full pool does not make the two meet.
+	 * fetched for nobody. They stay in the ring buffer until an extraction
+	 * makes room, and the programs drop what no longer fits. Compared on the
+	 * credited events rather than esdm_ebpf_avail_entropy() against
+	 * esdm_ebpf_max_entropy(): the former discounts an extraction's
+	 * oversampling while the latter does not, so a full pool never makes the
+	 * two meet.
 	 */
 	if (es->credited_events >= esdm_ebpf_events_per_block(es))
 		return 0;
@@ -1223,12 +1199,11 @@ int esdm_ebpf_consume(struct esdm_ebpf_es *es)
 		return 0;
 
 	/*
-	 * Take only the events the pool still has room to credit and leave the
-	 * rest where they are. Draining the whole ring buffer would hash every
-	 * record deposited since the last call into a pool that stops crediting
-	 * at one output block, so the surplus would cost a hash update each and
-	 * buy nothing - and the events are better off waiting in the ring
-	 * buffer, where the next fetch finds them.
+	 * Take only the events the pool still has room to credit. Draining the
+	 * whole ring buffer would hash every record into a pool that stops
+	 * crediting at one output block, costing a hash update each and buying
+	 * nothing - the surplus is better off waiting where the next fetch
+	 * finds it.
 	 */
 	es->fetch_target = esdm_ebpf_events_per_block(es);
 	if (es->credited_events >= es->fetch_target)

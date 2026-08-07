@@ -2,26 +2,16 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 #
 # Example: SP800-90B non-IID assessment of one CPU of an eBPF entropy source.
+# esdm-ebpf-collect writes the raw time between events, esdm-extractlsb keeps
+# the least significant bits as one byte per sample and ea_non_iid estimates the
+# per-event min-entropy. Its output is passed through as it stands - deriving
+# the ESDM entropy and oversampling rates is left to the reader. One CPU at a
+# time, as the CPUs' time stamp streams are separate noise sources; repeat for
+# every CPU to be credited and take the worst result.
 #
-# It drives the three tools the measurement needs:
-#
-#   esdm-ebpf-collect  writes the raw time between events as decimal ASCII
-#   esdm-extractlsb         keeps the least significant bits of each delta and
-#                      writes one byte per sample
-#   ea_non_iid         estimates the per-event min-entropy (NIST
-#                      SP800-90B_EntropyAssessment)
-#
-# The estimator's output is passed through as it stands - deriving the ESDM
-# entropy rate and oversampling rate from it is left to the reader, who has
-# to weigh the measurement against the deployment anyway.
-#
-# One CPU is assessed at a time: the time stamp streams of the individual
-# CPUs are separate noise sources and may not be mixed. Repeat for every CPU
-# that shall be credited and take the worst result.
-#
-# THIS IS EXAMPLE TOOLING FOR MEASUREMENT AND VALIDATION. The numbers it
-# reports describe the machine it ran on - repeat the measurement in the
-# deployment environment, idle and under load, before crediting anything.
+# THIS IS EXAMPLE TOOLING FOR MEASUREMENT AND VALIDATION. The numbers describe
+# the machine it ran on - repeat in the deployment environment, idle and under
+# load, before crediting anything.
 #
 # Usage: analyze_non_iid.sh [OPTIONS] <output-dir>
 #

@@ -20,16 +20,13 @@
  */
 
 /*
- * The client lock is held across the whole request / response exchange, which
- * waits for the peer and is bounded by nothing but the client's timeout. A
- * caller killed in that window - an application shot while waiting for an ESDM
- * that is not operational yet - is what the locks are robust for: with a plain
- * mutex the client would stay locked for the rest of the process lifetime and
- * every later request would wait for it forever.
- *
- * A peer that accepts but never answers puts a thread into exactly that window,
- * where it is cancelled. Everything after that has a deadline, so a client that
- * is wedged fails the test instead of hanging it.
+ * The client lock is held across the whole request / response exchange, bounded
+ * by nothing but the client's timeout. A caller killed in that window - an
+ * application shot while waiting for a not yet operational ESDM - is what the
+ * robust locks exist for: a plain mutex would stay locked for the rest of the
+ * process lifetime. A peer that accepts but never answers puts a thread into
+ * exactly that window, where it is cancelled. Everything after has a deadline,
+ * so a wedged client fails the test instead of hanging it.
  */
 
 #define _GNU_SOURCE

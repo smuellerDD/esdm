@@ -20,13 +20,11 @@
  */
 
 /*
- * These run against the test peer next to this file rather than against an
- * esdm-server: they are about the client's own behaviour - its framing of the
- * commands, what it makes of an answer no correct server would give, and how
- * it deals with a connection that is not there any more - none of which a
- * correct server can be made to produce on demand. No privileges are needed,
- * so this runs everywhere, and the esdm-server side of the protocol is covered
- * by egd_server_test.
+ * These run against the test peer next to this file rather than an esdm-server,
+ * because they are about the client's own behaviour: its command framing, what
+ * it makes of an answer no correct server would give, and how it handles a
+ * connection that is gone. No privileges needed; the esdm-server side of the
+ * protocol is covered by egd_server_test.
  */
 
 #define _GNU_SOURCE
@@ -511,14 +509,11 @@ static int test_failure_wipes_buffer(void)
 
 /*
  * An application may close descriptor ranges it did not open - OpenSSH does on
- * its way into the pre-authentication child - and the number is then free to
- * be reused for something else entirely. Reading "random" data out of whatever
- * took its place would be a silent and serious failure, so the client has to
- * notice that the descriptor is no longer its connection.
- *
- * The check needs to know which descriptor the client got, which is the lowest
- * free one at the time it connects. Nothing else in this process opens one in
- * between, but the assumption is verified rather than trusted.
+ * its way into the pre-authentication child - freeing the number for reuse.
+ * Reading "random" data out of whatever took its place would be a silent and
+ * serious failure, so the client has to notice. The check needs the client's
+ * descriptor, which is the lowest free one at connect time; nothing else here
+ * opens one in between, but that is verified rather than trusted.
  */
 static int test_descriptor_identity(void)
 {

@@ -52,31 +52,21 @@ static void esdm_rpcc_get_seed_cb(const RandValResponse *response,
 
 	/*
 	 * Track the copied length separately from the caller's capacity: the
-	 * request is retried while the server responds -EAGAIN (which it does
-	 * whenever another caller currently holds the server-side seed lock)
-	 * and such a response carries no payload. Folding that zero length back
-	 * into the capacity would clamp it to 0 for good, so the retry that
-	 * finally succeeds would copy nothing while still reporting the
-	 * server's positive byte count to the caller.
+	 * request is retried while the server responds -EAGAIN, which carries no
+	 * payload. Folding that zero length back into the capacity would clamp
+	 * it to 0 for good, so the retry that finally succeeds would copy
+	 * nothing while still reporting a positive byte count.
 	 */
 	buffer->copied = min_size(response->randval.len, buffer->buflen);
 
 	/*
-	 * Copy whatever payload the response carries, not only the one of a
-	 * successful call.
-	 *
-	 * esdm_get_seed() documents that a buffer of at least uint64_t but too
-	 * small for the whole seed is answered with -EMSGSIZE and the required
-	 * length written into it, which is the only way a caller can learn how
-	 * much to allocate. The server implements that and attaches the length
-	 * to the failing response, so gating the copy on a positive return code
-	 * discarded it: the caller's size stayed whatever it was - zero for the
-	 * documented "ask with a small buffer first" sequence - and the request
-	 * it sized from that then failed with -EINVAL for good.
-	 *
-	 * Responses without a payload keep the buffer untouched: a retried
-	 * -EAGAIN carries none, and neither does the length check the server
-	 * performs before it ever calls esdm_get_seed().
+	 * Copy whatever payload the response carries, not only that of a
+	 * successful call: esdm_get_seed() answers a buffer too small for the
+	 * whole seed with -EMSGSIZE and the required length written into it,
+	 * which is the only way a caller learns how much to allocate. Gating the
+	 * copy on a positive return code discarded that length, leaving the
+	 * caller's size at zero and its next request failing with -EINVAL.
+	 * Responses without a payload keep the buffer untouched.
 	 */
 	if (buffer->copied && response->randval.data != NULL &&
 	    buffer->buf != NULL) {

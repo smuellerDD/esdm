@@ -144,15 +144,12 @@ void esdm_rpcc_fini_unpriv_service(void);
 /**
  * @brief Release all resources around the RPC connection unconditionally.
  *
- * Unlike esdm_rpcc_fini_unpriv_service, the connection is torn down even when
- * other users still hold a reference to it - their subsequent service requests
- * fail with -EFAULT and their fini calls become a no-op. Use this only where
- * the connection must be gone irrespective of the remaining users, e.g. when
- * shutting down a process whose other users cannot be reached anymore.
- *
- * A connection handle that is checked out with esdm_rpcc_get_unpriv_service at
- * that moment is deliberately not freed - its memory is retained so that the
- * caller owning it can complete and release it safely.
+ * Unlike esdm_rpcc_fini_unpriv_service, the connection is torn down even while
+ * other users hold a reference - their later requests fail with -EFAULT and
+ * their fini calls become a no-op. Use this only where the connection must be
+ * gone irrespective of the remaining users. A handle checked out with
+ * esdm_rpcc_get_unpriv_service is deliberately not freed, so its owner can
+ * complete and release it safely.
  */
 void esdm_rpcc_force_fini_unpriv_service(void);
 
@@ -222,15 +219,12 @@ void esdm_rpcc_fini_priv_service(void);
 /**
  * @brief Release all resources around the RPC connection unconditionally.
  *
- * Unlike esdm_rpcc_fini_priv_service, the connection is torn down even when
- * other users still hold a reference to it - their subsequent service requests
- * fail with -EFAULT and their fini calls become a no-op. Use this only where
- * the connection must be gone irrespective of the remaining users, e.g. when
- * shutting down a process whose other users cannot be reached anymore.
- *
- * A connection handle that is checked out with esdm_rpcc_get_priv_service at
- * that moment is deliberately not freed - its memory is retained so that the
- * caller owning it can complete and release it safely.
+ * Unlike esdm_rpcc_fini_priv_service, the connection is torn down even while
+ * other users hold a reference - their later requests fail with -EFAULT and
+ * their fini calls become a no-op. Use this only where the connection must be
+ * gone irrespective of the remaining users. A handle checked out with
+ * esdm_rpcc_get_priv_service is deliberately not freed, so its owner can
+ * complete and release it safely.
  */
 void esdm_rpcc_force_fini_priv_service(void);
 

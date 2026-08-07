@@ -80,14 +80,12 @@ struct {
 } esdm_ebpf_timers SEC(".maps");
 
 /*
- * Filled by user space before the program is loaded.
- *
- * The explicit initializer makes this a definition rather than a tentative
- * one: a tentative definition becomes a common symbol under -fcommon and thus
- * lands outside of the ".rodata" section that the skeleton exposes and that
- * the verifier constant-folds the loads of. "volatile" keeps the compiler from
- * folding the reads against the zero initializer, "const" is what places the
- * object in the read-only section in the first place.
+ * Filled by user space before the program is loaded. The explicit initializer
+ * makes this a definition rather than a tentative one, which under -fcommon
+ * would become a common symbol outside the ".rodata" section the skeleton
+ * exposes and the verifier constant-folds. "volatile" keeps the compiler from
+ * folding the reads against the zero initializer, "const" places the object in
+ * the read-only section.
  */
 const volatile struct esdm_ebpf_config esdm_ebpf_cfg = { 0 };
 
@@ -127,13 +125,11 @@ esdm_ebpf_gcd_reset(struct esdm_ebpf_percpu_state *state)
 
 /*
  * Divide out the common granularity of the time source, mirroring the GCD
- * handling of the ESDM kernel add-on (esdm_es_timer_common.c). Coarse clock
- * sources - notably the monotonic clock in virtualized environments -
+ * handling of the kernel add-on (esdm_es_timer_common.c). Coarse clock sources
  * increment in fixed steps, leaving the low-order time stamp bits constant and
  * thus entropy-free. The GCD of the first ESDM_EBPF_GCD_WINDOW raw time stamps
- * of each CPU estimates that step; once known, subsequent time stamps are
- * divided by it so the low-order bits actually vary. Until the GCD is known
- * the raw time stamp is used (as does the kernel add-on).
+ * of a CPU estimates that step; later time stamps are divided by it so the
+ * low-order bits vary. Until it is known, the raw time stamp is used.
  */
 static __always_inline __u64
 esdm_ebpf_gcd_process(struct esdm_ebpf_percpu_state *state, __u64 ts)
@@ -161,13 +157,11 @@ esdm_ebpf_gcd_process(struct esdm_ebpf_percpu_state *state, __u64 ts)
 
 /*
  * Hand the collected deltas of this CPU over. The record goes out with exactly
- * the length its deltas occupy, so a partial batch costs the ring buffer no
- * more than it holds.
- *
- * Whether it made it through does not change what follows: the buffer starts
- * over either way, so no delta is ever accounted twice. A full ring buffer
- * means user space is not keeping up, and the deltas are dropped - the events
- * behind them are no worse than the ones that would replace them.
+ * the length its deltas occupy, so a partial batch costs no more than it holds.
+ * Whether it made it through changes nothing: the buffer starts over either
+ * way, so no delta is accounted twice. A full ring buffer means user space is
+ * not keeping up and the deltas are dropped, which costs nothing - the events
+ * behind them are no worse.
  */
 static __always_inline void
 esdm_ebpf_submit_batch(struct esdm_ebpf_percpu_state *state)
@@ -364,21 +358,18 @@ static __always_inline void esdm_ebpf_collect(void)
 
 	/*
 	 * Collect the time between events rather than the time stamps: the
-	 * entropy is in the spacing, while the high-order bits of a time stamp
-	 * are entirely predictable. It is also the signal the SP800-90B
-	 * assessment of the raw samples measures (iter_deltas() of
-	 * esdm_ebpf_raw.py), so what is credited here is what was assessed
-	 * there. The unsigned subtraction is correct across a wraparound.
+	 * entropy is in the spacing, the high-order bits are predictable. It is
+	 * also what the SP800-90B assessment of the raw samples measures
+	 * (iter_deltas() of esdm_ebpf_raw.py), so what is credited here is what
+	 * was assessed there. The unsigned subtraction handles a wraparound.
 	 *
-	 * Two time stamps form no delta: the first one a CPU sees, which has no
-	 * predecessor, and the first one after the timer granularity became
-	 * known, whose predecessor is on the undivided scale. Both only set the
-	 * predecessor up - as does the kernel add-on (esdm_time_process_common()
-	 * of esdm_es_timer_common.c) for the first time stamp of a CPU.
+	 * Two time stamps form no delta and only set the predecessor up: the
+	 * first one a CPU sees, and the first one after the timer granularity
+	 * became known, whose predecessor is on the undivided scale. The kernel
+	 * add-on does the same (esdm_time_process_common()).
 	 *
-	 * Only deltas the health tests vouch for are collected at all, so the
-	 * record carries no health state and user space may credit everything
-	 * it receives.
+	 * Only deltas the health tests vouch for are collected, so the record
+	 * carries no health state and user space may credit all of it.
 	 */
 	if (gcd_known && state->last_ts) {
 		__u64 delta = ts - state->last_ts;
@@ -414,20 +405,16 @@ static __always_inline void esdm_ebpf_collect(void)
 }
 
 /*
- * Zeroize the ring buffer: write filler records of zeros over the event
- * records it holds. User space runs this program (BPF_PROG_RUN) when the
- * entropy source is unloaded, once the programs are detached and the
- * collection buffers are cleared, and it keeps running it - draining the ring
- * buffer in between to make room - until the filler has covered the whole ring
- * buffer once. The raw time deltas of the events are the samples of an
- * SP800-90B noise source, and none of them may outlive the entropy source.
+ * Zeroize the ring buffer: write filler records of zeros over the event records
+ * it holds. The raw time deltas are the samples of an SP800-90B noise source
+ * and none may outlive the entropy source, so user space runs this program
+ * (BPF_PROG_RUN) on unload - draining the ring buffer in between to make room -
+ * until the filler has covered it once. It is the one buffer user space cannot
+ * clear itself, its data pages being mapped read-only, so only the producer
+ * side can overwrite them.
  *
- * The ring buffer is the one buffer of the entropy source that user space
- * cannot clear itself: its data pages are mapped read-only into user space,
- * so only the producer side - this program - can overwrite them.
- *
- * @return number of ring buffer bytes written, which is what tells user space
- *	   how much of the ring buffer is covered.
+ * @return number of ring buffer bytes written, which tells user space how much
+ *	   of the ring buffer is covered.
  */
 SEC("syscall")
 int esdm_ebpf_wipe(void *ctx)

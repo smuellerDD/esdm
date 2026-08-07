@@ -239,25 +239,19 @@
                   )
 
               # ... and the collected events have to reach the conditioning
-              # pool, which is what turns them into available entropy. Three
-              # digits is what a drain that actually handed the collection
-              # buffers over yields, as opposed to a stray event trickling in.
-              # Only the scheduler source is credited here - the interrupt
-              # source is built with the default entropy rate of 0.
+              # pool. Three digits distinguishes a real drain from a stray event
+              # trickling in. Only the scheduler source is credited - the
+              # interrupt source is built with an entropy rate of 0.
               machine.wait_until_succeeds(
                   "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 'Name: SchedulerEBPF' "
                   "| grep -qE 'Available entropy: [1-9][0-9][0-9]'", 60
               )
 
-              # Fetching entropy must not ramp the accounting up. One drain
-              # hands over far more events than a single extraction consumes,
-              # so crediting all of them would let the reported entropy grow
-              # past what the conditioning pool can ever deliver. Force
-              # reseeds with prediction resistance and watch the peak.
-              # The source must be able to report the full digest it can
-              # produce: one output block costs a digest plus the SP800-90C
-              # oversampling surcharge, so capping the collected count at the
-              # digest alone clips the surcharge and leaves it stuck below.
+              # Fetching entropy must not ramp the accounting past what the
+              # conditioning pool can deliver, but must still reach a full
+              # digest: one output block costs a digest plus the SP800-90C
+              # oversampling surcharge, so capping at the digest alone would
+              # clip the surcharge and leave it stuck below.
               machine.wait_until_succeeds(
                   "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 'Name: SchedulerEBPF' "
                   "| grep -q 'Available entropy: 512'", 60
@@ -305,13 +299,11 @@
                   "events in it until it needs them"
               )
 
-              # Unloading the entropy sources has to erase the raw samples
-              # they collected. The collection buffers are cleared by user
-              # space, the ring buffer is overwritten by the wipe program -
-              # the one buffer user space cannot write itself - and the
-              # message below is only logged once the filler has covered the
-              # whole ring buffer, so it reports the wipe program having
-              # loaded, run and gone all the way round.
+              # Unloading the sources has to erase the raw samples. User space
+              # clears the collection buffers; the ring buffer - the one it
+              # cannot write itself - is overwritten by the wipe program. The
+              # message below is logged only once the filler has covered the
+              # whole ring, so it reports load, run and wrap-around.
               machine.succeed("kill -TERM $(cat /run/esdm-server.pid)")
               for source in ["SchedulerEBPF", "InterruptEBPF"]:
                   machine.wait_until_succeeds(
@@ -327,23 +319,14 @@
             '';
           };
 
-        # End-to-end raw entropy measurement of the eBPF scheduler entropy
-        # source: esdm-ebpf-collect (addon/es_ebpf_testing) gathers raw,
-        # unconditioned time stamps inside the VM and the analysis scripts
-        # drive the NIST SP800-90B non-IID estimator - nixpkgs'
-        # sp800-90b-entropyassessment - over them.
-        #
-        # This is a functional test of the measurement tooling against the
-        # real estimator, NOT a validation grade assessment: an entropy claim
-        # has to be measured on the deployment environment itself, idle and
-        # under load, and a qemu VM is neither of those (see
-        # addon/es_ebpf_testing/README.md). The numbers this produces say
-        # nothing about any real machine, so nothing is asserted about their
-        # magnitude - only that the whole chain runs and reports a rate.
-        #
-        # Defined for a single kernel on purpose: the estimator dominates the
-        # run time, and neither the collector nor the analysis scripts are
-        # kernel version specific - mkEbpfCheck already covers every kernel.
+        # End-to-end raw entropy measurement of the eBPF scheduler source:
+        # esdm-ebpf-collect gathers unconditioned time stamps in the VM and the
+        # analysis scripts drive the NIST SP800-90B non-IID estimator over them.
+        # This tests the measurement tooling, NOT a validation grade assessment
+        # - a claim must be measured on the deployment environment, which a qemu
+        # VM is not (see addon/es_ebpf_testing/README.md), so nothing is
+        # asserted about the magnitude. Single kernel on purpose: the estimator
+        # dominates the run time and nothing here is kernel specific.
         mkEbpfRawCheck =
           kernel:
           let
@@ -395,15 +378,11 @@
 
               machine.wait_for_unit("multi-user.target")
 
-              # The scheduler entropy source only observes events that
-              # actually happen. stress-ng's context switch stressor is what
-              # produces them at a rate that reaches the requested count in
-              # seconds instead of hours - an idle VM switches a few hundred
-              # times per second and would never get there.
-              #
-              # The store path rather than a bare name: systemd-run resolves
-              # its command against its own PATH, not the one a login shell
-              # would see.
+              # The scheduler source only observes events that happen, and an
+              # idle VM switches a few hundred times per second - stress-ng's
+              # context switch stressor reaches the requested count in seconds
+              # instead of hours. The store path rather than a bare name:
+              # systemd-run resolves against its own PATH, not a login shell's.
               machine.succeed(
                   "systemd-run --unit=esdm-load --collect "
                   "${pkgs.stress-ng}/bin/stress-ng "
@@ -544,21 +523,12 @@
             '';
           };
 
-        # The ESDM's EGD (Entropy Gathering Daemon) compatibility interface,
-        # exercised by a real consumer: GnuPG through libgcrypt.
-        #
-        # The point of the check is that libgcrypt is rebuilt with
-        # --enable-random=egd, which makes the EGD its ONLY entropy gathering
-        # module. libgcrypt then log_fatal()s ("no entropy gathering module
-        # detected") as soon as it cannot reach the EGD socket, so gpg can only
-        # produce a single random number if the ESDM really serves the
-        # protocol. There is no kernel RNG left to silently paper over a broken
-        # implementation - which is exactly what makes the gpg operations below
-        # meaningful, and what the negative control at the end demonstrates.
-        #
-        # Defined once rather than per kernel version: neither the EGD
-        # interface nor libgcrypt is kernel specific, and this check does not
-        # need the patched kernel or its esdm_es module at all.
+        # The ESDM's EGD compatibility interface, exercised by a real consumer:
+        # GnuPG through libgcrypt, rebuilt with --enable-random=egd so the EGD
+        # is its ONLY entropy gathering module. libgcrypt then log_fatal()s as
+        # soon as it cannot reach the socket, leaving no kernel RNG to paper
+        # over a broken implementation - see the negative control at the end.
+        # Defined once rather than per kernel: nothing here is kernel specific.
         mkEgdCheck =
           let
             esdm = self.packages.${system}.esdm;
@@ -685,17 +655,12 @@
               ).strip()
               assert out == "entropy from the ESDM", f"decryption returned {out!r}"
 
-              # Negative control: without the EGD interface, the very same gpg
-              # must be unable to produce a random number. Both units have to
-              # go - stopping only the server would leave systemd listening on
-              # the socket with nobody accepting, which makes clients wait
-              # rather than fail.
-              #
-              # Note that the socket *file* stays behind: systemd's
-              # RemoveOnStop= defaults to no, so a stopped socket unit leaves
-              # its inode in place. That is fine - with nobody listening,
-              # connecting to it is refused, which is what libgcrypt trips
-              # over.
+              # Negative control: without the EGD interface the same gpg must
+              # fail. Both units have to go - stopping only the server would
+              # leave systemd listening with nobody accepting, making clients
+              # wait rather than fail. The socket file stays behind (systemd's
+              # RemoveOnStop= defaults to no), but with nobody listening the
+              # connect is refused, which is what libgcrypt trips over.
               machine.succeed("systemctl stop esdm-server-egd.socket esdm-server.service")
               machine.fail("${gpg} --gen-random 2 32 > /dev/null")
 
@@ -711,36 +676,14 @@
             '';
           };
 
-        # OpenSSH served by the ESDM through the EGD OpenSSL RAND provider,
-        # with the emphasis on OpenSSH's own sandbox.
-        #
-        # sshd hands its pre-authentication protocol handling - the key
-        # exchange included - to a privilege separated child which re-execs
-        # itself and is then confined by the seccomp filter of
-        # sandbox-seccomp-filter.c. That filter permits read, write, poll,
-        # close, getpid, clock_gettime, nanosleep and getsockopt, and answers
-        # everything else with SECCOMP_RET_KILL - notably socket, connect,
-        # sendto and recvfrom.
-        #
-        # Two properties of the EGD client are what let it serve that child,
-        # and this check is what holds them down:
-        #
-        #   * it connects when it is allocated, which for the provider is
-        #     while OpenSSL loads it - before the child confines itself. A
-        #     client connecting lazily on first use would instead call
-        #     socket() from inside the sandbox and be killed for it. Note that
-        #     the child arrives via execve, so it cannot inherit the parent's
-        #     connection either (it is CLOEXEC) - it really does open its own.
-        #
-        #   * once connected it stays within the permitted syscalls. In
-        #     particular it uses read/write rather than the send/recv that
-        #     MSG_NOSIGNAL would require, since those are sendto/recvfrom.
-        #
-        # The key exchanges are exercised individually because they differ in
-        # what they demand: curve25519 and sntrup761 are implemented inside
-        # OpenSSH, while ecdh-sha2-nistp256 and diffie-hellman-group14-sha256
-        # generate their ephemeral keys through libcrypto and therefore make
-        # the sandboxed child draw from the provider.
+        # OpenSSH served through the EGD OpenSSL RAND provider, with the
+        # emphasis on sshd's pre-authentication child: its seccomp filter kills
+        # socket, connect, sendto and recvfrom. Serving it requires the EGD
+        # client to connect at allocation time - while OpenSSL loads the
+        # provider, before the child confines itself - and to then use
+        # read/write rather than send/recv. The key exchanges are exercised
+        # individually: curve25519 and sntrup761 live inside OpenSSH, while
+        # ecdh-sha2-nistp256 and dh-group14-sha256 draw through libcrypto.
         mkEgdOpensshCheck =
           let
             esdm = self.packages.${system}.esdm;
@@ -934,34 +877,24 @@
 
         packages =
           let
-            # gcov occasionally emits a negative branch execution count for the
-            # Botan C++ backend - a long-standing gcov bug, not something the
-            # tree can fix (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080).
-            # gcovr treats that as fatal by default and produces no report at
-            # all, so a full green test run ends with nothing to look at. Warn
-            # about it instead, once per affected file so the log stays
-            # readable, and keep the rest of the data.
+            # gcov occasionally emits a negative branch count for the Botan C++
+            # backend (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080).
+            # gcovr treats that as fatal and produces no report at all, so warn
+            # once per affected file and keep the rest of the data.
             gcovrIgnoreParseErrors =
               "--gcov-ignore-parse-errors negative_hits.warn_once_per_file";
 
             # Turn one of the esdm packages above into a coverage build of
-            # itself: instrument the tree with gcov, run "meson test" and export
-            # the generated HTML report as the derivation output.
+            # itself: instrument with gcov, run "meson test" and export the HTML
+            # report as the derivation output.
             #
             #   nix build .#esdm-coverage
             #   xdg-open result/share/doc/esdm/coverage/index.html
             #
-            # Applying this to a package rather than spelling it out per variant
-            # keeps the configurations that are worth covering - currently the
-            # default one and the eBPF one - from drifting apart.
-            #
-            # The tests are run unprivileged inside the nix sandbox, so
-            # everything that needs root (the CUSE device files, the RPC and
-            # getrandom frontends, the esdm-server driven tests) reports itself
-            # as skipped and is missing from the report. What the report does
-            # cover is the code reachable without a running daemon - the common/
-            # helpers, the crypto backends, the entropy sources and the in-process
-            # ESDM and EGD server tests.
+            # The tests run unprivileged inside the nix sandbox, so everything
+            # needing root (CUSE device files, the RPC and getrandom frontends,
+            # the esdm-server driven tests) is skipped and missing from the
+            # report; see esdm-coverage-root and -vm for those.
             coverageOf =
               coveragePname: pkg:
               pkg.overrideAttrs (prev: {
@@ -972,17 +905,11 @@
               ];
 
               # Coverage needs unoptimized, unstripped objects without LTO: with
-              # link time optimization the arc counters can no longer be
-              # attributed to the source lines they came from.
-              #
-              # The address and undefined behaviour sanitizers run alongside, so
-              # the same execution that produces the coverage numbers also decides
-              # whether the code it covered was well defined while doing it - a
-              # line that is only reached by a test which corrupts memory on the
-              # way should not be reported as covered and left at that. Meson
-              # arms both to abort on the first finding (see ASAN_OPTIONS /
-              # UBSAN_OPTIONS in the test environment), so a finding fails the
-              # test rather than scrolling past.
+              # LTO the arc counters can no longer be attributed to source
+              # lines. The address and undefined behaviour sanitizers run
+              # alongside, so the same execution also decides whether the code
+              # it covered was well defined. Both abort on the first finding
+              # (see ASAN_OPTIONS / UBSAN_OPTIONS below), failing the test.
               mesonFlags =
                 (builtins.filter (
                   x:
@@ -1004,30 +931,21 @@
                   # hooks and are compiled out without this.
                   "-Dtestmode=enabled"
 
-                  # Every entropy source that can be compiled in, so the report
-                  # says something about all of them rather than only the ones
-                  # a production configuration happens to select. Whether a
-                  # source can deliver anything here is a separate question -
-                  # most disable themselves at runtime for want of a TPM, a
-                  # /dev/hwrng, a token or a patched kernel - but their
-                  # initialization, configuration handling and refusal paths
-                  # are code like any other, and were not compiled at all.
-                  #
-                  # The eBPF sources are deliberately not among them: they are
-                  # what esdm-coverage-ebpf covers, and crediting them changes
-                  # which source is credited (see there).
+                  # Every entropy source that can be compiled in. Most disable
+                  # themselves at runtime for want of a TPM, a /dev/hwrng, a
+                  # token or a patched kernel, but their initialization,
+                  # configuration and refusal paths are code like any other.
+                  # The eBPF sources are left out on purpose - esdm-coverage-ebpf
+                  # covers those, since enabling them changes the credited source.
                   "-Des_kernel=enabled"
                   "-Des_jent_kernel=enabled"
                   "-Des_pkcs11=enabled"
 
-                  # Point the PKCS#11 source at SoftHSM, a module that needs
-                  # no hardware. The path is compile-time only, so without
-                  # this the source disables itself at startup and only its
-                  # refusal paths are ever executed. With it, the test suite
-                  # creates a token of its own and draws real bytes through
-                  # C_GenerateRandom. The token label and PIN stay unset here
-                  # - the test installs both at runtime, which is how the
-                  # server sets them from its RPC handler.
+                  # Point the PKCS#11 source at SoftHSM, which needs no
+                  # hardware. The path is compile-time only, so without it the
+                  # source disables itself at startup. Label and PIN stay unset
+                  # - the test installs both at runtime, as the server does from
+                  # its RPC handler.
                   "-Des_pkcs11_module_path=${pkgs.softhsm}/lib/softhsm/libsofthsm2.so"
                 ];
 
@@ -1064,14 +982,11 @@
                 # tests that wait for entropy room before they time out.
                 meson test --print-errorlogs --timeout-multiplier 5
 
-                # Turn the .gcda files the run just produced into the report.
-                # gcovr is driven directly instead of through meson's
-                # coverage-html target, which offers no way to pass excludes:
-                # the report is about the code under test, so the tests
-                # themselves, the out-of-tree add-ons, esdm-tool's stress
-                # drivers - which are test code that happens to be installed -
-                # and the libbpf skeletons bpftool generates from the compiled
-                # BPF objects all stay out of it.
+                # Turn the .gcda files into the report. gcovr is driven directly
+                # rather than through meson's coverage-html target, which offers
+                # no way to pass excludes: the tests themselves, the out-of-tree
+                # add-ons, esdm-tool's stress drivers and the generated libbpf
+                # skeletons all stay out of the report.
                 mkdir -p meson-logs/coveragereport
                 gcovr \
                   --root .. \
@@ -1112,19 +1027,14 @@
               };
             });
 
-            # A coverage run packaged as a script instead of a sandboxed build -
+            # A coverage run packaged as a script instead of a sandboxed build,
             # so it can be started with root privileges:
             #
             #   sudo "$(nix build --no-link --print-out-paths .#esdm-coverage-root)/bin/esdm-coverage-run"
             #
-            # Everything the sandboxed build has to skip needs a privilege the nix
-            # builder does not have: starting an esdm-server, creating the CUSE
-            # device files, writing to the kernel entropy interfaces. Run as root,
-            # those tests execute and the resulting report covers the frontends
-            # and the RPC server as well.
-            #
-            # The script configures, builds, tests and reports in a temporary
-            # directory of its own - it neither needs nor touches a checkout.
+            # As root the tests the sandbox has to skip do run, so the report
+            # also covers the frontends and the RPC server. The script works in
+            # a temporary directory of its own and never touches a checkout.
             coverageRunnerOf =
               {
                 name,
@@ -1132,12 +1042,11 @@
                 extraRuntimeInputs ? [ ],
               }:
               let
-                # Every output of every dependency, not just the one that ends up
-                # in buildInputs: those carry a selected output (usually "dev"),
-                # and lib.getLib/getDev hand such a package back unchanged. The
-                # headers and the libraries generally live in different outputs -
-                # jitterentropy is looked up with cc.find_library() rather than
-                # pkg-config and needs the one holding the shared object.
+                # Every output of every dependency, not just the one in
+                # buildInputs: those carry a selected output (usually "dev") and
+                # lib.getLib/getDev hand such a package back unchanged, while
+                # headers and libraries live in different outputs - jitterentropy
+                # is found with cc.find_library() and needs the shared object.
                 deps = lib.concatMap (d: d.all or [ d ]) (
                   cov.buildInputs ++ cov.propagatedBuildInputs
                 );
@@ -1196,11 +1105,9 @@
                   fi
 
                   # A test mode ESDM binds these fixed paths, so a leftover one -
-                  # or a second coverage run - owns them and every client of this
-                  # run connects to it instead. Nothing fails outright, the tests
-                  # just wait for an answer that never comes until they hit their
-                  # timeout, which is an expensive way to find out. Say so up
-                  # front instead.
+                  # or a second coverage run - owns them and this run's clients
+                  # connect to it instead. Nothing fails outright, the tests just
+                  # wait for their timeout, so say so up front instead.
                   stale=0
                   for sock in /tmp/esdm-rpc-unpriv-testmode.socket \
                               /tmp/esdm-rpc-priv-testmode.socket; do
@@ -1249,12 +1156,11 @@
 
                   # shellcheck disable=SC2329  # run from the EXIT trap below
                   cleanup() {
-                    # A CUSE or RPC test that fails leaves its esdm-server and
-                    # frontends running. They hold the fixed test mode socket
-                    # paths and the /dev bind mounts, so every later test of this
-                    # run - and the next run altogether - would talk to them
-                    # instead. Match on the work directory, which appears in their
-                    # command line, so only this run's processes are hit.
+                    # A failed CUSE or RPC test leaves its esdm-server and
+                    # frontends holding the fixed socket paths and /dev bind
+                    # mounts, which every later test would talk to instead. Match
+                    # on the work directory in their command line, so only this
+                    # run's processes are hit.
                     pkill -TERM -f "$work" 2>/dev/null || true
                     sleep 2
                     pkill -KILL -f "$work" 2>/dev/null || true
@@ -1309,28 +1215,21 @@
                   export SOFTHSM2_CONF="$work/softhsm/softhsm2.conf"
 
                   # The esdm-server and the CUSE frontends drop privileges, and
-                  # libgcov writes their counters when they exit - as the dropped
-                  # user, into the build tree. mktemp gives us a 0700 root owned
-                  # directory, which that user cannot even traverse, so every
-                  # counter collected by exactly the processes this run exists to
-                  # measure would be discarded with a "Cannot create directory".
-                  #
-                  # Opening the tree up is only needed when we are root (nothing
-                  # drops privileges otherwise) and only affects a throwaway
-                  # directory that is removed again on exit.
+                  # libgcov writes their counters into the build tree as the
+                  # dropped user. mktemp's 0700 root owned directory is not even
+                  # traversable for them, so those counters would be lost with
+                  # "Cannot create directory". Only needed as root, and the
+                  # directory is a throwaway that is removed again on exit.
                   if [ "$(id -u)" -eq 0 ]; then
                     chmod -R a+rwX "$work"
                   fi
 
-                  # Opening the tree up above only covers what exists at this
-                  # point; the .gcda files themselves are created during the run.
-                  # A process still running as root creates them with the default
-                  # umask (0644), and the privilege-dropped processes that run
-                  # afterwards then cannot open them to merge their own counters
-                  # ("Cannot open"). Creating them 0666 for the duration of the
-                  # run makes the merge work in either order. The RPC sockets keep
-                  # their permissions regardless, because the server chmod()s them
-                  # explicitly rather than relying on the umask.
+                  # The chmod above only covers what exists now; the .gcda files
+                  # appear during the run. Created 0644 by a root process, the
+                  # privilege-dropped ones cannot open them to merge their
+                  # counters, so make them 0666 for the duration and the merge
+                  # works in either order. The RPC sockets are unaffected - the
+                  # server chmod()s them explicitly rather than using the umask.
                   old_umask="$(umask)"
                   if [ "$(id -u)" -eq 0 ]; then
                     umask 0000
@@ -1392,23 +1291,14 @@
             #   nix build .#esdm-coverage-vm
             #   xdg-open result/coverage/index.html
             #
-            # A privileged coverage run is only worth doing as root - everything
-            # the sandboxed build has to skip needs a privilege - and as root it
-            # binds fixed socket paths, creates CUSE device files, writes to the
-            # kernel entropy interfaces and, when a test fails, leaves daemons
-            # and bind mounts behind. A VM is where all of that is free of
-            # consequence: the run owns the machine, and whatever it leaves
-            # behind is discarded with it.
-            #
-            # The VM also offers the one thing neither the nix sandbox nor a
-            # typical developer machine does: the patched kernel and its esdm_es
-            # module. Without it the kernel entropy source disables itself at
-            # startup for want of /dev/esdm_es, and the report credits only its
-            # refusal paths.
-            #
-            # Deliberately a package rather than a check: this builds the whole
-            # tree and runs the entire suite under ASan/UBSan inside an emulated
-            # machine, which is not work `nix flake check` should be doing.
+            # As root the run binds fixed socket paths, creates CUSE device
+            # files, writes to the kernel entropy interfaces and leaves daemons
+            # behind on failure - in a VM all of that is free of consequence.
+            # The VM also carries the patched kernel and its esdm_es module,
+            # without which the kernel entropy source disables itself.
+            # A package rather than a check on purpose: a full build plus the
+            # whole suite under ASan/UBSan in an emulated machine is not work
+            # `nix flake check` should be doing.
             coverageVmOf =
               {
                 name,
@@ -1433,11 +1323,10 @@
                         { ... }:
                         {
                           # baseModule leaves the daemon disabled (startEsdm =
-                          # false), which is what this needs: the suite brings
-                          # up test mode ESDMs of its own on fixed socket paths,
-                          # and a running server would hold them instead - the
-                          # runner's preflight check refuses to start at all in
-                          # that case.
+                          # false), which is what this needs: the suite brings up
+                          # test mode ESDMs of its own on fixed socket paths, and
+                          # the runner's preflight check refuses to start if a
+                          # running server already holds them.
 
                           # The CUSE frontends reach their device files through
                           # /dev/cuse. Without the module they cannot start, and
@@ -1638,18 +1527,13 @@
 
           esdm-coverage = coverageOf "esdm-coverage" self.packages.${system}.esdm;
 
-          # The same, for the build carrying the eBPF scheduler and interrupt
-          # entropy sources. Those are a separate report rather than more flags
-          # on the one above, because enabling them changes which entropy source
-          # is credited (es_sched_ebpf_entropy_rate against a zeroed es_sched),
-          # so the two runs do not measure the same system and their numbers
-          # should not be pooled.
-          #
-          # The eBPF programs themselves are not instrumented: they are built by
-          # a custom_target invoking clang with -target bpf directly, which
-          # meson's b_coverage and b_sanitize never reach. What the report adds
-          # is the userspace side - the loaders, the health test cutoffs and the
-          # entropy source glue.
+          # The same, for the build carrying the eBPF entropy sources. A separate
+          # report rather than more flags on the one above, because enabling them
+          # changes which source is credited (es_sched_ebpf_entropy_rate against
+          # a zeroed es_sched), so the numbers should not be pooled. The eBPF
+          # programs themselves are not instrumented - clang builds them via a
+          # custom_target that meson's b_coverage never reaches - so what the
+          # report adds is the userspace side.
           esdm-coverage-ebpf =
             coverageOf "esdm-coverage-ebpf" self.packages.${system}.esdm-ebpf;
 

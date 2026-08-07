@@ -90,15 +90,12 @@ struct esdm_ebpf_event_rec {
 #define ESDM_EBPF_RB_REC_OVERHEAD 8
 
 /*
- * Zeroization of the ring buffer (esdm_ebpf_wipe): payload of one filler
- * record and the number of them one invocation of the wipe program writes.
- * The filler is written until it has wrapped around the whole ring buffer, so
- * every byte of it is overwritten - either by the zeros of a filler payload or
- * by the record header the ring buffer puts in front of one.
- *
- * The chunk is what makes that affordable: an event record covers half a
- * kilobyte, so wiping a ring buffer of up to four megabytes one event record
- * at a time would cost thousands of them.
+ * Zeroization of the ring buffer (esdm_ebpf_wipe): payload of one filler record
+ * and the number of them one invocation of the wipe program writes. The filler
+ * is written until it has wrapped the whole ring buffer, so every byte is
+ * overwritten - by the zeros of a payload or by the record header in front of
+ * one. The chunk makes that affordable: an event record covers half a kilobyte,
+ * so wiping four megabytes one of them at a time would cost thousands.
  */
 #define ESDM_EBPF_WIPE_CHUNK 4096
 #define ESDM_EBPF_WIPE_RECORDS 16
@@ -113,14 +110,11 @@ enum esdm_ebpf_health_test {
 
 /*
  * Per-CPU state of the eBPF programs, in a per-CPU array map that user space
- * reads whole. Its first fields are what user space needs to know about a CPU
- * and are read from there rather than reported through the ring buffer: the
- * count of deposited events, of which the ones not fetched yet are entropy
- * still to be had, and the SP800-90B health state, which is thereby seen
- * immediately instead of behind however many events are still buffered.
- *
- * The rest is private to the programs and only lives here because user space
- * has to know the size of the map value to read it.
+ * reads whole. The first fields are read from here rather than reported through
+ * the ring buffer - the count of deposited events and the SP800-90B health
+ * state - so they are seen immediately instead of behind however many events
+ * are still buffered. The rest is private to the programs and only lives here
+ * because user space has to know the map value's size to read it.
  */
 struct esdm_ebpf_percpu_state {
 	/* Read by user space */
@@ -177,11 +171,10 @@ _Static_assert(sizeof(struct esdm_ebpf_percpu_state) % sizeof(__u64) == 0,
 /*
  * One raw, unconditioned time delta - measurement mode only.
  *
- * The delta is formed in the eBPF program between two events the CPU observed
- * back to back, so every record stands on its own: a record the ring buffer
- * had no room for costs a sample but cannot distort the ones that arrive.
- * That is why there is no sequence number to reconcile - user space reads the
- * deltas as they come.
+ * The delta is formed between two events the CPU observed back to back, so
+ * every record stands on its own: one the ring buffer had no room for costs a
+ * sample but cannot distort the ones that arrive. Hence no sequence number to
+ * reconcile - user space reads the deltas as they come.
  */
 struct esdm_ebpf_raw_rec {
 	__u32 type; /* esdm_ebpf_rec_raw */

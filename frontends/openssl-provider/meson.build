@@ -46,12 +46,10 @@ esdm_openssl_rng_provider_pr_lib = library(
 )
 pkgconfig.generate(esdm_openssl_rng_provider_pr_lib)
 
-# Variant talking the EGD protocol instead of the ESDM RPC. It needs neither
-# the RPC client library nor the two RPC sockets - a single Unix domain stream
-# socket is all it takes, which is what makes it usable in environments where
-# the RPC interface cannot be reached. Its algorithms carry the property
-# "provider=esdm-egd" so it can be told apart from the RPC based ones when both
-# are loaded.
+# Variant talking the EGD protocol instead of the ESDM RPC: a single Unix
+# domain stream socket, neither the RPC client library nor the two RPC sockets,
+# which makes it usable where the RPC interface cannot be reached. Its
+# algorithms carry "provider=esdm-egd" to tell them apart from the RPC ones.
 esdm_openssl_egd_provider_lib = library(
 	'esdm-egd-provider',
 	[

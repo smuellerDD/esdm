@@ -207,13 +207,10 @@ static void esdm_gnutls_bcc(const struct aes256_ctx *key, const uint8_t *data,
  * down to exactly the seed length the DRBG core takes.
  *
  * GnuTLS operates its CTR DRBG without a derivation function, so
- * drbg_aes_init()/drbg_aes_reseed() reject anything whose entropy_size is not
- * DRBG_AES_SEED_SIZE. ESDM on the other hand hands over whatever its entropy
- * sources produced, which varies with the enabled sources and their rates.
- * Deriving the seed here bridges the two.
- *
- * SP800-90A pairs a CTR DRBG with the block cipher based derivation function,
- * not with Hash_df - using the AES-256 core of the DRBG itself keeps this
+ * drbg_aes_init()/drbg_aes_reseed() reject any entropy_size other than
+ * DRBG_AES_SEED_SIZE, while ESDM hands over whatever its entropy sources
+ * produced. SP800-90A pairs a CTR DRBG with the block cipher based derivation
+ * function rather than Hash_df, so using the DRBG's own AES-256 core keeps this
  * backend a plain SP800-90A CTR_DRBG(AES-256, use df).
  *
  *	S = L || N || input_string || 0x80, zero padded to a block boundary
@@ -387,14 +384,12 @@ static int esdm_gnutls_drbg_selftest(void)
 	 * PredictionResistance = False, PersonalizationStringLen = 0,
 	 * AdditionalInputLen = 0 and ReturnedBitsLen = 512.
 	 *
-	 * The test covers the backend as it is actually used: the seed material
-	 * (entropy_input || nonce) goes through esdm_gnutls_drbg_seed(), i.e.
-	 * through Block_Cipher_df, into the GnuTLS CTR DRBG core, followed by
-	 * two generate calls - CAVP compares the output of the second one.
-	 *
-	 * Covering the derivation function here is the point: a subtly wrong df
-	 * still yields random looking output, so nothing but a known answer
-	 * test over the whole composition detects it.
+	 * The test covers the backend as used: the seed material (entropy_input
+	 * || nonce) goes through esdm_gnutls_drbg_seed(), i.e. Block_Cipher_df,
+	 * into the GnuTLS CTR DRBG core, followed by two generate calls - CAVP
+	 * compares the second one's output. Covering the derivation function is
+	 * the point: a subtly wrong df still yields random looking output, so
+	 * only a known answer test over the whole composition detects it.
 	 */
 	static const struct {
 		/* entropy_input || nonce; the personalization string is empty */

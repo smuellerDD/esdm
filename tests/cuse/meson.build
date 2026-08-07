@@ -1,10 +1,8 @@
 if get_option('linux-devfiles').enabled()
-	# The handlers on their own, without a mounted device: what they do with
-	# a malformed request, a caller that may not make it, and an ESDM that
-	# does not answer. The translation unit is compiled into the test so the
-	# handlers can be called directly, and the libfuse reply functions are
-	# provided by the test itself - so this needs neither root nor /dev/fuse
-	# and runs in an ordinary unprivileged run.
+	# The handlers on their own, without a mounted device: a malformed
+	# request, a caller that may not make it, an ESDM that does not answer.
+	# The translation unit is compiled into the test and the libfuse reply
+	# functions are provided by it, so this needs neither root nor /dev/fuse.
 	cuse_device_test = executable(
 			'cuse_device_test',
 			[ files('../test_ipc_ns.c'), 'cuse_device_test.c' ],
@@ -126,14 +124,11 @@ if get_option('linux-devfiles').enabled()
 		'ESDM_CUSE_URANDOM=' + esdm_cuse_urandom.full_path()
 		]
 
-	# These stay serial where the other privileged suites no longer are.
-	# env_init() gives every test its own mount and IPC namespace, which
-	# makes the sockets, the semaphores and the System V segments private -
-	# but a CUSE device is registered by its name under a devtmpfs the
-	# kernel keeps a single instance of, and both frontends use a fixed one
-	# (ESDM_CUSE_RANDOM_DEVNAME). A second test bringing up the same device
-	# at the same time would collide there, outside anything a mount
-	# namespace can separate.
+	# These stay serial where the other privileged suites no longer are:
+	# env_init() makes the sockets, semaphores and System V segments private
+	# via a mount and IPC namespace, but a CUSE device is registered by a
+	# fixed name (ESDM_CUSE_RANDOM_DEVNAME) under the single devtmpfs the
+	# kernel keeps, which no mount namespace separates.
 
 	test('IOCTL RNDADDENTROPY /dev/random', ioctl_addent_tester,
 		env: [ tester_cuse_env ],

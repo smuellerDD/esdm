@@ -106,14 +106,12 @@ static int es_irq_ebpf_getdata(void)
 	memset(&zero, 0, sizeof(zero));
 
 	/*
-	 * Unlike the scheduler ES, the interrupt ES observes only hardware and
-	 * soft interrupts. These are far sparser than context switches -
-	 * especially in a lightly loaded VM - so the source commonly credits
-	 * well below the full security strength per extraction and may need a
-	 * long time to reach it at all. The test therefore verifies that the
-	 * extraction pipeline delivers conditioned data and that the entropy
-	 * accounting stays self-consistent (never crediting more than
-	 * requested), rather than demanding a fixed entropy amount.
+	 * The interrupt ES observes only hardware and soft interrupts, which are
+	 * far sparser than context switches - especially in a lightly loaded VM
+	 * - so it commonly credits well below the full security strength per
+	 * extraction. The test therefore checks that the pipeline delivers
+	 * conditioned data and that the accounting stays self-consistent, rather
+	 * than demanding a fixed entropy amount.
 	 */
 	for (loops = 0; loops < 3; loops++) {
 		memset(&eb_es, 0, sizeof(eb_es));

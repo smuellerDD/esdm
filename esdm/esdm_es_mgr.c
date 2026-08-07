@@ -263,15 +263,13 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 		mutex_w_lock(&esdm_es_mgr_monitor_lock);
 
 		/*
-		 * Re-check the termination request under the lock. The loop
+		 * Re-check the termination request under the lock: the loop
 		 * condition above may have been evaluated just before
-		 * esdm_es_mgr_finalize() set the flag, and starting a pass
-		 * after that function has waited one out is what its wait was
-		 * meant to prevent: the per-ES threads spawned below would
-		 * still be outstanding when it goes on to join every thread,
-		 * and joining makes an unstarted worker exit without clearing
-		 * the job this pass is waiting for - so the pass never
-		 * finishes and the join never returns.
+		 * esdm_es_mgr_finalize() set the flag. Starting a pass after
+		 * that function waited one out leaves the per-ES threads
+		 * outstanding when it joins every thread - and joining makes an
+		 * unstarted worker exit without clearing the job this pass waits
+		 * for, so neither the pass nor the join ever returns.
 		 */
 		if (atomic_load(&esdm_es_mgr_terminate)) {
 			mutex_w_unlock(&esdm_es_mgr_monitor_lock);
@@ -599,14 +597,12 @@ static uint32_t esdm_ntg1_es_entropy(uint32_t es, struct entropy_buf *eb,
 /*
  * Does the jitter RNG fulfill NTG.1 on its own right now?
  *
- * A jitter RNG of version 3.7.0 or later that is operated in its NTG.1 mode
- * (build option es_jent_ntg1, see esdm_jent_ntg1()) is an NTG.1 conformant RNG
- * by itself. Pairing it with a second entropy source adds nothing to that
- * property, so it alone may bring a DRNG to the fully seeded state.
- *
- * The assessment belongs to this one source, not to an arbitrary source
- * delivering the same amount of entropy, which is why the entropy of exactly
- * the jitter RNG is looked at instead of lowering the required source count.
+ * A jitter RNG of version 3.7.0 or later operated in its NTG.1 mode (build
+ * option es_jent_ntg1, see esdm_jent_ntg1()) is an NTG.1 conformant RNG by
+ * itself, so it alone may bring a DRNG to the fully seeded state. The
+ * assessment belongs to this one source rather than to any source delivering
+ * the same entropy, hence the check on exactly the jitter RNG instead of a
+ * lowered source count.
  */
 static bool esdm_ntg1_jent_self_sufficient(struct entropy_buf *eb,
 					   uint32_t ent_thresh)
@@ -770,16 +766,13 @@ void esdm_set_write_wakeup_bits(uint32_t val)
 		return;
 
 	/*
-	 * Cap at what the auxiliary pool can actually hold. That used to be one
-	 * digest's worth, which is the ceiling for a single pool - but the pool
-	 * has been an array of ESDM_NUM_AUX_POOLS for a while, and
-	 * esdm_set_wakeup_bits() initializes this very variable to the entropy
-	 * of all of them together. With more than one pool the two disagreed by
-	 * that factor, so every caller of this setter silently had its value
-	 * clamped to 1/ESDM_NUM_AUX_POOLS of what it asked for, could not
-	 * restore the default it had just read back from
-	 * esdm_get_write_wakeup_bits(), and left esdm_need_entropy() - hence
-	 * the /dev/random write poll - reporting satisfied far too early.
+	 * Cap at what the auxiliary pool can actually hold - all
+	 * ESDM_NUM_AUX_POOLS of them, which is what esdm_set_wakeup_bits()
+	 * initializes this variable to. Capping at one digest, the ceiling of a
+	 * single pool, clamped every caller to 1/ESDM_NUM_AUX_POOLS of what it
+	 * asked for: the default read back from esdm_get_write_wakeup_bits()
+	 * could not be restored, and esdm_need_entropy() - hence the
+	 * /dev/random write poll - reported satisfied far too early.
 	 */
 	esdm_write_wakeup_bits = min_uint32(val, esdm_avail_poolsize_aux());
 }
@@ -967,20 +960,14 @@ void esdm_es_mgr_finalize(void)
 	esdm_es_mgr_monitor_wakeup();
 
 	/*
-	 * Wait out an in-flight monitor pass before joining anything.
-	 *
-	 * A pass spawns a thread per entropy source and waits for them with
-	 * thread_wait(), which deliberately ignores the shutdown flag.
-	 * thread_wait_all() below sets exactly that flag on every worker and
-	 * then joins them - and a worker that has a job assigned but has not
-	 * started it yet exits on the flag without running the job and without
-	 * clearing it. The pass would then wait forever for a job nobody will
-	 * ever complete, and the join for a monitor that never returns.
-	 *
-	 * Taking the monitor lock blocks until any pass has finished, and the
-	 * terminate flag set above stops the monitor from starting another one
-	 * (it re-checks the flag under this very lock), so after this there is
-	 * no pass left to collide with.
+	 * Wait out an in-flight monitor pass before joining anything. A pass
+	 * waits for its per-ES threads with thread_wait(), which ignores the
+	 * shutdown flag, while thread_wait_all() below sets that flag and joins
+	 * - and a worker with a job assigned but not started exits on the flag
+	 * without running or clearing it, so the pass waits forever and the join
+	 * never returns. Taking the monitor lock blocks until any pass has
+	 * finished, and the terminate flag set above keeps the monitor from
+	 * starting another (it re-checks under this very lock).
 	 */
 	esdm_es_mgr_monitor_pause();
 	esdm_es_mgr_monitor_resume();

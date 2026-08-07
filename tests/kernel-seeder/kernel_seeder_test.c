@@ -20,31 +20,24 @@
 /*
  * Test of the kernel entropy feeder (esdm-kernel-seeder).
  *
- * The feeder is a daemon, so it is exercised as one: the test spawns the real
- * binary and inspects what it does.
+ * The feeder is a daemon, so the test spawns the real binary and inspects what
+ * it does. Two levels of coverage, depending on the privileges available:
  *
- * Two levels of coverage, depending on the privileges available:
+ * 1. Command line contract - always run, with invocations guaranteed to
+ *    terminate so they work as root too. Beyond the exit codes this pins down
+ *    the long option table: the handler dispatches on the getopt_long index, so
+ *    an entry inserted in the middle re-routes every following option, and a
+ *    misrouted --force-pr would hand a NULL optarg to the integer conversion.
  *
- * 1. Command line contract - always run. All checks here use invocations that
- *    are guaranteed to terminate, so they work as root as well. Beyond the
- *    obvious exit codes this pins down the long option table: the option
- *    handler dispatches on the getopt_long index, so a new entry inserted in
- *    the middle of the table silently re-routes every following option. The
- *    interval option is the one that takes an argument, so a misrouted
- *    --force-pr would hand a NULL optarg to the integer conversion.
+ * 2. End-to-end feeding - requires root, skipped otherwise (77). A server is
+ *    started, the feeder pointed at it, and the test waits for it to report
+ *    that it pulled data over RPC and handed it to the kernel. It must then
+ *    react to SIGTERM and report success while doing so, as a failure exit
+ *    would make every "systemctl stop" mark the unit as failed.
  *
- * 2. End-to-end feeding - requires root, skipped otherwise (exit 77), just
- *    like the CUSE tests. An ESDM server is started, the feeder is pointed at
- *    it, and the test waits for the feeder to report that it pulled random
- *    data over RPC and handed it to the kernel via RNDADDENTROPY. Finally the
- *    feeder must react to SIGTERM instead of sitting out its seeding interval,
- *    and report success while doing so - a signal-initiated shutdown is the
- *    ordinary way this daemon ends, and a failure exit code would make every
- *    "systemctl stop" mark the unit as failed.
- *
- * Every diagnostic checked here has to be reachable without any -v: the
- * failures they describe end the process, so a message the logger's default
- * threshold swallows is a message nobody ever sees.
+ * Every diagnostic checked here has to be reachable without -v: the failures
+ * they describe end the process, so anything the logger's default threshold
+ * swallows is a message nobody ever sees.
  */
 
 #define _GNU_SOURCE
@@ -442,12 +435,11 @@ static int seeder_test_feed(void)
 	}
 
 	/*
-	 * The seeding interval is 2 seconds here while the shutdown bound is
-	 * far larger, so a feeder that only noticed the signal after its sleep
-	 * would still pass. What is checked is that it terminates at all
-	 * instead of ignoring SIGTERM, and that it reports success while doing
-	 * so: a signal is how this daemon is normally stopped, so a failure
-	 * exit code would leave every "systemctl stop" marking the unit failed.
+	 * The seeding interval is 2 seconds while the shutdown bound is far
+	 * larger, so a feeder noticing the signal only after its sleep still
+	 * passes. Checked is that it terminates at all rather than ignoring
+	 * SIGTERM, and reports success while doing so - a signal is how this
+	 * daemon is normally stopped.
 	 */
 	kill(pid, SIGTERM);
 	if (!seeder_wait(pid, SEEDER_TERM_TIMEOUT_MS, &status)) {

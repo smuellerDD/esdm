@@ -21,41 +21,30 @@
  * Give a test that drives the ESDM in process its own System V IPC namespace.
  *
  * Those tests reach for machine-global names of two kinds: esdm_shm_status keys
- * its System V segment with ftok(), and it opens POSIX semaphores in /dev/shm.
- * Two tests at once share both, and either one left behind by a run that died
- * denies every later unprivileged run - which then fails with esdm_init() =
- * -13, reading like a defect in the code rather than a leftover on the machine.
- * Making both private is what allows these tests to run in parallel.
+ * its System V segment with ftok() and opens POSIX semaphores in /dev/shm. Two
+ * tests at once share both, and either left behind by a run that died denies
+ * every later unprivileged run with esdm_init() = -13, which reads like a
+ * defect rather than a leftover. The two need different treatment: an IPC
+ * namespace covers the System V side, the semaphores need a private /dev/shm.
  *
- * The two need different treatment: an IPC namespace covers the System V side,
- * while the semaphores are files and need a private /dev/shm.
+ * /tmp is deliberately left alone: unlike the daemon-starting tests these never
+ * bind the RPC sockets, and whatever they put there they name with mkdtemp() -
+ * so nothing collides, and a build tree below /tmp stays visible without the
+ * pinning tests/test_namespace.h needs.
  *
- * /tmp is deliberately left alone. Unlike the daemon-starting tests these never
- * bind the RPC sockets that live there, and everything they do put in /tmp they
- * name with mkdtemp() - so there is nothing to collide over, and not replacing
- * it keeps a build tree below /tmp visible without any of the pinning
- * tests/test_namespace.h needs.
+ * How the namespaces are obtained depends on who runs the test:
  *
- * How the namespaces are obtained depends on who runs the test, because the
- * suite is run both ways - unprivileged, and as root for the tests that need a
- * daemon:
- *
- * - Real root unshares them directly. It must not take the user namespace of
- *   the other case: the ESDM drops privileges with setgroups(), which is denied
- *   inside one.
+ * - Real root unshares directly, and must not take the user namespace of the
+ *   other case: the ESDM drops privileges with setgroups(), denied inside one.
  * - An unprivileged test has no capabilities to unshare with, so a user
- *   namespace supplies them - creating one grants a full capability set inside
- *   it, which is what CLONE_NEWIPC requires. The identity mapping below keeps
- *   the process' own credentials, so nothing else about the test changes; in
- *   particular it does not appear to be root, which would send the code under
- *   test down paths it would not otherwise take.
+ *   namespace supplies the full set CLONE_NEWIPC requires. The identity mapping
+ *   keeps the process' own credentials, so it does not appear to be root, which
+ *   would send the code under test down other paths.
  *
- * This is best effort. A kernel with unprivileged user namespaces disabled
- * simply leaves the test sharing the machine's IPC namespace, exactly as
- * before.
- *
- * Runs as a constructor so no test has to remember to call it, and early
- * (priority 101) so it precedes anything that might already touch the segment.
+ * Best effort: a kernel with unprivileged user namespaces disabled simply
+ * leaves the test sharing the machine's IPC namespace. Runs as a constructor so
+ * no test has to call it, and early (priority 101) so it precedes anything that
+ * might already touch the segment.
  */
 
 #define _GNU_SOURCE

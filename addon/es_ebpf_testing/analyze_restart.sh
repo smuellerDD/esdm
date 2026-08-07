@@ -5,20 +5,14 @@
 # source.
 #
 # The test validates the initial estimate H_I - what analyze_non_iid.sh
-# measured - against the samples the source delivers immediately after a
-# restart, when it has the least state to draw on. It needs a 1000 x 1000
-# matrix: 1000 restarts of 1000 samples each. Anything smaller is not a valid
-# restart test.
+# measured - against the samples the source delivers right after a restart. It
+# needs a 1000 x 1000 matrix; anything smaller is not a valid restart test.
 #
-# One row is one run of esdm-ebpf-collect. Every run loads and attaches its
-# own copy of the eBPF programs, so each row starts from a freshly
-# initialized source - zeroed per-CPU state, no previous time stamp and an
-# unlearned timer granularity - which is the state the entropy source is in
-# when the ESDM server has just started. A restart here is a restart of the
-# entropy source, not of the system.
-#
-# Expect this to take a long time: it is 1000 program loads plus 1000
-# collections.
+# One row is one run of esdm-ebpf-collect, which loads and attaches its own copy
+# of the eBPF programs and therefore starts from a freshly initialized source -
+# the state it is in when the ESDM server has just started. A restart here is
+# one of the entropy source, not of the system. Expect 1000 program loads plus
+# 1000 collections to take a long time.
 #
 # THIS IS EXAMPLE TOOLING FOR MEASUREMENT AND VALIDATION.
 #

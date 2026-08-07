@@ -20,17 +20,14 @@
 /*
  * Every call of the RPC client API, against a running server.
  *
- * The client side of the interface is one small file per call, each doing the
- * same three things: pack the request, hand it to the generic invoke, unpack
- * what came back. Most of them had never been executed - the existing tests
- * cover the handful of calls they happen to need - so a marshalling mistake in
- * any of the others would not have shown up anywhere.
+ * The client side is one small file per call, each packing the request, handing
+ * it to the generic invoke and unpacking what came back. Most had never been
+ * executed - the existing tests cover the handful of calls they need - so a
+ * marshalling mistake in any of the others showed up nowhere.
  *
- * Where a call can only be checked for "did not fail", it is. Where a pair of
- * calls can be checked against each other, it is: the setters are read back
- * through their getters, which is what actually demonstrates that both
- * directions of the marshalling agree rather than merely that neither returned
- * an error.
+ * Where a call can only be checked for "did not fail", it is. Where a pair can
+ * be checked against each other, the setters are read back through their
+ * getters, which demonstrates that both directions of the marshalling agree.
  */
 
 #include <errno.h>

@@ -20,12 +20,10 @@
 /*
  * Tests for common/esdm_logger.c.
  *
- * Two things decide whether a record is emitted at all - the verbosity level
- * and the class filter - and both are consulted in different places (the
- * severity comparison at the top of _esdm_logger(), the class lookup a few
- * lines further down). The tests below drive the logger into a temporary file
- * and assert on what actually lands there, so a filter that silently stops
- * filtering, or one that swallows everything, is caught.
+ * Whether a record is emitted is decided in two separate places - the severity
+ * comparison at the top of _esdm_logger() and the class lookup below it. The
+ * tests drive the logger into a temporary file and assert on what lands there,
+ * so a filter that stops filtering, or swallows everything, is caught.
  */
 
 #include <errno.h>

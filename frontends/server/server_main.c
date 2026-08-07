@@ -626,13 +626,12 @@ int main(int argc, char *argv[])
 			esdm_rpc_server_cleanup));
 
 	/*
-	 * The IPC cleanup at shutdown can only succeed in a process that
-	 * retained its privileges: the daemon permanently drops them, so its
-	 * in-process attempt merely logs EPERM noise. Disable the in-process
-	 * cleanup - in PID namespace mode the privileged supervisor (forked
-	 * off above, before this override) performs the cleanup after the
-	 * daemon terminated. A --keep_ipc request is unaffected as it turns
-	 * the cleanup off before the supervisor is forked.
+	 * The IPC cleanup at shutdown only succeeds with privileges retained,
+	 * which the daemon permanently drops, so its in-process attempt merely
+	 * logs EPERM noise. Disable it - in PID namespace mode the privileged
+	 * supervisor forked above, before this override, cleans up once the
+	 * daemon terminated. A --keep_ipc request is unaffected, as it turns the
+	 * cleanup off before that fork.
 	 */
 	esdm_config_ipc_cleanup_set(0);
 

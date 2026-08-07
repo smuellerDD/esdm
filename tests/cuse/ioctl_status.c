@@ -40,14 +40,12 @@
 static int status_ioctl(int fd)
 {
 	/*
-	 * The buffer must hold the largest status the ioctl can ever produce.
-	 * Request 42 carries no _IOC size and the size argument of ioctl(2) is
-	 * discarded by its variadic wrapper, so the handler has no way to learn
-	 * how much room the caller has: it hands the kernel the full status
-	 * length and the kernel copies exactly that much here. A smaller buffer
-	 * is therefore overrun by the kernel, where no userspace guard can
-	 * catch it. The one extra byte lets this terminate the result before
-	 * printing it, which the handler does not promise to do.
+	 * The buffer must hold the largest status the ioctl can produce: request
+	 * 42 carries no _IOC size and ioctl(2)'s variadic wrapper discards the
+	 * size argument, so the handler hands the kernel the full status length
+	 * and the kernel copies exactly that much. A smaller buffer is overrun
+	 * by the kernel, where no userspace guard can catch it. The extra byte
+	 * terminates the result, which the handler does not promise to do.
 	 */
 	char status[ESDM_SHM_STATUS_INFO_SIZE + 1];
 

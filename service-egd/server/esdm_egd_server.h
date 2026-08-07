@@ -29,21 +29,17 @@ extern "C" {
 /**
  * @brief Enable the EGD (Entropy Gathering Daemon) compatibility interface
  *
- * The EGD protocol is the interface offered by egd.pl / prngd and consumed by
- * legacy entropy clients such as libgcrypt's rndegd backend or OpenSSL's
- * RAND_egd(). Enabling it makes the ESDM serve that protocol on an additional
- * Unix domain stream socket, which allows such clients to obtain random
- * numbers from the ESDM without being modified.
+ * Serving the protocol of egd.pl / prngd on an additional Unix domain stream
+ * socket lets legacy clients - libgcrypt's rndegd backend, OpenSSL's
+ * RAND_egd() - draw from the ESDM unmodified.
  *
- * The interface is opt-in: it is disabled unless this call is made or systemd
- * hands over a socket named ESDM_EGD_SOCKET (see
- * esdm_egd_server_socket_init()). This enables the socket serving the ordinary
- * fully seeded generator; see esdm_egd_server_enable_pr() for its prediction
- * resistance counterpart.
+ * Opt-in: disabled unless this call is made or systemd hands over a socket
+ * named ESDM_EGD_SOCKET (see esdm_egd_server_socket_init()). This enables the
+ * socket serving the ordinary fully seeded generator; see
+ * esdm_egd_server_enable_pr() for the prediction resistance counterpart.
  *
- * This call only records the request. It must be invoked before
- * esdm_rpc_server_init(), i.e. while the server is still single-threaded and
- * privileged.
+ * Only records the request, and must be invoked before esdm_rpc_server_init(),
+ * i.e. while the server is still single-threaded and privileged.
  *
  * @param [in] socket_path Path of the Unix domain socket to create
  *
@@ -54,16 +50,12 @@ int esdm_egd_server_enable(const char *socket_path);
 /**
  * @brief Enable the prediction resistance variant of the EGD interface
  *
- * The EGD protocol has no notion of prediction resistance and thus no way to
- * ask for it per request, so it is a property of the socket instead: clients
- * of this second socket are served from esdm_get_random_bytes_pr() rather than
- * from esdm_get_random_bytes_full(), for every request they make. Note that
- * this generator delivers no more than the entropy sources just produced, so
- * answers take as long as collecting that entropy does.
- *
- * Like esdm_egd_server_enable(), for which everything else stated there
- * applies as well - the two sockets are independent and either can be enabled
- * on its own.
+ * The EGD protocol cannot ask for prediction resistance per request, so it is a
+ * property of the socket: every request on this second one is served from
+ * esdm_get_random_bytes_pr() rather than esdm_get_random_bytes_full(). That
+ * generator delivers no more than the entropy sources just produced, so answers
+ * take as long as collecting that entropy does. Everything stated at
+ * esdm_egd_server_enable() applies here too; the two sockets are independent.
  *
  * @param [in] socket_path Path of the Unix domain socket to create
  *
@@ -84,18 +76,14 @@ bool esdm_egd_server_enabled(void);
 /**
  * @brief Obtain the EGD listening socket
  *
- * A socket handed over by systemd socket activation under the name
- * ESDM_EGD_SOCKET is preferred and enables the interface on its own - starting
- * the .socket unit is the request to serve EGD, and the unit carries the path
- * and the access mode. Otherwise the path requested with
- * esdm_egd_server_enable() is bound and made accessible to all users, which
- * requires the privileges the server only holds during its initialization.
- *
- * Therefore this must be called before the permanent privilege drop, whereas
- * the worker serving the socket is only started afterwards (see
- * esdm_egd_server_start()).
- *
- * It is a no-op when neither of the two enables the interface.
+ * A socket handed over by systemd under the name ESDM_EGD_SOCKET is preferred
+ * and enables the interface on its own - starting the .socket unit is the
+ * request to serve EGD, and the unit carries path and access mode. Otherwise
+ * the path from esdm_egd_server_enable() is bound and opened to all users,
+ * which needs the privileges the server only holds while initializing. This
+ * must therefore run before the permanent privilege drop, while the worker
+ * serving the socket is started afterwards (esdm_egd_server_start()).
+ * A no-op when neither of the two enables the interface.
  *
  * @return 0 on success, < 0 on error
  */

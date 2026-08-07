@@ -61,13 +61,11 @@ static int64_t parse_int64_arg(const char *str, const char *name)
 	val = strtoll(str, &endptr, 10);
 	if (errno || endptr == str || (endptr && *endptr != '\0')) {
 		/*
-		 * Deliberately not esdm_logger(): this runs while the command
-		 * line is still being parsed, so no -v has been applied yet and
-		 * a LOGGER_ERR record sits below the logger's default
-		 * threshold. Logging it would swallow the only explanation the
-		 * user gets for the exit right below - no amount of -v could
-		 * bring it back, as the option loop has not finished. A usage
-		 * error belongs on stderr anyway, next to usage() itself.
+		 * Deliberately not esdm_logger(): the command line is still
+		 * being parsed, so no -v has been applied and a LOGGER_ERR
+		 * record sits below the default threshold. Logging it would
+		 * swallow the only explanation for the exit below, and no -v
+		 * could bring it back. A usage error belongs on stderr anyway.
 		 */
 		fprintf(stderr,
 			"esdm-kernel-seeder: conversion of %s failed: %s\n",
@@ -414,11 +412,10 @@ int main(int argc, char **argv)
 
 	/*
 	 * Only lower the threshold, never raise it: without -v the count is 0,
-	 * and setting the level to it would mean LOGGER_NONE - quieter than the
-	 * logger's own default of LOGGER_STATUS, and quiet enough to swallow
-	 * the LOGGER_ERR diagnostics below. The daemon would then fail with no
-	 * output whatsoever. This matches how esdm-server and esdm-tool treat
-	 * their -v counts.
+	 * which as a level means LOGGER_NONE - quieter than the logger's default
+	 * of LOGGER_STATUS and quiet enough to swallow the LOGGER_ERR
+	 * diagnostics below, leaving the daemon to fail without any output.
+	 * This matches how esdm-server and esdm-tool treat their -v counts.
 	 */
 	if (verbosity)
 		esdm_logger_set_verbosity((enum esdm_logger_verbosity)verbosity);

@@ -2,10 +2,10 @@
 /*
  * ESDM Slow Entropy Source: shared DRBG-based post-processing
  *
- * The interrupt and scheduler entropy sources both compress their collected
- * per-CPU events into seed material with an internal DRBG. The extraction is
- * identical for both sources; only the ring, the DRBG instance and the entropy
- * rate differ, which are captured in struct esdm_es_drbg.
+ * The interrupt and scheduler entropy sources both compress their per-CPU
+ * events into seed material with an internal DRBG, identically so - only the
+ * ring, the DRBG instance and the entropy rate differ, which struct
+ * esdm_es_drbg captures.
  *
  * Copyright (C) 2022 - 2026, Stephan Mueller <smueller@chronox.de>
  */
