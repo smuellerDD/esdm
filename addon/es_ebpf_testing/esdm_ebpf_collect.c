@@ -1,10 +1,24 @@
 /*
- * ESDM eBPF entropy sources: raw event time stamp collector
+ * ESDM eBPF entropy sources: raw time delta collector
  *
- * Standalone tool gathering raw, unconditioned event time stamps from the
- * eBPF entropy source programs for SP800-90B / AIS 20/31 entropy assessment.
- * The output file contains the verbatim struct esdm_ebpf_raw_rec records
- * (16 bytes each: u32 type, u32 cpu, u64 timestamp; host endianness).
+ * Standalone tool gathering raw, unconditioned event timing from the eBPF
+ * entropy source programs for SP800-90B entropy assessment. It writes the
+ * time between successive events of a CPU as decimal ASCII, one delta per
+ * line - the format extractlsb(1) of addon/test reads, which turns it into
+ * the byte stream the NIST tools assess:
+ *
+ *     esdm-ebpf-collect --source sched --cpu 0 --out raw.txt --events 1000000
+ *     extractlsb raw.txt raw.bin 1000000 FF
+ *     ea_non_iid raw.bin 8
+ *
+ * The eBPF program forms the deltas, each between two events its CPU observed
+ * back to back, so a record the ring buffer had no room for costs a sample and
+ * distorts nothing.
+ *
+ * Without --cpu the deltas of all CPUs are written into one stream in arrival
+ * order. That is convenient for a quick look, but the CPUs are separate noise
+ * sources and the stream carries no way to tell them apart again - assess one
+ * CPU at a time.
  *
  * THIS TOOL IS FOR MEASUREMENT AND VALIDATION ONLY. It refuses to operate
  * when the kernel FIPS mode is enabled.
@@ -29,14 +43,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <getopt.h>
-#include <linux/perf_event.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -59,11 +73,22 @@
 
 #define ESDM_COLLECT_RB_SIZE (16 * 1024 * 1024)
 
+/*
+ * Returned by handle_record() once the requested number of events was
+ * collected. libbpf aborts the ring buffer consumption on a negative callback
+ * return value and propagates it to ring_buffer__poll(), which lets the
+ * collection loop distinguish the completion from an actual polling error.
+ */
+#define ESDM_COLLECT_DONE (-ECANCELED)
+
 struct collect_ctx {
 	FILE *out;
-	unsigned long long events;
+	/* Deltas written, i.e. what the assessment gets */
+	unsigned long long deltas;
 	unsigned long long limit;
 	unsigned long long write_errors;
+	/* CPU to write, or -1 for all of them in one stream */
+	int only_cpu;
 };
 
 static volatile sig_atomic_t stop_requested;
@@ -79,13 +104,28 @@ static int handle_record(void *ctx, void *data, size_t size)
 	struct collect_ctx *cctx = ctx;
 	const struct esdm_ebpf_raw_rec *rec = data;
 
+	/*
+	 * A single ring_buffer__poll() call hands over every record the eBPF
+	 * program deposited since the last call, so the collection loop can
+	 * only re-check the limit once the whole batch was consumed. Enforce
+	 * it here to keep the output file at exactly the requested number of
+	 * deltas.
+	 */
+	if (cctx->deltas >= cctx->limit)
+		return ESDM_COLLECT_DONE;
+
 	if (size < sizeof(*rec) || rec->type != esdm_ebpf_rec_raw)
 		return 0;
 
-	if (fwrite(rec, sizeof(*rec), 1, cctx->out) != 1)
+	if (cctx->only_cpu >= 0 && rec->cpu != (uint32_t)cctx->only_cpu)
+		return 0;
+
+	if (fprintf(cctx->out, "%llu\n", (unsigned long long)rec->delta) < 0) {
 		cctx->write_errors++;
-	else
-		cctx->events++;
+		return 0;
+	}
+
+	cctx->deltas++;
 
 	return 0;
 }
@@ -106,52 +146,17 @@ static bool fips_mode_enabled(void)
 	return enabled;
 }
 
-/* Open a CPU cycle counter perf event on every possible CPU */
-static int perf_setup(int **fds_out, unsigned int nr_cpus)
+static int parse_ull(const char *arg, unsigned long long *out)
 {
-	struct perf_event_attr attr = {
-		.type = PERF_TYPE_HARDWARE,
-		.size = sizeof(struct perf_event_attr),
-		.config = PERF_COUNT_HW_CPU_CYCLES,
-	};
-	int *fds;
-	unsigned int cpu, opened = 0;
+	char *end;
+	unsigned long long val;
 
-	fds = calloc(nr_cpus, sizeof(int));
-	if (!fds)
-		return -ENOMEM;
+	errno = 0;
+	val = strtoull(arg, &end, 10);
+	if (errno || end == arg || *end)
+		return -EINVAL;
 
-	for (cpu = 0; cpu < nr_cpus; cpu++)
-		fds[cpu] = -1;
-
-	for (cpu = 0; cpu < nr_cpus; cpu++) {
-		int fd = (int)syscall(__NR_perf_event_open, &attr, -1, (int)cpu,
-				      -1, PERF_FLAG_FD_CLOEXEC);
-
-		if (fd < 0) {
-			if (errno == ENODEV || errno == ENXIO)
-				continue; /* offline CPU */
-
-			fprintf(stderr,
-				"CPU cycle counter unavailable on CPU %u: %s\n",
-				cpu, strerror(errno));
-			for (cpu = 0; cpu < nr_cpus; cpu++) {
-				if (fds[cpu] >= 0)
-					close(fds[cpu]);
-			}
-			free(fds);
-			return -EOPNOTSUPP;
-		}
-		fds[cpu] = fd;
-		opened++;
-	}
-
-	if (!opened) {
-		free(fds);
-		return -EOPNOTSUPP;
-	}
-
-	*fds_out = fds;
+	*out = val;
 	return 0;
 }
 
@@ -160,16 +165,28 @@ static void usage(const char *name)
 	fprintf(stderr,
 		"Usage: %s --source sched|irq --out FILE [OPTIONS]\n"
 		"\n"
-		"Collect raw event time stamps of the eBPF entropy sources.\n"
+		"Collect raw event time deltas of the eBPF entropy sources as\n"
+		"decimal ASCII, one per line - the input format of extractlsb.\n"
 		"\n"
 		"Options:\n"
 		"\t--source, -s sched|irq  Entropy source to collect from\n"
-		"\t--out, -o FILE          Output file (raw records)\n"
-		"\t--events, -e N          Stop after N events (default: 10000000)\n"
-		"\t--tier, -t 2|3          Timestamp: 2 = CPU cycle counter (perf),\n"
-		"\t                        3 = monotonic clock (default: 2 with\n"
-		"\t                        fallback to 3)\n"
-		"\t--help, -h              This help\n",
+		"\t--out, -o FILE          Output file (one delta per line)\n"
+		"\t--events, -e N          Stop after N deltas (default: 10000000)\n"
+		"\t--cpu, -c N             Only write the deltas of CPU N. Without\n"
+		"\t                        it the deltas of all CPUs go into one\n"
+		"\t                        stream in arrival order, which is handy\n"
+		"\t                        to look at but mixes what are separate\n"
+		"\t                        noise sources - assess one CPU at a\n"
+		"\t                        time.\n"
+		"\t--help, -h              This help\n"
+		"\n"
+		"A delta is only written for two events known to be consecutive\n"
+		"observations of one CPU, so a sample the eBPF program had to drop\n"
+		"ends the run of deltas rather than distorting one.\n"
+		"\n"
+		"The timer granularity (GCD) is always divided out of the time\n"
+		"stamps, exactly as the ESDM server does, so that the assessed\n"
+		"signal is the one that enters the entropy pool.\n",
 		name);
 }
 
@@ -179,23 +196,24 @@ int main(int argc, char *argv[])
 		{ "source", required_argument, NULL, 's' },
 		{ "out", required_argument, NULL, 'o' },
 		{ "events", required_argument, NULL, 'e' },
-		{ "tier", required_argument, NULL, 't' },
+		{ "cpu", required_argument, NULL, 'c' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 },
 	};
-	struct collect_ctx cctx = { .limit = 10000000 };
+	struct collect_ctx cctx = { .limit = 10000000, .only_cpu = -1 };
 	struct bpf_object *obj = NULL;
-	struct bpf_map *rb_map, *status_map, *perf_map, *timers_map;
-	struct bpf_link *links[2] = { NULL, NULL };
+	struct bpf_map *rb_map, *status_map, *timers_map;
+	struct bpf_link **links = NULL;
 	struct bpf_program *prog;
 	struct ring_buffer *rb = NULL;
 	struct esdm_ebpf_status status = { .reset_gen = 1 };
 	struct esdm_ebpf_config *cfg = NULL;
 	const char *source = NULL, *outfile = NULL;
+	size_t nr_progs = 0, nr_links = 0, i;
 	time_t start;
-	int *perf_fds = NULL;
-	unsigned int nr_cpus;
-	int c, ret = 1, tier = 0, effective_tier = 3;
+	int nr_cpus_ret;
+	unsigned int nr_cpus = 0;
+	int c, ret = 1;
 	uint32_t zero = 0;
 
 #ifdef ESDM_ES_SCHED_EBPF
@@ -205,7 +223,7 @@ int main(int argc, char *argv[])
 	struct esdm_es_irq_ebpf_bpf *irq_skel = NULL;
 #endif
 
-	while ((c = getopt_long(argc, argv, "s:o:e:t:h", opts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "s:o:e:c:h", opts, NULL)) != -1) {
 		switch (c) {
 		case 's':
 			source = optarg;
@@ -214,11 +232,25 @@ int main(int argc, char *argv[])
 			outfile = optarg;
 			break;
 		case 'e':
-			cctx.limit = strtoull(optarg, NULL, 10);
+			if (parse_ull(optarg, &cctx.limit) || !cctx.limit) {
+				fprintf(stderr,
+					"Invalid event count: %s (expected a positive number)\n",
+					optarg);
+				return 1;
+			}
 			break;
-		case 't':
-			tier = atoi(optarg);
+		case 'c': {
+			unsigned long long cpu;
+
+			if (parse_ull(optarg, &cpu) || cpu > INT_MAX) {
+				fprintf(stderr,
+					"Invalid CPU: %s (expected a CPU number)\n",
+					optarg);
+				return 1;
+			}
+			cctx.only_cpu = (int)cpu;
 			break;
+		}
 		case 'h':
 			usage(argv[0]);
 			return 0;
@@ -228,7 +260,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!source || !outfile || (tier && tier != 2 && tier != 3)) {
+	if (!source || !outfile) {
 		usage(argv[0]);
 		return 1;
 	}
@@ -239,7 +271,13 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	nr_cpus = (unsigned int)libbpf_num_possible_cpus();
+	nr_cpus_ret = libbpf_num_possible_cpus();
+	if (nr_cpus_ret < 1) {
+		fprintf(stderr,
+			"Cannot determine the number of possible CPUs\n");
+		return 1;
+	}
+	nr_cpus = (unsigned int)nr_cpus_ret;
 
 	/* Open the requested skeleton and locate its configuration */
 	if (!strcmp(source, "sched")) {
@@ -264,36 +302,31 @@ int main(int argc, char *argv[])
 
 	if (!obj || !cfg) {
 		fprintf(stderr, "Unknown or unsupported source: %s\n", source);
-		return 1;
-	}
-
-	/* Timestamp tier selection */
-	if (tier != 3) {
-		if (perf_setup(&perf_fds, nr_cpus) == 0) {
-			cfg->use_perf_counter = 1;
-			effective_tier = 2;
-		} else if (tier == 2) {
-			fprintf(stderr,
-				"Requested tier 2 but the CPU cycle counter is not available\n");
-			goto out;
-		}
+		goto out;
 	}
 
 	cfg->raw_sampling = 1;
 	cfg->health_enabled = 0;
-	cfg->flush_timer_enabled = 0;
 
 	rb_map = bpf_object__find_map_by_name(obj, "esdm_ebpf_rb");
 	status_map = bpf_object__find_map_by_name(obj, "esdm_ebpf_status_map");
-	perf_map = bpf_object__find_map_by_name(obj, "esdm_ebpf_perf");
 	timers_map = bpf_object__find_map_by_name(obj, "esdm_ebpf_timers");
-	if (!rb_map || !status_map || !perf_map || !timers_map)
+	if (!rb_map || !status_map || !timers_map)
 		goto out;
 
 	if (bpf_map__set_max_entries(rb_map, ESDM_COLLECT_RB_SIZE) ||
-	    bpf_map__set_max_entries(perf_map, nr_cpus) ||
 	    bpf_map__set_max_entries(timers_map, nr_cpus))
 		goto out;
+
+	/*
+	 * The zeroization of the ring buffer is of no use to a measurement run
+	 * that writes the very same deltas to a file, so it is left out of the
+	 * load - which also keeps this tool working on kernels that do not
+	 * support the BPF syscall programs it is implemented with.
+	 */
+	prog = bpf_object__find_program_by_name(obj, ESDM_EBPF_WIPE_PROG_NAME);
+	if (prog)
+		bpf_program__set_autoload(prog, false);
 
 	if (bpf_object__load(obj)) {
 		fprintf(stderr, "Cannot load the eBPF object\n");
@@ -303,23 +336,6 @@ int main(int argc, char *argv[])
 	if (bpf_map__update_elem(status_map, &zero, sizeof(zero), &status,
 				 sizeof(status), 0))
 		goto out;
-
-	if (perf_fds) {
-		uint32_t cpu;
-
-		for (cpu = 0; cpu < nr_cpus; cpu++) {
-			if (perf_fds[cpu] < 0)
-				continue;
-			if (bpf_map__update_elem(perf_map, &cpu, sizeof(cpu),
-						 &perf_fds[cpu],
-						 sizeof(perf_fds[cpu]), 0)) {
-				fprintf(stderr,
-					"Cannot set cycle counter for CPU %u\n",
-					cpu);
-				goto out;
-			}
-		}
-	}
 
 	cctx.out = fopen(outfile, "wx");
 	if (!cctx.out) {
@@ -335,32 +351,52 @@ int main(int argc, char *argv[])
 	/* Attach all programs of the object */
 	bpf_object__for_each_program(prog, obj)
 	{
-		size_t i;
+		nr_progs++;
+	}
 
-		for (i = 0; i < sizeof(links) / sizeof(links[0]); i++) {
-			if (!links[i]) {
-				links[i] = bpf_program__attach(prog);
-				if (!links[i]) {
-					fprintf(stderr,
-						"Cannot attach program %s\n",
-						bpf_program__name(prog));
-					goto out;
-				}
-				break;
-			}
+	if (!nr_progs) {
+		fprintf(stderr, "The eBPF object contains no program\n");
+		goto out;
+	}
+
+	links = calloc(nr_progs, sizeof(*links));
+	if (!links)
+		goto out;
+
+	bpf_object__for_each_program(prog, obj)
+	{
+		/* A program kept out of the load has nothing to attach */
+		if (bpf_program__fd(prog) < 0)
+			continue;
+
+		links[nr_links] = bpf_program__attach(prog);
+		if (!links[nr_links]) {
+			fprintf(stderr, "Cannot attach program %s\n",
+				bpf_program__name(prog));
+			goto out;
 		}
+		nr_links++;
 	}
 
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	fprintf(stderr,
-		"Collecting %llu raw %s events (timestamp tier %d) into %s ...\n",
-		cctx.limit, source, effective_tier, outfile);
+	if (cctx.only_cpu >= 0)
+		fprintf(stderr,
+			"Collecting %llu raw %s deltas of CPU %d into %s ...\n",
+			cctx.limit, source, cctx.only_cpu, outfile);
+	else
+		fprintf(stderr,
+			"Collecting %llu raw %s deltas of all CPUs into %s ...\n",
+			cctx.limit, source, outfile);
 
 	start = time(NULL);
-	while (!stop_requested && cctx.events < cctx.limit) {
-		if (ring_buffer__poll(rb, 200) < 0 && errno != EINTR)
+	while (!stop_requested && cctx.deltas < cctx.limit) {
+		int poll_ret = ring_buffer__poll(rb, 200);
+
+		if (poll_ret == ESDM_COLLECT_DONE)
+			break;
+		if (poll_ret < 0 && errno != EINTR)
 			break;
 	}
 
@@ -368,12 +404,17 @@ int main(int argc, char *argv[])
 		time_t duration = time(NULL) - start;
 		unsigned long long rate =
 			duration > 0 ?
-				cctx.events / (unsigned long long)duration :
-				      cctx.events;
+				cctx.deltas / (unsigned long long)duration :
+				      cctx.deltas;
 
+		/*
+		 * The time stamps exceed the deltas by the first one of each
+		 * CPU, which has no predecessor to form a delta with, plus one
+		 * for every segment a lost sample or a reset started.
+		 */
 		fprintf(stderr,
-			"Collected %llu events in %ld seconds (%llu events/s), %llu write errors\n",
-			cctx.events, (long)duration, rate, cctx.write_errors);
+			"Collected %llu deltas in %ld seconds (%llu deltas/s), %llu write errors\n",
+			cctx.deltas, (long)duration, rate, cctx.write_errors);
 	}
 
 	ret = cctx.write_errors ? 1 : 0;
@@ -381,20 +422,19 @@ int main(int argc, char *argv[])
 out:
 	if (rb)
 		ring_buffer__free(rb);
-	for (c = 0; c < 2; c++) {
-		if (links[c])
-			bpf_link__destroy(links[c]);
-	}
-	if (cctx.out)
-		fclose(cctx.out);
-	if (perf_fds) {
-		unsigned int cpu;
-
-		for (cpu = 0; cpu < nr_cpus; cpu++) {
-			if (perf_fds[cpu] >= 0)
-				close(perf_fds[cpu]);
+	for (i = 0; i < nr_links; i++)
+		bpf_link__destroy(links[i]);
+	free(links);
+	if (cctx.out) {
+		/*
+		 * The final buffer flush happens here - a write error at this
+		 * point would otherwise escape the accounting above.
+		 */
+		if (fclose(cctx.out)) {
+			fprintf(stderr, "Cannot write %s: %s\n", outfile,
+				strerror(errno));
+			ret = 1;
 		}
-		free(perf_fds);
 	}
 #ifdef ESDM_ES_SCHED_EBPF
 	if (sched_skel)

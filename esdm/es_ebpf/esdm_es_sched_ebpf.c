@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "config.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_ebpf.h"
@@ -50,6 +51,7 @@ static struct esdm_es_sched_ebpf_bpf *esdm_sched_ebpf_skel = NULL;
 static struct esdm_ebpf_es esdm_sched_ebpf_es = {
 	.name = "SchedulerEBPF",
 	.entropy_rate = esdm_config_es_sched_ebpf_entropy_rate,
+	.osr = ESDM_SCHED_EBPF_OSR,
 };
 
 /*
@@ -67,6 +69,14 @@ bool esdm_sched_ebpf_enabled(void)
 /* Caller must hold sched_ebpf_mutex (write lock). */
 static void esdm_sched_ebpf_finalize_locked(void)
 {
+	/*
+	 * Detach before the entropy source is torn down: the tear-down erases
+	 * the collected events, and an attached program would go on collecting
+	 * into what it just erased.
+	 */
+	if (esdm_sched_ebpf_skel)
+		esdm_es_sched_ebpf_bpf__detach(esdm_sched_ebpf_skel);
+
 	esdm_ebpf_fini_es(&esdm_sched_ebpf_es);
 
 	if (esdm_sched_ebpf_skel) {
@@ -83,12 +93,13 @@ static void esdm_sched_ebpf_finalize(void)
 }
 
 /*
- * Open, configure and load the eBPF object. On kernels rejecting the
- * bpf_timer usage in tracing programs, the caller retries with the flush
- * timer disabled which prunes the timer code from the program.
+ * Open, configure and load the eBPF object.
+ *
+ * @fatal is set when the failure is one the caller must not paper over by
+ * running without this entropy source - see esdm_ebpf_prepare().
  */
-static int esdm_sched_ebpf_open_load(bool flush_timer,
-				     struct esdm_es_sched_ebpf_bpf **skel_out)
+static int esdm_sched_ebpf_open_load(struct esdm_es_sched_ebpf_bpf **skel_out,
+				     bool *fatal)
 {
 	struct esdm_es_sched_ebpf_bpf *skel;
 	int ret;
@@ -103,9 +114,11 @@ static int esdm_sched_ebpf_open_load(bool flush_timer,
 	}
 
 	ret = esdm_ebpf_prepare(&esdm_sched_ebpf_es, skel->obj,
-				&skel->rodata->esdm_ebpf_cfg, flush_timer);
-	if (ret)
+				&skel->rodata->esdm_ebpf_cfg);
+	if (ret) {
+		*fatal = true;
 		goto err;
+	}
 
 	ret = esdm_es_sched_ebpf_bpf__load(skel);
 	if (ret)
@@ -123,6 +136,7 @@ err:
 static int esdm_sched_ebpf_initialize(void)
 {
 	struct esdm_es_sched_ebpf_bpf *skel = NULL;
+	bool fatal = false;
 	int ret;
 
 	mutex_lock(&sched_ebpf_mutex);
@@ -138,15 +152,29 @@ static int esdm_sched_ebpf_initialize(void)
 		goto out;
 	}
 
+	if (!esdm_ebpf_highres_timer()) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ES,
+			"Disabling eBPF scheduler-based entropy source as no high-resolution timer is available\n");
+		ret = 0;
+		goto out;
+	}
+
 	esdm_ebpf_setup_logging();
 
-	ret = esdm_sched_ebpf_open_load(true, &skel);
-	if (ret) {
+	ret = esdm_sched_ebpf_open_load(&skel, &fatal);
+	if (ret && fatal) {
+		/*
+		 * The source could only run in a state where the raw samples
+		 * it collects cannot be erased again. That is not a degraded
+		 * mode to fall back to - fail the initialization, which fails
+		 * esdm_init() and terminates the ESDM.
+		 */
 		esdm_logger(
-			LOGGER_VERBOSE, LOGGER_C_ES,
-			"Loading of eBPF scheduler entropy source program failed (%d), retrying without in-program flush timer\n",
+			LOGGER_ERR, LOGGER_C_ES,
+			"eBPF scheduler-based entropy source cannot be set up so that its collected events can be erased again - refusing to start: %d\n",
 			ret);
-		ret = esdm_sched_ebpf_open_load(false, &skel);
+		goto out;
 	}
 	if (ret) {
 		esdm_logger(
@@ -164,6 +192,7 @@ static int esdm_sched_ebpf_initialize(void)
 			"Attaching of eBPF scheduler entropy source program failed: %d\n",
 			ret);
 		esdm_es_sched_ebpf_bpf__destroy(skel);
+		esdm_ebpf_fini_es(&esdm_sched_ebpf_es);
 		ret = 0;
 		goto out;
 	}
@@ -171,6 +200,7 @@ static int esdm_sched_ebpf_initialize(void)
 	ret = esdm_ebpf_init_es(&esdm_sched_ebpf_es, skel->obj);
 	if (ret) {
 		esdm_es_sched_ebpf_bpf__destroy(skel);
+		esdm_ebpf_fini_es(&esdm_sched_ebpf_es);
 		goto out;
 	}
 
@@ -192,12 +222,13 @@ static int esdm_sched_ebpf_seed_monitor(void)
 		return 0;
 
 	/*
-	 * Always drain the ring buffer into the conditioning pool - even when
-	 * fully seeded - so that the collected data is not lost and later
-	 * reseeds draw from a filled pool.
+	 * Top the conditioning pool up while it has room for the entropy of
+	 * more events. Once it has not, the fetching stops and the eBPF
+	 * programs go back to collecting for nobody until an extraction has
+	 * spent what is in the pool.
 	 */
 	mutex_lock(&sched_ebpf_mutex);
-	esdm_ebpf_consume(&esdm_sched_ebpf_es);
+	esdm_ebpf_refill(&esdm_sched_ebpf_es);
 	ent = esdm_ebpf_avail_entropy(&esdm_sched_ebpf_es);
 	max_ent = esdm_ebpf_max_entropy(&esdm_sched_ebpf_es);
 	mutex_unlock(&sched_ebpf_mutex);
@@ -246,8 +277,6 @@ static void esdm_sched_ebpf_get(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool __unused unused)
 {
 	mutex_lock(&sched_ebpf_mutex);
-	/* Opportunistically pick up pending batches before extraction */
-	esdm_ebpf_consume(&esdm_sched_ebpf_es);
 	esdm_ebpf_get_ent(&esdm_sched_ebpf_es, eb_es, requested_bits);
 	mutex_unlock(&sched_ebpf_mutex);
 }
@@ -262,27 +291,19 @@ static void esdm_sched_ebpf_reset(void)
 static void esdm_sched_ebpf_es_state(char *buf, size_t buflen)
 {
 	snprintf(buf, buflen,
-		 " Available: %s\n"
 		 " Available entropy: %u\n"
-		 " Maximum entropy: %u\n"
-		 " Total events: %llu\n"
-		 " Entropy Rate per 256 events: %u\n"
-		 " Timestamp mechanism: %s\n"
-		 " Partial batch flush timer: %s\n"
-		 " SP800-90B health tests: %s\n"
-		 " SP800-90B health test failures: %llu\n",
-		 esdm_sched_ebpf_es.loaded ? "true" : "false",
-		 esdm_sched_ebpf_entropylevel(0), esdm_sched_ebpf_poolsize(),
-		 (unsigned long long)esdm_sched_ebpf_es.total_events,
+		 " Entropy Rate per 256 data bits: %u\n"
+		 " Oversampling Rate: %u\n"
+		 " Standards compliance: %s\n"
+		 " eBPF programs loaded: %s\n"
+		 " Health test failures: %llu%s\n",
+		 esdm_sched_ebpf_entropylevel(0),
 		 esdm_config_es_sched_ebpf_entropy_rate(),
-		 esdm_sched_ebpf_es.tier == 2 ? "CPU cycle counter (perf)" :
-						      "monotonic clock",
-		 esdm_sched_ebpf_es.flush_timer ? "true" : "false",
-		 esdm_sched_ebpf_es.perm_failure ?
-			 "permanent failure" :
-			       (esdm_sched_ebpf_es.health_enabled ? "active" :
-								    "disabled"),
-		 (unsigned long long)esdm_sched_ebpf_es.health_failures);
+		 esdm_ebpf_osr(&esdm_sched_ebpf_es),
+		 esdm_sched_ebpf_es.health_enabled ? "SP800-90B" : "",
+		 esdm_sched_ebpf_es.loaded ? "true" : "false",
+		 (unsigned long long)esdm_sched_ebpf_es.health_failures,
+		 esdm_sched_ebpf_es.perm_failure ? " (permanent failure)" : "");
 }
 
 static bool esdm_sched_ebpf_active(void)

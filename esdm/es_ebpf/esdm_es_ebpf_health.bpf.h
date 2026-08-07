@@ -35,23 +35,6 @@
 #ifndef _ESDM_ES_EBPF_HEALTH_BPF_H
 #define _ESDM_ES_EBPF_HEALTH_BPF_H
 
-/* Emit a health event record to user space (best effort) */
-static __always_inline void esdm_ebpf_health_rec_emit(__u32 event, __u32 test)
-{
-	struct esdm_ebpf_health_rec *rec;
-
-	rec = bpf_ringbuf_reserve(&esdm_ebpf_rb, sizeof(*rec), 0);
-	if (!rec)
-		return;
-
-	rec->type = esdm_ebpf_rec_health;
-	rec->cpu = bpf_get_smp_processor_id();
-	rec->event = event;
-	rec->test = test;
-
-	bpf_ringbuf_submit(rec, 0);
-}
-
 /* Reset the health test state to its initial (startup) values */
 static __always_inline void
 esdm_ebpf_health_reset(struct esdm_ebpf_percpu_state *state)
@@ -66,7 +49,22 @@ esdm_ebpf_health_reset(struct esdm_ebpf_percpu_state *state)
 	state->apt_trigger = ESDM_EBPF_APT_WINDOW_SIZE;
 	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS;
 	state->startup_done = 0;
-	state->health_pending = 0;
+	state->health_failures = 0;
+	state->permanent_failure = 0;
+	state->health_test = 0;
+}
+
+/*
+ * May the events of this CPU be collected? With the SP800-90B health tests
+ * enabled the startup test must have completed - and as every failure
+ * restarts it, this covers the failure case too: no event collected between
+ * a failure and the completion of the new startup test, and therefore no
+ * health state that would have to travel to user space with the events.
+ */
+static __always_inline __u32
+esdm_ebpf_health_ok(const struct esdm_ebpf_percpu_state *state)
+{
+	return !esdm_ebpf_cfg.health_enabled || state->startup_done;
 }
 
 /* SP800-90B startup test progress: one APT window completed */
@@ -74,41 +72,32 @@ static __always_inline void
 esdm_ebpf_sp80090b_startup(struct esdm_ebpf_percpu_state *state)
 {
 	if (!state->startup_done && state->startup_blocks &&
-	    --state->startup_blocks == 0) {
+	    --state->startup_blocks == 0)
 		state->startup_done = 1;
-		esdm_ebpf_health_rec_emit(esdm_ebpf_health_startup_done, 0);
-	}
 }
 
 /*
  * Handle failure of the SP800-90B startup or runtime testing: restart the
- * startup test. The invalidation of the collected entropy is performed by
- * user space upon reception of the failure state.
+ * startup test, which stops this CPU from collecting until it passes again.
+ * The failure is recorded in the per-CPU state, from which user space picks it
+ * up and invalidates the collected entropy.
  */
 static __always_inline void
 esdm_ebpf_sp80090b_failure(struct esdm_ebpf_percpu_state *state, __u32 test)
 {
-	state->health_pending |= (test == esdm_ebpf_health_test_rct) ?
-					 ESDM_EBPF_HEALTH_RCT_FAILURE :
-					       ESDM_EBPF_HEALTH_APT_FAILURE;
+	state->health_failures++;
+	state->health_test = test;
 	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS;
 	state->startup_done = 0;
-
-	esdm_ebpf_health_rec_emit(esdm_ebpf_health_intermittent_failure, test);
 }
 
 static __always_inline void
 esdm_ebpf_sp80090b_permanent_failure(struct esdm_ebpf_percpu_state *state,
 				     __u32 test)
 {
-	__u32 zero = 0;
-	struct esdm_ebpf_status *status =
-		bpf_map_lookup_elem(&esdm_ebpf_status_map, &zero);
-
-	if (status)
-		status->permanent_failure = 1;
-
-	state->health_pending |= ESDM_EBPF_HEALTH_PERM_FAILURE;
+	state->health_failures++;
+	state->health_test = test;
+	state->permanent_failure = 1;
 	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS;
 	state->startup_done = 0;
 
@@ -117,8 +106,6 @@ esdm_ebpf_sp80090b_permanent_failure(struct esdm_ebpf_percpu_state *state,
 	state->apt_count = 0;
 	state->apt_base = 0;
 	state->apt_trigger = ESDM_EBPF_APT_WINDOW_SIZE;
-
-	esdm_ebpf_health_rec_emit(esdm_ebpf_health_permanent_failure, test);
 }
 
 /*

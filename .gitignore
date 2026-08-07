@@ -19,3 +19,6 @@ result-*
 
 # stray test output
 /out.bin
+
+# byte code of the raw measurement analysis helpers
+__pycache__/

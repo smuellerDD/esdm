@@ -22,13 +22,3 @@ int esdm_irq_handler_entry(void *ctx)
 
 	return 0;
 }
-
-SEC("tp_btf/softirq_entry")
-int esdm_softirq_entry(void *ctx)
-{
-	(void)ctx;
-
-	esdm_ebpf_collect();
-
-	return 0;
-}
