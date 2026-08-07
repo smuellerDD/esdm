@@ -76,6 +76,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_drng_mgr_throughput_test = executable(
+		'esdm_drng_mgr_throughput_test',
+		[ esdm_ipc_ns, 'esdm_drng_mgr_throughput_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_drng_mgr_max_wo_reseed_bits_test = executable(
 		'esdm_drng_mgr_max_wo_reseed_bits_test',
 		[ esdm_ipc_ns, 'esdm_drng_mgr_max_wo_reseed_bits_test.c' ],
@@ -121,6 +129,13 @@ if get_option('esdm-server').enabled()
 		args : [ '1' ])
 	test('ESDM DRNG manager max w/o reseed bits - 2 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
 		args : [ '2' ])
+
+	# Serial: it reports a rate, and a rate measured while the rest of the
+	# suite has the machine says more about the suite than about the ESDM.
+	test('ESDM DRNG manager sustained generation', esdm_drng_mgr_throughput_test,
+		timeout: 300,
+		is_parallel: false,
+		priority: -10)
 
 	test('ESDM seed entropy - all ES, no FIPS', esdm_drng_seed_entropy_test,
 		args : [ '0', '0' ],

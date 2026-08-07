@@ -12,6 +12,24 @@ es_mgr_monitor_tester = executable(
 
 test('ES manager monitor', es_mgr_monitor_tester, timeout: 120)
 
+# Whatever entropy sources this build and this machine actually have - the test
+# walks the ES manager's table rather than naming any of them, so it needs no
+# option guard of its own.
+es_seed_cycle_tester = executable(
+	'es_seed_cycle_tester',
+	[ esdm_ipc_ns, 'es_seed_cycle_test.c' ],
+	dependencies: dependencies_server,
+	include_directories: include_dirs_server,
+	link_with: esdm_static_lib,
+)
+
+# Serial: it reports durations, and a duration measured while the rest of the
+# suite has the machine is a measure of the suite.
+test('ES seed cycle duration', es_seed_cycle_tester,
+	timeout: 300,
+	is_parallel: false,
+	priority: -10)
+
 if get_option('es_jent').enabled()
 	es_jent_tester = executable(
 		'es_jent_tester',
