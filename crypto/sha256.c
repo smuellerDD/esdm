@@ -126,7 +126,19 @@ static inline void sha256_transform(struct esdm_hash_state *ctx,
 static void sha256_update(struct esdm_hash_state *ctx, const uint8_t *in,
 			  size_t inlen)
 {
-	unsigned int partial = ctx->msg_len % ESDM_SHA256_SIZE_BLOCK;
+	unsigned int partial;
+
+	/*
+	 * Hashing nothing is a no-op, but the memcpy calls below would still
+	 * run with a length of zero - and callers legitimately pair a length of
+	 * zero with a NULL buffer (mmap_file() in the FIPS integrity check does
+	 * so for an empty file). memcpy is declared to never take a NULL
+	 * argument, so that is undefined behavior even for a zero length copy.
+	 */
+	if (!inlen)
+		return;
+
+	partial = ctx->msg_len % ESDM_SHA256_SIZE_BLOCK;
 
 	ctx->msg_len += inlen;
 

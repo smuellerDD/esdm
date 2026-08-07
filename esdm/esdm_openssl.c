@@ -173,7 +173,7 @@ struct esdm_openssl_drng_state {
 static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 					   size_t inbuflen,
 					   const uint8_t *addtl,
-					   size_t addtllen bool test_mode)
+					   size_t addtllen, bool test_mode)
 {
 	struct esdm_openssl_drng_state *state = drng;
 	struct timespec current_time = { 0 };
@@ -564,10 +564,10 @@ static int esdm_openssl_drbg_selftest(void)
 	int ret;
 
 	CKINT(esdm_openssl_drbg_alloc(&drng, 256));
-	CKINT(esdm_openssl_drbg_seed_internal(drng, ent_nonce,
-					      sizeof(ent_nonce), true));
+	CKINT(esdm_openssl_drbg_seed_internal(
+		drng, ent_nonce, sizeof(ent_nonce), NULL, 0, true));
 	CKINT(esdm_openssl_drbg_seed_internal(drng, reseed, sizeof(reseed),
-					      true));
+					      NULL, 0, true));
 	if (esdm_openssl_drbg_generate_w_additional_data(
 		    drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
 		ret = -EFAULT;
