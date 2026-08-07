@@ -30,6 +30,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "egd_peer.h"
@@ -252,6 +253,7 @@ static void *peer_conn_thread(void *arg)
 {
 	struct egd_peer_conn *conn = arg;
 	struct egd_peer *peer = conn->peer;
+	struct timespec nowait = { 0, 0 };
 	sigset_t sigpipe;
 
 	/*
@@ -331,6 +333,24 @@ static void *peer_conn_thread(void *arg)
 		if (ret)
 			break;
 	}
+
+	/*
+	 * Blocking the signal keeps the write from being fatal, it does not make
+	 * the signal go away: a SIGPIPE raised above is still pending on this
+	 * thread, and leaving the thread is not enough to be rid of it. Whoever
+	 * unblocks SIGPIPE in this thread first gets it delivered, and the exit
+	 * path does exactly that - the sanitizer runtime's thread specific data
+	 * destructor takes the mask apart on the way out, so an ASan build dies
+	 * of the pending signal in __nptl_deallocate_tsd(), long after the write
+	 * that raised it. That is the very death the block above exists to
+	 * prevent, only moved to where nothing points at the cause any more.
+	 *
+	 * So take the signal off the thread here, while it is still blocked and
+	 * this is the only thread that could receive it. Nothing is pending in
+	 * the common case, where the zero timeout returns right away.
+	 */
+	while (sigtimedwait(&sigpipe, NULL, &nowait) < 0 && errno == EINTR)
+		;
 
 	free(conn);
 
