@@ -20,5 +20,8 @@ result-*
 # stray test output
 /out.bin
 
+# default output of esdm-coverage-run
+/esdm-coverage-report/
+
 # byte code of the raw measurement analysis helpers
 __pycache__/

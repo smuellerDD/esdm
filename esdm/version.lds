@@ -128,6 +128,15 @@ LIBESDM_PRIVATE_1.0 {
 		/* esdm_es_jent.h */
 		esdm_jent_status;
 
+		/*
+		 * esdm_es_pkcs11.h - the token configuration the server sets
+		 * from its RPC handler. Only built when es_pkcs11 is enabled;
+		 * the linker is asked for --undefined-version so naming them
+		 * here costs nothing in a build without that source.
+		 */
+		esdm_es_pkcs11_set_pin;
+		esdm_es_pkcs11_set_token_label;
+
 		/* esdm_shm_status.h */
 		esdm_shm_status_cleanup_ipc;
 
