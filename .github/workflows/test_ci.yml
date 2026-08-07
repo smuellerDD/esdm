@@ -6,29 +6,585 @@ on:
   pull_request:
     branches: [ "master" ]
 
+env:
+  JITTERENTROPY_VERSION: "3.7.0"
+  # Ubuntu 24.04 only ships Botan 2, while ESDM requires botan-3 >= 3.0, and it
+  # does not package leancrypto at all - both are therefore built from source
+  # and cached.
+  BOTAN_VERSION: "3.12.0"
+  LEANCRYPTO_VERSION: "1.8.0"
+  # The GnuTLS backend drives GnuTLS' SP800-90A CTR DRBG through
+  # drbg_aes_init/reseed/generate. Those live in the GNUTLS_FIPS140_3_4 version
+  # node and are only exported by a build configured with
+  # --enable-fips140-mode - the distribution package is not, so GnuTLS is built
+  # from source here too.
+  GNUTLS_VERSION: "3.8.9"
+  # Bump the matching *_BUILD_REV whenever the build recipe of a dependency
+  # changes (configure flags, meson options, module selection). The version
+  # alone does not identify the artefact: without this a recipe change silently
+  # keeps restoring the previously built - and now wrong - prefix from cache.
+  BOTAN_BUILD_REV: "1"
+  LEANCRYPTO_BUILD_REV: "1"
+  GNUTLS_BUILD_REV: "2"
+  # One prefix and one cache per dependency. They must not share a cache key:
+  # a botan job populates only Botan, so a leancrypto job restoring the same
+  # entry would see a cache hit, skip its own build and then fail to find
+  # leancrypto.
+  BOTAN_PREFIX: ${{ github.workspace }}/deps/botan
+  LEANCRYPTO_PREFIX: ${{ github.workspace }}/deps/leancrypto
+  GNUTLS_PREFIX: ${{ github.workspace }}/deps/gnutls
+
 jobs:
   build:
+    name: ${{ matrix.runner }} / ${{ matrix.backend.name }}
+    runs-on: ${{ matrix.runner }}
 
-    runs-on: ubuntu-latest
+    strategy:
+      # Report every broken combination in one run instead of stopping at the
+      # first one - the configurations are independent of each other.
+      fail-fast: false
+      matrix:
+        # ubuntu-24.04-arm is the native arm64 runner, so the arm64 leg is a
+        # real build and test run rather than an emulated one.
+        runner: [ ubuntu-24.04, ubuntu-24.04-arm ]
+        # Every crypto backend, including the DRNG variants the backends offer.
+        # The variants matter: they select different code paths behind #ifdef
+        # and are not covered by building the backend's default alone.
+        backend:
+          - name: builtin
+            opts: -Dcrypto_backend=builtin
+          - name: builtin-chacha20-sha3
+            opts: >-
+              -Dcrypto_backend=builtin
+              -Ddrng_hash_drbg=disabled -Ddrng_chacha20=enabled
+              -Dhash_sha512=disabled -Dhash_sha3_512=enabled
+          - name: openssl-hash
+            opts: -Dcrypto_backend=openssl -Dopenssl_drng_type=hash
+          - name: openssl-ctr
+            opts: -Dcrypto_backend=openssl -Dopenssl_drng_type=ctr
+          - name: openssl-hmac
+            opts: -Dcrypto_backend=openssl -Dopenssl_drng_type=hmac
+          - name: botan-hmac
+            opts: -Dcrypto_backend=botan -Dbotan_drng_type=hmac
+          - name: botan-chacha20
+            opts: -Dcrypto_backend=botan -Dbotan_drng_type=chacha20
+          - name: leancrypto
+            opts: -Dcrypto_backend=leancrypto
+          - name: gnutls
+            opts: -Dcrypto_backend=gnutls
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Install meson
+    - uses: actions/checkout@v4
+
+    - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y meson libprotobuf-c-dev libfuse3-dev
+        # nettle-dev is needed by the ESDM build itself for the GnuTLS backend
+        # (Block_Cipher_df uses the AES core), so it must be present even when
+        # the GnuTLS source build below is skipped on a cache hit.
+        sudo apt-get install -y meson ninja-build pkg-config \
+                                libprotobuf-c-dev libfuse3-dev libssl-dev \
+                                libjson-c-dev nettle-dev
+
     - name: Install Jitter RNG
       run: |
-        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v3.4.1.tar.gz
-        tar xvfz jent.tar.gz
-        make -C jitterentropy-library*
-        sudo make -C jitterentropy-library* install
+        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v${JITTERENTROPY_VERSION}.tar.gz
+        tar xfz jent.tar.gz
+        make -C jitterentropy-library-${JITTERENTROPY_VERSION}
+        sudo make -C jitterentropy-library-${JITTERENTROPY_VERSION} install
         sudo ldconfig
+
+    # restore/save are split rather than using actions/cache: the combined
+    # action saves in its post step even when the job failed, which would
+    # publish a half-built prefix under the key and break every later run. A
+    # separate save step only runs when the steps before it succeeded.
+    - name: Restore Botan
+      if: startsWith(matrix.backend.name, 'botan')
+      id: botan-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.BOTAN_PREFIX }}
+        key: ${{ matrix.runner }}-botan-${{ env.BOTAN_VERSION }}-r${{ env.BOTAN_BUILD_REV }}
+
+    - name: Build Botan
+      if: startsWith(matrix.backend.name, 'botan') && steps.botan-cache.outputs.cache-hit != 'true'
+      run: |
+        wget -O botan.tar.xz https://botan.randombit.net/releases/Botan-${BOTAN_VERSION}.tar.xz
+        tar xf botan.tar.xz
+        cd Botan-${BOTAN_VERSION}
+        # Minimized build with just the primitives esdm_botan.cpp asks for:
+        # SHA-3(512) and SHA-512 for conditioning, plus the HMAC-DRBG and
+        # ChaCha20 DRNG cores. A full Botan build would dominate the job time.
+        ./configure.py \
+          --prefix="${BOTAN_PREFIX}" \
+          --build-targets=shared \
+          --without-documentation \
+          --minimized-build \
+          --enable-modules=sha2_64,sha3,hmac,hmac_drbg,chacha,chacha_rng,system_rng,auto_rng
+        make -j"$(nproc)"
+        make install
+
+    # Both botan jobs can miss and race to save the same key; a losing save
+    # must not fail the build.
+    - name: Save Botan
+      if: startsWith(matrix.backend.name, 'botan') && steps.botan-cache.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.BOTAN_PREFIX }}
+        key: ${{ matrix.runner }}-botan-${{ env.BOTAN_VERSION }}-r${{ env.BOTAN_BUILD_REV }}
+
+    - name: Restore leancrypto
+      if: matrix.backend.name == 'leancrypto'
+      id: leancrypto-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.LEANCRYPTO_PREFIX }}
+        key: ${{ matrix.runner }}-leancrypto-${{ env.LEANCRYPTO_VERSION }}-r${{ env.LEANCRYPTO_BUILD_REV }}
+
+    - name: Build leancrypto
+      if: matrix.backend.name == 'leancrypto' && steps.leancrypto-cache.outputs.cache-hit != 'true'
+      run: |
+        wget -O leancrypto.tar.gz https://github.com/smuellerDD/leancrypto/archive/refs/tags/v${LEANCRYPTO_VERSION}.tar.gz
+        tar xfz leancrypto.tar.gz
+        cd leancrypto-${LEANCRYPTO_VERSION}
+        # ESDM only links the library: skip leancrypto's own test suite and its
+        # helper apps, which dominate the build time here. The algorithm
+        # self-tests (enable_selftests) stay on - those run inside the library.
+        # --libdir=lib: meson defaults to a multiarch libdir on Debian-derived
+        # distributions (lib/x86_64-linux-gnu), which is not where the export
+        # step below would look for the .pc file.
+        meson setup build --prefix="${LEANCRYPTO_PREFIX}" --libdir=lib \
+                          --buildtype=release \
+                          -Dtests=disabled -Dapps=disabled
+        ninja -C build
+        ninja -C build install
+
+    - name: Save leancrypto
+      if: matrix.backend.name == 'leancrypto' && steps.leancrypto-cache.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.LEANCRYPTO_PREFIX }}
+        key: ${{ matrix.runner }}-leancrypto-${{ env.LEANCRYPTO_VERSION }}-r${{ env.LEANCRYPTO_BUILD_REV }}
+
+    - name: Restore GnuTLS
+      if: matrix.backend.name == 'gnutls'
+      id: gnutls-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.GNUTLS_PREFIX }}
+        key: ${{ matrix.runner }}-gnutls-${{ env.GNUTLS_VERSION }}-fips-r${{ env.GNUTLS_BUILD_REV }}
+
+    - name: Build GnuTLS with FIPS140 mode
+      if: matrix.backend.name == 'gnutls' && steps.gnutls-cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt-get install -y libgmp-dev
+        wget -O gnutls.tar.xz "https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-${GNUTLS_VERSION}.tar.xz"
+        tar xf gnutls.tar.xz
+        cd gnutls-${GNUTLS_VERSION}
+        # --enable-fips140-mode is the point of building this from source: it
+        # is what exports drbg_aes_*. Everything ESDM does not link against is
+        # turned off to keep the job time down.
+        #
+        # The --with-included-* and --without-* flags are not just trimming:
+        # every optional library GnuTLS picks up lands in Requires.private of
+        # gnutls.pc, and pkg-config (hence meson) then refuses to resolve
+        # gnutls unless that library's own .pc file is installed too. Letting
+        # configure auto-detect whatever the runner image happens to ship makes
+        # that set vary per image and per architecture. Pinning it leaves
+        # exactly "nettle, hogweed" behind, which nettle-dev provides.
+        ./configure \
+          --prefix="${GNUTLS_PREFIX}" \
+          --enable-fips140-mode \
+          --disable-doc --disable-tests --disable-tools --disable-cxx \
+          --disable-guile --disable-libdane --disable-nls \
+          --without-p11-kit --without-idn \
+          --without-zlib --without-brotli --without-zstd \
+          --with-included-libtasn1 --with-included-unistring
+        make -j"$(nproc)"
+        make install
+
+        # Requires.private must stay resolvable from nettle-dev alone.
+        echo "gnutls.pc Requires.private:"
+        grep '^Requires' "${GNUTLS_PREFIX}/lib/pkgconfig/gnutls.pc" || true
+
+        # Guard against a silently non-FIPS build: without these three the
+        # ESDM backend would only fail much later, at link time.
+        nm -D --defined-only "${GNUTLS_PREFIX}/lib/libgnutls.so" \
+          | grep -q drbg_aes_init \
+          || { echo "::error::built GnuTLS does not export drbg_aes_* - FIPS140 mode not active"; exit 1; }
+
+    - name: Save GnuTLS
+      if: matrix.backend.name == 'gnutls' && steps.gnutls-cache.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.GNUTLS_PREFIX }}
+        key: ${{ matrix.runner }}-gnutls-${{ env.GNUTLS_VERSION }}-fips-r${{ env.GNUTLS_BUILD_REV }}
+
+    - name: Export source-built dependencies
+      if: startsWith(matrix.backend.name, 'botan') || matrix.backend.name == 'leancrypto' || matrix.backend.name == 'gnutls'
+      run: |
+        case "${{ matrix.backend.name }}" in
+          botan*)      prefix="${BOTAN_PREFIX}"      ; pc=botan-3   ;;
+          leancrypto)  prefix="${LEANCRYPTO_PREFIX}" ; pc=leancrypto ;;
+          gnutls)      prefix="${GNUTLS_PREFIX}"     ; pc=gnutls    ;;
+        esac
+
+        # Discover the pkgconfig/library directories instead of assuming lib
+        # or lib64: a dependency may install into a multiarch libdir such as
+        # lib/x86_64-linux-gnu, which differs between the two runners.
+        for d in $(find "${prefix}" -type d -name pkgconfig 2>/dev/null); do
+          PKG_CONFIG_PATH="${d}:${PKG_CONFIG_PATH}"
+        done
+        for d in $(find "${prefix}" -type d -name "lib*" -maxdepth 2 2>/dev/null); do
+          LD_LIBRARY_PATH="${d}:${LD_LIBRARY_PATH}"
+        done
+        export PKG_CONFIG_PATH LD_LIBRARY_PATH
+
+        # Fail here rather than in the meson run below, where the same problem
+        # only shows up as an unhelpful "Dependency not found". --print-errors
+        # matters: the usual cause is not a missing .pc file but an
+        # unresolvable entry in its Requires.private, and only pkg-config can
+        # say which one.
+        if ! pkg-config --print-errors --exists "${pc}"; then
+          echo "::error::pkg-config cannot resolve ${pc} under ${prefix}"
+          echo "installed .pc files:"
+          find "${prefix}" -name '*.pc' -exec grep -H '^Requires' {} + || true
+          exit 1
+        fi
+        pkg-config --modversion "${pc}"
+
+        echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
     - name: Meson setup
-      run: meson setup build -Dtestmode=enabled -Dselinux=disabled -Dais2031=false -Dfips140=true
+      run: |
+        meson setup build -Dtestmode=enabled -Dselinux=disabled \
+                          -Dais2031_ntg1=false -Dais2031_drg4=false -Dfips140=true \
+                          ${{ matrix.backend.opts }}
+
     - name: Meson compile
       run: meson compile -C build
 
 # TODO: invoke meson test with real root privileges to enable all CUSE tests
     - name: Meson test
       run: meson test -v -C build
+
+    - name: Meson test (privileged)
+      run: |
+        # The esdm-server refuses to run unprivileged, so the EGD server test
+        # only reports "must be started as root" and skips in the run above.
+        # Re-run it as root, where it starts a server on an EGD socket of its
+        # own and drives the protocol through it - the one place both sides of
+        # that protocol meet, as the client tests answer themselves.
+        #
+        # "sudo env VAR=..." rather than "sudo -E": the source built backends
+        # live in prefixes of their own, and whether the server finds them must
+        # not depend on the sudoers policy.
+        sudo env LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
+             meson test -v -C build 'EGD server interface'
+
+  # Memory safety: the same sources built with AddressSanitizer and
+  # UndefinedBehaviorSanitizer, then driven hard through the esdm-tool stress
+  # tests. These exercise the threading, fork and RPC paths that the ordinary
+  # unit tests only touch briefly, which is where use-after-free and
+  # out-of-bounds accesses actually surface.
+  sanitizers:
+    name: ${{ matrix.runner }} / asan+ubsan
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ ubuntu-24.04, ubuntu-24.04-arm ]
+
+    env:
+      # halt_on_error/abort_on_error make a finding fail the job instead of
+      # being buried in the log.
+      #
+      # verify_asan_link_order=0 is required, not cosmetic: the getrandom tests
+      # LD_PRELOAD libesdm-getrandom.so, and ASan otherwise aborts every one of
+      # them with "ASan runtime does not come first in initial library list"
+      # before the test has run at all.
+      ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_summary=1:verify_asan_link_order=0
+      UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1
+      # Keep each stress run short - these are smoke tests for memory safety,
+      # not benchmarks.
+      STRESS_DURATION: "10"
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y meson ninja-build pkg-config \
+                                libprotobuf-c-dev libfuse3-dev \
+                                libjson-c-dev
+
+    - name: Install Jitter RNG
+      run: |
+        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v${JITTERENTROPY_VERSION}.tar.gz
+        tar xfz jent.tar.gz
+        make -C jitterentropy-library-${JITTERENTROPY_VERSION}
+        sudo make -C jitterentropy-library-${JITTERENTROPY_VERSION} install
+        sudo ldconfig
+
+    - name: Meson setup
+      run: |
+        # The builtin crypto backend keeps this job self contained - no source
+        # built dependency is needed, and the sanitizers are what is under test
+        # here rather than any particular backend.
+        #
+        # b_lundef=false is needed so the sanitizer runtime may stay undefined
+        # in the shared libraries at link time.
+        meson setup build --buildtype=debug \
+                          -Db_sanitize=address,undefined -Db_lundef=false \
+                          -Dtestmode=enabled -Dselinux=disabled \
+                          -Dais2031_ntg1=false -Dais2031_drg4=false -Dfips140=true
+
+    - name: Meson compile
+      run: meson compile -C build
+
+    - name: Meson test
+      run: meson test -v -C build
+
+    - name: Start esdm-server
+      run: |
+        # esdm-server refuses to run unprivileged, and the stress tests are
+        # only meaningful against a live server - without one they degrade to
+        # exercising the client's error paths.
+        #
+        # "sudo env VAR=..." rather than "sudo -E": preserving the environment
+        # wholesale depends on the sudoers policy, naming the two variables
+        # does not - and losing them would silently turn every sanitizer
+        # finding in the server into a log line instead of a failure.
+        # nohup detaches the server from this step's shell so it survives into
+        # the following ones.
+        nohup sudo env ASAN_OPTIONS="${ASAN_OPTIONS}" \
+                       UBSAN_OPTIONS="${UBSAN_OPTIONS}" \
+                  ./build/frontends/server/esdm-server --foreground \
+                  > esdm-server.log 2>&1 &
+
+        for i in $(seq 1 30); do
+          if ./build/frontends/tool/esdm-tool --is-running; then
+            echo "server is up"
+            exit 0
+          fi
+          sleep 1
+        done
+
+        echo "::error::esdm-server did not come up"
+        cat esdm-server.log
+        exit 1
+
+    - name: Stress test the RPC client
+      run: |
+        set -x
+        # --stress-init-fini hammers the reference counting of the client
+        # library, the other three cover the threaded, multi-process and fork
+        # paths of the RPC round trip.
+        ./build/frontends/tool/esdm-tool --stress-init-fini \
+                                         --stress-duration "${STRESS_DURATION}"
+        ./build/frontends/tool/esdm-tool --stress-thread \
+                                         --stress-duration "${STRESS_DURATION}"
+        ./build/frontends/tool/esdm-tool --stress-process \
+                                         --stress-duration "${STRESS_DURATION}"
+        ./build/frontends/tool/esdm-tool --stress-fork
+
+    - name: Check the server for sanitizer findings
+      if: always()
+      run: |
+        # -x matches the process name exactly, so this cannot match itself
+        sudo pkill -x esdm-server || true
+        sleep 1
+
+        echo "----- esdm-server log -----"
+        cat esdm-server.log || true
+
+        # A finding inside the server kills it rather than the stress tool, so
+        # the tool may well have reported nothing but RPC errors. Look at the
+        # server's own output explicitly.
+        if grep -qE "AddressSanitizer|LeakSanitizer|runtime error:" esdm-server.log; then
+          echo "::error::sanitizer finding in esdm-server"
+          exit 1
+        fi
+
+  # eBPF-based entropy sources plus the raw measurement addon
+  # (addon/es_ebpf_testing -> esdm-ebpf-collect). The eBPF programs are
+  # compiled for the BPF target with clang and turned into libbpf skeletons by
+  # bpftool, so this covers a toolchain the other jobs never touch.
+  ebpf:
+    name: ebpf
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        # libbpf >= 1.2, clang for the BPF target and bpftool for the skeleton
+        # headers - see esdm/es_ebpf/meson.build.
+        #
+        # "bpftool" itself is only a virtual package on 24.04, so it cannot be
+        # installed by that name - the providers are the linux-tools packages.
+        sudo apt-get install -y meson ninja-build pkg-config \
+                                libprotobuf-c-dev libfuse3-dev \
+                                libjson-c-dev libbpf-dev clang \
+                                linux-tools-common linux-tools-generic
+
+    - name: Provide a usable bpftool
+      run: |
+        # linux-tools-common installs /usr/sbin/bpftool as a wrapper that execs
+        # /usr/lib/linux-tools/$(uname -r)/bpftool. The runners boot an -azure
+        # kernel, for which no matching linux-tools package exists, so that
+        # wrapper cannot resolve and meson's find_program('bpftool') would pick
+        # up something that fails at the first invocation.
+        #
+        # The build only ever calls "bpftool gen skeleton", which transforms an
+        # ELF object in userspace and does not have to match the running
+        # kernel, so any real binary will do - point PATH at the one that
+        # linux-tools-generic brought in.
+        if bpftool version >/dev/null 2>&1; then
+          echo "bpftool already usable"
+          exit 0
+        fi
+
+        real=$(ls /usr/lib/linux-tools/*/bpftool \
+                  /usr/lib/linux-tools-*/bpftool 2>/dev/null | head -1)
+        if [ -z "${real}" ]; then
+          echo "::error::no usable bpftool binary found"
+          ls -R /usr/lib/linux-tools* || true
+          exit 1
+        fi
+        echo "using ${real}"
+
+        # Prepend a directory through $GITHUB_PATH rather than dropping a
+        # symlink into /usr/local/bin and assuming it outranks the /usr/sbin
+        # wrapper - this is the documented way to put something ahead of it for
+        # the following steps.
+        mkdir -p "${HOME}/.local/bin"
+        ln -sf "${real}" "${HOME}/.local/bin/bpftool"
+        echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+        # Verify through the absolute path. A bare "bpftool" would still resolve
+        # to the wrapper here: the check above already made this shell cache
+        # that lookup, and $GITHUB_PATH only takes effect in later steps. The
+        # wrapper exits 2, which under "bash -e" would fail this step.
+        "${HOME}/.local/bin/bpftool" version
+
+    - name: Install Jitter RNG
+      run: |
+        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v${JITTERENTROPY_VERSION}.tar.gz
+        tar xfz jent.tar.gz
+        make -C jitterentropy-library-${JITTERENTROPY_VERSION}
+        sudo make -C jitterentropy-library-${JITTERENTROPY_VERSION} install
+        sudo ldconfig
+
+    - name: Meson setup
+      run: |
+        # The entropy rates are deliberately left at their defaults. Only one
+        # of es_irq/es_sched/es_irq_ebpf/es_sched_ebpf may carry a rate above
+        # zero, and the eBPF tests set the rate they need at runtime anyway -
+        # so moving the rate over to the eBPF source would only break the
+        # unrelated seeding tests without adding coverage.
+        # validation-helpers builds esdm-extractlsb, which turns the decimal
+        # deltas of esdm-ebpf-collect into the byte stream the NIST tools
+        # assess - the consumer the collector's output format exists for.
+        meson setup build -Dtestmode=enabled -Dselinux=disabled \
+                          -Dais2031_ntg1=false -Dais2031_drg4=false -Dfips140=true \
+                          -Des_sched_ebpf=enabled \
+                          -Des_ebpf_testing=enabled -Dvalidation-helpers=enabled
+
+    - name: Meson compile
+      run: meson compile -C build
+
+    - name: Check that the measurement addon was built
+      run: |
+        # addon/es_ebpf_testing is only built with -Des_ebpf_testing=enabled;
+        # make its absence an explicit failure rather than something the later
+        # steps skip over silently.
+        test -x build/addon/es_ebpf_testing/esdm-ebpf-collect
+        build/addon/es_ebpf_testing/esdm-ebpf-collect --help
+
+    - name: Meson test
+      run: meson test -v -C build
+
+    - name: Meson test (privileged)
+      run: |
+        # Attaching the eBPF programs needs privileges: unprivileged the
+        # eBPF tests only report "not available" and skip, so re-run them as
+        # root where they actually load and read the maps.
+        sudo -E meson test -v -C build \
+             'ES Scheduler eBPF' 'ES eBPF health cutoffs'
+
+    - name: Collect raw eBPF entropy events
+      run: |
+        # Exercise addon/es_ebpf_testing for real: attach with raw sampling
+        # enabled - a code path none of the entropy source tests take and one
+        # the verifier has to accept - and gather enough events for the
+        # analysis steps below to work on.
+
+        # The programs only observe events that actually occur, so keep the
+        # machine busy for the duration. Single processes without children,
+        # bounded by timeout, so nothing survives this step: the scheduler
+        # preempts them at every tick, which is the event this source sees.
+        load_pids=()
+        for _ in $(seq $(( $(nproc) * 2 ))); do
+          timeout 300 dd if=/dev/urandom of=/dev/null bs=4096 2>/dev/null &
+          load_pids+=("$!")
+        done
+        trap 'kill "${load_pids[@]}" 2>/dev/null || true' EXIT
+
+        collected=1
+        for src in sched; do
+          echo "--- collecting from ${src}"
+
+          # A run that cannot reach --events must not hang the job: SIGTERM
+          # makes the collector stop and write out what it has, so a quiet
+          # machine fails on the record count of the next step instead.
+          if sudo timeout -s TERM 120 \
+                  build/addon/es_ebpf_testing/esdm-ebpf-collect \
+                  --source "${src}" --out "raw-${src}.txt" --events 20000 \
+                  2> "collect-${src}.log"; then
+            cat "collect-${src}.log"
+            ls -l "raw-${src}.txt"
+            test -s "raw-${src}.txt" \
+              || { echo "::error::${src}: no raw events recorded"; exit 1; }
+          else
+            cat "collect-${src}.log"
+            # A runner whose kernel refuses the attach is an environment limit,
+            # not a defect - but anything else is.
+            grep -qiE "cannot load the eBPF object|cannot attach" \
+                 "collect-${src}.log" \
+              || { echo "::error::${src}: collection failed"; exit 1; }
+            echo "::notice::${src}: eBPF attach unavailable on this runner, skipped"
+            collected=0
+          fi
+        done
+
+        # The checks below have nothing to work on when the attach was
+        # refused, so let them skip along with this step.
+        echo "raw_collected=${collected}" >> "${GITHUB_ENV}"
+
+    - name: Feed the raw deltas through esdm-extractlsb
+      if: env.raw_collected == '1'
+      run: |
+        set -o pipefail
+
+        # The collector writes decimal deltas, one per line, and esdm-extractlsb
+        # turns them into the byte stream the NIST tools assess - one byte per
+        # delta. Anything the collector wrote that esdm-extractlsb cannot parse
+        # would show up as a short output file here.
+        for src in sched; do
+          lines=$(wc -l < "raw-${src}.txt")
+          build/addon/test/esdm-extractlsb "raw-${src}.txt" "raw-${src}.bin" \
+              "${lines}" FF
+          bytes=$(stat -c %s "raw-${src}.bin")
+          echo "${src}: ${lines} deltas -> ${bytes} bytes"
+          test "${lines}" -eq "${bytes}" \
+            || { echo "::error::${src}: esdm-extractlsb produced ${bytes} bytes for ${lines} deltas"; exit 1; }
+        done
