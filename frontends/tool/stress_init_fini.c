@@ -21,16 +21,12 @@
  * Stress test for the reference counting of the RPC client library.
  *
  * esdm_rpcc_init_*_service() may be called any number of times within one
- * process - by an application and a preloaded library independently of each
- * other - and the connections are only released once as many finis as inits
- * were seen. Getting that wrong is not visible in a single-threaded run: a
- * count that drops too early frees connections that a concurrent caller still
- * holds, and one that never reaches zero leaks them silently.
- *
- * The test therefore drives init/fini from many threads at once and checks the
- * one invariant the reference counting has to provide: while a caller holds a
- * reference, the service must stay usable, no matter how many other threads
- * init and fini around it.
+ * process, and the connections are only released once as many finis as inits
+ * were seen. Getting that wrong is invisible in a single-threaded run: a count
+ * dropping too early frees connections a concurrent caller still holds, one
+ * never reaching zero leaks them. The test therefore drives init/fini from many
+ * threads and checks the invariant: while a caller holds a reference, the
+ * service stays usable no matter what the other threads do.
  */
 
 #include <errno.h>

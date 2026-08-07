@@ -21,25 +21,21 @@
  */
 
 /*
- * This is the EGD counterpart of the RPC based provider in common.c: it
- * delivers the same RAND algorithms, but obtains its random numbers over the
- * protocol of the Entropy Gathering Daemon instead of the ESDM RPC. Its reason
- * to exist is deployment, not capability - the EGD interface is a single Unix
- * domain stream socket and needs no RPC client library, so it reaches into
- * environments where the RPC interface is inconvenient, such as a chroot that
- * can only be given one extra socket.
+ * The EGD counterpart of the RPC based provider in common.c: same RAND
+ * algorithms, but the random numbers come over the Entropy Gathering Daemon
+ * protocol. Its reason to exist is deployment, not capability - a single Unix
+ * domain stream socket and no RPC client library reaches into environments
+ * where the RPC interface is inconvenient, such as a chroot.
  *
- * Everything about talking the protocol - the single connection, its locking,
- * and the reconnect handling - lives in libesdm_egd_client; this file is the
- * OpenSSL side of it. One client is allocated per loaded provider, connected
- * during OSSL_provider_init() and released in the teardown, which gives the
- * provider exactly one connection for its whole lifetime.
+ * Talking the protocol - the connection, its locking and the reconnect
+ * handling - lives in libesdm_egd_client; this file is the OpenSSL side. One
+ * client is allocated per loaded provider, connected during
+ * OSSL_provider_init() and released in the teardown.
  *
  * Prediction resistance
  * ---------------------
- * The EGD protocol cannot express it. Rather than silently serving ordinary
- * random data for a request that explicitly asked for prediction resistance,
- * such a request is refused - use the RPC based provider for that.
+ * The EGD protocol cannot express it, so a request asking for it is refused
+ * rather than silently served ordinary random data - use the RPC provider.
  */
 
 #define _GNU_SOURCE
@@ -62,15 +58,11 @@
 
 /*
  * Built twice: once against the ordinary EGD socket, and once - with
- * ESDM_EGD_PROV_FORCE_PR - against the one serving the ESDM's prediction
- * resistance generator.
- *
- * The EGD protocol has no notion of prediction resistance and thus no way to
- * ask for it per request, so which generator answers is decided by the socket
- * a client connects to. This variant therefore differs from its sibling in
- * exactly that: the socket it defaults to. Everything arriving over it is
- * prediction resistant, so unlike the ordinary variant it accepts requests
- * that ask for prediction resistance rather than refusing them.
+ * ESDM_EGD_PROV_FORCE_PR - against the one serving the prediction resistance
+ * generator. The protocol cannot ask for prediction resistance per request, so
+ * the socket decides which generator answers; this variant therefore differs
+ * from its sibling only in the socket it defaults to, and accepts requests
+ * asking for prediction resistance rather than refusing them.
  */
 #ifdef ESDM_EGD_PROV_FORCE_PR
 #define ESDM_EGD_PROV_NAME "ESDM RNG Provider (EGD, PR)"
@@ -349,12 +341,11 @@ static size_t esdm_egd_rand_get_seed(void *ctx, unsigned char **buffer,
 	buf_len = ((size_t)entropy_bits + 7) / 8;
 
 	/*
-	 * OSSL_FUNC_rand_get_seed() has to hand back at least min_len bytes:
+	 * OSSL_FUNC_rand_get_seed() has to hand back at least min_len bytes -
 	 * the caller sizes its seed material by that, not by the entropy
-	 * request. So round a smaller request up rather than failing - the
-	 * ESDM delivers full entropy, hence the additional bytes carry the
-	 * requested entropy either way. Only a request exceeding max_len is
-	 * unsatisfiable.
+	 * request - so round a smaller request up rather than failing. The ESDM
+	 * delivers full entropy, so the extra bytes carry the requested entropy
+	 * either way. Only a request above max_len is unsatisfiable.
 	 */
 	if (buf_len < min_len)
 		buf_len = min_len;
@@ -681,13 +672,11 @@ DSO_PUBLIC int OSSL_provider_init(const OSSL_CORE_HANDLE *handle,
 	/*
 	 * The socket named in this provider's openssl.cnf section wins; with
 	 * none configured the client library falls back to the environment and
-	 * then to the path the esdm-server-egd.socket unit uses.
-	 *
-	 * This also establishes the one connection the provider uses for its
-	 * whole lifetime. An ESDM that is not up yet is not fatal - the client
-	 * retries, and refusing to load would take the entire OpenSSL
-	 * configuration down with it. Use the provider self test where that
-	 * should be a hard failure.
+	 * then to the esdm-server-egd.socket path. This also establishes the one
+	 * connection used for the provider's lifetime. An ESDM that is not up
+	 * yet is not fatal - the client retries, and refusing to load would take
+	 * the whole OpenSSL configuration down. Use the provider self test where
+	 * that should be a hard failure.
 	 */
 	socket_path = esdm_prov_get_conf_param(handle,
 					       ESDM_EGD_SOCKET_CONF_KEY);

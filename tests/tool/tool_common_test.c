@@ -21,15 +21,14 @@
  * Tests for frontends/tool/common.c - the timing arithmetic, the human readable
  * formatters and the result collector the esdm-tool stress modes report through.
  *
- * The formatters pick a unit by magnitude, and the boundaries between those
- * units are exactly where a wrong comparison hides: a report that says "1000
- * ms" instead of "1.000 s" is still plausible enough to go unnoticed. Every
- * threshold is therefore checked from both sides.
+ * The formatters pick a unit by magnitude, and the boundaries are where a wrong
+ * comparison hides: "1000 ms" instead of "1.000 s" is plausible enough to go
+ * unnoticed, so every threshold is checked from both sides.
  *
  * handle_messages() is driven over real socket pairs with hand-built result
- * messages, so the aggregation across workers - and the fact that it returns
- * once every worker has reported, rather than waiting for its report timer - is
- * exercised without running an actual stress test against a server.
+ * messages, exercising the aggregation across workers - and its returning once
+ * every worker reported rather than waiting for its report timer - without
+ * running an actual stress test against a server.
  */
 
 #define _GNU_SOURCE

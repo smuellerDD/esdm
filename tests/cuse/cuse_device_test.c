@@ -21,22 +21,20 @@
  * Tests for the CUSE device handlers.
  *
  * The tests next to this one bring up the real /dev/random and /dev/urandom
- * frontends, which needs root, /dev/fuse and a running ESDM - so they cover
- * what the handlers do when everything is in place, and nothing else. What is
- * left over is the larger part of every handler: the request that arrives
- * malformed, the caller that is not allowed to make it, and the ESDM that does
- * not answer.
+ * frontends, which needs root, /dev/fuse and a running ESDM, so they only cover
+ * what the handlers do when everything is in place. What is left is the larger
+ * part of every handler: the malformed request, the caller that may not make
+ * it, and the ESDM that does not answer.
  *
- * All of it is decided inside the handlers, which are ordinary functions of a
- * request and its arguments - so the translation unit is compiled into the test
- * and they are called directly. What a handler "returns" is the reply it sends,
- * so the libfuse reply functions are provided here and record it; that is also
- * what makes the caller's identity controllable, since fuse_req_ctx() is one of
- * them and the privilege decisions are made from its uid.
+ * The handlers are ordinary functions of a request and its arguments, so the
+ * translation unit is compiled into the test and they are called directly. A
+ * handler "returns" the reply it sends, so the libfuse reply functions are
+ * provided here and record it - which also makes the caller's identity
+ * controllable, fuse_req_ctx() being one of them.
  *
- * The ESDM is deliberately absent. Every RPC below therefore fails, which is
- * the only way to reach the fallback to the kernel device that keeps
- * /dev/random working when the daemon is not running.
+ * The ESDM is deliberately absent, so every RPC below fails - the only way to
+ * reach the fallback to the kernel device that keeps /dev/random working while
+ * the daemon is not running.
  */
 
 #define _GNU_SOURCE
@@ -207,12 +205,11 @@ void fuse_session_exit(struct fuse_session *se)
  * The privilege helpers, replaced so the handlers can be driven in process
  *
  * The privileged ioctls raise to root around the request and drop to "nobody"
- * afterwards. Performing that here would leave the rest of the test - and, in a
- * root run, everything the harness does with the process afterwards - running
- * as nobody, and what is under test is the handler's decision rather than the
+ * afterwards. Doing that here would leave the rest of the test running as
+ * nobody, and what is under test is the handler's decision rather than the
  * credential syscalls (frontends/cuse/privileges.c is covered by tests/proc).
- * Counting the calls instead also makes the pairing checkable: a raise without
- * its drop would leave a real daemon running as root.
+ * Counting the calls also makes the pairing checkable: a raise without its drop
+ * would leave a real daemon running as root.
  ******************************************************************************/
 
 int raise_privilege_transient(uid_t uid, gid_t gid)
@@ -724,11 +721,11 @@ static void test_privileged_ioctls(void)
 /*
  * The status segment and the semaphore that go with it.
  *
- * Both are machine-global names, so this test has an IPC namespace of its own
- * (see tests/test_ipc_ns.c) and creates them there. What matters about the
- * attach is that a segment nobody is attached to any more is treated as a
- * leftover and replaced rather than trusted: it is what a crashed server leaves
- * behind, and its contents would otherwise be reported as the current state.
+ * Both are machine-global names, so this test creates them in an IPC namespace
+ * of its own (see tests/test_ipc_ns.c). What matters is that a segment nobody
+ * is attached to any more is treated as a leftover and replaced rather than
+ * trusted - it is what a crashed server leaves behind, and its contents would
+ * otherwise be reported as the current state.
  */
 static void test_shm_status(void)
 {

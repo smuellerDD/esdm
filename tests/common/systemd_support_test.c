@@ -22,13 +22,11 @@
  * activation handover, both reimplemented here rather than taken from libsystemd.
  *
  * The notification side is driven against a real AF_UNIX datagram socket this
- * test binds itself, so the exact bytes that would reach systemd are asserted
- * instead of just the return code.
- *
- * The socket activation side latches its answer on first use and keeps it for
- * the process lifetime - deliberately, so that a fork cannot make the setup and
- * the teardown disagree. Each environment it has to cope with therefore needs a
- * process of its own, which is what the fork()ed cases below are for.
+ * test binds, so the exact bytes that would reach systemd are asserted. The
+ * socket activation side latches its answer on first use and keeps it for the
+ * process lifetime - deliberately, so a fork cannot make setup and teardown
+ * disagree - so each environment needs a process of its own, hence the fork()ed
+ * cases below.
  */
 
 #define _GNU_SOURCE
@@ -67,13 +65,11 @@ static void run_child(void (*fn)(void), const char *name)
 		common_test_failures = 0;
 		fn();
 		/*
-		 * exit() rather than _exit(): the child has to run the process
-		 * exit handlers so an instrumented build writes out the
-		 * coverage data it collected - otherwise everything these
-		 * children execute is invisible. It is safe here because
-		 * nothing is buffered on stdout at fork time (the checks report
-		 * on unbuffered stderr and the summary is printed once every
-		 * child has been reaped), so no output can be emitted twice.
+		 * exit() rather than _exit(): the exit handlers have to run so
+		 * an instrumented build writes out the coverage these children
+		 * collected. Safe because nothing is buffered on stdout at fork
+		 * time - the checks report on unbuffered stderr and the summary
+		 * is printed once every child has been reaped.
 		 */
 		exit(common_test_failures > 200 ?
 			     200 :

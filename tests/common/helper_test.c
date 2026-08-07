@@ -20,12 +20,11 @@
 /*
  * Tests for common/helper.c and the macros of common/helper.h.
  *
- * The interesting part is esdm_safe_read()/esdm_safe_write(): both are the
- * short-read/short-write loops every consumer of a pipe or socket in the tree
- * relies on, and both have to distinguish three outcomes that are easy to
- * confuse - a partial transfer that has to be resumed, an end of file, and a
- * genuine error that has to be reported as a negative errno. EINTR belongs to
- * the first group and is provoked here with a real signal rather than assumed.
+ * The interesting part is esdm_safe_read()/esdm_safe_write(), the short
+ * read/write loops every pipe and socket consumer in the tree relies on. Both
+ * have to tell three easily confused outcomes apart: a partial transfer to be
+ * resumed, an end of file, and a genuine error reported as a negative errno.
+ * EINTR belongs to the first group and is provoked here with a real signal.
  */
 
 #define _GNU_SOURCE

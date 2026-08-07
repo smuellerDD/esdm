@@ -21,11 +21,10 @@
  * Tests for common/fips_integrity.c - the power-on self test that verifies the
  * HMAC of the running binary against the .<name>.hmac file next to it.
  *
- * The point of this code is to say no, so the tests spend most of their effort
- * on the failure paths: a modified target, an HMAC file holding a digest of the
- * wrong length, an empty one, and a target that cannot be read at all. Each of
- * them has to be distinguishable, because a self test that reports success for
- * a file it never actually hashed is worse than none at all.
+ * The point of this code is to say no, so the tests concentrate on the failure
+ * paths: a modified target, an HMAC file of the wrong length, an empty one, and
+ * a target that cannot be read. Each has to be distinguishable - a self test
+ * reporting success for a file it never hashed is worse than none.
  */
 
 #define _GNU_SOURCE

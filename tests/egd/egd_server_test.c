@@ -20,13 +20,11 @@
  */
 
 /*
- * The counterpart of egd_client_test: that one drives the client against a
- * peer of its own to reach the answers a correct server never gives, this one
- * drives it against the real esdm-server started with --egd_socket. Both sides
- * of the protocol are only covered together.
- *
- * The server refuses to run unprivileged, so this skips (77) when it is not
- * started as root.
+ * The counterpart of egd_client_test: that one drives the client against a peer
+ * of its own to reach answers a correct server never gives, this one against
+ * the real esdm-server started with --egd_socket. Both sides of the protocol
+ * are only covered together. The server refuses to run unprivileged, so this
+ * skips (77) when not started as root.
  */
 
 #define _GNU_SOURCE

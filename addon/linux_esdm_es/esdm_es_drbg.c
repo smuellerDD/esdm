@@ -124,23 +124,15 @@ out:
 }
 
 /*
- * Collect all per-CPU pools, process with internal DRBG and return the output
- * to be used as seed data for seeding a DRNG.
- * The caller must not guarantee backtracking resistance, as the internal
- * cryptographic post-processing with a DRBG is always used.
- * The function will only copy as much data as entropy is available into the
- * caller-provided output buffer (further restricted by the internal DRBG's
- * security strength).
+ * Collect all per-CPU pools, post-process with the internal DRBG and return the
+ * output as seed data. Backtracking resistance is inherent in that DRBG, so the
+ * caller need not provide it. Only as much data as entropy is available is
+ * copied out, further restricted by the DRBG's security strength.
  *
- * This function handles the translation from the number of received events into
- * an entropy statement. The conversion depends on the source's entropy rate
- * which defines how many events must be received to obtain 256 bits of entropy.
- * With this value, esdm_data_to_entropy converts a given data size (received
- * events, requested amount of data, etc.) into an entropy statement.
- * esdm_entropy_to_data does the reverse.
- *
- * With DRBG-based cryptographic post-processing only full blocks can be read.
- * This is done in esdm_es_drbg_pool_extract_block.
+ * The number of received events is translated into an entropy statement via the
+ * source's entropy rate (esdm_data_to_entropy and its inverse
+ * esdm_entropy_to_data). Only full blocks can be read, see
+ * esdm_es_drbg_pool_extract_block().
  *
  * @drbg: description of the source's ring and DRBG post-processing
  * @eb: entropy buffer to store entropy

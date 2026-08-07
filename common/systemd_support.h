@@ -52,13 +52,10 @@ int systemd_notify_status(char *msg);
  *
  * Reads and validates LISTEN_PID / LISTEN_FDS once and caches the outcome, so
  * every later query is independent of the environment. Call this from the
- * initial process before the server forks: LISTEN_PID names the process
- * systemd started, which is no longer our PID afterwards - most notably the
- * PID namespace prefork turns the daemon into PID 1 of its own namespace.
- *
- * The call is optional in the sense that systemd_listen_fds() performs the
- * same initialization on first use, but that is only correct as long as no
- * fork has happened yet. Not thread safe - call it while single threaded.
+ * initial process before the server forks: LISTEN_PID names the process systemd
+ * started, which the PID namespace prefork in particular leaves behind.
+ * systemd_listen_fds() does the same on first use, but only correctly as long
+ * as no fork has happened. Not thread safe - call it while single threaded.
  */
 void systemd_listen_fds_init(void);
 

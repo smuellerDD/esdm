@@ -100,12 +100,11 @@ int env_init(void)
 		goto out;
 
 	/*
-	 * The EGD provider does not use the RPC interface at all - it speaks
-	 * the EGD protocol over a socket of its own - so the server is given
-	 * one and the client is pointed at it. Doing this unconditionally
-	 * costs the RPC based providers nothing and keeps one server startup
-	 * for every provider under test. /tmp is private to this test, so the
-	 * fixed name cannot collide with another one.
+	 * The EGD provider speaks the EGD protocol over a socket of its own, so
+	 * the server is given one and the client pointed at it. Doing this
+	 * unconditionally costs the RPC based providers nothing and keeps one
+	 * server startup for every provider under test. /tmp is private to this
+	 * test, so the fixed name cannot collide.
 	 */
 	setenv(ESDM_EGD_SOCKET_ENV, ESDM_TEST_EGD_SOCKET, 1);
 

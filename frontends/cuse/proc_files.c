@@ -509,10 +509,9 @@ static int esdm_proc_readdir(const char *path, void *buf,
 
 	/*
 	 * Compare the whole path, not just its first character: the mount has
-	 * exactly one directory and this is the check that says so. Testing
-	 * one byte accepted every path that merely starts with a slash and
-	 * listed the root for it - harmless in practice, since the kernel only
-	 * calls this for something getattr reported as a directory, but it is
+	 * exactly one directory and this is the check saying so. Testing one
+	 * byte accepted every path starting with a slash - harmless, as the
+	 * kernel only calls this for what getattr reported as a directory, but
 	 * not what the check is there to express.
 	 */
 	if (strcmp(path, "/") != 0)

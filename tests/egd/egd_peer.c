@@ -257,20 +257,16 @@ static void *peer_conn_thread(void *arg)
 	sigset_t sigpipe;
 
 	/*
-	 * A client that gives up on an answer - which several of the tests make
-	 * it do, the overlong one on the very byte before the data - closes its
-	 * end while this thread is in the middle of writing the response, and
-	 * an unhandled SIGPIPE would take the whole test process down with it.
-	 * The peer writes plainly rather than with MSG_NOSIGNAL, as this has to
-	 * stay reachable from where sendto(2) is not.
+	 * A client giving up on an answer - which several tests make it do -
+	 * closes its end mid-write, and an unhandled SIGPIPE would take the test
+	 * process down. The peer writes plainly rather than with MSG_NOSIGNAL,
+	 * as this has to stay reachable from where sendto(2) is not.
 	 *
-	 * Blocked here rather than ignored process wide on purpose: the client
-	 * library promises to never let a vanished peer raise SIGPIPE (it polls
-	 * for writability instead of using MSG_NOSIGNAL, see its header), and
-	 * ignoring the signal for the whole process would take that promise out
-	 * of the test. A blocked SIGPIPE only makes the write of this thread
-	 * report EPIPE; every other thread keeps the default disposition, so a
-	 * client that broke that promise still kills the test.
+	 * Blocked here rather than ignored process wide: the client library
+	 * promises never to let a vanished peer raise SIGPIPE, and ignoring it
+	 * globally would take that promise out of the test. A blocked SIGPIPE
+	 * only makes this thread's write report EPIPE, while every other thread
+	 * keeps the default disposition.
 	 */
 	sigemptyset(&sigpipe);
 	sigaddset(&sigpipe, SIGPIPE);
@@ -298,11 +294,10 @@ static void *peer_conn_thread(void *arg)
 
 		/*
 		 * Counted on receipt, before the answer goes out. Counting a
-		 * served request instead would race with the client it was
-		 * served to: the client returns as soon as it has read the
-		 * answer, so it can be back - and looking at this counter -
-		 * while the thread that wrote that very answer has not got
-		 * round to incrementing it yet.
+		 * served request would race with the client it was served to:
+		 * it returns as soon as it read the answer, so it can be back
+		 * looking at this counter while the thread that wrote that
+		 * answer has not incremented it yet.
 		 */
 		pthread_mutex_lock(&peer->lock);
 		peer->requests++;
@@ -335,19 +330,14 @@ static void *peer_conn_thread(void *arg)
 	}
 
 	/*
-	 * Blocking the signal keeps the write from being fatal, it does not make
-	 * the signal go away: a SIGPIPE raised above is still pending on this
-	 * thread, and leaving the thread is not enough to be rid of it. Whoever
-	 * unblocks SIGPIPE in this thread first gets it delivered, and the exit
-	 * path does exactly that - the sanitizer runtime's thread specific data
-	 * destructor takes the mask apart on the way out, so an ASan build dies
-	 * of the pending signal in __nptl_deallocate_tsd(), long after the write
-	 * that raised it. That is the very death the block above exists to
-	 * prevent, only moved to where nothing points at the cause any more.
-	 *
-	 * So take the signal off the thread here, while it is still blocked and
-	 * this is the only thread that could receive it. Nothing is pending in
-	 * the common case, where the zero timeout returns right away.
+	 * Blocking the signal keeps the write from being fatal but does not make
+	 * it go away: a SIGPIPE raised above stays pending on this thread, and
+	 * whoever unblocks it first gets it delivered. The exit path does exactly
+	 * that - the sanitizer runtime's TSD destructor takes the mask apart - so
+	 * an ASan build dies in __nptl_deallocate_tsd(), long after the write
+	 * that raised it. So take the signal off here, while it is still blocked
+	 * and this is the only thread that could receive it. The zero timeout
+	 * returns right away in the common case, where nothing is pending.
 	 */
 	while (sigtimedwait(&sigpipe, NULL, &nowait) < 0 && errno == EINTR)
 		;

@@ -163,17 +163,12 @@ static int esdm_cuse_shm_status_down(struct timespec *ts)
 	}
 
 	/*
-	 * Wait for the SHM segment to become available - i.e. for a server to
-	 * have published its status in it - but no longer than the caller
-	 * allowed. Waiting here without a bound would make the timeout this
-	 * function documents unreachable whenever no server is running yet,
-	 * which is exactly when a caller needs it: an entropy provider started
-	 * alongside the ESDM rather than after it would never come back to
-	 * report that, and never retry.
-	 *
-	 * @ts is the absolute CLOCK_MONOTONIC deadline sem_clockwait() below
-	 * is given, so the same deadline applies here, and the timeout is
-	 * reported the way sem_clockwait() would report it.
+	 * Wait for a server to publish its status in the SHM segment, but no
+	 * longer than the caller allowed: an unbounded wait would make the
+	 * documented timeout unreachable while no server runs, which is exactly
+	 * when a caller needs it. @ts is the absolute CLOCK_MONOTONIC deadline
+	 * of the sem_clockwait() below, so the same deadline applies here and
+	 * the timeout is reported the same way.
 	 */
 	while (!esdm_cuse_shm_status_avail()) {
 		struct timespec now;

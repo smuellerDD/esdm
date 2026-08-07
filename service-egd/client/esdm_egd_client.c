@@ -53,11 +53,10 @@
 
 /*
  * Default bound, in milliseconds, on how long the client waits for the peer in
- * one step - the connection setup, or one transfer of a request or its
- * response. The blocking read command waits for the ESDM to become
- * operational, which right after boot legitimately takes a moment, so this is
- * generous: it is a backstop against a wedged daemon hanging the caller
- * forever, not a latency target.
+ * one step - the connection setup, or one transfer. Generous, because the
+ * blocking read waits for the ESDM to become operational, which right after
+ * boot takes a moment: this is a backstop against a wedged daemon, not a
+ * latency target.
  */
 #define ESDM_EGD_CLIENT_DEFAULT_TIMEOUT_MS 30000
 
@@ -84,15 +83,12 @@ struct esdm_egd_client {
 	unsigned int timeout_ms;
 
 	/*
-	 * Serializes the command stream - see the header.
-	 *
-	 * Robust: this is held across the whole request / response exchange,
-	 * which waits for the peer and is therefore bounded by nothing but the
-	 * client's timeout. A caller killed in that window - the very thing
-	 * that happens to an application that is shot while waiting for an ESDM
-	 * that is not operational yet - would leave a plain mutex locked for
-	 * the rest of the process' lifetime, wedging this client for everybody
-	 * else. A robust mutex hands the lock to the next taker instead.
+	 * Serializes the command stream - see the header. Robust, because it is
+	 * held across the whole request / response exchange, bounded by nothing
+	 * but the client's timeout: a caller killed in that window - shot while
+	 * waiting for an ESDM that is not operational yet - would leave a plain
+	 * mutex locked for the rest of the process' lifetime. A robust mutex
+	 * hands the lock to the next taker instead.
 	 */
 	mutex_w_t lock;
 
@@ -128,13 +124,11 @@ static pthread_once_t esdm_egd_client_init_once = PTHREAD_ONCE_INIT;
 /*
  * Take the registry lock.
  *
- * EOWNERDEAD reports that the previous owner died while holding it. The lock
- * is recovered by the wrapper, and the list is used as it was found: the
- * pointer updates of a TAILQ operation are not atomic, so an owner that died
- * inside one may have left the list inconsistent, and there is no way to tell
- * from here. That is still the better outcome than the alternative, in which
- * every later esdm_egd_client_alloc() and esdm_egd_client_free() waits forever
- * for a lock that nobody can release any more.
+ * EOWNERDEAD reports that the previous owner died while holding it. The lock is
+ * recovered by the wrapper and the list is used as found - a TAILQ operation is
+ * not atomic, so an owner that died inside one may have left it inconsistent,
+ * with no way to tell from here. Still better than the alternative, where every
+ * later alloc and free waits forever for a lock nobody can release.
  */
 static void esdm_egd_clients_lock_acquire(void)
 {
@@ -206,34 +200,21 @@ static void esdm_egd_client_recreate_lock(mutex_w_t *lock)
 /*
  * Give up every inherited connection right here in the child.
  *
- * A forked child holds a duplicate of each descriptor, referring to the very
- * same connection as the parent's. Two processes issuing commands on one EGD
- * stream would desynchronize it - the protocol matches responses to requests
- * by their order alone - so the child must not use them. Closing them at the
- * fork rather than at the next use also releases them immediately instead of
- * pinning the connection open for as long as the child happens to live.
+ * A child's duplicated descriptors refer to the parent's connections, and two
+ * processes issuing commands on one EGD stream would desynchronize it. Closing
+ * at the fork rather than at the next use also releases them immediately.
  *
- * The per-client locks are recreated rather than unlocked, and their robustness
- * does not help here: a lock may have been held by a thread of the parent that
- * does not exist in this process at all, so there is nobody whose death the
- * kernel could report it through - the robustness protocol hands a lock over
- * when a thread of *this* process dies while holding it. Waiting for such a
- * lock would hang the child's first operation forever. The child is single
- * threaded at this point, so recreating is both safe and the only way to leave
- * a usable client behind.
+ * The locks are recreated rather than unlocked, robustness notwithstanding: it
+ * only hands over a lock when a thread of *this* process dies, and a lock held
+ * by a parent thread that does not exist here would hang the child forever.
+ * That includes the registry lock the prepare handler took - a robust mutex
+ * records its owner by thread ID and fork(2) gave this thread a new one, so to
+ * the lock its owner no longer exists. The child is single threaded here, so
+ * recreating is safe.
  *
- * The registry lock, taken by the prepare handler above, is recreated for the
- * same reason rather than unlocked - even though the thread that took it is
- * the very thread running here. A robust mutex records its owner by thread ID
- * and refuses an unlock by anybody else with EPERM, and fork(2) gave this
- * thread a new ID: to the lock, its owner no longer exists. (A plain mutex has
- * no owner to check, which is why unlocking it used to be correct.)
- *
- * Beyond close(2) and plain stores this calls pthread_mutex_destroy() and
- * pthread_mutex_init(), which are not formally async-signal-safe. They neither
- * allocate nor take a lock in the implementations at hand, and there is no
- * alternative: a robust mutex cannot be reset by assigning a static
- * initializer over it.
+ * pthread_mutex_destroy()/_init() are not formally async-signal-safe, but they
+ * neither allocate nor lock in the implementations at hand, and a robust mutex
+ * cannot be reset by assigning a static initializer over it.
  */
 static void esdm_egd_client_atfork_child(void)
 {
@@ -255,14 +236,11 @@ static void esdm_egd_client_atfork_child(void)
 static void esdm_egd_client_init(void)
 {
 	/*
-	 * Make the registry lock robust. It is only ever held for a list
-	 * operation, but the prepare handler above holds it across the fork(2)
-	 * itself - and a caller killed anywhere inside that window would
-	 * otherwise leave every later allocation and release of a client
-	 * waiting for a lock that has no owner left to release it.
-	 *
-	 * A static initializer cannot express this, hence the one time
-	 * initialization here rather than at the definition.
+	 * Make the registry lock robust. It is only held for a list operation,
+	 * but the prepare handler above holds it across the fork(2) itself, and
+	 * a caller killed in that window would leave every later allocation and
+	 * release waiting for a lock with no owner. A static initializer cannot
+	 * express this, hence the one time initialization here.
 	 */
 	if (mutex_w_init(&esdm_egd_clients_lock, 0, 1)) {
 		static const mutex_w_t lock_init = MUTEX_W_UNLOCKED;
@@ -457,17 +435,12 @@ static int esdm_egd_client_connect_locked(struct esdm_egd_client *client)
 /*
  * Is the descriptor still our connection? Caller holds the lock.
  *
- * An application is free to close descriptor ranges it did not open, and doing
- * so is not exotic: OpenSSH's privilege separation runs
- * closefrom(PRIVSEP_MIN_FREE_FD) and closefrom(REEXEC_MIN_FREE_FD) on its way
- * into the pre-authentication child. Should such a call ever land after this
- * client connected, the descriptor would be gone and its number free to be
- * reused for something else entirely - and reading "random" data out of
- * whatever took its place would be a silent and serious failure. So confirm
- * the peer is still the socket we connected to.
- *
- * getpeername(2) is permitted even inside OpenSSH's pre-auth seccomp sandbox,
- * so this costs one allowed syscall per operation and nothing else.
+ * Applications do close descriptor ranges they did not open - OpenSSH's
+ * privilege separation runs closefrom() on its way into the pre-authentication
+ * child. Landing after this client connected, that frees the descriptor number
+ * for reuse, and reading "random" data out of whatever took its place would be
+ * a silent and serious failure. getpeername(2) is permitted even inside
+ * OpenSSH's pre-auth sandbox, so confirming costs one allowed syscall.
  */
 static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client)
 {
@@ -522,16 +495,12 @@ static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 
 		/*
 		 * Establish writability before writing rather than after an
-		 * EAGAIN. This is what keeps a peer that went away since the
-		 * last request from turning into a SIGPIPE - which would kill
-		 * the application this library is linked into - as poll
-		 * reports the hangup and the write never happens.
-		 *
-		 * The obvious alternative, send(2) with MSG_NOSIGNAL, is
-		 * deliberately not used: it is sendto(2), which OpenSSH's
-		 * pre-auth seccomp sandbox answers with SECCOMP_RET_KILL. See
-		 * the note on that sandbox in the header - staying within
-		 * read/write/poll is what makes this library usable there.
+		 * EAGAIN: poll reports the hangup of a peer that went away, so
+		 * the write never happens and cannot raise a SIGPIPE that would
+		 * kill the application this library is linked into. send(2)
+		 * with MSG_NOSIGNAL is deliberately not used - it is sendto(2),
+		 * which OpenSSH's pre-auth sandbox answers with
+		 * SECCOMP_RET_KILL (see the header).
 		 */
 		wret = esdm_egd_client_wait(client->fd, POLLOUT, timeout_ms,
 					    &revents);
@@ -608,14 +577,12 @@ static int esdm_egd_client_invoke(struct esdm_egd_client *client,
 		return -EINVAL;
 
 	/*
-	 * EOWNERDEAD means the lock was taken over from a caller that died in
-	 * the middle of its exchange. The lock is consistent again, but the
-	 * connection is not: a half written command leaves the peer's parser at
-	 * an unknown offset, and an unconsumed response would be handed to the
-	 * next request - the protocol matches responses to requests by their
-	 * order alone. The descriptor itself is still perfectly valid, so
-	 * nothing below would notice; drop it right here and let the loop open
-	 * a fresh one.
+	 * EOWNERDEAD means the lock was taken over from a caller that died mid
+	 * exchange. The lock is consistent again, the connection is not: a half
+	 * written command leaves the peer's parser at an unknown offset, and an
+	 * unconsumed response would be handed to the next request. The
+	 * descriptor is still valid, so nothing below would notice - drop it
+	 * here and let the loop open a fresh one.
 	 */
 	if (mutex_w_lock(&client->lock) == EOWNERDEAD) {
 		esdm_logger(
@@ -997,13 +964,11 @@ int esdm_egd_client_alloc(struct esdm_egd_client **client,
 	mutex_w_unlock(&esdm_egd_clients_lock);
 
 	/*
-	 * Connect right away: a consumer that has to serve a process which
-	 * later confines itself - see the syscall discipline in the header -
-	 * has to have its connection by then, because opening one is precisely
-	 * what such a process can no longer do.
-	 *
-	 * A failure is not fatal. The operations reconnect, so a consumer set
-	 * up before the ESDM is running keeps working once it arrives.
+	 * Connect right away: a consumer serving a process that later confines
+	 * itself must hold its connection by then, since opening one is exactly
+	 * what such a process can no longer do (see the header). A failure is
+	 * not fatal - the operations reconnect, so a consumer set up before the
+	 * ESDM is running keeps working once it arrives.
 	 */
 	ret = esdm_egd_client_connect_locked(new_client);
 	if (ret) {
@@ -1029,13 +994,11 @@ void esdm_egd_client_free(struct esdm_egd_client *client)
 	mutex_w_unlock(&esdm_egd_clients_lock);
 
 	/*
-	 * No client lock: the caller guarantees that nobody uses the client any
-	 * more, which it must, as the lock itself goes away here.
-	 *
-	 * Destroying it fails with EBUSY when a died owner left it held and
-	 * nobody recovered it since - i.e. exactly when the client was never
-	 * used again after that death. Nothing can be done about it and nothing
-	 * is leaked: the memory the mutex lives in is released right below.
+	 * No client lock: the caller guarantees nobody uses the client any more,
+	 * which it must, as the lock itself goes away here. Destroying it fails
+	 * with EBUSY when a died owner left it held and nobody recovered it
+	 * since. Nothing can be done about that and nothing leaks - the memory
+	 * the mutex lives in is released right below.
 	 */
 	esdm_egd_client_disconnect_locked(client);
 	mutex_w_destroy(&client->lock);

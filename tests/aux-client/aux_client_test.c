@@ -21,11 +21,11 @@
  * Tests for the ESDM auxiliary client library.
  *
  * This is the interface an external entropy provider uses: attach, sleep until
- * the ESDM says it wants entropy, insert some, repeat. It needs no privileges
- * and no running server to be exercised - the semaphore and the shared memory
- * segment it uses are created by whichever side gets there first - so the
- * behaviour a provider meets before and without a server is what is covered
- * here, which is precisely the situation its documented timeout exists for.
+ * the ESDM wants entropy, insert some, repeat. It needs neither privileges nor
+ * a running server - the semaphore and the shared memory segment are created by
+ * whichever side gets there first - so what is covered here is the behaviour a
+ * provider meets before and without a server, which is what its documented
+ * timeout exists for.
  */
 
 #define _GNU_SOURCE
@@ -91,14 +91,11 @@ static void test_init_fini(void)
 }
 
 /*
- * The documented contract: "This function allows the caller to specify a
- * timeout when this function shall return even though the semaphore did not
- * fire." A provider that starts before the ESDM server - the ordinary case for
- * something launched by the same service manager - depends on it to notice and
- * retry rather than sit there.
- *
- * Run in a child with a hard bound, so a wait that never returns fails the test
- * instead of hanging it.
+ * The documented contract: the call returns at the timeout even though the
+ * semaphore did not fire. A provider started before the ESDM server - the
+ * ordinary case under one service manager - depends on that to notice and
+ * retry. Run in a child with a hard bound, so a wait that never returns fails
+ * the test instead of hanging it.
  */
 static void test_wait_honours_timeout(void)
 {

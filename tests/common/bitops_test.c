@@ -24,9 +24,9 @@
  * (math_helper.h), the alignment macros (buffer.h) and the error pointer
  * encoding (ptr_err.h).
  *
- * These are inline functions, so nothing links them unless a caller exists -
- * the coverage they get is exactly the coverage their callers happen to
- * produce. The known answers below pin their contract independently of that.
+ * These are inline functions, so the coverage they get is whatever their
+ * callers happen to produce; the known answers below pin their contract
+ * independently of that.
  *
  * Note: xor.h and helper.h both define a static inline aligned(), so only one
  * of the two may be included here.

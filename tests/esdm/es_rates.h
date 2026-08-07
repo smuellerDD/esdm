@@ -25,16 +25,12 @@
 /*
  * Declare every entropy source to deliver no entropy at all.
  *
- * Tests that want to observe the ESDM losing its seed have to silence all
- * sources, not just the ones that happen to be active in a default build: a
- * single source still crediting entropy reseeds the DRNG behind the test's
- * back and it stays operational. Keeping the list in one place means enabling
- * a source that was previously compiled out - or adding a new one - cannot
- * quietly turn such a test into one that no longer tests anything.
- *
- * The setters are declared unconditionally, so this compiles regardless of
- * which sources the build actually includes; setting the rate of an absent
- * source is a no-op.
+ * Tests observing the ESDM lose its seed have to silence every source, not just
+ * those active in a default build: one source still crediting entropy reseeds
+ * the DRNG behind the test's back. Keeping the list in one place means enabling
+ * a previously compiled out source cannot quietly turn such a test into one
+ * that no longer tests anything. The setters are declared unconditionally, so
+ * this compiles either way - setting the rate of an absent source is a no-op.
  */
 static inline void esdm_test_es_rates_zero(void)
 {

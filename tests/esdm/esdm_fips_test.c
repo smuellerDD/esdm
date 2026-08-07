@@ -21,16 +21,13 @@
  * Tests for fips_enabled() in esdm/fips.c - the single decision that puts the
  * whole ESDM into FIPS mode.
  *
- * Two things decide it: the ESDM_SERVER_FORCE_FIPS environment variable and
- * the kernel's /proc/sys/crypto/fips_enabled. The answer is then latched for
- * the lifetime of the process, deliberately, so that nothing can flip the mode
- * underneath a running daemon by editing its environment. Latching is also why
- * every case below needs a process of its own.
- *
- * The environment is only honoured when it cannot have been planted by a less
- * privileged caller - secure_getenv() where it exists, an explicit check that
- * no privileges were gained where it does not. These tests run unprivileged,
- * where both variants agree that the variable counts.
+ * Two things decide it: the ESDM_SERVER_FORCE_FIPS environment variable and the
+ * kernel's /proc/sys/crypto/fips_enabled. The answer is latched for the process
+ * lifetime so nothing can flip the mode underneath a running daemon, which is
+ * also why every case below needs a process of its own. The environment is only
+ * honoured when it cannot have been planted by a less privileged caller
+ * (secure_getenv(), or an explicit privilege check where it does not exist);
+ * these tests run unprivileged, where both variants let the variable count.
  */
 
 #define _GNU_SOURCE

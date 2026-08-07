@@ -21,10 +21,9 @@
  * Tests for common/binhexbin.c - the hex/binary converters and the RFC 3986
  * percent encoder.
  *
- * Besides the plain round trips these cover the corner cases the converters
- * document but nothing else exercises: odd-length hex input (whose first digit
- * is a lone nibble), destination buffers too small to hold the full conversion,
- * and the percent encoder's rejection of malformed UTF-8 - in particular a
+ * Besides the round trips these cover the documented corner cases nothing else
+ * exercises: odd-length hex input (a lone leading nibble), destination buffers
+ * too small, and malformed UTF-8 in the percent encoder - in particular a
  * multi-byte sequence truncated at the end of the input, which used to
  * underflow the remaining-length counter and read past the buffer.
  */

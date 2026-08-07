@@ -21,16 +21,12 @@
  * esdm-tool driven against a real esdm-server.
  *
  * tests/tool/tool_cli_test.c covers what the tool decides on its own - the
- * arguments, the refusals, the failure of every command when nothing answers
- * it. What is left is the larger half: what each command actually does once
- * there is a server behind it, which is every command's success path and the
- * only way any of them is reached at all.
- *
- * The tool is executed rather than linked, so what is checked is what a user
- * and a script see: the exit status, the message, and the bytes on stdout.
- *
- * Skipped (77) unless run as root - the esdm-server refuses to start
- * otherwise, and the privileged commands are refused as well.
+ * arguments, the refusals, the failure of every command with nothing answering.
+ * What is left is the larger half: every command's success path, reachable only
+ * with a server behind it. The tool is executed rather than linked, so what is
+ * checked is what a user and a script see: the exit status, the message and the
+ * bytes on stdout. Skipped (77) unless run as root, since the esdm-server
+ * refuses to start otherwise.
  */
 
 #define _GNU_SOURCE

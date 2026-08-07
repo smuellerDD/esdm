@@ -20,24 +20,18 @@
 /*
  * Tests of the getrandom/getentropy interposition library that need no server.
  *
- * The two tests next to this one drive the library against a running ESDM,
- * which is what covers the paths that succeed. Two things are left over, and
- * both are what a caller meets when something is wrong:
+ * The two tests next to this one cover the succeeding paths against a running
+ * ESDM. What is left is what a caller meets when something is wrong:
  *
- * - the flag combinations the library refuses. They are checked before anything
- *   else happens, and each one is a request that cannot be honoured - insecure
- *   randomness that is also blocking, a seed that is also insecure, an unknown
- *   flag. Getting one of these wrong would hand the caller data with properties
- *   it did not ask for, so the refusal is the property, not the data.
- * - the fallback to the kernel. Every call the ESDM cannot answer is retried as
- *   the plain system call, which is what keeps a program working when the
- *   daemon is not running. With no server to answer, that is the path every
- *   request below takes.
+ * - the flag combinations the library refuses, checked before anything else
+ *   happens. Getting one wrong would hand the caller data with properties it
+ *   did not ask for, so the refusal is the property, not the data.
+ * - the fallback to the kernel, which every call the ESDM cannot answer is
+ *   retried as. With no server, that is the path every request below takes.
  *
- * The library is linked rather than preloaded here, and both the wrapped and
- * the unwrapped entry points are called: the wrapper is what a relinked program
- * reaches, the plain name is what an LD_PRELOAD'ed one does, and the __real_
- * pair is the way back to the kernel that the library offers its callers.
+ * The library is linked rather than preloaded, and both entry points are
+ * called: the wrapper is what a relinked program reaches, the plain name what
+ * an LD_PRELOAD'ed one does, and __real_ the way back to the kernel.
  */
 
 #define _GNU_SOURCE

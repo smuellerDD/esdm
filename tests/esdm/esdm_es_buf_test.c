@@ -22,17 +22,15 @@
  * ES monitor fills asynchronously and a reseed drains.
  *
  * The cache is a lock-free state machine: every slot moves empty -> filling ->
- * filled -> reading -> empty, and each transition is a compare-and-exchange
- * that decides who owns the block. The tests drive that machine directly and
- * assert on the resulting slot states, so a transition that stops being
- * exclusive - two owners of one block, or a slot that is drained twice - is
- * caught rather than left to a rare race in production.
+ * filled -> reading -> empty, each transition a compare-and-exchange deciding
+ * who owns the block. The tests drive it directly and assert on the slot
+ * states, so a transition that stops being exclusive - two owners, or a slot
+ * drained twice - is caught rather than left to a rare production race.
  *
- * esdm_es_buf.c is compiled into this test together with stubs for the ES
- * manager entry points it calls out to. That is what makes the cases below
- * reachable at all: the monitor's cooperative abort needs an ES manager that
- * stops running mid-loop, and the wakeup accounting needs to be observed rather
- * than inferred.
+ * esdm_es_buf.c is compiled into this test along with stubs for the ES manager
+ * entry points, which is what makes the cases below reachable: the monitor's
+ * cooperative abort needs a manager that stops running mid-loop, and the wakeup
+ * accounting has to be observed rather than inferred.
  */
 
 #include <errno.h>

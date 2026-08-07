@@ -20,37 +20,26 @@
 /*
  * Test of the entropy source monitor of the ES manager.
  *
- * The monitor is a long-running worker loop, so it is driven here exactly the
- * way the RPC server drives it: esdm_init(), then esdm_init_monitor() on a
- * thread of the ESDM_THREAD_ES_MONITOR group. The test then asserts the
- * contract the rest of the code base relies on:
+ * The monitor is a long-running worker loop, driven here exactly as the RPC
+ * server drives it: esdm_init(), then esdm_init_monitor() on a thread of the
+ * ESDM_THREAD_ES_MONITOR group. Asserted is the contract the rest of the code
+ * base relies on:
  *
- * - the privileged-initialization completion callback is invoked, exactly
- *   once, and reasonably promptly - the RPC server blocks its startup on this
- *   notification, so a monitor that never issues it hangs the daemon,
+ * - the privileged-initialization completion callback is invoked exactly once
+ *   and promptly - the RPC server blocks its startup on it,
  * - esdm_es_mgr_running() reports the monitor's life cycle,
- * - esdm_es_mgr_monitor_pause() is mutually exclusive, i.e. a second pause
- *   blocks until the first one resumed. This is the property esdm_reinit()
- *   depends on to keep a monitor pass off the entropy sources while they are
- *   torn down and re-initialized,
- * - esdm_reinit(), the actual user of pause/resume, completes while the
- *   monitor is running,
- * - esdm_es_mgr_monitor_wakeup() is safe before, during and after the monitor
- *   runs, and
- * - shutdown terminates the loop instead of sitting out its sleep interval -
- *   the sleep is an interruptible wait for exactly this reason. A regression
- *   to an uninterruptible sleep shows up as this test running into its meson
- *   timeout.
+ * - esdm_es_mgr_monitor_pause() is mutually exclusive, which esdm_reinit()
+ *   depends on to keep a pass off the entropy sources while they are torn down,
+ * - esdm_reinit() completes while the monitor is running,
+ * - esdm_es_mgr_monitor_wakeup() is safe before, during and after the loop,
+ * - shutdown terminates the loop instead of sitting out its sleep interval; a
+ *   regression to an uninterruptible sleep shows up as a meson timeout.
  *
- * Note what is NOT covered: that no monitor pass is *in flight* while a pause
- * is held. Observing that from the outside would need instrumentation of the
- * per-ES monitor callbacks; the mutual exclusion checked here is the part that
- * is externally visible.
- *
- * If no active entropy source provides a monitor_es callback, the monitor
- * completes the notification and returns right away. The test detects that and
- * keeps checking everything that still applies rather than claiming to have
- * exercised the loop.
+ * NOT covered: that no pass is *in flight* while a pause is held - observing
+ * that needs instrumentation of the per-ES callbacks, while the mutual
+ * exclusion checked here is externally visible. If no active source provides a
+ * monitor_es callback the monitor returns right away; the test detects that and
+ * keeps checking whatever still applies.
  */
 
 #include <errno.h>
@@ -78,11 +67,11 @@
 /*
  * Deadline for the whole test, comfortably below the meson timeout.
  *
- * Not every wait here can be bounded from the calling thread: pause(),
- * esdm_reinit() and esdm_fini() block on the ES monitor lock and on joining
- * the monitor, and there is no timed variant of either. Should one of them
- * fail to return, a watchdog thread reports the step the test was in and
- * aborts, which turns an unexplained meson timeout into a diagnosable failure.
+ * Not every wait can be bounded from the calling thread: pause(),
+ * esdm_reinit() and esdm_fini() block on the ES monitor lock and on joining it,
+ * with no timed variant of either. Should one fail to return, a watchdog thread
+ * reports the step and aborts, turning an unexplained meson timeout into a
+ * diagnosable failure.
  */
 #define ES_MGR_MONITOR_DEADLINE_SEC 90
 

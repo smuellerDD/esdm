@@ -21,22 +21,21 @@
  * Tests for common/threading_support.c - the worker pool the server, the RPC
  * services and the entropy source monitor all run on.
  *
- * The properties covered here are the ones the pool promises and the ones its
- * users would silently lose if they broke:
+ * Covered are the properties the pool promises and its users would silently
+ * lose if they broke:
  *
- *   - a thread group always keeps its own slots, so a group that is fully
- *     occupied cannot starve another group (this is what the group split
- *     exists for in the first place),
+ *   - a thread group keeps its own slots, so a fully occupied group cannot
+ *     starve another (which is what the group split exists for),
  *   - the return codes of the spawned jobs reach the waiter, ORed together,
- *   - a thread group outside the configured range - including the values in
- *     the gap below the special groups - is rejected instead of indexing the
- *     slot array out of bounds,
+ *   - a group outside the configured range - including the gap below the
+ *     special groups - is rejected rather than indexing the slot array out of
+ *     bounds,
  *   - the reserved special groups each get their own slot,
  *   - thread_fork_join() runs every task exactly once, whether it can spawn
- *     threads or has to fall back to running them inline.
+ *     threads or falls back to running them inline.
  *
- * Every wait in this test is bounded, so a regression that wedges the pool
- * shows up as a failed check rather than as a test that never returns.
+ * Every wait is bounded, so a regression that wedges the pool shows up as a
+ * failed check rather than a test that never returns.
  */
 
 #define _GNU_SOURCE

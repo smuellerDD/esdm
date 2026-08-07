@@ -54,16 +54,14 @@ struct esdm_rpc_client_connection {
 	void *interrupt_data;
 
 	/*
-	 * Both are robust mutexes, so a caller that is killed while owning the
-	 * connection does not wedge it for the rest of the process lifetime.
+	 * Both are robust mutexes, so a caller killed while owning the
+	 * connection does not wedge it for the process' lifetime.
 	 *
 	 * lock	   - held by esdm_client_invoke() across one request/response
-	 *	     exchange. Taking it over from a died owner implies the
-	 *	     socket may sit mid-message and has to be dropped.
-	 * ref_cnt - held from esdm_rpcc_get_*_service() until the matching
-	 *	     esdm_rpcc_put_*_service(), marking the connection as
-	 *	     checked out. It guards no data, so taking it over from a
-	 *	     died owner needs no recovery beyond the takeover itself.
+	 *	     exchange. Taken over from a died owner, the socket may sit
+	 *	     mid-message and has to be dropped.
+	 * ref_cnt - held between get and put, marking the connection checked
+	 *	     out. It guards no data, so a takeover needs no recovery.
 	 */
 	mutex_w_t lock;
 	mutex_w_t ref_cnt;
@@ -89,21 +87,13 @@ struct esdm_rpc_client_connection {
 	struct timespec last_used;
 
 	/*
-	 * Outcome of the most recent esdm_client_invoke() on this connection:
-	 * 0 on success, a negative errno when the request never made it to the
-	 * server or no response came back.
-	 *
-	 * protobuf-c's invoke() returns void and only reports a result by
-	 * calling the closure, which does not happen at all when the RPC fails
-	 * at the transport level. Without this, callers can merely observe
-	 * that their closure was not run and have to report a generic error
-	 * for what may just as well be a refused connection or a broken pipe.
-	 *
-	 * A connection is owned exclusively by one caller from
-	 * esdm_rpcc_get_*_service() to esdm_rpcc_put_*_service() (see the
-	 * ref_cnt handling in esdm_rpcc_get_service()), so writing it in the
-	 * invoke and reading it right afterwards needs no further
-	 * serialization.
+	 * Outcome of the most recent esdm_client_invoke() on this connection: 0
+	 * on success, a negative errno when the request never reached the server
+	 * or no response came back. protobuf-c's invoke() returns void and only
+	 * reports through the closure, which is not called at all on a transport
+	 * failure - without this, callers can merely observe that and report a
+	 * generic error. A connection is owned exclusively by one caller between
+	 * get and put, so no further serialization is needed.
 	 */
 	int last_error;
 };
@@ -112,13 +102,10 @@ struct esdm_rpc_client_connection {
  * @brief Reason why the last RPC on this connection produced no response
  *
  * The RPC wrappers pre-set their closure result to -ETIMEDOUT and only learn
- * that something went wrong from the closure not having been invoked. This
- * turns that into the actual reason.
- *
- * -EAGAIN is deliberately not reported: that is how an interruption requested
- * through esdm_rpcc_interrupt_func_t surfaces - most notably the deadline of
- * esdm_rpcc_get_random_bytes_full_timeout() - for which the callers' own
- * -ETIMEDOUT placeholder is the right answer.
+ * that something went wrong from the closure not being invoked; this turns that
+ * into the actual reason. -EAGAIN is deliberately not reported: it is how an
+ * interruption requested through esdm_rpcc_interrupt_func_t surfaces, for which
+ * the callers' own -ETIMEDOUT placeholder is the right answer.
  *
  * @return negative errno describing the failure, 0 if the request reached the
  *	   server (or was interrupted on request of the caller)

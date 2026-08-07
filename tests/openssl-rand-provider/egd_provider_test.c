@@ -20,19 +20,16 @@
 /*
  * The OpenSSL EGD provider, driven against the EGD test peer.
  *
- * The provider tests next to this one start an esdm-server and therefore need
- * root, which leaves most of this provider - every RAND entry point past
- * generate(), and every way any of them can fail - out of an ordinary run. None
- * of that needs the ESDM: the provider speaks the EGD protocol over a Unix
- * domain socket, and tests/egd/egd_peer.c already speaks the other side of it.
+ * The provider tests next to this one start an esdm-server and need root, which
+ * leaves most of this provider out of an ordinary run. None of it needs the
+ * ESDM: the provider speaks the EGD protocol over a Unix domain socket, and
+ * tests/egd/egd_peer.c speaks the other side.
  *
- * That is the whole point of the exercise. Against the peer this test can reach
- * what a server cannot be made to do on demand: a socket that stops answering
- * mid-life, so the transfer errors and their reason strings are executed, and a
- * socket path that cannot be used at all, so the provider's refusal to load is.
- * The peer also makes the successful paths deterministic - it answers reads
- * with a counter, so a request that had to be split into several protocol
- * transfers is checkable as having been reassembled in order.
+ * Against the peer this test reaches what a server cannot be made to do on
+ * demand - a socket that stops answering mid-life, reaching the transfer errors
+ * and their reason strings, and one that cannot be used at all, reaching the
+ * refusal to load. The peer also answers reads with a counter, so a request
+ * split across several transfers is checkable as reassembled in order.
  */
 
 #define _GNU_SOURCE

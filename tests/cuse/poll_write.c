@@ -35,12 +35,10 @@
 /*
  * Read a numeric field out of the ESDM status report.
  *
- * The write poll reports "entropy wanted" for exactly as long as
- * esdm_need_entropy() holds, which compares the entropy in the aux pool
- * against esdm_write_wakeup_bits - and that threshold is
- * ESDM_NUM_AUX_POOLS * digestsize, so it scales with the configuration. Ask
- * the ESDM what it is instead of assuming a value that only holds for a
- * single-pool build.
+ * The write poll reports "entropy wanted" for as long as esdm_need_entropy()
+ * holds, which compares the aux pool against esdm_write_wakeup_bits - a
+ * threshold of ESDM_NUM_AUX_POOLS * digestsize, so it scales with the
+ * configuration. Ask the ESDM rather than assume a single-pool value.
  */
 static int status_value(int fd, const char *field, uint32_t *value)
 {
@@ -73,14 +71,11 @@ static int status_value(int fd, const char *field, uint32_t *value)
  * Supply entropy until the ESDM holds as much as its write wakeup threshold
  * demands, i.e. until it stops asking for more.
  *
- * This uses RNDADDENTROPY rather than RNDADDTOENTCNT. The latter ends up in
- * esdm_pool_set_entropy(), which deliberately only ever touches the first aux
- * pool ("this interface can only influence the first pool slot for security
- * reasons") and sets rather than accumulates - so however often it is called,
- * it cannot lift the total above a single pool's worth, while the threshold
- * covers all of them. On a build with more than one aux pool the state this
- * test needs is therefore unreachable that way. RNDADDENTROPY inserts into
- * whichever pool has the most unused capacity and so fills them all.
+ * RNDADDENTROPY rather than RNDADDTOENTCNT: the latter reaches
+ * esdm_pool_set_entropy(), which only ever touches the first aux pool and sets
+ * rather than accumulates, so it cannot lift the total above one pool's worth
+ * while the threshold covers all of them. RNDADDENTROPY inserts into whichever
+ * pool has the most unused capacity and so fills them all.
  */
 static int fill_aux_pool(int fd)
 {

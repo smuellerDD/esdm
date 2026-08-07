@@ -20,15 +20,11 @@
 /*
  * Tests for common/conv_be_le.h.
  *
- * This file is built twice: once as-is, where the header resolves the byte
- * swaps to the compiler builtins, and once with CONVERSION_TEST defined, where
- * the header's own rotation-based implementations (_bswap16/32/64) are used
- * instead. The second build is the only thing that ever compiles - let alone
- * exercises - that fallback, which is what a toolchain without the builtins
- * would get.
- *
- * The endian-dependent macros are checked against the explicit byte stream
- * accessors of bitshift_le.h / bitshift_be.h rather than against a hard-coded
+ * Built twice: once as-is, where the byte swaps resolve to the compiler
+ * builtins, and once with CONVERSION_TEST defined, which is the only thing that
+ * ever compiles - let alone exercises - the header's own rotation-based
+ * _bswap16/32/64 fallback. The endian-dependent macros are checked against the
+ * explicit accessors of bitshift_le.h / bitshift_be.h rather than a hard-coded
  * byte order, so the expectations hold on either endianness.
  */
 

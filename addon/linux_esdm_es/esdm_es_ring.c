@@ -60,11 +60,10 @@ void esdm_es_ring_reset(struct esdm_es_ring *ring)
 
 	/*
 	 * Iterate the possible mask, not the online mask: the per-CPU arrays
-	 * exist for every possible CPU, and a CPU that is offline right now
-	 * keeps its collected events and pointers otherwise. Reset is invoked
-	 * to invalidate ALL prior entropy (VM fork via the vmgenid notifier,
-	 * SP800-90B failure), so pre-reset events must not survive a later
-	 * CPU online and get credited as fresh.
+	 * exist for every possible CPU, and an offline one would otherwise keep
+	 * its events and pointers. Reset invalidates ALL prior entropy (VM fork
+	 * via the vmgenid notifier, SP800-90B failure), so pre-reset events must
+	 * not survive a later CPU online and be credited as fresh.
 	 */
 	for_each_possible_cpu (cpu) {
 		struct esdm_es_ring_cpu *rc = per_cpu_ptr(ring->cpu, cpu);

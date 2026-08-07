@@ -89,11 +89,10 @@ struct esdm_es_ring;
 
 /*
  * Hot-path timestamp handling shared by the interrupt and scheduler entropy
- * sources: take a timestamp, fold in the GCD, run the health test and, on
- * success, append the event to the source's per-CPU @ring. @es selects the
+ * sources: take a timestamp, fold in the GCD, run the health test and on
+ * success append the event to the source's per-CPU @ring. @es selects the
  * health-test instance; @raw_hires_store and @perf_time are the source's
- * testing hooks (compiled to no-ops unless the respective testing option is
- * enabled).
+ * testing hooks (no-ops unless the respective testing option is enabled).
  */
 void esdm_time_process(struct esdm_es_ring *ring, enum esdm_internal_es es,
 		       bool (*raw_hires_store)(u64 value),

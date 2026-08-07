@@ -72,17 +72,13 @@ static struct esdm_test_shm_status *esdm_test_shm_status = NULL;
 static int esdm_test_shmid = -1;
 
 /*
- * The segment is a process-global singleton, but several independent users
- * attach to it: the privileged and the unprivileged RPC client service each
- * init and fini it on their own, as do the server and the test environments.
- * Without a reference count the first fini detaches the segment and removes
- * the IPC object while the other users are still writing to it through
- * esdm_test_shm_status - the RPC client accounting then faults on a mapping
- * that is gone.
- *
- * The lock is needed on top: esdm_rpcc_init_service() calls the init under the
- * connection lock while esdm_rpcc_fini_service() calls the fini outside of it,
- * so the two are not serialized against each other by the caller.
+ * The segment is a process-global singleton with several independent users -
+ * the privileged and unprivileged RPC client services, the server and the test
+ * environments all init and fini it on their own. Without a reference count the
+ * first fini removes the IPC object while the others still write to it through
+ * esdm_test_shm_status. The lock is needed on top, as
+ * esdm_rpcc_init_service() calls the init under the connection lock while
+ * esdm_rpcc_fini_service() calls the fini outside of it.
  */
 static uint32_t esdm_test_shm_status_ref = 0;
 static DEFINE_MUTEX_W_UNLOCKED(esdm_test_shm_status_lock);

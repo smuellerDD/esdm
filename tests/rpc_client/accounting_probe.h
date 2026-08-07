@@ -31,17 +31,15 @@
  * Check the byte accounting for one request of each shape the client's chunking
  * can produce.
  *
- * A request larger than one RPC message is split, and the last piece is a
- * partial one whenever the length is not a multiple of ESDM_RPC_MAX_DATA. Each
- * shape is therefore probed on its own - well below a message, exactly one
- * message, and one message plus a remainder - so that a discrepancy is
- * attributed to a specific shape rather than inferred from the totals of a
- * megabyte-sized request that contains all of them at once.
+ * A request larger than one RPC message is split, with a partial last piece
+ * whenever the length is not a multiple of ESDM_RPC_MAX_DATA. Each shape is
+ * probed on its own - below a message, exactly one, and one plus a remainder -
+ * so a discrepancy is attributed rather than inferred from the totals of a
+ * megabyte-sized request containing all of them.
  *
- * The server counts what it generated and the client what it kept. The two are
- * expected to agree: entropy the server produces and then discards is worth
- * knowing about, both because generating it is not free and because it means a
- * request was answered twice.
+ * The server counts what it generated and the client what it kept; the two have
+ * to agree, as discarded entropy is neither free to generate nor explicable
+ * except by a request having been answered twice.
  *
  * Returns the number of shapes that did not add up.
  */

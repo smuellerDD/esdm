@@ -283,10 +283,9 @@ static int esdm_botan_drbg_seed(void *drng, const uint8_t *inbuf,
 			 * SP800-90A reseeds over
 			 * seed_material = entropy_input || additional_input,
 			 * i.e. one Update across the concatenation. Dropping
-			 * addtl here - as this did before - loses the caller's
-			 * additional input entirely, and feeding it as a second
-			 * add_entropy() call would be two Updates and thus a
-			 * different state transition than the one specified.
+			 * addtl loses the caller's additional input, and a
+			 * second add_entropy() call would be two Updates and
+			 * thus a different state transition.
 			 */
 			if (addtl && addtllen) {
 				Botan::secure_vector<uint8_t> seed_material(
@@ -981,15 +980,11 @@ static int esdm_botan_drbg_selftest_hmac()
 	};
 
 	/*
-	 * The table is static, so it is built once and keeps the pointers it
-	 * was initialized with for the life of the process. Every array it
-	 * points at must therefore be static as well - an automatic one would
-	 * leave this table pointing into a stack frame that is gone by the
-	 * second call, which is what it did: the first self test passed and
-	 * every later one compared whatever had since been written over that
-	 * frame. It failed, but only after esdm_reinit() started calling the
-	 * self test a second time, and it would have passed just as
-	 * meaninglessly had the garbage happened to match.
+	 * The table is static, so it is built once and keeps its pointers for
+	 * the life of the process. Every array it points at must be static as
+	 * well - an automatic one leaves the table pointing into a stack frame
+	 * that is gone by the second call, so every self test after the first
+	 * compares whatever has since been written over that frame.
 	 */
 	static struct nist_test_vector_hmac_drbg test_vectors[] = {
 		HMAC_TEST_VECTOR(1),	HMAC_TEST_VECTOR(2),

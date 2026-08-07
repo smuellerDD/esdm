@@ -30,11 +30,9 @@
 /**
  * @brief Pick up the error reporting upcalls handed over by libcrypto
  *
- * Without them a provider failure surfaces as nothing but the caller's own
- * generic message - e.g. "evp_rand_generate_locked:generate error" - which
- * gives no hint about what actually went wrong underneath.
- *
- * Call this first thing in OSSL_provider_init(), before anything can fail.
+ * Without them a provider failure surfaces as nothing but the caller's generic
+ * message - e.g. "evp_rand_generate_locked:generate error". Call this first
+ * thing in OSSL_provider_init(), before anything can fail.
  *
  * @param [in] in Dispatch table libcrypto passed to OSSL_provider_init()
  * @param [in] handle Core handle, kept as a fallback for the few call sites
@@ -48,8 +46,7 @@ void esdm_prov_init_error_reporting(const OSSL_DISPATCH *in,
  *
  * Keys of a provider's configuration section that OpenSSL does not consume
  * itself (everything besides module, path, activate, identity and soft_load)
- * are handed to the provider, which is how a provider takes its configuration
- * from openssl.cnf.
+ * are handed to the provider - this is how it reads openssl.cnf.
  *
  * @param [in] handle Core handle passed to OSSL_provider_init()
  * @param [in] name Name of the configuration key
