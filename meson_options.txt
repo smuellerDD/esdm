@@ -722,21 +722,40 @@ The DRG.4 reseeding limits of the same standard are
 configured independently with the option 'ais2031_drg4'.
 ''')
 
+option('ais2031_drg3', type: 'boolean', value: false,
+       description:'''German AIS 20/31 3.0 (2024) DRG.3 class.
+
+This option applies the entropy source oversampling of the
+'sp80090c' option without the request size based reseeding
+limits that come with it. The reseeding thresholds are left
+at whatever 'drng_reseed_threshold_bits' and
+'drng_max_reseed_bits' configure, and are not capped - those
+limits belong to DRG.4.
+
+Setting 'sp80090c' alongside this option does not bring the
+limits back.
+
+Mutually exclusive with 'ais2031_drg4', whose whole content is
+the reseeding limits this option leaves out.
+''')
+
 option('ais2031_drg4', type: 'boolean', value: false,
        description:'''German AIS 20/31 3.0 (2024) DRG.4 reseeding limits.
 
 When enabling this option, the request size based reseeding
 limits are capped to the values required by DRG.4.10 of
-German AIS 20/31 3.0 from 2024: a DRNG instance tries to
-reseed after 2**16 output bits at the latest and loses its
+German AIS 20/31 3.0 from 2024: a DRNG instance loses its
 fully seeded state after 2**17 output bits without a
-successful reseed.
+successful reseed, and tries to reseed after three quarters
+of that at the latest.
 
 Smaller values configured through 'drng_reseed_threshold_bits'
 and 'drng_max_reseed_bits' are kept as they are.
 
 The NTG.1 seeding strategy of the same standard is configured
 independently with the option 'ais2031_ntg1'.
+
+Mutually exclusive with 'ais2031_drg3'.
 ''')
 
 # Option for: THREADING_MAX_WORKER_THREADS

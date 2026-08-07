@@ -145,20 +145,23 @@ static void check_digest_sized_request(void)
 }
 
 /*
- * Under SP800-90C the pull is oversampled, which is the only thing that makes
- * the partial trailing block happen at all. Both settings are exercised, since
- * the arithmetic differs and only one of them is what a given build runs with.
+ * With the oversampling on the pull is larger, which is the only thing that
+ * makes the partial trailing block happen at all. Both settings are exercised,
+ * since the arithmetic differs and only one of them is what a given build runs
+ * with.
  *
- * The mode cannot be switched on in a build that left the oversampling out at
- * compile time - esdm_sp80090c_compliant() is then a constant. The FIPS and
- * SP800-90C builds are the ones that cover this half.
+ * The mechanism rather than the compliance claim is what is checked for:
+ * esdm_sp80090c_compliant() answers no in a build to one of the DRG classes
+ * even where the oversampling is applied. It cannot be switched on at all in a
+ * build that left it out at compile time - the FIPS, SP800-90C and DRG.3 builds
+ * are the ones that cover this half.
  */
 static void check_oversampling(void)
 {
 #ifdef ESDM_OVERSAMPLE_ENTROPY_SOURCES
 	esdm_config_force_fips_set(esdm_config_force_sp80090c_enabled);
-	CHECK(esdm_sp80090c_compliant(),
-	      "SP800-90C mode did not take effect, oversampling not covered");
+	CHECK(esdm_es_oversampling(),
+	      "oversampling did not take effect, its path not covered");
 
 	check_get_ent(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 	check_digest_sized_request();

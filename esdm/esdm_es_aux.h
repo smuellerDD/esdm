@@ -53,13 +53,13 @@ static inline uint32_t esdm_get_seed_entropy_osr(bool do_full_init,
 	       (do_full_init != full_entropy));
 
 	/* Apply oversampling during initialization according to SP800-90C */
-	if (esdm_sp80090c_compliant() && do_full_init)
+	if (esdm_es_oversampling() && do_full_init)
 		requested_bits += ESDM_SEED_BUFFER_INIT_ADD_BITS;
 	/*
 	 * Apply oversampling when aiming for RBG3(RS) mode,
 	 * see SP800-90C sec. 6.5.1.2
 	 */
-	if (esdm_sp80090c_compliant() && full_entropy)
+	if (esdm_es_oversampling() && full_entropy)
 		requested_bits += ESDM_OVERSAMPLE_ES_BITS;
 	return requested_bits;
 }

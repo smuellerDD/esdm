@@ -58,7 +58,7 @@ bool esdm_es_mgr_running(void);
 void esdm_es_mgr_monitor_wakeup(void);
 void esdm_es_add_entropy(void);
 uint32_t esdm_get_digestsize(void);
-int esdm_sp80090c_compliant(void);
+int esdm_es_oversampling(void);
 
 bool esdm_es_mgr_running(void)
 {
@@ -83,7 +83,7 @@ uint32_t esdm_get_digestsize(void)
 	return ESDM_FULL_SEED_ENTROPY_BITS;
 }
 
-int esdm_sp80090c_compliant(void)
+int esdm_es_oversampling(void)
 {
 	return 0;
 }
