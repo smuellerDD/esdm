@@ -54,6 +54,12 @@ DevicePolicy=strict
 ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock --keep_ipc -vvv
 IPAddressDeny=any
 LimitMEMLOCK=infinity
+# The EGD clients hold their connection open for their entire lifetime, so the
+# server keeps one descriptor per consumer on the system, next to the RPC ones.
+# systemd's default of 1024 is below the number of EGD clients the server is
+# willing to serve, which would turn into connections that are accepted and
+# immediately dropped rather than into a clean limit.
+LimitNOFILE=8192
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 MountFlags=private

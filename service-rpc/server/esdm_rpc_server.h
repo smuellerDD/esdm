@@ -45,6 +45,22 @@ int esdm_rpc_server_init(const char *username, const char *groupname);
 void esdm_rpc_server_fini(void);
 
 /**
+ * @brief Remove a left-over Unix domain socket of a previous server instance
+ *
+ * The socket is only removed when nothing is listening on it, which is probed
+ * by connecting to it. The check is deliberately conservative: only a refused
+ * connection proves the socket is dead, and the file is re-validated right
+ * before the removal so a symlink or a replaced inode cannot be unlinked
+ * instead.
+ *
+ * @param [in] path Path of the socket to examine
+ * @param [in] socktype Socket type used for the probe (SOCK_SEQPACKET,
+ *			SOCK_STREAM, ...) - it must match the type the socket
+ *			was created with
+ */
+void esdm_server_remove_stale_socket(const char *path, int socktype);
+
+/**
  * @brief Remove the server IPC resources: both RPC Unix domain sockets, the
  *	  status SHM segment and its semaphores.
  *

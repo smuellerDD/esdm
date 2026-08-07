@@ -1,0 +1,34 @@
+# Optional EGD (Entropy Gathering Daemon) compatibility socket of the ESDM.
+#
+# This socket is not part of the ESDM's regular interfaces - it exists to serve
+# legacy consumers that can only obtain entropy from an EGD (libgcrypt built
+# with --enable-random=egd, OpenSSL's RAND_egd(), ...). It is therefore not
+# pulled in by esdm-server.service; starting or enabling this unit is what
+# requests the EGD interface:
+#
+#	systemctl enable --now esdm-server-egd-pr.socket
+#
+# Note that the ESDM does not get activated by traffic on this socket: it binds
+# the socket during its own startup and the esdm-server has to be running for
+# the socket to be served. Hence the socket unit merely hands the descriptor
+# over - see Service= below.
+
+[Unit]
+Description=ESDM EGD compatibility socket (prediction resistance)
+
+[Socket]
+# EGD is a stream protocol - the esdm-server refuses any other socket type.
+ListenStream=@SOCKET_PATH@
+# The consumers are ordinary applications of arbitrary users. Everything
+# reachable through this socket is unprivileged: an entropy claim attached to
+# written data is only honored for a caller with UID 0, which the ESDM
+# determines from the peer credentials.
+SocketMode=0666
+SocketUser=root
+SocketGroup=root
+PassCredentials=yes
+FileDescriptorName=ESDM_EGD_PR_SOCKET
+Service=esdm-server.service
+
+[Install]
+WantedBy=sockets.target
