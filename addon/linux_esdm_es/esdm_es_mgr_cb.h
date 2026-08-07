@@ -35,6 +35,12 @@ void esdm_reset_state(enum esdm_internal_es es);
  * @max_entropy: Maximum amount of entropy the entropy source is able to
  *		 maintain.
  * @state: Buffer with human-readable ES state.
+ * @state_json: Buffer with the ES state as a JSON object. The member names are
+ *		the labels of @state, lower-cased with every run of
+ *		non-alphanumeric characters replaced by one underscore, so that
+ *		both representations describe the same properties. The ESDM
+ *		server embeds the object verbatim in its JSON status document.
+ *		This callback may be NULL.
  * @reset: Reset entropy source (drop all entropy and reinitialize).
  *	   This callback may be NULL.
  */
@@ -44,6 +50,7 @@ struct esdm_es_cb {
 	u32 (*curr_entropy)(u32 requested_bits);
 	u32 (*max_entropy)(void);
 	void (*state)(unsigned char *buf, size_t buflen);
+	void (*state_json)(unsigned char *buf, size_t buflen);
 	void (*reset)(void);
 	void (*set_entropy_rate)(u32 rate);
 };

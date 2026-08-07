@@ -434,6 +434,32 @@ static void esdm_sched_es_state(char *buf, size_t buflen)
 	mutex_unlock(&sched_mutex);
 }
 
+/*
+ * The kernel add-on renders its state as a JSON object itself
+ * (ESDM_SCHED_STATUS_JSON), so the properties of this entropy source enter the
+ * JSON status document without being derived from the status text.
+ */
+static void esdm_sched_es_state_json(char *buf, size_t buflen)
+{
+	char status[ESDM_STATUS_JSON_BUFLEN];
+
+	mutex_lock(&sched_mutex);
+
+	if (esdm_sched_entropy_fd < 0) {
+		snprintf(buf, buflen,
+			 "{ \"disabled\": \"missing kernel support\" }");
+	} else if (ioctl(esdm_sched_entropy_fd, ESDM_SCHED_STATUS_JSON,
+			 status) < 0) {
+		snprintf(buf, buflen,
+			 "{ \"error\": \"failure in reading kernel status\" }");
+	} else {
+		status[sizeof(status) - 1] = '\0';
+		snprintf(buf, buflen, "%s", status);
+	}
+
+	mutex_unlock(&sched_mutex);
+}
+
 static void esdm_sched_reset(void)
 {
 	uint32_t reset[2];
@@ -474,6 +500,7 @@ struct esdm_es_cb esdm_es_sched = {
 	.curr_entropy = esdm_sched_entropylevel,
 	.max_entropy = esdm_sched_poolsize,
 	.state = esdm_sched_es_state,
+	.state_json = esdm_sched_es_state_json,
 	.reset = esdm_sched_reset,
 	.active = esdm_sched_active,
 };

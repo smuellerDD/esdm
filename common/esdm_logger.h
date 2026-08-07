@@ -35,6 +35,12 @@ enum esdm_logger_verbosity {
 	LOGGER_VERBOSE,
 	LOGGER_DEBUG,
 	LOGGER_DEBUG2,
+	/*
+	 * Per-event bookkeeping of the hot paths (e.g. one record per collected
+	 * entropy batch). Logging at this level costs more time than the
+	 * operation it reports and is only meant for development.
+	 */
+	LOGGER_TRACE,
 
 	LOGGER_MAX_LEVEL /* This must be last entry */
 };

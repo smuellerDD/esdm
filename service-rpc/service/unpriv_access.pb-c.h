@@ -76,7 +76,7 @@ struct  RandValResponse
 /*
  **
  * @brief Request to obtain status text.
- * Shared by RpcStatus and RpcJentStatus.
+ * Shared by RpcStatus, RpcStatusJson and RpcJentStatus.
  * @param maxlen Maximum size of buffer
  */
 struct  StatusRequest
@@ -92,7 +92,7 @@ struct  StatusRequest
 /*
  **
  * @brief Response carrying status text.
- * Shared by RpcStatus and RpcJentStatus.
+ * Shared by RpcStatus, RpcStatusJson and RpcJentStatus.
  * @param ret Return code (0 on success, < 0 on error); if no message buffer is
  *	      returned this value specifies the number of required bytes.
  * @param buffer Buffer with ASCII status - this is a NULL-terminated string
@@ -413,6 +413,10 @@ struct UnprivAccess_Service
                           const StatusRequest *input,
                           StatusResponse_Closure closure,
                           void *closure_data);
+  void (*rpc_status_json)(UnprivAccess_Service *service,
+                          const StatusRequest *input,
+                          StatusResponse_Closure closure,
+                          void *closure_data);
 };
 typedef void (*UnprivAccess_ServiceDestroy)(UnprivAccess_Service *);
 void unpriv_access__init (UnprivAccess_Service *service,
@@ -433,7 +437,8 @@ void unpriv_access__init (UnprivAccess_Service *service,
       function_prefix__ ## rpc_get_poolsize,\
       function_prefix__ ## rpc_get_write_wakeup_thresh,\
       function_prefix__ ## rpc_get_min_reseed_secs,\
-      function_prefix__ ## rpc_jent_status  }
+      function_prefix__ ## rpc_jent_status,\
+      function_prefix__ ## rpc_status_json  }
 void unpriv_access__rpc_status(ProtobufCService *service,
                                const StatusRequest *input,
                                StatusResponse_Closure closure,
@@ -483,6 +488,10 @@ void unpriv_access__rpc_get_min_reseed_secs(ProtobufCService *service,
                                             ValResponse_Closure closure,
                                             void *closure_data);
 void unpriv_access__rpc_jent_status(ProtobufCService *service,
+                                    const StatusRequest *input,
+                                    StatusResponse_Closure closure,
+                                    void *closure_data);
+void unpriv_access__rpc_status_json(ProtobufCService *service,
                                     const StatusRequest *input,
                                     StatusResponse_Closure closure,
                                     void *closure_data);

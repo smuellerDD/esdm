@@ -61,4 +61,18 @@
 /* SCHED ES: read status information */
 #define ESDM_SCHED_STATUS _IOR(ESDMIO, 0x09, char[250])
 
+/*
+ * IRQ / SCHED ES: read status information as a JSON object
+ *
+ * The returned document carries the same properties as the plain status text
+ * of ESDM_IRQ_STATUS / ESDM_SCHED_STATUS with the labels turned into JSON
+ * member names, so that the ESDM server can embed it in its JSON status
+ * document without parsing text.
+ */
+#define ESDM_IRQ_STATUS_JSON _IOR(ESDMIO, 0x0a, char[500])
+#define ESDM_SCHED_STATUS_JSON _IOR(ESDMIO, 0x0b, char[500])
+
+/* Size of the buffer the JSON status IOCTLs report into */
+#define ESDM_STATUS_JSON_BUFLEN 500
+
 #endif /* _ESDM_ES_IOCTL_H */

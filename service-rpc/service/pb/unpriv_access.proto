@@ -53,7 +53,7 @@ message RandValResponse {
 /**
  * @brief Request to obtain status text.
  *
- * Shared by RpcStatus and RpcJentStatus.
+ * Shared by RpcStatus, RpcStatusJson and RpcJentStatus.
  *
  * @param maxlen Maximum size of buffer
  */
@@ -64,7 +64,7 @@ message StatusRequest {
 /**
  * @brief Response carrying status text.
  *
- * Shared by RpcStatus and RpcJentStatus.
+ * Shared by RpcStatus, RpcStatusJson and RpcJentStatus.
  *
  * @param ret Return code (0 on success, < 0 on error); if no message buffer is
  *	      returned this value specifies the number of required bytes.
@@ -158,4 +158,11 @@ service UnprivAccess {
 
 	/* entropy source specific calls */
 	rpc RpcJentStatus (StatusRequest) returns (StatusResponse);
+
+	/*
+	 * New calls are appended here: the wire protocol addresses a call by
+	 * its index in this list, so inserting one anywhere above would make
+	 * an already installed client invoke a different call on the server.
+	 */
+	rpc RpcStatusJson (StatusRequest) returns (StatusResponse);
 }

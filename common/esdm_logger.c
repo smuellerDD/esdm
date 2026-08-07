@@ -75,6 +75,9 @@ static void esdm_logger_severity(enum esdm_logger_verbosity severity, char *sev,
 				 const unsigned int sevlen)
 {
 	switch (severity) {
+	case LOGGER_TRACE:
+		snprintf(sev, sevlen, "Trace");
+		break;
 	case LOGGER_DEBUG2:
 		snprintf(sev, sevlen, "Debug2");
 		break;
@@ -152,6 +155,9 @@ static void log_syslog(int severity, const char *format, ...)
 
 	va_start(args, format);
 	switch (severity) {
+	case LOGGER_TRACE:
+		log_prio = LOG_DEBUG;
+		break;
 	case LOGGER_DEBUG2:
 		log_prio = LOG_DEBUG;
 		break;
@@ -215,6 +221,7 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	localtime_r(&now, &now_detail);
 
 	switch (severity) {
+	case LOGGER_TRACE:
 	case LOGGER_DEBUG2:
 		fprintf_color = &fprintf_cyan;
 		break;
@@ -251,6 +258,7 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 		flockfile(stream);
 
 	switch (esdm_logger_verbosity_level) {
+	case LOGGER_TRACE:
 	case LOGGER_DEBUG2:
 	case LOGGER_DEBUG:
 		if (use_syslog) {

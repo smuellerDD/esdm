@@ -57,6 +57,19 @@
 /* SCHED ES: read status information */
 #define ESDM_SCHED_STATUS _IOR(ESDMIO, 0x09, char[250])
 
+/*
+ * SCHED ES: read status information as a JSON object
+ *
+ * The returned document carries the same properties as the status text of
+ * ESDM_SCHED_STATUS with the labels turned into JSON member names.
+ */
+#define ESDM_SCHED_STATUS_JSON _IOR(ESDMIO, 0x0b, char[500])
+
+#ifndef ESDM_STATUS_JSON_BUFLEN
+/* Size of the buffer the JSON status IOCTLs report into */
+#define ESDM_STATUS_JSON_BUFLEN 500
+#endif
+
 extern struct esdm_es_cb esdm_es_sched;
 
 bool esdm_sched_enabled(void);
