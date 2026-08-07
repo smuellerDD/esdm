@@ -139,6 +139,9 @@ endif
 
 dependencies = [ dependency('libprotobuf-c'), dependency('threads') ]
 
+# Rendering of the JSON status document and its parsing in the test suite
+json_c_dep = dependency('json-c', required: true)
+
 pkgconfig = import('pkgconfig')
 
 include_user_files = [ ]
@@ -146,16 +149,26 @@ include_user_files = [ ]
 include_dirs_server = include_directories([ 'esdm',
 					    'crypto',
 					    'common',
+					    'service-egd',
+					    'service-egd/server',
 					    'service-rpc/service',
 					    'service-rpc/server' ])
-dependencies_server = dependencies
+dependencies_server = dependencies + [ json_c_dep ]
 
 include_dirs_client = include_directories([ 'common',
+					    'service-egd',
+					    'service-egd/client',
 					    'service-rpc/service',
 					    'service-rpc/client' ])
 dependencies_client = dependencies
 
-subdirs = [ 'common', 'crypto', 'esdm',
+# The EGD client needs nothing but the common code - keep it that way by not
+# handing it the RPC service includes.
+include_dirs_egd_client = include_directories([ 'common',
+						'service-egd',
+						'service-egd/client' ])
+
+subdirs = [ 'common', 'crypto', 'esdm', 'service-egd',
 	    'service-rpc/server', 'service-rpc/service', 'service-rpc/client/' ]
 
 if get_option('esdm-server').disabled() and get_option('linux-devfiles').enabled()
@@ -216,6 +229,24 @@ endif
 
 if get_option('crypto_backend') == 'gnutls'
 	gnutls_dep = dependency('gnutls', version: '>= 3.5', required: true)
+
+	# The SP800-90A Block_Cipher_df in front of GnuTLS' CTR DRBG uses the
+	# AES-256 core directly. GnuTLS only lists nettle in Requires.private,
+	# so it has to be linked explicitly.
+	nettle_dep = dependency('nettle', required: true)
+
+	# The CTR DRBG this backend drives (drbg_aes_init/reseed/generate) is
+	# not part of the regular GnuTLS ABI: those three live in the
+	# GNUTLS_FIPS140_3_4 version node and are only exported by a GnuTLS
+	# configured with --enable-fips140-mode. Distribution builds generally
+	# are not, and then the only symptom is a pile of undefined references
+	# at link time - so check for it here and say what is actually wrong.
+	if not cc.has_function('drbg_aes_init', dependencies: gnutls_dep)
+		error('''The GnuTLS backend needs the SP800-90A CTR DRBG symbols
+(drbg_aes_init/reseed/generate), which GnuTLS only exports when it is built
+with --enable-fips140-mode. The GnuTLS found here does not export them.
+Rebuild GnuTLS with FIPS140 mode enabled, or select another crypto_backend.''')
+	endif
 endif
 
 if get_option('crypto_backend') == 'leancrypto'
@@ -255,6 +286,8 @@ if get_option('validation-helpers').enabled()
 	subdirs += [ 'addon/test' ]
 endif
 
+subdirs += [ 'man' ]
+
 foreach n : subdirs
 	subdir(n)
 endforeach
@@ -268,9 +301,11 @@ install_headers(include_user_files, subdir: 'esdm')
 testdirs = [
 	'tests/crypto',
 	'tests/cuse',
+	'tests/egd',
 	'tests/es',
 	'tests/esdm',
 	'tests/getrandom',
+	'tests/kernel-seeder',
 	#'tests/misc',
 	'tests/rpc_client',
 	'tests/rpc_service',

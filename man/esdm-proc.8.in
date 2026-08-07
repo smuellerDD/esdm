@@ -1,0 +1,83 @@
+.TH ESDM\-PROC 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-proc \- serve /proc/sys/kernel/random from the ESDM
+.SH SYNOPSIS
+.B esdm\-proc
+.RI [ OPTIONS ]
+.I MOUNTPOINT
+.SH DESCRIPTION
+.B esdm\-proc
+is a FUSE file system that provides the interface applications know as
+.I /proc/sys/kernel/random
+with values taken from
+.BR esdm\-server (8)
+instead of from the kernel RNG. It is normally mounted over the kernel's own
+directory, so that entropy gathering daemons and other consumers reading those
+files see the state of the ESDM.
+.PP
+The following files are served:
+.TP
+.I boot_id
+The boot ID, stable for the lifetime of the daemon.
+.TP
+.I uuid
+A freshly generated random UUID on every read.
+.TP
+.I entropy_avail
+Entropy currently held by the ESDM, in bits.
+.TP
+.I poolsize
+Size of the entropy pool, in bits.
+.TP
+.I write_wakeup_threshold
+Entropy level below which writers polling the random device are woken.
+Writable.
+.TP
+.I urandom_min_reseed_secs
+Minimum number of seconds between two reseed operations. Writable.
+.TP
+.I esdm_type
+Identifies the provider as the ESDM. This file has no counterpart in the
+kernel and lets a consumer tell the two apart.
+.PP
+The daemon needs to be started as root to mount over
+.IR /proc/sys/kernel/random .
+On systemd installations it is normally started through the shipped
+.B esdm\-proc.service
+unit, which is pulled in by
+.BR esdm\-linux\-compat.target .
+.PP
+The options are handled by FUSE, so the general FUSE mount options are
+accepted in addition to the ones listed below. Serving the mount to users
+other than the one running the daemon requires the FUSE option
+.BR "\-o allow_other" .
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.TP
+.BR \-v ", " \-\-verbosity= \fINUM\fR
+Logging verbosity level.
+.TP
+.B \-\-relabel
+Perform automatic SELinux relabeling of the served files, so that they carry
+the same context as the kernel files they replace.
+.TP
+.B \-\-syslog
+Log via syslog.
+.SH EXAMPLES
+Mount over the kernel directory the way the shipped service unit does:
+.PP
+.RS
+.nf
+esdm\-proc \-\-relabel \-\-syslog \-f \-o allow_other /proc/sys/kernel/random \-v 3
+.fi
+.RE
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-cuse\-random (8),
+.BR esdm\-tool (1),
+.BR random (4),
+.BR fuse (8)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

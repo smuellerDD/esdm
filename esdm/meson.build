@@ -11,7 +11,7 @@ esdm_src = files([
 	'esdm_shm_status.c',
 ])
 
-dependencies_esdm_lib = [ ]
+dependencies_esdm_lib = [ json_c_dep ]
 include_dirs_esdm_lib = [ include_dirs_server ]
 
 if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
@@ -108,7 +108,7 @@ elif get_option('crypto_backend') == 'botan'
 	dependencies_esdm_lib += [ botan_dep ]
 elif get_option('crypto_backend') == 'gnutls'
 	esdm_src += files([ 'esdm_gnutls.c' ])
-	dependencies_esdm_lib += [ gnutls_dep ]
+	dependencies_esdm_lib += [ gnutls_dep, nettle_dep ]
 elif get_option('crypto_backend') == 'leancrypto'
 	esdm_src += files([ 'esdm_leancrypto.c' ])
 	dependencies_esdm_lib += [ leancrypto_dep ]
@@ -132,12 +132,36 @@ esdm_static_lib = static_library('esdm_static',
 	 link_with: esdm_common_static_lib,
 	)
 
+# Symbol versioning for libesdm: Meson has no dedicated option for linker
+# version scripts, so the flag is passed through link_args. link_depends makes
+# Ninja relink the library when version.lds changes - without it an edit of
+# the script would go unnoticed.
+#
+# Version scripts are a GNU ld / LLD feature and are not universally
+# available, hence the probe. Since binutils 2.41 and LLD 17 the linker
+# defaults to --no-undefined-version, which turns a symbol that is listed in
+# the script but not built in the current configuration into a hard error; ask
+# for the lenient behaviour where the linker knows the option. Older linkers
+# are lenient anyway.
+esdm_version_lds = meson.current_source_dir() / 'version.lds'
+esdm_lib_link_args = [ '-Wl,--version-script,' + esdm_version_lds ]
+if cc.has_link_argument('-Wl,--undefined-version')
+	esdm_lib_link_args += [ '-Wl,--undefined-version' ]
+endif
+
+if not cc.has_multi_link_arguments(esdm_lib_link_args)
+	warning('Linker does not support version scripts - libesdm.so exports every DSO_PUBLIC symbol')
+	esdm_lib_link_args = []
+endif
+
 esdm_lib = library('esdm',
 	[ common_src, crypto_src, esdm_src ],
 	 include_directories: [ include_dirs_client, include_dirs_esdm_lib ],
 	 dependencies: [ dependencies_client, dependencies_esdm_lib ],
 	 version: meson.project_version(),
 	 soversion: version_array[0],
+	 link_args: esdm_lib_link_args,
+	 link_depends: files('version.lds'),
 	 install: true
 	)
 

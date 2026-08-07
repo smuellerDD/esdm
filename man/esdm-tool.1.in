@@ -1,0 +1,223 @@
+.TH ESDM\-TOOL 1 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-tool \- query and control a running ESDM server
+.SH SYNOPSIS
+.B esdm\-tool
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B esdm\-tool
+is the command line client of
+.BR esdm\-server (8).
+It talks to the daemon over the RPC interface and covers three areas: querying
+the status of the ESDM and its entropy sources, obtaining random data, and
+administrative or diagnostic operations.
+.PP
+Options that change the state of the daemon go through the privileged RPC
+interface and therefore require root; they are marked as such below. All other
+operations work for any user that may access the unprivileged RPC socket.
+.SH OPTIONS
+.SS General
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.TP
+.BR \-v ", " \-\-verbose
+Increase logging verbosity. May be given repeatedly.
+.TP
+.BR \-V ", " \-\-decrease\-verbosity
+Decrease logging verbosity. May be given repeatedly.
+.TP
+.B \-\-use\-syslog
+Log to syslog instead of standard output and standard error.
+.SS Status
+.TP
+.BR \-s ", " \-\-status
+Print the status of the ESDM and all of its entropy sources.
+.TP
+.B \-\-status\-json
+Print the same information as a JSON document.
+.TP
+.BR \-J ", " \-\-jent\-status
+Print the internal status of the Jitter RNG entropy source.
+.TP
+.BR \-S ", " \-\-is\-fully\-seeded
+Exit successfully if the ESDM is fully seeded, i.e. ready to hand out random
+data.
+.TP
+.B \-\-is\-running
+Exit successfully if an
+.BR esdm\-server (8)
+is reachable.
+.TP
+.BR \-e ", " \-\-entropy\-count
+Print the number of entropy bits accounted for in the auxiliary pool.
+.TP
+.BR \-E ", " \-\-entropy\-level
+Print the number of entropy bits accounted for in the internal state.
+.TP
+.BR \-w ", " \-\-wait\-until\-seeded " \fITRIES\fR"
+Poll the seeding state once per second, at most
+.I TRIES
+times, and exit as soon as the ESDM is fully seeded. Useful in service units
+that must not start before random data of full quality is available.
+.SS Obtaining random data
+.TP
+.BR \-r ", " \-\-get\-random " \fIBYTES\fR"
+Print
+.I BYTES
+random bytes, hex encoded by default.
+.TP
+.B \-\-get\-seed
+Perform a get\-seed operation, i.e. obtain seed material together with its
+entropy accounting.
+.TP
+.B \-\-raw\-bytes
+Write the random data unencoded instead of hex encoded. Applies to
+.B \-\-get\-random
+and
+.BR \-\-get\-seed .
+.TP
+.B \-\-use\-pr
+Request the data from the prediction\-resistance generator, which reseeds from
+the entropy sources for every request.
+.TP
+.B \-\-timeout\-msec " \fIMSEC\fR"
+Bound
+.B \-\-get\-random
+by a timeout of
+.I MSEC
+milliseconds instead of blocking indefinitely.
+.TP
+.B \-\-allow\-unseeded
+Let
+.B \-\-get\-random
+and
+.B \-\-get\-seed
+proceed even though the ESDM is not fully seeded yet. The data is then not of
+full quality.
+.SS Administration
+.TP
+.BR \-W ", " \-\-write\-to\-aux\-pool " \fIDATA\fR"
+Write the string
+.I DATA
+into the auxiliary pool. The argument is the data itself, not a byte count.
+Requires root.
+.TP
+.BR \-B ", " \-\-write\-entropy\-bits " \fIBITS\fR"
+Number of entropy bits the preceding write to the auxiliary pool is credited
+with.
+.TP
+.B \-\-clear\-pool
+Clear the entropy pool. Intended for testing. Requires root.
+.TP
+.B \-\-reseed\-crng
+Force a reseed of the DRNGs. Intended for testing. Requires root.
+.TP
+.BR \-\-pkcs11\-pin " \fIPIN\fR"
+Set the user PIN of the PKCS#11 entropy source. Pass
+.B \-
+to read the PIN from standard input with terminal echo disabled, which keeps
+it out of the process table. May be combined with
+.BR \-\-pkcs11\-token\-label .
+Requires root.
+.TP
+.BR \-\-pkcs11\-token\-label " \fILABEL\fR"
+Set the token label of the PKCS#11 entropy source and re\-open the module. Pass
+an empty string to clear the override. Requires root.
+.SS Benchmarking and stress testing
+.TP
+.BR \-b ", " \-\-benchmark
+Run a small speed test in full and prediction\-resistance mode across several
+buffer sizes.
+.TP
+.BR \-\-benchmark\-mode " \fIMODE\fR"
+Restrict the benchmark to one request mode:
+.BR full ", " pr " or " both
+(default:
+.BR both ).
+Implies
+.BR \-\-benchmark .
+.TP
+.B \-\-stress\-delay
+Run a single\-threaded delay measurement.
+.TP
+.B \-\-stress\-process
+Run the delay stress test on all cores, using processes.
+.TP
+.B \-\-stress\-thread
+Run the delay stress test on all cores, using threads.
+.TP
+.BR \-\-stress\-duration " \fISECS\fR"
+Timeout of the stress tests. Default: 65.0.
+.TP
+.BR \-\-stress\-request\-size " \fIBYTES\fR"
+Buffer size used by the stress tests. Default: 4.
+.TP
+.B \-\-stress\-cpu\-usage
+Show CPU usage during the stress test.
+.TP
+.B \-\-stress\-fork
+Check the fork handling of the RPC client library on the current platform.
+.TP
+.B \-\-stress\-init\-fini
+Stress the init/fini reference counting of the RPC client library from several
+threads.
+.TP
+.B \-\-endless\-stress
+Run an endless stress test. Together with
+.B \-\-continue\-on\-failure
+the
+.BR esdm\-server (8)
+may be stopped and started while it runs.
+.TP
+.B \-\-continue\-on\-failure
+Do not abort the test on the first failure.
+.SS Testing helpers
+The following options exist to study the behaviour of the auxiliary pool. They
+seed the ESDM from the operating system RNG, which defeats the entropy
+accounting of the ESDM.
+.B Do not use them in production.
+All of them require root.
+.TP
+.B \-\-seed\-via\-os
+Single\-shot seeding of the auxiliary pool via
+.BR getentropy (3)/ getrandom (2).
+.TP
+.B \-\-reseed\-via\-os
+Automatic reseeding of the auxiliary pool from the same source.
+.TP
+.BR \-\-reseed\-delay\-ms " \fIMSEC\fR"
+Delay inserted before each reseed, to emulate the latency of a smartcard or a
+TPM.
+.SH EXIT STATUS
+.B esdm\-tool
+exits with status 0 on success. The query options
+.RB ( \-\-is\-fully\-seeded ,
+.BR \-\-is\-running ,
+.BR \-\-wait\-until\-seeded )
+report their answer through the exit status and are meant to be used in
+scripts and service units.
+.SH EXAMPLES
+Wait up to a minute for the ESDM to become fully seeded, then draw 32 raw
+random bytes:
+.PP
+.RS
+.nf
+esdm\-tool \-\-wait\-until\-seeded 60
+esdm\-tool \-\-get\-random 32 \-\-raw\-bytes > seed.bin
+.fi
+.RE
+.PP
+Show the entropy source status as JSON:
+.PP
+.RS
+.nf
+esdm\-tool \-\-status\-json
+.fi
+.RE
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-kernel\-seeder (8),
+.BR libesdm_rpc_client (3)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

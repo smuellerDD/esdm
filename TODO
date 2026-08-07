@@ -1,8 +1,4 @@
-- add Tests: HW-Rand ES, entropy feeder, ES monitor
-
-- add: man pages for API / apps
-
-- linker version script - how do do that with meson?
-
-- libesdm_getrandom.so: how to convince Meson to address issue outlined in frontends/getrandom/meson.build?
-
+- tests/kernel-seeder: the end-to-end part (start esdm-server, run the feeder,
+  check that entropy reaches the kernel) needs root and is therefore skipped in
+  an unprivileged CI run. Wire it into one of the NixOS VM checks so it is
+  actually executed somewhere.

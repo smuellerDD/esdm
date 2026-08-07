@@ -184,9 +184,26 @@ sources above, the ESDM provides eBPF-based variants (`es_sched_ebpf` and
 `es_irq_ebpf`) that collect the same event timing on a stock Linux kernel:
 eBPF programs attached to the stable `sched_switch`, `irq_handler_entry`
 and `softirq_entry` tracepoints record the event time stamps, execute the
-SP800-90B health tests (RCT and APT) on the raw data and deliver the folded
-time stamp bits to the `esdm-server` through a BPF ring buffer where they
-are conditioned into a per-source entropy pool with the configured hash.
+SP800-90B health tests (RCT and APT) on the raw data and deposit the time
+between successive events of a CPU. The spacing of the events is where the
+entropy is, and it is what the SP800-90B assessment of the raw samples
+measures, so what the server credits is what was assessed.
+
+The deltas are collected in per-CPU buffers and handed to a BPF ring
+buffer once a buffer is full - or, for a CPU that falls quiet with a
+partially filled one, after an idle deadline, so that nothing collected
+lingers unaccounted. The `esdm-server` reads them from there when it wants
+entropy and conditions them into a per-source entropy pool with the
+configured hash; it stops reading once that pool holds all the entropy one
+output block can carry, and an extraction fetches what its block still
+costs. Events collected while nobody reads fill the buffers up and are then
+dropped - nothing needs them, and what is already collected is no worse.
+
+Only events the health tests vouch for are collected, so no health state
+travels with them. What the programs report back - the deltas each CPU
+handed over and its SP800-90B health state - lives in a per-CPU map the
+server reads directly, which is also how it knows how much entropy is
+still to be had without fetching it first.
 
 Requirements: a kernel with BTF support (`CONFIG_DEBUG_INFO_BTF`, standard
 on the common distributions; kernel 5.15 or later on x86_64, 6.1 or later
@@ -309,6 +326,31 @@ The ESDM consists of the following components:
 * `openssl-provider`: A random provider for OpenSSL 3.0 and greater is included.
   Load `libesdm-rng-provider.so` if all random numbers should originate in ESDM
   or `esdm-seed-src-provider.so` if ESDM should only be used as a source of seeds.
+  Both reach the ESDM over its RPC interface and tag their algorithms with the
+  property `provider=esdm`.
+
+  `libesdm-egd-provider.so` is an alternative to `libesdm-rng-provider.so` that
+  obtains its random numbers over the EGD interface instead (see
+  README.usage.md). It needs nothing but that one socket - no RPC client, no
+  shared memory - which makes it usable where the RPC interface cannot be
+  reached. Its algorithms carry the property `provider=esdm-egd`, so it can be
+  loaded next to the RPC based ones, and the socket it uses is named with the
+  `egd_socket` key of its `openssl.cnf` section. Note that the EGD protocol
+  cannot express prediction resistance: a request explicitly asking for it is
+  refused rather than served with ordinary random data.
+
+  `libesdm-egd-provider-pr.so` is the prediction resistance counterpart. Since
+  the protocol cannot select the generator per request, that is a property of
+  the socket - the ESDM serves a second EGD socket from
+  `esdm_get_random_bytes_pr()` - so this variant simply defaults to that socket
+  and accepts prediction resistance requests. Its algorithms carry
+  `provider=esdm-egd-pr`.
+
+* `libesdm_egd_client`: A small client library for the ESDM's EGD interface,
+  used by the EGD OpenSSL provider and usable on its own (`esdm_egd_client.h`).
+  It owns a single connection, serializes the command stream on it, bounds every
+  wait, and reconnects transparently when the daemon was restarted or the client
+  is used after a `fork()`.
 
 * `esdm-server-signal-helper`: This small tool is used to support proper
   quiescing of the ESDM server when the system suspends or sleeps. When invoking

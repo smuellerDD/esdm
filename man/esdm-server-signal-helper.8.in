@@ -1,0 +1,66 @@
+.TH ESDM\-SERVER\-SIGNAL\-HELPER 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-server\-signal\-helper \- notify the ESDM server about suspend and resume
+.SH SYNOPSIS
+.B esdm\-server\-signal\-helper
+.B \-\-suspend
+.RB [ \-\-pid
+.IR PIDFILE ]
+.br
+.B esdm\-server\-signal\-helper
+.B \-\-resume
+.SH DESCRIPTION
+.B esdm\-server\-signal\-helper
+tells a running
+.BR esdm\-server (8)
+that the system is about to be suspended, and that it has resumed.
+.PP
+On
+.BR \-\-suspend ,
+the helper reads the PID of the daemon from its PID file and sends it
+.BR SIGUSR1 .
+The daemon then marks itself as suspended in the status shared memory segment,
+so that consumers waiting on it do not block on a daemon that is about to stop
+running.
+.PP
+On
+.BR \-\-resume ,
+the helper connects to the unprivileged RPC interface and writes an empty data
+buffer into the auxiliary pool. That write is what triggers the reseed of the
+DRNGs after the resume; no PID file is needed for it.
+.PP
+Both operations are wired to the sleep targets by the shipped
+.BR esdm\-server\-suspend.service " and " esdm\-server\-resume.service
+systemd units, so the helper rarely needs to be invoked by hand.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-suspend
+Signal the impending suspend.
+.TP
+.BR \-r ", " \-\-resume
+Signal the completed resume.
+.TP
+.BR \-p ", " \-\-pid " \fIPIDFILE\fR"
+Read the PID of the daemon from
+.IR PIDFILE .
+Only used by
+.BR \-\-suspend .
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit with a non\-zero status.
+.SH EXIT STATUS
+Returns 0 when the requested notification was delivered, and a non\-zero status
+otherwise \- including when no mode was requested at all.
+.SH FILES
+.TP
+.I /run/esdm\-server.pid
+PID file written by
+.BR esdm\-server (8)
+when started with
+.BR \-\-pid ,
+and the file the shipped suspend unit passes to this helper.
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-tool (1)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>
