@@ -153,7 +153,8 @@ static sem_t *esdm_semid_need_entropy_level = SEM_FAILED;
 
 static int esdm_cuse_shm_status_down(struct timespec *ts)
 {
-	struct timespec ts_init = { .tv_sec = 1, .tv_nsec = 0 };
+	static const long poll_nsec = 50 * 1000 * 1000;
+	struct timespec ts_init = { .tv_sec = 0, .tv_nsec = poll_nsec };
 
 	if (esdm_semid_need_entropy_level == SEM_FAILED) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "Cannot use semaphore\n");
@@ -161,9 +162,31 @@ static int esdm_cuse_shm_status_down(struct timespec *ts)
 		return -1;
 	}
 
-	/* Wait and block until the SHM-Segment becomes available */
-	while (!esdm_cuse_shm_status_avail())
+	/*
+	 * Wait for the SHM segment to become available - i.e. for a server to
+	 * have published its status in it - but no longer than the caller
+	 * allowed. Waiting here without a bound would make the timeout this
+	 * function documents unreachable whenever no server is running yet,
+	 * which is exactly when a caller needs it: an entropy provider started
+	 * alongside the ESDM rather than after it would never come back to
+	 * report that, and never retry.
+	 *
+	 * @ts is the absolute CLOCK_MONOTONIC deadline sem_clockwait() below
+	 * is given, so the same deadline applies here, and the timeout is
+	 * reported the way sem_clockwait() would report it.
+	 */
+	while (!esdm_cuse_shm_status_avail()) {
+		struct timespec now;
+
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (now.tv_sec > ts->tv_sec ||
+		    (now.tv_sec == ts->tv_sec && now.tv_nsec >= ts->tv_nsec)) {
+			errno = ETIMEDOUT;
+			return -1;
+		}
+
 		nanosleep(&ts_init, NULL);
+	}
 
 	/*
 	 * If the ESDM server already indicates it needs entropy, return

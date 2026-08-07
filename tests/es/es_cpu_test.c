@@ -17,6 +17,7 @@
  * DAMAGE.
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -165,6 +166,38 @@ static int es_cpu_init(void)
 	return 0;
 }
 
+/*
+ * The CPU entropy source is compiled in for this architecture, but the CPU
+ * actually running the test may not implement the instruction behind it. An
+ * arm64 part without FEAT_RNG (RNDRRS) is the common case - including the
+ * virtualized arm64 CI runners - and on x86 a hypervisor may withhold
+ * RDSEED just as well. esdm_es_cpu.c then credits 0 bits and wipes the
+ * buffer, which is correct behavior of an absent source rather than a test
+ * failure, so the test is skipped instead.
+ *
+ * The ->active() callback cannot be used for this: it only reports whether the
+ * source was compiled in for the architecture, not whether this CPU serves it.
+ */
+static bool es_cpu_data_available(void)
+{
+	struct entropy_es eb_es;
+
+	memset(&eb_es, 0, sizeof(eb_es));
+
+	/*
+	 * Probe with a non-zero entropy rate: the delivered bits are credited
+	 * according to the configured rate, so with a rate of 0 - which is a
+	 * legitimate configuration - even a working source would report 0 bits
+	 * and look absent. The checks below set the rate per iteration anyway.
+	 */
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS,
+					  true);
+
+	return eb_es.e_bits > 0;
+}
+
 int main(int argc, char *argv[])
 {
 	uint32_t i;
@@ -178,6 +211,11 @@ int main(int argc, char *argv[])
 	ret = es_cpu_init();
 	if (ret)
 		return ret;
+
+	if (!es_cpu_data_available()) {
+		printf("ES CPU: CPU delivers no random numbers on this platform, skipping test\n");
+		return 77;
+	}
 
 	ret += es_cpu_name();
 

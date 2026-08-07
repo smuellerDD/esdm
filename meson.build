@@ -273,6 +273,9 @@ testdirs = [
 	'tests/getrandom',
 	#'tests/misc',
 	'tests/rpc_client',
+	'tests/rpc_service',
+	'tests/aux-client',
+	'tests/tool',
 	]
 if get_option('openssl-rand-provider').enabled()
 testdirs += [

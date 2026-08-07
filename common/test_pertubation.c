@@ -27,6 +27,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "esdm_logger.h"
+#include "mutex_w.h"
 #include "ret_checkers.h"
 #include "test_pertubation.h"
 
@@ -69,6 +70,22 @@ struct esdm_test_shm_status {
 
 static struct esdm_test_shm_status *esdm_test_shm_status = NULL;
 static int esdm_test_shmid = -1;
+
+/*
+ * The segment is a process-global singleton, but several independent users
+ * attach to it: the privileged and the unprivileged RPC client service each
+ * init and fini it on their own, as do the server and the test environments.
+ * Without a reference count the first fini detaches the segment and removes
+ * the IPC object while the other users are still writing to it through
+ * esdm_test_shm_status - the RPC client accounting then faults on a mapping
+ * that is gone.
+ *
+ * The lock is needed on top: esdm_rpcc_init_service() calls the init under the
+ * connection lock while esdm_rpcc_fini_service() calls the fini outside of it,
+ * so the two are not serialized against each other by the caller.
+ */
+static uint32_t esdm_test_shm_status_ref = 0;
+static DEFINE_MUTEX_W_UNLOCKED(esdm_test_shm_status_lock);
 
 #define ESDM_TEST_SHM_NAME "/"
 #define ESDM_TEST_SHM_STATUS 99887766
@@ -172,17 +189,33 @@ void esdm_test_shm_status_reset(void)
 
 int esdm_test_shm_status_init(void)
 {
-	int ret = esdm_test_shm_status_create_shm();
+	int ret = 0;
 
-	if (ret)
-		return ret;
+	mutex_w_lock(&esdm_test_shm_status_lock);
 
-	return 0;
+	/* Only the first user attaches, everybody else just takes a reference. */
+	if (!esdm_test_shm_status_ref) {
+		ret = esdm_test_shm_status_create_shm();
+		if (ret)
+			goto out;
+	}
+
+	esdm_test_shm_status_ref++;
+
+out:
+	mutex_w_unlock(&esdm_test_shm_status_lock);
+	return ret;
 }
 
 void esdm_test_shm_status_fini(void)
 {
-	esdm_test_shm_status_delete_shm();
+	mutex_w_lock(&esdm_test_shm_status_lock);
+
+	/* Detach only once the last user is gone. */
+	if (esdm_test_shm_status_ref && !--esdm_test_shm_status_ref)
+		esdm_test_shm_status_delete_shm();
+
+	mutex_w_unlock(&esdm_test_shm_status_lock);
 }
 
 void esdm_test_shm_status_add_rpc_client_written(size_t written)

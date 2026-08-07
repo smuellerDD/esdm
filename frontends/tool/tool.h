@@ -55,6 +55,7 @@ extern void handle_stress_process(double timeout_sec, uint32_t request_size,
 				  bool show_cpu_usage);
 extern void handle_stress_thread(double timeout_sec, int num_threads,
 				 uint32_t request_size, bool show_cpu_usage);
+extern int handle_stress_init_fini(double timeout_sec, int num_threads);
 
 extern void handle_messages(int *sockets, size_t num_sockets,
 			    bool show_cpu_usage);
