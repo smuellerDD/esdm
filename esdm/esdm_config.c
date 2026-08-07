@@ -24,6 +24,7 @@
 #include "esdm_config_internal.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
+#include "es_ebpf/esdm_es_irq_ebpf.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
 #include "fips.h"
@@ -45,6 +46,8 @@ struct esdm_config {
 	_Atomic uint32_t esdm_es_irq_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_krng_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_sched_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_irq_ebpf_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_sched_ebpf_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_hwrand_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_tpm2_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_pkcs11_entropy_rate_bits;
@@ -93,6 +96,16 @@ static struct esdm_config esdm_config = {
 	 * See documentation of ESDM_SCHED_ENTROPY_RATE
 	 */
 	.esdm_es_sched_entropy_rate_bits = ESDM_SCHED_ENTROPY_RATE,
+
+	/*
+	 * See documentation of ESDM_IRQ_EBPF_ENTROPY_RATE
+	 */
+	.esdm_es_irq_ebpf_entropy_rate_bits = ESDM_IRQ_EBPF_ENTROPY_RATE,
+
+	/*
+	 * See documentation of ESDM_SCHED_EBPF_ENTROPY_RATE
+	 */
+	.esdm_es_sched_ebpf_entropy_rate_bits = ESDM_SCHED_EBPF_ENTROPY_RATE,
 
 	/*
 	 * See documentation of ESDM_HWRAND_ENTROPY_RATE
@@ -148,6 +161,30 @@ static struct esdm_config esdm_config = {
 static uint32_t esdm_config_entropy_rate_max(uint32_t val)
 {
 	return min_uint32(ESDM_DRNG_SECURITY_STRENGTH_BITS, val);
+}
+
+/*
+ * The events of the interrupt-based and scheduler-based entropy sources
+ * (both the kernel-patch and the eBPF variants) have dependencies - e.g. a
+ * scheduling event may coincide with an interrupt. Thus, at most one of
+ * these timing entropy sources may be credited with a non-zero entropy
+ * rate. Setting a non-zero rate for one of them therefore zeroes the rates
+ * of all others.
+ */
+static void esdm_config_timing_es_rate_set(_Atomic uint32_t *rate_bits,
+					   uint32_t ent)
+{
+	uint32_t val = esdm_config_entropy_rate_max(ent);
+
+	if (val > 0) {
+		esdm_config.esdm_es_irq_entropy_rate_bits = 0;
+		esdm_config.esdm_es_sched_entropy_rate_bits = 0;
+		esdm_config.esdm_es_irq_ebpf_entropy_rate_bits = 0;
+		esdm_config.esdm_es_sched_ebpf_entropy_rate_bits = 0;
+	}
+
+	*rate_bits = val;
+	esdm_es_add_entropy();
 }
 
 DSO_PUBLIC
@@ -211,17 +248,8 @@ uint32_t esdm_config_es_irq_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_irq_entropy_rate_set(uint32_t ent)
 {
-	uint32_t val = esdm_config_entropy_rate_max(ent);
-
-	/*
-	 * Due to dependencies between both entropy sources, it is not
-	 * permissible to have both set to non-zero values.
-	 */
-	if (val > 0)
-		esdm_config_es_sched_entropy_rate_set(0);
-
-	esdm_config.esdm_es_irq_entropy_rate_bits = val;
-	esdm_es_add_entropy();
+	esdm_config_timing_es_rate_set(
+		&esdm_config.esdm_es_irq_entropy_rate_bits, ent);
 }
 
 DSO_PUBLIC
@@ -245,7 +273,7 @@ uint32_t esdm_config_es_krng_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_krng_entropy_rate_set(uint32_t ent)
 {
-	if (esdm_irq_enabled())
+	if (esdm_irq_enabled() || esdm_irq_ebpf_enabled())
 		ent = min_uint32(ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY, ent);
 
 	esdm_config.esdm_es_krng_entropy_rate_bits =
@@ -262,17 +290,34 @@ uint32_t esdm_config_es_sched_entropy_rate(void)
 DSO_PUBLIC
 void esdm_config_es_sched_entropy_rate_set(uint32_t ent)
 {
-	uint32_t val = esdm_config_entropy_rate_max(ent);
+	esdm_config_timing_es_rate_set(
+		&esdm_config.esdm_es_sched_entropy_rate_bits, ent);
+}
 
-	/*
-	 * Due to dependencies between both entropy sources, it is not
-	 * permissible to have both set to non-zero values.
-	 */
-	if (val > 0)
-		esdm_config_es_irq_entropy_rate_set(0);
+DSO_PUBLIC
+uint32_t esdm_config_es_irq_ebpf_entropy_rate(void)
+{
+	return esdm_config.esdm_es_irq_ebpf_entropy_rate_bits;
+}
 
-	esdm_config.esdm_es_sched_entropy_rate_bits = val;
-	esdm_es_add_entropy();
+DSO_PUBLIC
+void esdm_config_es_irq_ebpf_entropy_rate_set(uint32_t ent)
+{
+	esdm_config_timing_es_rate_set(
+		&esdm_config.esdm_es_irq_ebpf_entropy_rate_bits, ent);
+}
+
+DSO_PUBLIC
+uint32_t esdm_config_es_sched_ebpf_entropy_rate(void)
+{
+	return esdm_config.esdm_es_sched_ebpf_entropy_rate_bits;
+}
+
+DSO_PUBLIC
+void esdm_config_es_sched_ebpf_entropy_rate_set(uint32_t ent)
+{
+	esdm_config_timing_es_rate_set(
+		&esdm_config.esdm_es_sched_ebpf_entropy_rate_bits, ent);
 }
 
 DSO_PUBLIC
@@ -467,6 +512,15 @@ int esdm_config_init(void)
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_irq_entropy_rate_bits);
 	complete_entropy_rate += esdm_config.esdm_es_irq_entropy_rate_bits;
+	esdm_config.esdm_es_sched_ebpf_entropy_rate_bits =
+		esdm_config_entropy_rate_max(
+			esdm_config.esdm_es_sched_ebpf_entropy_rate_bits);
+	complete_entropy_rate +=
+		esdm_config.esdm_es_sched_ebpf_entropy_rate_bits;
+	esdm_config.esdm_es_irq_ebpf_entropy_rate_bits =
+		esdm_config_entropy_rate_max(
+			esdm_config.esdm_es_irq_ebpf_entropy_rate_bits);
+	complete_entropy_rate += esdm_config.esdm_es_irq_ebpf_entropy_rate_bits;
 	esdm_config.esdm_es_hwrand_entropy_rate_bits =
 		esdm_config_entropy_rate_max(
 			esdm_config.esdm_es_hwrand_entropy_rate_bits);

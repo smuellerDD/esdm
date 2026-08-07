@@ -142,6 +142,16 @@ else
 	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS', 0)
 endif
 
+conf_data.set('ESDM_ES_SCHED_EBPF', get_option('es_sched_ebpf').enabled())
+conf_data.set('ESDM_SCHED_EBPF_ENTROPY_RATE',
+	      get_option('es_sched_ebpf_entropy_rate'))
+
+conf_data.set('ESDM_ES_IRQ_EBPF', get_option('es_irq_ebpf').enabled())
+conf_data.set('ESDM_IRQ_EBPF_ENTROPY_RATE',
+	      get_option('es_irq_ebpf_entropy_rate'))
+
+conf_data.set('ESDM_ES_EBPF_TESTING', get_option('es_ebpf_testing').enabled())
+
 conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
 conf_data.set('ESDM_HWRAND_ENTROPY_RATE',
 	      get_option('es_hwrand_entropy_rate'))
@@ -189,8 +199,17 @@ else
 	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS', 0)
 endif
 
-if (get_option('es_irq_entropy_rate') > 0) and get_option('es_sched_entropy_rate') > 0
-	error('It is not permissible to award both, the interrupt and scheduler-based entropy sources, an entropy rate greater than zero. Adjust es_irq_entropy_rate or es_sched_entropy_rate to zero.')
+timing_es_credited = 0
+foreach timing_es_rate_option : [ 'es_irq_entropy_rate',
+				  'es_sched_entropy_rate',
+				  'es_irq_ebpf_entropy_rate',
+				  'es_sched_ebpf_entropy_rate' ]
+	if get_option(timing_es_rate_option) > 0
+		timing_es_credited += 1
+	endif
+endforeach
+if timing_es_credited > 1
+	error('It is not permissible to award more than one of the interrupt and scheduler-based entropy sources (es_irq, es_sched, es_irq_ebpf, es_sched_ebpf) an entropy rate greater than zero. Adjust the respective entropy rate options to zero.')
 endif
 
 conf_data.set('ESDM_SELINUX_ENABLED', get_option('selinux').enabled())

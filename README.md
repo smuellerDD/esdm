@@ -177,6 +177,30 @@ scheduler entropy source. It will try to find the kernel interface of the
 aforementioned extension. If it does not find it, it will print a message
 during the startup of the `esdm-server` and then deactivate itself.
 
+### eBPF-based Scheduler and Interrupt Entropy Sources
+
+As an alternative to the kernel-patch based scheduler and interrupt entropy
+sources above, the ESDM provides eBPF-based variants (`es_sched_ebpf` and
+`es_irq_ebpf`) that collect the same event timing on a stock Linux kernel:
+eBPF programs attached to the stable `sched_switch`, `irq_handler_entry`
+and `softirq_entry` tracepoints record the event time stamps, execute the
+SP800-90B health tests (RCT and APT) on the raw data and deliver the folded
+time stamp bits to the `esdm-server` through a BPF ring buffer where they
+are conditioned into a per-source entropy pool with the configured hash.
+
+Requirements: a kernel with BTF support (`CONFIG_DEBUG_INFO_BTF`, standard
+on the common distributions; kernel 5.15 or later on x86_64, 6.1 or later
+on arm64), libbpf >= 1.2, and `clang` plus `bpftool` at build time. The
+programs are loaded during the privileged initialization phase of the
+`esdm-server`. Like all timing entropy sources, at most one of `es_irq`,
+`es_sched`, `es_irq_ebpf` and `es_sched_ebpf` may be credited with a
+non-zero entropy rate.
+
+The default entropy rate of both sources is 0 (uncredited): determine the
+appropriate rate for a deployment environment with the measurement tooling
+in `addon/es_ebpf_testing/` before crediting the sources. See
+`doc/esdm_es_ebpf.md` for the design description.
+
 ## Testing
 
 The ESDM code repository uses `meson` to provide an extensive test harness

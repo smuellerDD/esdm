@@ -44,6 +44,8 @@
 #include "esdm_es_krng.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_pkcs11.h"
+#include "es_ebpf/esdm_es_irq_ebpf.h"
+#include "es_ebpf/esdm_es_sched_ebpf.h"
 #include "esdm_es_sched.h"
 #include "esdm_interface_dev_common.h"
 #include "esdm_shm_status.h"
@@ -123,6 +125,12 @@ struct esdm_es_cb *esdm_es[] = {
 #endif
 #ifdef ESDM_ES_SCHED
 	&esdm_es_sched,
+#endif
+#ifdef ESDM_ES_IRQ_EBPF
+	&esdm_es_irq_ebpf,
+#endif
+#ifdef ESDM_ES_SCHED_EBPF
+	&esdm_es_sched_ebpf,
 #endif
 #ifdef ESDM_ES_JENT
 	&esdm_es_jent,
