@@ -1,3 +1,36 @@
+# The per-ES block cache is exercised on its own: the ES manager entry points it
+# calls out to are stubbed in the test, which is what makes the cooperative
+# shutdown of the monitor loop and the wakeup accounting observable at all. It
+# therefore compiles the unit under test rather than linking the ESDM library,
+# and needs neither a server nor an initialized DRNG.
+esdm_es_buf_test = executable(
+	'esdm_es_buf_test',
+	[ files('../../esdm/esdm_es_buf.c'), 'esdm_es_buf_test.c' ],
+	include_directories: [ include_dirs_server,
+			       include_directories('../common') ],
+	dependencies: dependencies_server,
+	link_with: esdm_common_static_lib,
+)
+
+test('ESDM per-ES block cache', esdm_es_buf_test)
+
+# fips.c only exists in a FIPS build. Like the block cache above it is compiled
+# into the test rather than linked from the library, so the configuration probe
+# its constructor calls can be stubbed out - a failing power-on self test would
+# exit() the process before main() runs.
+if get_option('fips140')
+	esdm_fips_test = executable(
+		'esdm_fips_test',
+		[ files('../../esdm/fips.c'), 'esdm_fips_test.c' ],
+		include_directories: [ include_dirs_server,
+				       include_directories('../common') ],
+		dependencies: dependencies_server,
+		link_with: esdm_common_static_lib,
+	)
+
+	test('ESDM FIPS mode detection', esdm_fips_test)
+endif
+
 if get_option('esdm-server').enabled()
 	esdm_status_test = executable(
 		'esdm_status_test',

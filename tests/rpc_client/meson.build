@@ -36,6 +36,18 @@ if get_option('esdm-server').enabled()
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
 
+	# One test over the whole client API: most of its calls are a file each
+	# and had never been executed.
+	rpc_api_test = executable(
+			'rpc_api_test',
+			[ esdm_tester_common, 'rpc_api_test.c' ],
+			include_directories: [ include_dirs_client,
+					       include_dirs_server,
+					       include_directories('../common') ],
+			dependencies: [ dependencies_client ],
+			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
+		)
+
 	rpc_get_seed_test = executable(
 			'rpc_get_seed_test',
 			[ esdm_tester_common, 'rpc_get_seed_test.c' ],
@@ -102,6 +114,10 @@ if get_option('esdm-server').enabled()
 		is_parallel: false)
 
 	test('RPC call seed_lvl_test', rpc_seed_lvl_test,
-		env: [ tester_esdm_env ],
-		is_parallel: false)
+		env: [ tester_esdm_env ])
+
+	# Sweeps every client wrapper in one server life cycle, hence the
+	# larger timeout.
+	test('RPC call whole client API', rpc_api_test,
+		env: [ tester_esdm_env ], timeout: 300)
 endif
