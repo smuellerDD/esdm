@@ -307,7 +307,7 @@ testdirs = [
 	'tests/esdm',
 	'tests/getrandom',
 	'tests/kernel-seeder',
-	#'tests/misc',
+	'tests/misc',
 	'tests/proc',
 	'tests/rpc_client',
 	'tests/rpc_service',

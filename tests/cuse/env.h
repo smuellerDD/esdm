@@ -26,6 +26,7 @@ extern "C" {
 
 void esdm_cuse_dev_file(char *outfile, size_t outfilelen, const char *name);
 void env_fini(void);
+int env_daemons_alive(void);
 int env_init(int disable_fallback);
 void env_kill_server(void);
 

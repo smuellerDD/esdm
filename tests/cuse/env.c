@@ -75,6 +75,35 @@ void env_fini(void)
 	server_pid = 0;
 }
 
+/*
+ * Whether one of the daemons started above is still running. A daemon that
+ * exited is reaped here rather than in env_fini(), which is what makes it
+ * visible at all - a zombie still answers kill(pid, 0).
+ */
+static int env_daemon_alive(const char *name, pid_t *pid)
+{
+	if (*pid <= 0) {
+		printf("%s was never started\n", name);
+		return 0;
+	}
+
+	if (waitpid(*pid, NULL, WNOHANG) != *pid)
+		return 1;
+
+	printf("%s (PID %u) terminated\n", name, *pid);
+	*pid = 0;
+
+	return 0;
+}
+
+int env_daemons_alive(void)
+{
+	/* Bitwise, so that all three are checked and reported */
+	return env_daemon_alive("Server", &server_pid) &
+	       env_daemon_alive("random", &random_pid) &
+	       env_daemon_alive("urandom", &urandom_pid);
+}
+
 static int env_check_file(const char *path)
 {
 	struct stat sb;
