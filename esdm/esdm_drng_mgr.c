@@ -1420,7 +1420,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		 * others contribute nothing to collected_bits below and their
 		 * output would be carried out to the caller uncredited.
 		 */
-		esdm_get_seed_buffers(eb, NULL, requested_bits, false);
+		esdm_get_seed_buffers(eb, eb, requested_bits, false);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */
