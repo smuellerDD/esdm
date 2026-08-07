@@ -1,18 +1,21 @@
+# Every test here drives the ESDM in process and therefore touches the
+# machine-global System V names - see tests/test_ipc_ns.c.
+esdm_ipc_ns = files('../test_ipc_ns.c')
+
 es_mgr_monitor_tester = executable(
 	'es_mgr_monitor_tester',
-	[ 'es_mgr_monitor_test.c' ],
+	[ esdm_ipc_ns, 'es_mgr_monitor_test.c' ],
 	dependencies: dependencies_server,
 	include_directories: include_dirs_server,
 	link_with: esdm_static_lib,
 )
 
-test('ES manager monitor', es_mgr_monitor_tester, timeout: 120,
-	is_parallel: false)
+test('ES manager monitor', es_mgr_monitor_tester, timeout: 120)
 
 if get_option('es_jent').enabled()
 	es_jent_tester = executable(
 		'es_jent_tester',
-		[ 'es_jent_test.c' ],
+		[ esdm_ipc_ns, 'es_jent_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -24,7 +27,7 @@ endif
 if get_option('es_cpu').enabled()
 	es_cpu_tester = executable(
 		'es_cpu_tester',
-		[ 'es_cpu_test.c' ],
+		[ esdm_ipc_ns, 'es_cpu_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -36,7 +39,7 @@ endif
 if get_option('es_kernel').enabled()
 	es_krng_tester = executable(
 		'es_krng_tester',
-		[ 'es_krng_test.c' ],
+		[ esdm_ipc_ns, 'es_krng_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -48,7 +51,7 @@ endif
 if get_option('es_sched').enabled()
 	es_sched_tester = executable(
 		'es_sched_tester',
-		[ 'es_sched_test.c' ],
+		[ esdm_ipc_ns, 'es_sched_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -63,7 +66,7 @@ endif
 if get_option('es_hwrand').enabled()
 	es_hwrand_tester = executable(
 		'es_hwrand_tester',
-		[ 'es_hwrand_test.c' ],
+		[ esdm_ipc_ns, 'es_hwrand_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -75,7 +78,7 @@ endif
 if get_option('es_tpm2').enabled()
 	es_tpm2_tester = executable(
 		'es_tpm2_tester',
-		[ 'es_tpm2_test.c' ],
+		[ esdm_ipc_ns, 'es_tpm2_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -88,7 +91,7 @@ endif
 if get_option('es_sched_ebpf').enabled()
 	es_sched_ebpf_tester = executable(
 		'es_sched_ebpf_tester',
-		[ 'es_sched_ebpf_test.c' ],
+		[ esdm_ipc_ns, 'es_sched_ebpf_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -100,7 +103,7 @@ endif
 if get_option('es_irq_ebpf').enabled()
 	es_irq_ebpf_tester = executable(
 		'es_irq_ebpf_tester',
-		[ 'es_irq_ebpf_test.c' ],
+		[ esdm_ipc_ns, 'es_irq_ebpf_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -112,7 +115,7 @@ endif
 if get_option('es_pkcs11').enabled()
 	es_pkcs11_tester = executable(
 		'es_pkcs11_tester',
-		[ 'es_pkcs11_test.c' ],
+		[ esdm_ipc_ns, 'es_pkcs11_test.c' ],
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
 	)
@@ -122,7 +125,7 @@ endif
 if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
 	es_ebpf_health_tester = executable(
 		'es_ebpf_health_tester',
-		[ 'es_ebpf_health_test.c' ],
+		[ esdm_ipc_ns, 'es_ebpf_health_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
@@ -134,7 +137,7 @@ endif
 if get_option('es_jent_kernel').enabled()
 	es_jent_kernel_tester = executable(
 		'es_jent_kernel_tester',
-		[ 'es_jent_kernel_test.c' ],
+		[ esdm_ipc_ns, 'es_jent_kernel_test.c' ],
 		dependencies: dependencies_server,
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,

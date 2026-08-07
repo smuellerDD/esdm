@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = esdm_rpcc_get_seed((uint8_t *)&buf, buflen, 0);
+	rc = esdm_rpcc_get_seed((uint8_t *)buf, buflen, 0);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;

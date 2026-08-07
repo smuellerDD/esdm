@@ -31,6 +31,7 @@
 #include "esdm_config_internal.h"
 #include "esdm_es_mgr.h"
 #include "esdm_logger.h"
+#include "es_rates.h"
 #include "ret_checkers.h"
 
 #ifdef ESDM_TESTMODE
@@ -67,14 +68,7 @@ static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
 	esdm_drng_force_reseed();
 	esdm_config_drng_max_wo_reseed_bits_set(256);
 
-	esdm_config_es_cpu_entropy_rate_set(0);
-	esdm_config_es_tpm2_entropy_rate_set(0);
-	esdm_config_es_jent_entropy_rate_set(0);
-	esdm_config_es_krng_entropy_rate_set(0);
-	esdm_config_es_hwrand_entropy_rate_set(0);
-	esdm_config_es_irq_entropy_rate_set(0);
-	esdm_config_es_sched_entropy_rate_set(0);
-	esdm_config_es_jent_kernel_entropy_rate_set(0);
+	esdm_test_es_rates_zero();
 
 	if (!esdm_state_operational()) {
 		printf("failed to remain in operational mode\n");

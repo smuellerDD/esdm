@@ -84,19 +84,20 @@ threading_support_test = executable(
 	)
 
 if get_option('testmode').enabled()
+	# The shared memory segment is a system wide singleton keyed by a fixed
+	# ftok() value, so this would otherwise run next to everything else that
+	# attaches to it - which is every test mode ESDM on the machine. An IPC
+	# namespace of its own keeps the segment to itself; see
+	# tests/test_ipc_ns.c.
 	test_pertubation_test = executable(
 			'test_pertubation_test',
-			[ 'test_pertubation_test.c' ],
+			[ files('../test_ipc_ns.c'), 'test_pertubation_test.c' ],
 			include_directories: include_dirs_server,
 			dependencies: common_test_deps,
 			link_with: esdm_common_static_lib,
 		)
 
-	# The shared memory segment is a system wide singleton keyed by a fixed
-	# ftok() value, so this must not run next to anything else that attaches
-	# to it - which is every test mode ESDM on the machine.
-	test('common test perturbation', test_pertubation_test,
-		is_parallel: false)
+	test('common test perturbation', test_pertubation_test)
 endif
 
 # Both of these are only compiled into common_src when their option is set.

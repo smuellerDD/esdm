@@ -44,6 +44,8 @@
 #include "esdm_egd_client.h"
 #include "esdm_egd_protocol.h"
 
+#include "../test_namespace.h"
+
 /*
  * The blocking read waits for the ESDM to become operational, which right
  * after its start legitimately takes a moment.
@@ -166,6 +168,19 @@ int main(int argc, char *argv[])
 	if (getuid()) {
 		printf("Program must be started as root\n");
 		return 77;
+	}
+
+	/*
+	 * The EGD socket below is named uniquely, but the server started on it
+	 * also claims the fixed RPC socket, semaphore and IPC names. Run in
+	 * namespaces of our own so those cannot collide with another test using
+	 * the same ones - see tests/test_namespace.h.
+	 */
+	ret = test_isolate_namespaces();
+	if (ret) {
+		printf("Cannot isolate the test namespaces: %s\n",
+		       strerror(-ret));
+		return 1;
 	}
 
 	if (mkdtemp(tmpdir) == NULL) {

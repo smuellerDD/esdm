@@ -29,7 +29,116 @@
 #include <unistd.h>
 
 #include "env.h"
+#include "esdm_rpc_service.h"
 #include "privileges.h"
+
+/*
+ * Read a numeric field out of the ESDM status report.
+ *
+ * The write poll reports "entropy wanted" for exactly as long as
+ * esdm_need_entropy() holds, which compares the entropy in the aux pool
+ * against esdm_write_wakeup_bits - and that threshold is
+ * ESDM_NUM_AUX_POOLS * digestsize, so it scales with the configuration. Ask
+ * the ESDM what it is instead of assuming a value that only holds for a
+ * single-pool build.
+ */
+static int status_value(int fd, const char *field, uint32_t *value)
+{
+	char status[ESDM_SHM_STATUS_INFO_SIZE + 1];
+	const char *p;
+
+	memset(status, 0, sizeof(status));
+	if (ioctl(fd, 42, status, ESDM_SHM_STATUS_INFO_SIZE) < 0) {
+		printf("Status IOCTL failed with %d\n", errno);
+		return 1;
+	}
+	status[ESDM_SHM_STATUS_INFO_SIZE] = '\0';
+
+	p = strstr(status, field);
+	if (!p) {
+		printf("Status report contains no \"%s\" field\n", field);
+		return 1;
+	}
+
+	if (sscanf(p + strlen(field), "%u", value) != 1) {
+		printf("Cannot parse the \"%s\" field of the status report\n",
+		       field);
+		return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Supply entropy until the ESDM holds as much as its write wakeup threshold
+ * demands, i.e. until it stops asking for more.
+ *
+ * This uses RNDADDENTROPY rather than RNDADDTOENTCNT. The latter ends up in
+ * esdm_pool_set_entropy(), which deliberately only ever touches the first aux
+ * pool ("this interface can only influence the first pool slot for security
+ * reasons") and sets rather than accumulates - so however often it is called,
+ * it cannot lift the total above a single pool's worth, while the threshold
+ * covers all of them. On a build with more than one aux pool the state this
+ * test needs is therefore unreachable that way. RNDADDENTROPY inserts into
+ * whichever pool has the most unused capacity and so fills them all.
+ */
+static int fill_aux_pool(int fd)
+{
+	struct rand_pool_info *rpi;
+	uint32_t threshold, digestsize, ent = 0;
+	unsigned int i, max_rounds;
+	size_t buflen;
+	int ret = 1;
+
+	if (status_value(fd, "Write wakeup threshold: ", &threshold))
+		return 1;
+	if (status_value(fd, "Digestsize: ", &digestsize))
+		return 1;
+	if (!digestsize) {
+		printf("Status report claims a digest size of zero\n");
+		return 1;
+	}
+
+	/* A single insertion is capped at one digest worth of entropy */
+	buflen = digestsize / 8;
+	rpi = calloc(1, sizeof(struct rand_pool_info) + buflen);
+	if (!rpi)
+		return 1;
+	rpi->entropy_count = (int)digestsize;
+	rpi->buf_size = (int)buflen;
+	memset(rpi->buf, 0xa5, buflen);
+
+	/*
+	 * One round per pool would do, but an insertion also triggers a reseed
+	 * which consumes entropy again, so leave generous room. The loop exits
+	 * on the pool level rather than on a round count either way.
+	 */
+	max_rounds = (threshold / digestsize + 2) * 4 + 64;
+
+	for (i = 0; i < max_rounds; i++) {
+		if (ioctl(fd, RNDADDENTROPY, rpi) != 0) {
+			printf("RNDADDENTROPY IOCTL failed: with %d\n", errno);
+			goto out;
+		}
+
+		if (ioctl(fd, RNDGETENTCNT, &ent) != 0) {
+			printf("RNDGETENTCNT IOCTL failed: with %d\n", errno);
+			goto out;
+		}
+
+		if (ent >= threshold) {
+			ret = 0;
+			goto out;
+		}
+	}
+
+	printf("Poll - failed: aux pool stalled at %u bits after %u rounds, write wakeup threshold is %u\n",
+	       ent, max_rounds, threshold);
+
+out:
+	free(rpi);
+	return ret;
+}
 
 /**
  * Test poll system call to wait for insufficient entropy
@@ -40,7 +149,6 @@ static int test_poll_write(const char *path)
 {
 	struct timeval timeout = { .tv_sec = 2, .tv_usec = 0 };
 	fd_set fds;
-	uint32_t bits = 64 + 512;
 	int ret = 0, fd;
 
 	fd = open(path, O_RDONLY);
@@ -51,28 +159,12 @@ static int test_poll_write(const char *path)
 	}
 
 	/*
-	 * write poll only sleeps after all DRNGs are seeded, and new entropy
-	 * is in the aux pool.
-	 *
-	 * TODO: replace 30 with the number of CPUs, may fail if more than
-	 * 30 CPUs are available.
+	 * The write poll only sleeps once all DRNGs are seeded and the aux pool
+	 * holds what the write wakeup threshold asks for.
 	 */
-	for (unsigned int i = 0; i < 30; i++) {
-		/* Ensure we are fully seeded - no write poll should be needed */
-		ret = ioctl(fd, RNDADDTOENTCNT, &bits, sizeof(bits));
-		if (ret != 0) {
-			printf("RNDADDTOENTCNT IOCTL failed: with %d\n", errno);
-			ret = 1;
-			goto out;
-		}
-	}
-	/* Ensure we are fully seeded - no write poll should be needed */
-	ret = ioctl(fd, RNDADDTOENTCNT, &bits, sizeof(bits));
-	if (ret != 0) {
-		printf("RNDADDTOENTCNT IOCTL failed: with %d\n", errno);
-		ret = 1;
+	ret = fill_aux_pool(fd);
+	if (ret)
 		goto out;
-	}
 
 	FD_ZERO(&fds);
 	FD_SET(fd, &fds);
@@ -93,9 +185,9 @@ static int test_poll_write(const char *path)
 	}
 
 	/* Clear the entropy pool */
-	ret = ioctl(fd, RNDCLEARPOOL, &bits, sizeof(bits));
+	ret = ioctl(fd, RNDCLEARPOOL);
 	if (ret != 0) {
-		printf("RNDGETENTCNT IOCTL failed: with %d\n", errno);
+		printf("RNDCLEARPOOL IOCTL failed: with %d\n", errno);
 		ret = 1;
 		goto out;
 	}
@@ -120,13 +212,10 @@ static int test_poll_write(const char *path)
 		printf("Poll - passed: write select returned available FD for empty ESDM!\n");
 	}
 
-	/* Ensure we are fully seeded - no write poll should be needed */
-	ret = ioctl(fd, RNDADDTOENTCNT, &bits, sizeof(bits));
-	if (ret != 0) {
-		printf("RNDADDTOENTCNT IOCTL failed: with %d\n", errno);
-		ret = 1;
+	/* Refill so no write poll should be needed any more */
+	ret = fill_aux_pool(fd);
+	if (ret)
 		goto out;
-	}
 
 	FD_ZERO(&fds);
 	FD_SET(fd, &fds);

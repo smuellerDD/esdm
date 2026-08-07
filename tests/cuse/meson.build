@@ -105,15 +105,26 @@ if get_option('linux-devfiles').enabled()
 		'ESDM_CUSE_URANDOM=' + esdm_cuse_urandom.full_path()
 		]
 
+	# These stay serial where the other privileged suites no longer are.
+	# env_init() gives every test its own mount and IPC namespace, which
+	# makes the sockets, the semaphores and the System V segments private -
+	# but a CUSE device is registered by its name under a devtmpfs the
+	# kernel keeps a single instance of, and both frontends use a fixed one
+	# (ESDM_CUSE_RANDOM_DEVNAME). A second test bringing up the same device
+	# at the same time would collide there, outside anything a mount
+	# namespace can separate.
+
 	test('IOCTL RNDADDENTROPY /dev/random', ioctl_addent_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL RNDADDENTROPY /dev/urandom', ioctl_addent_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('IOCTL RNDCLEARPOOL /dev/random', ioctl_clear_tester,
@@ -121,122 +132,144 @@ if get_option('linux-devfiles').enabled()
 		args : ['random' ],
 		timeout: 300,
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL RNDCLEARPOOL /dev/urandom', ioctl_clear_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		timeout: 300,
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('IOCTL RNDGETENTCNT /dev/random', ioctl_getent_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL RNDGETENTCNT /dev/urandom', ioctl_getent_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('IOCTL RNDRESEEDCRNG /dev/random', ioctl_reseed_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL RNDRESEEDCRNG /dev/urandom', ioctl_reseed_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('IOCTL RNDADDTOENTCNT /dev/random', ioctl_setent_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL RNDADDTOENTCNT /dev/urandom', ioctl_setent_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('IOCTL get info /dev/random', ioctl_getinfo_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL get info /dev/urandom', ioctl_getinfo_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('IOCTL status /dev/random', ioctl_status_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('IOCTL status /dev/urandom', ioctl_status_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('Poll writer FD /dev/random', poll_write_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('Poll writer FD /dev/urandom', poll_write_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('Read /dev/random', random_read_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('Read /dev/urandom', random_read_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('Write /dev/random', random_write_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('Write /dev/urandom', random_write_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('Read /dev/random - w/o ESDM server', random_read_no_server_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('Read /dev/urandom - w/o ESDM server', random_read_no_server_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	test('Write /dev/random - w/o ESDM server', random_write_no_server_tester,
 		env: [ tester_cuse_env ],
 		args : ['random' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 	test('Write /dev/urandom - w/o ESDM server', random_write_no_server_tester,
 		env: [ tester_cuse_env ],
 		args : ['urandom' ],
 		is_parallel: false,
+		priority: -10,
 		suite: 'cuse')
 
 	# Poll read is not yet well implemented
