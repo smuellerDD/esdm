@@ -500,6 +500,15 @@ int main(int argc, char *argv[])
 
 	esdm_logger_set_verbosity(verbosity);
 
+	/*
+	 * Evaluate the socket activation environment while we still are the
+	 * process systemd started and no thread exists yet. Everything after
+	 * this point - daemonize(), the PID namespace prefork, the socket setup
+	 * and the shutdown cleanup - uses the latched result, so all of them
+	 * agree on whether the RPC sockets belong to systemd.
+	 */
+	systemd_listen_fds_init();
+
 	if (verbosity == 0 && !foreground)
 		daemonize();
 
@@ -575,6 +584,17 @@ int main(int argc, char *argv[])
 		CKINT(linux_isolate_namespace_prefork(
 			esdm_rpc_server_cleanup));
 
+	/*
+	 * The IPC cleanup at shutdown can only succeed in a process that
+	 * retained its privileges: the daemon permanently drops them, so its
+	 * in-process attempt merely logs EPERM noise. Disable the in-process
+	 * cleanup - in PID namespace mode the privileged supervisor (forked
+	 * off above, before this override) performs the cleanup after the
+	 * daemon terminated. A --keep_ipc request is unaffected as it turns
+	 * the cleanup off before the supervisor is forked.
+	 */
+	esdm_config_ipc_cleanup_set(0);
+
 	if (memlock) {
 		/*
 		 * its hard to set a sane limit here, as we have a
@@ -630,15 +650,6 @@ int main(int argc, char *argv[])
 out:
 	/* dealloc() performs the daemon_release() teardown itself. */
 	dealloc();
-
-	/*
-	 * Without the PID namespace supervisor there is no privileged process
-	 * left to remove the IPC resources - attempt it here. This is best
-	 * effort: the daemon permanently dropped its privileges, so removing
-	 * the root-owned sockets, SHM segment and semaphores may fail.
-	 */
-	if (!pid_namespace)
-		esdm_rpc_server_cleanup();
 
 	if (memlock) {
 		munlockall();

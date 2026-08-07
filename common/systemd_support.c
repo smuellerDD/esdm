@@ -21,6 +21,7 @@
 #include "systemd_support.h"
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,6 +30,8 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "esdm_logger.h"
 
 #define _cleanup_(f) __attribute__((cleanup(f)))
 
@@ -148,7 +151,7 @@ int systemd_listen_pid(void)
 	return (int)val;
 }
 
-int systemd_listen_fds(void)
+static int systemd_listen_fds_env(void)
 {
 	const char *listen_fds = getenv("LISTEN_FDS");
 	char *endptr;
@@ -163,6 +166,52 @@ int systemd_listen_fds(void)
 		return -1;
 
 	return (int)val;
+}
+
+/*
+ * Latched result of the LISTEN_PID / LISTEN_FDS evaluation. Caching it makes
+ * the answer stable for the entire process lifetime and across fork(), which
+ * both callers rely on: the socket setup and the shutdown cleanup must not be
+ * able to disagree about whether the sockets belong to systemd.
+ */
+static bool listen_fds_initialized;
+static int cached_listen_fds = -1;
+
+void systemd_listen_fds_init(void)
+{
+	int fds, pid;
+
+	if (listen_fds_initialized)
+		return;
+	listen_fds_initialized = true;
+
+	fds = systemd_listen_fds_env();
+	if (fds <= 0)
+		return;
+
+	/*
+	 * LISTEN_PID is not set by every socket activation implementation, so
+	 * only reject the descriptors when it is present and names a different
+	 * process - then they were meant for somebody else and happened to be
+	 * inherited by us.
+	 */
+	pid = systemd_listen_pid();
+	if (pid > 0 && pid != getpid()) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_SERVER,
+			"Ignoring socket activation environment: LISTEN_PID %i does not match own PID %i\n",
+			pid, getpid());
+		return;
+	}
+
+	cached_listen_fds = fds;
+}
+
+int systemd_listen_fds(void)
+{
+	systemd_listen_fds_init();
+
+	return cached_listen_fds;
 }
 
 static void freep(char **p)

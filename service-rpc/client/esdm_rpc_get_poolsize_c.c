@@ -50,17 +50,31 @@ int esdm_rpcc_get_poolsize_int(unsigned int *poolsize, void *int_data)
 {
 	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
-	struct esdm_poolsize_buf buffer;
+	/*
+	 * Initialize every field: the callback does not run at all on a
+	 * transport failure and returns early on an error response, so the
+	 * value handed to the caller's out parameter below would otherwise be
+	 * indeterminate.
+	 */
+	struct esdm_poolsize_buf buffer = {
+		.ret = -ETIMEDOUT,
+		.poolsize = 0,
+	};
 	int ret = 0;
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
-	buffer.ret = -ETIMEDOUT;
-
 	unpriv_access__rpc_get_poolsize(&rpc_conn->service, &msg,
 					esdm_rpcc_get_poolsize_cb, &buffer);
 
-	ret = buffer.ret;
+	/*
+	 * The callback only runs once a response was received - without one
+	 * buffer.ret still holds the placeholder set above, which would
+	 * report every transport failure as a timeout.
+	 */
+	ret = esdm_rpcc_last_error(rpc_conn);
+	if (!ret)
+		ret = buffer.ret;
 	if (poolsize)
 		*poolsize = buffer.poolsize;
 

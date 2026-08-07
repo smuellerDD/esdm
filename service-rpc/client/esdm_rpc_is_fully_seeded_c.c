@@ -51,18 +51,32 @@ int esdm_rpcc_is_fully_seeded_int(bool *fully_seeded, void *int_data)
 {
 	EmptyRequest msg = EMPTY_REQUEST__INIT;
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
-	struct esdm_is_fully_seeded_buf buffer;
+	/*
+	 * Initialize every field: the callback does not run at all on a
+	 * transport failure and returns early on an error response, so the
+	 * value handed to the caller's out parameter below would otherwise be
+	 * indeterminate.
+	 */
+	struct esdm_is_fully_seeded_buf buffer = {
+		.ret = -ETIMEDOUT,
+		.fully_seeded = false,
+	};
 	int ret = 0;
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
-
-	buffer.ret = -ETIMEDOUT;
 
 	unpriv_access__rpc_is_fully_seeded(&rpc_conn->service, &msg,
 					   esdm_rpcc_is_fully_seeded_cb,
 					   &buffer);
 
-	ret = buffer.ret;
+	/*
+	 * The callback only runs once a response was received - without one
+	 * buffer.ret still holds the placeholder set above, which would
+	 * report every transport failure as a timeout.
+	 */
+	ret = esdm_rpcc_last_error(rpc_conn);
+	if (!ret)
+		ret = buffer.ret;
 	if (fully_seeded)
 		*fully_seeded = buffer.fully_seeded;
 
