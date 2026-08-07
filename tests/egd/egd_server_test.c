@@ -44,6 +44,7 @@
 #include "esdm_egd_client.h"
 #include "esdm_egd_protocol.h"
 
+#include "../test_env.h"
 #include "../test_namespace.h"
 
 /*
@@ -80,6 +81,7 @@ static int server_start(void)
 {
 	const char *server = getenv("ESDM_SERVER");
 	struct timespec wait = { .tv_sec = 0, .tv_nsec = 200 * 1000 * 1000 };
+	char *server_envp[TEST_ENV_MAX_VARS + 1];
 	struct stat sb;
 	unsigned int i;
 
@@ -87,6 +89,9 @@ static int server_start(void)
 		printf("ESDM_SERVER does not point at the esdm-server binary\n");
 		return 1;
 	}
+
+	/* Built before the fork - see test_env_daemon_envp() */
+	test_env_daemon_envp(server_envp, TEST_ENV_MAX_VARS + 1);
 
 	server_pid = fork();
 	if (server_pid < 0)
@@ -101,7 +106,7 @@ static int server_start(void)
 
 		snprintf(binary, sizeof(binary), "%s", server);
 		snprintf(socket_arg, sizeof(socket_arg), "%s", sockpath);
-		execve(server, argv, NULL);
+		execve(server, argv, server_envp);
 
 		/* NOTREACHED */
 		_exit(1);

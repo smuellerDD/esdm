@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include "env.h"
+#include "../test_env.h"
 #include "../test_namespace.h"
 #include "../test_wait.h"
 #include "esdm_rpc_service.h"
@@ -73,6 +74,7 @@ static int env_check_file(const char *path)
 int env_init(void)
 {
 	const char *server = getenv("ESDM_SERVER");
+	char *server_envp[TEST_ENV_MAX_VARS + 1];
 	pid_t pid;
 	int ret;
 
@@ -107,6 +109,9 @@ int env_init(void)
 	 */
 	setenv(ESDM_EGD_SOCKET_ENV, ESDM_TEST_EGD_SOCKET, 1);
 
+	/* Built before the fork - see test_env_daemon_envp() */
+	test_env_daemon_envp(server_envp, TEST_ENV_MAX_VARS + 1);
+
 	/* Server forking */
 	pid = fork();
 	if (pid < 0)
@@ -117,7 +122,7 @@ int env_init(void)
 					(char *)ESDM_TEST_EGD_SOCKET, NULL };
 
 		snprintf(buf, sizeof(buf), "%s", server);
-		execve(server, server_argv, NULL);
+		execve(server, server_argv, server_envp);
 
 		/* NOTREACHED */
 		return EFAULT;

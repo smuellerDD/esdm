@@ -1019,11 +1019,26 @@
                   "-Des_kernel=enabled"
                   "-Des_jent_kernel=enabled"
                   "-Des_pkcs11=enabled"
+
+                  # Point the PKCS#11 source at SoftHSM, a module that needs
+                  # no hardware. The path is compile-time only, so without
+                  # this the source disables itself at startup and only its
+                  # refusal paths are ever executed. With it, the test suite
+                  # creates a token of its own and draws real bytes through
+                  # C_GenerateRandom. The token label and PIN stay unset here
+                  # - the test installs both at runtime, which is how the
+                  # server sets them from its RPC handler.
+                  "-Des_pkcs11_module_path=${pkgs.softhsm}/lib/softhsm/libsofthsm2.so"
                 ];
 
               # es_jent_kernel reaches the kernel crypto API through libkcapi.
-              # es_pkcs11 needs libp11, which is already among the inputs.
+              # es_pkcs11 needs libp11, which is already among the inputs;
+              # softhsm supplies the module it loads plus the softhsm2-util
+              # the test initializes the token with.
               buildInputs = prev.buildInputs ++ [ pkgs.libkcapi ];
+              nativeCheckInputs = (prev.nativeCheckInputs or [ ]) ++ [
+                pkgs.softhsm
+              ];
 
               mesonBuildType = "debug";
               dontStrip = true;
@@ -1032,6 +1047,18 @@
               doCheck = true;
               checkPhase = ''
                 runHook preCheck
+
+                # Every ESDM this suite starts loads the SoftHSM module the
+                # PKCS#11 source was built against, and SoftHSM logs three
+                # errors per start when it finds no configuration - nixpkgs
+                # ships none at the path it compiles in. Point it at one of our
+                # own so the run stays readable; the PKCS#11 test overrides this
+                # with the config of the token it creates.
+                mkdir -p "$NIX_BUILD_TOP/softhsm/tokens"
+                printf 'directories.tokendir = %s\nobjectstore.backend = file\nlog.level = ERROR\n' \
+                  "$NIX_BUILD_TOP/softhsm/tokens" \
+                  >"$NIX_BUILD_TOP/softhsm/softhsm2.conf"
+                export SOFTHSM2_CONF="$NIX_BUILD_TOP/softhsm/softhsm2.conf"
 
                 # The builder may be busy and is not necessarily fast - give the
                 # tests that wait for entropy room before they time out.
@@ -1147,6 +1174,9 @@
                   # pkill and umount for the cleanup of a failed run
                   pkgs.procps
                   pkgs.util-linux
+                  # softhsm2-util, which the PKCS#11 test initializes its own
+                  # token with - without it that test skips
+                  pkgs.softhsm
                 ]
                 ++ extraRuntimeInputs;
                 text = ''
@@ -1263,6 +1293,20 @@
                     --buildtype=${cov.mesonBuildType} \
                     ${lib.escapeShellArgs cov.mesonFlags}
                   ninja -C "$work/build"
+
+                  # Every ESDM this suite starts loads the SoftHSM module the
+                  # PKCS#11 source was built against, and SoftHSM logs three
+                  # errors per start when it finds no configuration - nixpkgs
+                  # ships none at the path it compiles in. Point it at one of
+                  # our own so the run stays readable. Below $work, which the
+                  # privileged tests pin across their private /tmp, and which
+                  # the chmod below opens up for the daemons that drop
+                  # privileges. The PKCS#11 test overrides this with the config
+                  # of the token it creates.
+                  mkdir -p "$work/softhsm/tokens"
+                  printf 'directories.tokendir = %s\nobjectstore.backend = file\nlog.level = ERROR\n' \
+                    "$work/softhsm/tokens" >"$work/softhsm/softhsm2.conf"
+                  export SOFTHSM2_CONF="$work/softhsm/softhsm2.conf"
 
                   # The esdm-server and the CUSE frontends drop privileges, and
                   # libgcov writes their counters when they exit - as the dropped

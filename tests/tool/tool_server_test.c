@@ -51,6 +51,7 @@
 #include "../test_run.h"
 
 #include "../status_json_check.h"
+#include "../test_env.h"
 #include "../test_namespace.h"
 #include "../test_wait.h"
 
@@ -72,12 +73,16 @@ static pid_t server_pid;
 static int server_start(void)
 {
 	const char *server = getenv("ESDM_SERVER");
+	char *server_envp[TEST_ENV_MAX_VARS + 1];
 	struct stat sb;
 
 	if (!server || stat(server, &sb) || !S_ISREG(sb.st_mode)) {
 		printf("ESDM_SERVER does not point at the esdm-server binary\n");
 		return 1;
 	}
+
+	/* Built before the fork - see test_env_daemon_envp() */
+	test_env_daemon_envp(server_envp, TEST_ENV_MAX_VARS + 1);
 
 	server_pid = fork();
 	if (server_pid < 0) {
@@ -95,7 +100,7 @@ static int server_start(void)
 		char *argv[] = { buf, (char *)"-f", NULL };
 
 		snprintf(buf, sizeof(buf), "%s", server);
-		execve(server, argv, NULL);
+		execve(server, argv, server_envp);
 		_exit(127);
 	}
 

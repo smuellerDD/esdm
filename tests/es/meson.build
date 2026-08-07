@@ -34,6 +34,37 @@ if get_option('es_cpu').enabled()
 	)
 
 	test('ES CPU', es_cpu_tester)
+
+	# RDRAND is unreachable through the entropy source on every CPU that has
+	# RDSEED, so the two instructions are driven directly - see the file
+	# header. Needs no ESDM around it, only the logger the header calls.
+	if host_machine.cpu_family() in [ 'x86', 'x86_64' ]
+		es_cpu_x86_tester = executable(
+			'es_cpu_x86_tester',
+			'es_cpu_x86_test.c',
+			include_directories: [ include_dirs_server,
+					       include_directories('../common') ],
+			dependencies: dependencies_server,
+			link_with: esdm_common_static_lib,
+		)
+
+		test('ES CPU x86 RDSEED/RDRAND', es_cpu_x86_tester)
+	endif
+
+	# The compressing data path is selected by a multiplier that is fixed at
+	# build time and is 1 in every configuration this suite is built in, so
+	# the entropy source is compiled into the test with the build option
+	# raised - see the file header.
+	es_cpu_compress_tester = executable(
+		'es_cpu_compress_tester',
+		[ esdm_ipc_ns, 'es_cpu_compress_test.c' ],
+		include_directories: [ include_dirs_server,
+				       include_directories('../common') ],
+		dependencies: dependencies_server,
+		link_with: esdm_static_lib,
+	)
+
+	test('ES CPU compressing path', es_cpu_compress_tester)
 endif
 
 if get_option('es_kernel').enabled()
@@ -60,6 +91,20 @@ if get_option('es_sched').enabled()
 	test('ES Scheduler', es_sched_tester, timeout: 70)
 endif
 
+if get_option('es_irq').enabled()
+	es_irq_tester = executable(
+		'es_irq_tester',
+		[ esdm_ipc_ns, 'es_irq_test.c' ],
+		dependencies: dependencies_server,
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+	)
+
+	# The interrupt generator sleeps 5000 times per round, so the wall clock
+	# is dominated by the rounds rather than by the work.
+	test('ES Interrupt', es_irq_tester, timeout: 300)
+endif
+
 # The following hardware/service-backed sources may be absent on the test
 # machine; their tests are structural / graceful-absence checks (see the file
 # headers) and pass whether or not the device is present.
@@ -84,7 +129,10 @@ if get_option('es_tpm2').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES TPM 2.0', es_tpm2_tester)
+	# With a TPM behind it the test drives the device itself, including a
+	# full fill of the block cache - one command exchange per block, and a
+	# software TPM in an emulated machine is not quick about them.
+	test('ES TPM 2.0', es_tpm2_tester, timeout: 120)
 endif
 
 
@@ -120,6 +168,23 @@ if get_option('es_pkcs11').enabled()
 		link_with: esdm_static_lib,
 	)
 	test('ES PKCS11', es_pkcs11_tester)
+
+	# The test above passes with the source switched off for want of a
+	# token, so it never reaches the half that matters. SoftHSM is a
+	# PKCS#11 module that needs no hardware, so when the build points at
+	# one this test creates a token and drives the source against it for
+	# real. It skips at runtime if softhsm2-util is not installed.
+	if get_option('es_pkcs11_module_path') != ''
+		es_pkcs11_softhsm_tester = executable(
+			'es_pkcs11_softhsm_tester',
+			[ esdm_ipc_ns, 'es_pkcs11_softhsm_test.c' ],
+			dependencies: dependencies_server,
+			include_directories: include_dirs_server,
+			link_with: esdm_static_lib,
+		)
+		test('ES PKCS11 with SoftHSM', es_pkcs11_softhsm_tester,
+			timeout: 120)
+	endif
 endif
 
 if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()

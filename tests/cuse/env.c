@@ -29,6 +29,7 @@
 
 #include "config.h"
 #include "env.h"
+#include "../test_env.h"
 #include "../test_namespace.h"
 #include "../test_wait.h"
 #include "esdm_rpc_service.h"
@@ -102,6 +103,7 @@ int env_init(int disable_fallback)
 	const char *random = getenv("ESDM_CUSE_RANDOM");
 	const char *urandom = getenv("ESDM_CUSE_URANDOM");
 	const char *server = getenv("ESDM_SERVER");
+	char *daemon_envp[TEST_ENV_MAX_VARS + 1];
 	pid_t pid;
 	int ret;
 
@@ -132,6 +134,9 @@ int env_init(int disable_fallback)
 	CKINT(env_check_file(server));
 	CKINT(esdm_test_shm_status_init());
 
+	/* Built before the forks below - see test_env_daemon_envp() */
+	test_env_daemon_envp(daemon_envp, TEST_ENV_MAX_VARS + 1);
+
 	/* Server forking */
 	pid = fork();
 	if (pid < 0)
@@ -142,7 +147,7 @@ int env_init(int disable_fallback)
 
 		CKNULL(server, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", server);
-		execve(server, server_argv, NULL);
+		execve(server, server_argv, daemon_envp);
 
 		/* NOTREACHED */
 		return EFAULT;
@@ -168,7 +173,7 @@ int env_init(int disable_fallback)
 		CKNULL(random, -EFAULT);
 		snprintf(buf, sizeof(buf), "%s", random);
 		execve(random, disable_fallback ? random_argv_dis : random_argv,
-		       NULL);
+		       daemon_envp);
 
 		/* NOTREACHED */
 		return EFAULT;
@@ -195,7 +200,7 @@ int env_init(int disable_fallback)
 		snprintf(buf, sizeof(buf), "%s", urandom);
 		execve(urandom,
 		       disable_fallback ? urandom_argv_dis : urandom_argv,
-		       NULL);
+		       daemon_envp);
 
 		/* NOTREACHED */
 		return EFAULT;
