@@ -72,19 +72,26 @@ struct esdm_drng {
 	atomic_bool force_reseed; /* Force a reseed */
 	atomic_bool initiated; /* Was DRNG initiated once? (used for pr drng) */
 
+	/*
+	 * A reseed is due and has been handed to the asynchronous reseed
+	 * worker. Set by the generate path instead of collecting entropy
+	 * inline, cleared by the worker once it has taken the DRNG on. It also
+	 * serves as the "already queued" guard: the generate path keeps seeing
+	 * the reseed condition on every iteration until the worker lands, and
+	 * only the thread that flips this flag wakes the worker.
+	 */
+	atomic_bool reseed_pending;
+
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
 	mutex_w_t lock; /* Non-atomic DRNG operation */
 };
 
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
 	.drng = d, .drng_cb = d_cb, .hash_cb = h_cb,                           \
-	.requests = ESDM_DRNG_RESEED_THRESH,                                   \
-	.requests_since_fully_seeded = 0,                                      \
-	.request_bits_since_fully_seeded = 0,                                  \
-	.last_seeded_time = 0,                                                 \
-	.fully_seeded = false,                                                 \
-	.force_reseed = true,                                                  \
-	.initiated = false
+	.requests = ESDM_DRNG_RESEED_THRESH, .requests_since_fully_seeded = 0, \
+	.request_bits_since_fully_seeded = 0, .last_seeded_time = 0,           \
+	.fully_seeded = false, .force_reseed = true, .initiated = false,       \
+	.reseed_pending = false
 
 struct esdm_drng *esdm_drng_init_instance(void);
 struct esdm_drng *esdm_drng_node_instance(void);

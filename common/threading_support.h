@@ -68,7 +68,13 @@ extern "C" {
 #define ESDM_THREAD_ES_MONITOR ((uint32_t)-2)
 #define ESDM_THREAD_RPC_UNPRIV_GROUP ((uint32_t)-3)
 #define ESDM_THREAD_EGD_GROUP ((uint32_t)-4)
-#define ESDM_THREAD_MAX_SPECIAL_GROUPS 4
+/*
+ * The asynchronous reseed of the per-node DRNGs. One slot is all this needs:
+ * every reseed serializes on the entropy pool lock anyway, so a second worker
+ * would only wait for the first.
+ */
+#define ESDM_THREAD_DRNG_RESEED ((uint32_t)-5)
+#define ESDM_THREAD_MAX_SPECIAL_GROUPS 5
 
 enum esdm_request_type {
 	es_monitor,
