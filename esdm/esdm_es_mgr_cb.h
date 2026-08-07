@@ -132,6 +132,14 @@ struct esdm_es_cb {
 	uint32_t (*curr_entropy)(uint32_t requested_bits);
 	uint32_t (*max_entropy)(void);
 	void (*state)(char *buf, size_t buflen);
+	/*
+	 * State of the entropy source as a JSON object, used by
+	 * esdm_status_json(). The member names are the labels of ->state,
+	 * lower-cased with every run of non-alphanumeric characters replaced by
+	 * one underscore. This callback may be NULL, in which case the members
+	 * are derived from the ->state text.
+	 */
+	void (*state_json)(char *buf, size_t buflen);
 	void (*reset)(void);
 	bool (*active)(void);
 };

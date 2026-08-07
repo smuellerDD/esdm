@@ -736,7 +736,7 @@ const ProtobufCMessageDescriptor write_data_request__descriptor =
   (ProtobufCMessageInit) write_data_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[13] =
+static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[14] =
 {
   { "RpcStatus", &status_request__descriptor, &status_response__descriptor },
   { "RpcGetEntLvl", &empty_request__descriptor, &val_response__descriptor },
@@ -751,6 +751,7 @@ static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[13] =
   { "RpcGetWriteWakeupThresh", &empty_request__descriptor, &val_response__descriptor },
   { "RpcGetMinReseedSecs", &empty_request__descriptor, &val_response__descriptor },
   { "RpcJentStatus", &status_request__descriptor, &status_response__descriptor },
+  { "RpcStatusJson", &status_request__descriptor, &status_response__descriptor },
 };
 const unsigned unpriv_access__method_indices_by_name[] = {
   1,        /* RpcGetEntLvl */
@@ -765,6 +766,7 @@ const unsigned unpriv_access__method_indices_by_name[] = {
   12,        /* RpcJentStatus */
   8,        /* RpcRndGetEntCnt */
   0,        /* RpcStatus */
+  13,        /* RpcStatusJson */
   7         /* RpcWriteData */
 };
 const ProtobufCServiceDescriptor unpriv_access__descriptor =
@@ -774,7 +776,7 @@ const ProtobufCServiceDescriptor unpriv_access__descriptor =
   "UnprivAccess",
   "UnprivAccess",
   "",
-  13,
+  14,
   unpriv_access__method_descriptors,
   unpriv_access__method_indices_by_name
 };
@@ -881,6 +883,14 @@ void unpriv_access__rpc_jent_status(ProtobufCService *service,
 {
   assert(service->descriptor == &unpriv_access__descriptor);
   service->invoke(service, 12, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void unpriv_access__rpc_status_json(ProtobufCService *service,
+                                    const StatusRequest *input,
+                                    StatusResponse_Closure closure,
+                                    void *closure_data)
+{
+  assert(service->descriptor == &unpriv_access__descriptor);
+  service->invoke(service, 13, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__init (UnprivAccess_Service *service,
                           UnprivAccess_ServiceDestroy destroy)

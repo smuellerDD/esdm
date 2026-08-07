@@ -48,7 +48,7 @@ if get_option('esdm-server').enabled()
 			'rpc_status_test',
 			[ esdm_tester_common, 'rpc_status_test.c' ],
 			include_directories: include_dirs_client,
-			dependencies: [ dependencies_client ],
+			dependencies: [ dependencies_client, json_c_dep ],
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
 

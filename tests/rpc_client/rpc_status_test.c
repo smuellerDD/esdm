@@ -23,9 +23,17 @@
 #include "env.h"
 #include "esdm_rpc_client.h"
 
+#include "../status_json_check.h"
+
 int main(int argc, char *argv[])
 {
-	char buf[2048];
+	/*
+	 * Large enough to hold the full status / JSON document for all
+	 * entropy sources without truncation - matching the buffer the
+	 * esdm-tool frontend uses. A short buffer would clip the JSON
+	 * mid-document and fail esdm_status_json_check().
+	 */
+	char buf[65536];
 	int ret;
 
 	(void)argc;
@@ -54,6 +62,18 @@ int main(int argc, char *argv[])
 	    !strstr(buf, "Standards compliance") ||
 	    !strstr(buf, "ESDM fully seeded")) {
 		printf("Unexpected status: %s\n", buf);
+		ret = 1;
+		goto out;
+	}
+
+	ret = esdm_rpcc_status_json(buf, sizeof(buf));
+	if (ret < 0) {
+		printf("RPC JSON status returned error %d\n", ret);
+		ret = 1;
+		goto out;
+	}
+
+	if (esdm_status_json_check(buf)) {
 		ret = 1;
 		goto out;
 	}

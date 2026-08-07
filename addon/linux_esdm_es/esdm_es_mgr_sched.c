@@ -27,6 +27,7 @@ int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg)
 {
 	struct entropy_buf eb __aligned(ESDM_KCAPI_ALIGN);
 	char status[250];
+	char status_json[ESDM_STATUS_JSON_BUFLEN];
 	u32 data, data2, __user *p = (int __user *)arg;
 	int ret = 0;
 	void __user *argp = (void __user *)arg;
@@ -84,6 +85,17 @@ int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg)
 		memset(status, 0, sizeof(status));
 		esdm_es_sched.state(status, sizeof(status));
 		if (copy_to_user(argp, &status, sizeof(status)))
+			ret = -EFAULT;
+
+		break;
+
+	case ESDM_SCHED_STATUS_JSON:
+		if (!esdm_es_sched.state_json)
+			return -EOPNOTSUPP;
+
+		memset(status_json, 0, sizeof(status_json));
+		esdm_es_sched.state_json(status_json, sizeof(status_json));
+		if (copy_to_user(argp, &status_json, sizeof(status_json)))
 			ret = -EFAULT;
 
 		break;

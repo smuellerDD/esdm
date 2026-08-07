@@ -217,6 +217,19 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 void esdm_status(char *buf, size_t buflen);
 
 /**
+ * @brief esdm_status_json() - Get status information on ESDM as JSON
+ *
+ * The reported information is the one of esdm_status(), rendered as a JSON
+ * object: the ESDM properties as members and the entropy sources as an array
+ * of objects below "entropy_sources". The property names of an entropy source
+ * are the labels of its status text.
+ *
+ * @param [out] buf Buffer to be filled with the JSON document
+ * @param [in] buflen Length of buffer
+ */
+void esdm_status_json(char *buf, size_t buflen);
+
+/**
  * @brief esdm_status_machine() - Get status information on ESDM
  *
  * @param [out] status Buffer to be filled with status information

@@ -436,6 +436,32 @@ static void esdm_irq_es_state(char *buf, size_t buflen)
 	mutex_unlock(&irq_mutex);
 }
 
+/*
+ * The kernel add-on renders its state as a JSON object itself
+ * (ESDM_IRQ_STATUS_JSON), so the properties of this entropy source enter the
+ * JSON status document without being derived from the status text.
+ */
+static void esdm_irq_es_state_json(char *buf, size_t buflen)
+{
+	char status[ESDM_STATUS_JSON_BUFLEN];
+
+	mutex_lock(&irq_mutex);
+
+	if (esdm_irq_entropy_fd < 0) {
+		snprintf(buf, buflen,
+			 "{ \"disabled\": \"missing kernel support\" }");
+	} else if (ioctl(esdm_irq_entropy_fd, ESDM_IRQ_STATUS_JSON, status) <
+		   0) {
+		snprintf(buf, buflen,
+			 "{ \"error\": \"failure in reading kernel status\" }");
+	} else {
+		status[sizeof(status) - 1] = '\0';
+		snprintf(buf, buflen, "%s", status);
+	}
+
+	mutex_unlock(&irq_mutex);
+}
+
 static void esdm_irq_reset(void)
 {
 	uint32_t reset[2];
@@ -476,6 +502,7 @@ struct esdm_es_cb esdm_es_irq = {
 	.curr_entropy = esdm_irq_entropylevel,
 	.max_entropy = esdm_irq_poolsize,
 	.state = esdm_irq_es_state,
+	.state_json = esdm_irq_es_state_json,
 	.reset = esdm_irq_reset,
 	.active = esdm_irq_active,
 };

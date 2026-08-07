@@ -17,7 +17,13 @@
  * DAMAGE.
  */
 
+#include <ctype.h>
+#include <errno.h>
+#include <json-c/json.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "esdm_config.h"
 #include "esdm.h"
@@ -97,6 +103,234 @@ void esdm_status(char *buf, size_t buflen)
 		len = esdm_used_buf_len(buf, buflen);
 		esdm_es[i]->state(buf + len, buflen - len);
 	}
+}
+
+/****************************** JSON status ***********************************/
+
+/*
+ * Turn a status label into a JSON member name: the label is lower-cased and
+ * every run of non-alphanumeric characters becomes one underscore, e.g.
+ * "Entropy Rate per 256 data bits" turns into "entropy_rate_per_256_data_bits".
+ */
+static void esdm_json_key(const char *label, char *key, size_t keylen)
+{
+	bool pending_sep = false;
+	size_t used = 0;
+
+	while (*label && used < keylen - 1) {
+		unsigned char c = (unsigned char)*label++;
+
+		if (!isalnum(c)) {
+			pending_sep = true;
+			continue;
+		}
+
+		if (pending_sep && used) {
+			key[used++] = '_';
+			if (used >= keylen - 1)
+				break;
+		}
+
+		key[used++] = (char)tolower(c);
+		pending_sep = false;
+	}
+
+	key[used] = '\0';
+}
+
+/*
+ * Add a status value to an object: an integer or a boolean is added as such,
+ * anything else as a string.
+ */
+static void esdm_json_add_value(struct json_object *obj, const char *key,
+				const char *val)
+{
+	long long num;
+	char *end;
+
+	if (!strcmp(val, "true") || !strcmp(val, "false")) {
+		json_object_object_add(
+			obj, key,
+			json_object_new_boolean(!strcmp(val, "true")));
+		return;
+	}
+
+	errno = 0;
+	num = strtoll(val, &end, 10);
+	if (!errno && end != val && !*end) {
+		json_object_object_add(obj, key, json_object_new_int64(num));
+		return;
+	}
+
+	json_object_object_add(obj, key, json_object_new_string(val));
+}
+
+/*
+ * Add the members an entropy source renders itself. Used by the sources whose
+ * state lives outside this process (the kernel add-on returns a JSON object
+ * through its status IOCTL), so that no status text has to be parsed.
+ *
+ * Returns true when the object was consumed.
+ */
+static bool esdm_json_es_state_native(struct json_object *es_obj, uint32_t es)
+{
+	char state[1024] = { 0 };
+	struct json_object *obj;
+	bool consumed = false;
+
+	if (!esdm_es[es]->state_json)
+		return false;
+
+	esdm_es[es]->state_json(state, sizeof(state));
+
+	/*
+	 * A source that cannot render its state (e.g. a truncated or otherwise
+	 * malformed document) falls back to the status text below rather than
+	 * corrupting the status document.
+	 */
+	obj = json_tokener_parse(state);
+	if (!obj)
+		return false;
+
+	if (json_object_is_type(obj, json_type_object)) {
+		json_object_object_foreach(obj, key, val)
+		{
+			json_object_object_add(es_obj, key,
+					       json_object_get(val));
+		}
+		consumed = true;
+	}
+
+	json_object_put(obj);
+
+	return consumed;
+}
+
+/*
+ * Turn the status text of one entropy source into JSON members: its lines are
+ * of the shape " Label: value", which become "label": value.
+ */
+static void esdm_json_es_state(struct json_object *es_obj, uint32_t es)
+{
+	char state[1024] = { 0 };
+	char *line, *saveptr = NULL;
+
+	if (esdm_json_es_state_native(es_obj, es))
+		return;
+
+	esdm_es[es]->state(state, sizeof(state));
+
+	for (line = strtok_r(state, "\n", &saveptr); line;
+	     line = strtok_r(NULL, "\n", &saveptr)) {
+		char key[128];
+		char *val = strchr(line, ':');
+
+		/* Lines without a label (e.g. an error report) carry no member */
+		if (!val)
+			continue;
+
+		*val++ = '\0';
+		while (*line == ' ' || *line == '\t')
+			line++;
+		while (*val == ' ' || *val == '\t')
+			val++;
+
+		esdm_json_key(line, key, sizeof(key));
+		if (!key[0])
+			continue;
+
+		esdm_json_add_value(es_obj, key, val);
+	}
+}
+
+DSO_PUBLIC
+void esdm_status_json(char *buf, size_t buflen)
+{
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	struct json_object *root, *compliance, *sources;
+	const char *doc;
+	uint32_t i;
+
+	if (!buf || !buflen) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Status information cannot be created\n");
+		return;
+	}
+	buf[0] = '\0';
+
+	root = json_object_new_object();
+	compliance = json_object_new_array();
+	sources = json_object_new_array();
+	if (!root || !compliance || !sources) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Status information cannot be created\n");
+		goto out;
+	}
+
+	json_object_object_add(root, "library_version",
+			       json_object_new_string(VERSION));
+	json_object_object_add(root, "test_mode",
+			       json_object_new_boolean(sizeof(TESTMODE_STR) >
+						       1));
+	json_object_object_add(
+		root, "drng_name",
+		json_object_new_string(drng->drng_cb->drng_name()));
+	json_object_object_add(root, "security_strength_bits",
+			       json_object_new_int64(esdm_security_strength()));
+	json_object_object_add(root, "drng_instances",
+			       json_object_new_int64(esdm_nodes));
+
+	if (esdm_config_fips_enabled())
+		json_object_array_add(compliance,
+				      json_object_new_string("FIPS 140"));
+	if (esdm_sp80090c_compliant())
+		json_object_array_add(compliance,
+				      json_object_new_string("SP800-90C"));
+	if (esdm_ntg1_compliant())
+		json_object_array_add(compliance,
+				      json_object_new_string("NTG.1(2011)"));
+	if (esdm_ntg1_2024_compliant() || esdm_jent_ntg1())
+		json_object_array_add(compliance,
+				      json_object_new_string("NTG.1(2024)"));
+	json_object_object_add(root, "standards_compliance", compliance);
+	compliance = NULL;
+
+	json_object_object_add(
+		root, "fully_seeded",
+		json_object_new_boolean(esdm_state_fully_seeded()));
+	json_object_object_add(root, "entropy_level_bits",
+			       json_object_new_int64(esdm_avail_entropy()));
+
+	for_each_esdm_es (i) {
+		struct json_object *es_obj = json_object_new_object();
+
+		if (!es_obj)
+			continue;
+
+		json_object_object_add(es_obj, "id",
+				       json_object_new_int((int32_t)i));
+		json_object_object_add(
+			es_obj, "name",
+			json_object_new_string(esdm_es[i]->name));
+		esdm_json_es_state(es_obj, i);
+		json_object_array_add(sources, es_obj);
+	}
+	json_object_object_add(root, "entropy_sources", sources);
+	sources = NULL;
+
+	/*
+	 * The document is truncated if it does not fit into the caller's
+	 * buffer - as with the plain status text, and detectable by the
+	 * consumer as the JSON is then incomplete.
+	 */
+	doc = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY);
+	if (doc)
+		snprintf(buf, buflen, "%s\n", doc);
+
+out:
+	json_object_put(root);
+	json_object_put(compliance);
+	json_object_put(sources);
 }
 
 DSO_PUBLIC

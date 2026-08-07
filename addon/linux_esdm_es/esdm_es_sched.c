@@ -147,6 +147,33 @@ static void esdm_sched_es_state(unsigned char *buf, size_t buflen)
 		 esdm_highres_timer() ? "true" : "false");
 }
 
+/*
+ * Same properties as esdm_sched_es_state(), rendered as a JSON object. The
+ * inserted strings are compile-time constants of this module and the DRBG
+ * name, none of which contains a character JSON would require to be escaped.
+ */
+static void esdm_sched_es_state_json(unsigned char *buf, size_t buflen)
+{
+	snprintf(buf, buflen,
+		 "{"
+		 "\"drbg_for_operating_entropy_pool\":\"%s\","
+		 "\"available_entropy\":%u,"
+		 "\"per_cpu_scheduler_event_collection_size\":%u,"
+		 "\"standards_compliance\":\"%s\","
+#ifdef CONFIG_CRYPTO_FIPS
+		 "\"fips_mode_enabled\":%i,"
+#endif /* CONFIG_CRYPTO_FIPS */
+		 "\"high_resolution_timer\":%s"
+		 "}",
+		 esdm_drbg_cb->drbg_name(), esdm_sched_avail_entropy(0),
+		 ESDM_DATA_NUM_VALUES,
+		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B" : "",
+#ifdef CONFIG_CRYPTO_FIPS
+		 fips_enabled,
+#endif /* CONFIG_CRYPTO_FIPS */
+		 esdm_highres_timer() ? "true" : "false");
+}
+
 static void esdm_sched_set_entropy_rate(u32 rate)
 {
 	esdm_sched_drbg.entropy_bits = max_t(u32, ESDM_SCHED_ENTROPY_BITS, rate);
@@ -158,6 +185,7 @@ struct esdm_es_cb esdm_es_sched = {
 	.curr_entropy = esdm_sched_avail_entropy,
 	.max_entropy = esdm_sched_avail_pool_size,
 	.state = esdm_sched_es_state,
+	.state_json = esdm_sched_es_state_json,
 	.reset = esdm_sched_reset,
 	.set_entropy_rate = esdm_sched_set_entropy_rate,
 };

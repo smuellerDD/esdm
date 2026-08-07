@@ -67,6 +67,19 @@
 /* IRQ ES: read status information */
 #define ESDM_IRQ_STATUS _IOR(ESDMIO, 0x04, char[250])
 
+/*
+ * IRQ ES: read status information as a JSON object
+ *
+ * The returned document carries the same properties as the status text of
+ * ESDM_IRQ_STATUS with the labels turned into JSON member names.
+ */
+#define ESDM_IRQ_STATUS_JSON _IOR(ESDMIO, 0x0a, char[500])
+
+#ifndef ESDM_STATUS_JSON_BUFLEN
+/* Size of the buffer the JSON status IOCTLs report into */
+#define ESDM_STATUS_JSON_BUFLEN 500
+#endif
+
 bool esdm_irq_enabled(void);
 extern struct esdm_es_cb esdm_es_irq;
 
