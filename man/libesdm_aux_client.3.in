@@ -1,0 +1,82 @@
+.TH LIBESDM_AUX_CLIENT 3 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+libesdm_aux_client \- wait until the ESDM server asks for entropy
+.SH SYNOPSIS
+.nf
+.B #include <esdm/esdm_aux_client.h>
+.PP
+.B pkg\-config \-\-cflags \-\-libs esdm_aux_client
+.fi
+.SH DESCRIPTION
+.B libesdm_aux_client
+lets an entropy provider find out when
+.BR esdm\-server (8)
+wants entropy, instead of pushing data at it on a timer.
+.PP
+The daemon posts a named POSIX semaphore whenever its auxiliary pool falls
+below the level it wants. A provider waits on that semaphore and inserts
+entropy \- through
+.BR esdm_rpcc_write_data ()
+of
+.BR libesdm_rpc_client (3),
+or
+.BR esdm_egd_client_write_entropy ()
+of
+.BR libesdm_egd_client (3)
+\- whenever the wait returns. This is meant to be used in a loop, so that the
+provider delivers exactly when the daemon has a use for the data.
+.SH FUNCTIONS
+.TP
+.BI "int esdm_aux_init_wait_for_need_entropy(void);"
+Attach to the semaphore. Returns 0 on success and a negative errno value on
+error.
+.TP
+.BI "void esdm_aux_fini_wait_for_need_entropy(void);"
+Detach from the semaphore.
+.TP
+.BI "int esdm_aux_timedwait_for_need_entropy(struct timespec *" ts ");"
+Wait until the daemon asks for entropy, or until the absolute deadline
+.I ts
+expires. This is a thin wrapper around
+.BR sem_clockwait (3):
+.I ts
+and the return value and
+.I errno
+convention are that call's. In particular a return of \-1 with
+.I errno
+set to
+.B ETIMEDOUT
+means the deadline passed without the daemon asking, which is not an error but
+the caller's cue to loop.
+.SH EXAMPLE
+.nf
+#include <esdm/esdm_aux_client.h>
+#include <errno.h>
+#include <time.h>
+
+if (esdm_aux_init_wait_for_need_entropy())
+	return \-1;
+
+for (;;) {
+	struct timespec ts;
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+	ts.tv_sec += 60;
+
+	if (esdm_aux_timedwait_for_need_entropy(&ts) == 0) {
+		/* the ESDM wants entropy - insert some */
+	} else if (errno != ETIMEDOUT) {
+		break;
+	}
+}
+
+esdm_aux_fini_wait_for_need_entropy();
+.fi
+.SH SEE ALSO
+.BR libesdm_rpc_client (3),
+.BR libesdm_egd_client (3),
+.BR libesdm (3),
+.BR esdm\-server (8),
+.BR sem_clockwait (3)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

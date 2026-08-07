@@ -1,0 +1,133 @@
+.TH ESDM\-EBPF\-COLLECT 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-ebpf\-collect \- collect raw event deltas of the eBPF entropy sources
+.SH SYNOPSIS
+.B esdm\-ebpf\-collect
+.B \-\-source
+.RB { sched | irq }
+.B \-\-out
+.I FILE
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B esdm\-ebpf\-collect
+obtains raw, unconditioned noise source data from the eBPF based scheduler and
+interrupt entropy sources
+.RB ( es_sched_ebpf ", " es_irq_ebpf ),
+for an SP800\-90B entropy assessment. It serves the same purpose for those
+sources as the
+.I esdm_raw_*
+debugfs interfaces of the
+.I linux_esdm_es
+kernel add\-on do for the kernel based ones.
+.PP
+The tool loads and attaches its own copy of the eBPF programs, so every
+invocation starts from a freshly initialized source: zeroed per\-CPU state, no
+previous time stamp and an unlearned timer granularity. That is what makes a
+restart test possible \- one run is one row.
+.PP
+It must be run as root, and it refuses to run when the kernel FIPS mode is
+enabled. It is built only with
+.BR "\-Des_ebpf_testing=enabled" ,
+which must never be set for a production build. The ESDM server itself never
+records raw data.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-source " " { sched | irq }
+Entropy source to collect from.
+.TP
+.BR \-o ", " \-\-out " \fIFILE\fR"
+Output file, one delta per line.
+.TP
+.BR \-e ", " \-\-events " \fIN\fR"
+Stop after
+.I N
+deltas have been written. Default: 10000000. Since the count is of deltas
+actually written, an interrupted collection yields exactly the requested
+number and losses show up as a longer run rather than a shorter assessment.
+.TP
+.BR \-c ", " \-\-cpu " \fIN\fR"
+Write only the deltas of CPU
+.IR N .
+Without it the deltas of all CPUs go into one stream in arrival order, which
+is handy to look at but mixes what are separate noise sources and cannot be
+split again \-
+.B do not assess that stream.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.SH OUTPUT FORMAT
+One decimal time delta per line \- the input format of
+.BR esdm\-extractlsb (8).
+A delta is the time between two events of one CPU, with the timer granularity
+already divided out, exactly as the ESDM server does it, so that the assessed
+signal is the one that actually enters the entropy pool. The undivided time
+stamps cannot be collected: they report close to zero entropy on coarse clock
+sources, notably the monotonic clock in virtualized environments, whose
+low\-order bits are constant.
+.PP
+The time stamps are read with
+.BR bpf_ktime_get_ns (),
+the same source the deployed entropy sources use. The entropy rate must
+therefore be measured in the environment the deployment actually runs in, as
+the clock resolution differs notably between bare metal and virtualized
+systems.
+.PP
+The deltas are formed in the eBPF program, always between two events one CPU
+observed back to back, and each is handed over on its own. Nothing user space
+receives can therefore span a gap: a record the ring buffer had no room for is
+a sample that never arrives, not a delta stretched across the ones it
+swallowed. Two events yield no delta at all \- the first one a CPU sees, and
+the first one after a reset.
+.SH EXAMPLES
+Collect a million deltas of CPU 0 from the scheduler source:
+.PP
+.RS
+.nf
+esdm\-ebpf\-collect \-\-source sched \-\-cpu 0 \-\-events 1000000 \\
+                  \-\-out sched_idle_cpu0.txt
+.fi
+.RE
+.PP
+Turn them into the byte stream the NIST tools assess and run the estimator:
+.PP
+.RS
+.nf
+esdm\-extractlsb sched_idle_cpu0.txt sched_idle_cpu0\-8.bin 1000000 FF
+ea_non_iid sched_idle_cpu0\-8.bin 8
+.fi
+.RE
+.PP
+The scripts
+.I analyze_non_iid.sh
+and
+.I analyze_restart.sh
+next to the tool do the whole procedure for one CPU. Collect at least 1,000,000
+deltas per CPU, once on an idle system and once under load, and take the
+minimum across all CPUs and load profiles.
+.SH NOTES
+From the measured per\-event min\-entropy
+.IR H ,
+the entropy rate is
+.I floor(H * 256 / 64)
+\- an event contributes its 64 bit delta, so 256 bits of data are four events \-
+and the oversampling rate is
+.IR "ceil(1 / H)" .
+The two have to agree: the accounting credits the smaller of what each yields
+and caps a rate above
+.IR "4 / OSR" .
+Configure them at build time
+.RB ( \-Des_sched_ebpf_entropy_rate=N ,
+.BR \-Des_sched_ebpf_osr=N )
+or the rate at runtime through the ESDM configuration interface. The shipped
+default rate of 0 keeps the source uncredited until this measurement has been
+performed for the deployment environment.
+.PP
+The full procedure, including the SP800\-90B restart test, is described in
+.I addon/es_ebpf_testing/README.md
+of the ESDM source distribution.
+.SH SEE ALSO
+.BR esdm\-extractlsb (8),
+.BR esdm\-getrawentropy (8),
+.BR esdm\-server (8)
+.SH AUTHOR
+Markus Theil <theil.markus@gmail.com>

@@ -1,0 +1,173 @@
+.TH ESDM\-OPENSSL\-PROVIDER 7 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-openssl\-provider \- OpenSSL 3 providers backed by the ESDM
+.SH SYNOPSIS
+.nf
+.B libesdm\-rng\-provider.so
+.B libesdm\-rng\-provider\-pr.so
+.B libesdm\-seed\-src\-provider.so
+.B libesdm\-egd\-provider.so
+.B libesdm\-egd\-provider\-pr.so
+.fi
+.SH DESCRIPTION
+These are OpenSSL 3 providers that answer OpenSSL's random number requests
+from
+.BR esdm\-server (8)
+rather than from OpenSSL's own DRBG chain. They are built with the meson
+option
+.BR openssl\-rand\-provider .
+.PP
+Each provider offers the four RAND algorithms OpenSSL knows \-
+.BR CTR\-DRBG ", " HASH\-DRBG ", " HMAC\-DRBG " and " SEED\-SRC
+\- and routes all of them to the ESDM. Which one an application asks for
+therefore no longer selects a construction; it selects nothing at all, because
+the data comes from the ESDM either way. The algorithms are told apart from
+OpenSSL's own by their property string, which is what an
+.I openssl.cnf
+selects on.
+.SS The variants
+.TP
+.B libesdm\-rng\-provider.so
+Property
+.BR provider=esdm .
+Talks the ESDM RPC protocol. Honors the prediction\-resistance flag OpenSSL
+passes per request.
+.TP
+.B libesdm\-rng\-provider\-pr.so
+Property
+.BR provider=esdm .
+The same, except that every generate and seed request goes to the
+prediction\-resistance generator of the ESDM regardless of what OpenSSL asked
+for. Its provider name reports "ESDM RNG Provider (PR)".
+.TP
+.B libesdm\-seed\-src\-provider.so
+Property
+.BR provider=esdm .
+Offers
+.B SEED\-SRC
+only. For a configuration that wants OpenSSL to keep running its own DRBG but
+to take its seed material from the ESDM.
+.TP
+.B libesdm\-egd\-provider.so
+Property
+.BR provider=esdm\-egd .
+Talks the EGD protocol instead of the RPC protocol, and therefore needs
+nothing but a single UNIX domain stream socket \- no protobuf, no shared
+memory, no second socket. This is the variant for environments the RPC
+interface cannot reach, a chroot that can be handed exactly one socket being
+the usual case. See
+.BR libesdm_egd_client (3)
+for what the protocol can and cannot do.
+.TP
+.B libesdm\-egd\-provider\-pr.so
+Property
+.BR provider=esdm\-egd\-pr .
+The EGD variant bound to the prediction\-resistance socket. The EGD protocol
+cannot select the generator per request, so this is purely a matter of which
+socket the provider connects to.
+.PP
+The distinct property strings mean several of these can be loaded side by side
+and be selected individually.
+.SH CONFIGURATION
+Providers are activated in
+.BR config (5),
+i.e. in
+.IR openssl.cnf .
+Merely activating one is not enough to make OpenSSL use it: without a
+.B random
+section OpenSSL remains free to pick the default provider, so pin both the DRBG
+and its seed source to the properties of the ESDM provider.
+.PP
+.RS
+.nf
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+random = random_sect
+
+[provider_sect]
+esdm = esdm_sect
+default = default_sect
+
+[default_sect]
+activate = 1
+
+[esdm_sect]
+activate = 1
+module = /usr/lib64/libesdm\-rng\-provider.so
+
+[random_sect]
+random = CTR\-DRBG
+properties = provider=esdm
+seed = SEED\-SRC
+seed_properties = provider=esdm
+.fi
+.RE
+.PP
+The
+.B default
+provider stays activated because the rest of OpenSSL needs its algorithms; only
+the random section is redirected.
+.SS EGD socket selection
+The EGD providers take their socket path, in decreasing precedence, from the
+.B egd_socket
+key of their provider section in
+.IR openssl.cnf ,
+from the
+.B ESDM_EGD_SOCKET
+environment variable, and from the path the ESDM was built with. Configuring
+the EGD variant therefore differs from the above only in the module and in the
+properties:
+.PP
+.RS
+.nf
+[esdm_sect]
+activate = 1
+module = /usr/lib64/libesdm\-egd\-provider.so
+egd_socket = /run/esdm\-egd.socket
+
+[random_sect]
+random = CTR\-DRBG
+properties = provider=esdm\-egd
+seed = SEED\-SRC
+seed_properties = provider=esdm\-egd
+.fi
+.RE
+.PP
+The ESDM server serves that socket when started with
+.B \-\-egd_socket
+or through the shipped EGD socket units.
+.SH NOTES
+The reported security strength is 256 bits and the maximum request size is 256
+bytes, which is the granularity OpenSSL's own DRBG chain uses as well; larger
+consumer requests are split by OpenSSL.
+.PP
+A provider that cannot reach the ESDM fails the request rather than falling
+back to another source \- otherwise pinning OpenSSL to the ESDM would be
+advisory rather than binding.
+.SH ENVIRONMENT
+.TP
+.B ESDM_EGD_SOCKET
+Path of the EGD socket, used by the EGD providers when
+.I openssl.cnf
+does not name one.
+.SH EXAMPLES
+Check that the provider is loaded and serving:
+.PP
+.RS
+.nf
+openssl list \-random\-generators \-provider esdm\-rng\-provider
+openssl rand \-hex 32
+.fi
+.RE
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR libesdm_rpc_client (3),
+.BR libesdm_egd_client (3),
+.BR config (5),
+.BR provider (7)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>
+.br
+Markus Theil <theil.markus@gmail.com>

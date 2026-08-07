@@ -1,0 +1,196 @@
+.TH LIBESDM_EGD_CLIENT 3 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+libesdm_egd_client \- client library for the ESDM EGD interface
+.SH SYNOPSIS
+.nf
+.B #include <esdm/esdm_egd_client.h>
+.PP
+.B pkg\-config \-\-cflags \-\-libs esdm_egd_client
+.fi
+.SH DESCRIPTION
+.B libesdm_egd_client
+speaks the EGD (Entropy Gathering Daemon) protocol to
+.BR esdm\-server (8),
+which serves it when started with
+.B \-\-egd_socket
+or through the shipped EGD socket units.
+.PP
+The reason to use this rather than
+.BR libesdm_rpc_client (3)
+is reach: the EGD interface needs nothing but a single UNIX domain stream
+socket \- no protobuf, no shared memory, no second socket \- so it works in
+places the RPC interface cannot go, such as a chroot that can be handed
+exactly one socket. The price is the protocol: it is a legacy one that can
+neither express prediction resistance nor transfer more than
+.B ESDM_EGD_MAX_TRANSFER
+(255) bytes per request, though this client splits larger requests
+transparently.
+.SS Clients and concurrency
+A client owns exactly one connection. The EGD protocol carries no request
+identifiers \- responses are matched to requests purely by their order on the
+stream \- so all operations of one client are serialized against each other and
+one request is in flight at a time. An application that wants concurrency uses
+several clients.
+.PP
+That serialization survives a caller that does not: the lock behind it is a
+robust one, so a thread killed in the middle of an operation hands the client
+to the next caller instead of wedging it. The connection it left at an unknown
+offset of the command stream is dropped.
+.SS Reconnecting
+All operations are thread safe and reconnect on their own:
+.RS
+.IP \(bu 2
+A client whose initial connect failed \- because the ESDM is not up yet \- is
+still handed back usable and connects on first use. A consumer initialized
+before the daemon exists, such as an OpenSSL provider loaded during boot, keeps
+working once the daemon arrives.
+.IP \(bu 2
+A transfer that fails halfway leaves the peer's parser at an unknown offset, so
+the connection is dropped rather than reused and the operation is retried once
+on a fresh one. A daemon restart between two requests is therefore invisible to
+the caller.
+.IP \(bu 2
+A descriptor inherited across
+.BR fork (2)
+refers to the parent's connection, and two processes interleaving commands on
+it would desynchronize the stream. A fork handler closes every inherited
+connection in the child; the next operation there opens one of its own. Should
+the fork have bypassed the handler \- a direct
+.BR clone (2),
+say \- the client notices at its next use and reconnects then.
+.RE
+.SH FUNCTIONS
+.TP
+.BI "int esdm_egd_client_alloc(struct esdm_egd_client **" client ", const char *" socket_path ", unsigned int " timeout_ms ");"
+Allocate a client and connect it. Release it with
+.BR esdm_egd_client_free ().
+.IP
+.I socket_path
+selects the EGD socket; NULL or the empty string takes the path from the
+.B ESDM_EGD_SOCKET
+environment variable, and failing that the socket path this ESDM was built
+with.
+.IP
+.I timeout_ms
+bounds how long the client waits for the peer in one step \- the connection
+setup, or one transfer of a request or its response \- before treating it as
+failed. The socket is non\-blocking and every wait is a poll of its own, so this
+covers the connect as well, which a receive timeout cannot. 0 selects a default
+generous enough for the blocking read command to wait for an ESDM that is not
+operational yet; unreasonably large values are capped.
+.IP
+Returns 0 on success, and a negative value only when no client could be
+allocated. A failure to connect is not an error here \- it is reported through
+the ESDM logger and the client is usable regardless.
+.TP
+.BI "void esdm_egd_client_free(struct esdm_egd_client *" client ");"
+Close the connection and release the client. Passing NULL is a no\-op.
+.TP
+.BI "const char *esdm_egd_client_socket_path(const struct esdm_egd_client *" client ");"
+The socket path this client talks to. The string is owned by the client.
+.TP
+.BI "int esdm_egd_client_get_random(struct esdm_egd_client *" client ", uint8_t *" buf ", size_t " buflen ");"
+Obtain
+.I buflen
+bytes of random data, waiting for the ESDM to become operational. Requests
+larger than one protocol transfer are split transparently. On failure
+.I buf
+is cleansed, so a partial transfer can never be mistaken for a complete one.
+.TP
+.BI "int esdm_egd_client_get_random_nonblock(struct esdm_egd_client *" client ", uint8_t *" buf ", size_t " buflen ", size_t *" generated ");"
+Obtain random data without waiting. The ESDM answers with as much as it can
+deliver right away, which is nothing at all while it is not operational yet;
+the amount actually delivered is stored in
+.IR generated .
+.I buflen
+is at most
+.BR ESDM_EGD_MAX_TRANSFER .
+Use this only where a short answer is acceptable \- a seed consumer wants
+.BR esdm_egd_client_get_random ().
+.TP
+.BI "int esdm_egd_client_entropy_count(struct esdm_egd_client *" client ", uint32_t *" entropy_bits ");"
+Entropy the ESDM currently holds, in bits.
+.TP
+.BI "int esdm_egd_client_write_entropy(struct esdm_egd_client *" client ", const uint8_t *" buf ", size_t " buflen ", uint32_t " entropy_bits ");"
+Insert at most
+.B ESDM_EGD_MAX_TRANSFER
+bytes into the auxiliary pool of the ESDM. The protocol allows attaching an
+entropy claim to the data, but the ESDM only honors it for a caller running as
+UID 0 and inserts everybody else's data without any entropy credit. An
+unprivileged caller passing a non\-zero
+.I entropy_bits
+is therefore not an error \- the claim is simply dropped.
+.TP
+.BI "int esdm_egd_client_get_pid(struct esdm_egd_client *" client ", pid_t *" pid ");"
+PID of the daemon serving the socket.
+.SH RETURN VALUE
+All functions returning
+.B int
+return 0 on success and a negative errno value on error.
+.SH SYSCALL DISCIPLINE
+Once connected, the operations stay within
+.BR read (2),
+.BR write (2),
+.BR poll (2),
+.BR close (2),
+.BR getpid (2),
+.BR clock_gettime (2),
+.BR nanosleep (2)
+and
+.BR getsockopt (2).
+That is deliberate: it is the set a seccomp confined process is typically still
+allowed, OpenSSH's pre\-auth sandbox being the reference case. In particular
+.BR send (2)/ recv (2)
+are avoided \- they are
+.BR sendto (2)/ recvfrom (2),
+which that filter answers with
+.B SECCOMP_RET_KILL
+\- and
+.B MSG_NOSIGNAL
+is therefore not available, so a write is preceded by a poll that catches a
+vanished peer before it could raise
+.BR SIGPIPE .
+.PP
+Establishing a connection is a different matter: it needs
+.BR socket (2)
+and
+.BR connect (2),
+which such a sandbox does not permit and does not merely fail but kills the
+process for. A client that has to serve a sandboxed process must therefore be
+connected before the sandbox is entered \- which is why
+.BR esdm_egd_client_alloc ()
+connects rather than deferring it. A process that forks into a sandbox cannot
+be served at all, since the fork forces a reconnect.
+.SH ENVIRONMENT
+.TP
+.B ESDM_EGD_SOCKET
+Path of the EGD socket, used when
+.BR esdm_egd_client_alloc ()
+is called without an explicit one.
+.SH EXAMPLE
+.nf
+#include <esdm/esdm_egd_client.h>
+
+int get_random(uint8_t *buf, size_t buflen)
+{
+	struct esdm_egd_client *client;
+	int ret;
+
+	ret = esdm_egd_client_alloc(&client, NULL, 0);
+	if (ret)
+		return ret;
+
+	ret = esdm_egd_client_get_random(client, buf, buflen);
+
+	esdm_egd_client_free(client);
+
+	return ret;
+}
+.fi
+.SH SEE ALSO
+.BR libesdm_rpc_client (3),
+.BR libesdm (3),
+.BR libesdm_aux_client (3),
+.BR esdm\-server (8)
+.SH AUTHOR
+Markus Theil <theil.markus@gmail.com>

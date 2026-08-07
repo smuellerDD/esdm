@@ -86,10 +86,24 @@ is present.
 
 ## AIS 20/31 (2024) Compliance
 
-When enabling the compile time option of `ais2031`, the ESDM server
+When enabling the compile time option of `ais2031_ntg1`, the ESDM server
 operates NTG.1 compliant to AIS 20/31 (2024, version 3.0) right away when using
 the interfaces that are documented to block until sufficient initial entropy
-is present.
+is present. Two entropy sources have to deliver 240 bits of entropy each before
+a DRNG is considered fully seeded.
+
+If the jitter RNG is operated in its own NTG.1 mode - the compile time option
+`es_jent_ntg1` together with jitterentropy 3.7.0 or later providing secure
+memory - then it is an NTG.1 conformant RNG by itself. In that case a second
+entropy source adds nothing to the NTG.1 property and the ESDM server seeds
+from the jitter RNG alone, once it delivered its 240 bits of entropy. The
+requirement is bound to the jitter RNG: another entropy source delivering the
+same amount of entropy does not replace it.
+
+The compile time option of `ais2031_drg4` is independent of it and caps the
+request size based reseeding limits to the values required by DRG.4.10 of the
+same standard, i.e. a reseed is attempted after 2**16 output bits and the fully
+seeded state is lost after 2**17 output bits without a successful reseed.
 
 ## AIS 20/31 (2011) Compliance
 
@@ -145,6 +159,148 @@ If your system uses e.g. `/var/run` and no systemd, set instead:
 ```
 
 In order to use systemd socket activation with esdm, compile esdm with `-Dsystemd=enabled` (default).
+
+## EGD Compatibility Interface
+
+The `esdm-server` can additionally serve the protocol of the Entropy Gathering
+Daemon (EGD, `egd.pl` and its re-implementations like `prngd`). It allows
+consumers which only know how to obtain entropy from an EGD - such as
+libgcrypt built with `--enable-random=egd` or OpenSSL's `RAND_egd()` - to be
+served by the ESDM without any modification.
+
+The interface is disabled by default. It is enabled in either of two ways:
+
+* With systemd, by starting the socket unit that carries it - this is the
+  recommended way, as the unit defines the path and the access mode of the
+  socket:
+
+```
+   systemctl enable --now esdm-server-egd.socket
+   systemctl restart esdm-server
+```
+
+  The `esdm-server.service` is only ordered after that socket unit and does not
+  require it, so the EGD interface stays off until the socket unit is started.
+  Because the descriptor is handed over when the server starts, an already
+  running `esdm-server` has to be restarted once after enabling the socket.
+  The socket path is set at build time with
+  `-Desdm-server-egd-socket-path=/run/esdm-egd.socket`.
+
+* Without systemd, by naming the Unix domain socket on the command line:
+
+```
+   esdm-server --egd_socket /run/esdm-egd.socket
+```
+
+The socket carries access rights for all users - taken from the `SocketMode=`
+of the socket unit, or set to 0666 for a socket bound by the server itself,
+just like the unprivileged RPC socket. The operations reachable through it are
+unprivileged as well:
+
+* Obtaining random numbers is equivalent to what the unprivileged RPC
+  interface offers.
+
+* Data written by a caller with the EGD "write entropy" command is inserted
+  into the auxiliary pool. The entropy claim the protocol allows the caller to
+  attach to that data is only honored for a privileged (UID 0) caller - the
+  data of an unprivileged caller is inserted without any entropy credit. This
+  mirrors the rule of the RPC interface, where inserting data with an entropy
+  claim is reserved for the privileged interface.
+
+Note that the EGD protocol transfers data in the clear over the socket and
+caps every single transfer at 255 bytes. It exists for compatibility with
+legacy consumers - new applications should use the ESDM RPC interface, the
+device files or `getrandom(2)`.
+
+Point the consumers at the socket, e.g. for libgcrypt at build time with
+`--with-egd-socket=/run/esdm-egd.socket` or at runtime with
+`gcry_control(GCRYCTL_SET_RNDEGD_SOCKET, "/run/esdm-egd.socket")`.
+
+### Own consumers of the EGD interface
+
+Two components of the ESDM use the interface themselves, and both are useful
+where the RPC interface cannot be reached - a chroot that can be given exactly
+one socket, for instance:
+
+* `libesdm_egd_client` (`esdm_egd_client.h`) is a small client library for the
+  protocol. A client owns one connection, serializes the requests on it, bounds
+  every wait, and reconnects on its own after a restart of the daemon or a
+  `fork()` of the calling process.
+
+* `libesdm-egd-provider.so` is an OpenSSL 3 RAND provider built on it. Unlike
+  `libesdm-rng-provider.so` it needs no RPC client, and it tags its algorithms
+  with `provider=esdm-egd` so both can be loaded side by side. Its counterpart
+  `libesdm-egd-provider-pr.so` is served by the prediction resistance socket
+  described below and tags its algorithms `provider=esdm-egd-pr`:
+
+```
+   [provider_sect]
+   esdm_egd = esdm_egd_sect
+
+   [esdm_egd_sect]
+   activate = 1
+   module = /usr/local/lib64/libesdm-egd-provider.so
+   egd_socket = /run/esdm-egd.socket
+
+   [random_sect]
+   random = CTR-DRBG
+   properties = provider=esdm-egd
+   seed = SEED-SRC
+   seed_properties = provider=esdm-egd
+```
+
+  Without the `egd_socket` key the socket is taken from the `ESDM_EGD_SOCKET`
+  environment variable and, failing that, from the path the respective provider
+  was built with.
+
+### Prediction resistance
+
+The EGD protocol has no notion of prediction resistance and therefore no way to
+ask for it per request. It is a property of the socket instead: a second socket
+answers every request from `esdm_get_random_bytes_pr()` rather than from
+`esdm_get_random_bytes_full()`. Enable it with
+
+```
+   systemctl enable --now esdm-server-egd-pr.socket
+```
+
+or with `esdm-server --egd_socket_pr <path>`; its path is set at build time with
+`-Desdm-server-egd-pr-socket-path=`. The two sockets are independent and either
+can be enabled on its own.
+
+Consequently the ordinary provider refuses a request that explicitly asks for
+prediction resistance, rather than quietly serving it ordinary random data,
+while `libesdm-egd-provider-pr.so` - which talks to the prediction resistance
+socket - accepts it. Note that this generator hands out no more than the
+entropy sources just produced, so answers take as long as collecting that
+entropy does.
+
+### Sandboxed consumers
+
+The EGD interface reaches consumers that confine themselves after startup.
+OpenSSH is the reference case: sshd hands the pre-authentication protocol,
+including the key exchange, to a privilege separated child that re-execs itself
+and is then confined by a seccomp filter which permits little more than `read`,
+`write`, `poll`, `close` and `getpid` - `socket` and `connect` are answered with
+`SECCOMP_RET_KILL`, as are `sendto` and `recvfrom`.
+
+Pointing sshd at the EGD provider works because the client establishes its
+connection when it is allocated, which happens while OpenSSL loads the provider
+and therefore before the child confines itself, and because everything it does
+afterwards stays within those permitted calls. Setting `OPENSSL_CONF` on the
+`sshd` and `sshd-keygen` units is all it takes:
+
+```
+   systemd.services.sshd.environment.OPENSSL_CONF = "/etc/ssl/openssl-esdm-egd.cnf";
+   systemd.services.sshd-keygen.environment.OPENSSL_CONF = "/etc/ssl/openssl-esdm-egd.cnf";
+```
+
+The corresponding check is `nix build .#checks.<system>.egd_openssh`.
+
+The one thing such a consumer cannot do is reconnect: a process that has already
+confined itself, or that forks after connecting, cannot open a new connection.
+The client therefore reports a failure there rather than recovering from it,
+whereas an unconfined consumer sees a restarted ESDM transparently.
 
 ## Additional Hardening Measures
 

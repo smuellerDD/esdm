@@ -1,0 +1,73 @@
+.TH ESDM\-GETRAWENTROPY 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-getrawentropy \- read raw noise source data from the ESDM kernel module
+.SH SYNOPSIS
+.B esdm\-getrawentropy
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B esdm\-getrawentropy
+reads raw, unconditioned noise source samples from a debugfs interface of the
+.I linux_esdm_es
+kernel add\-on and writes them as decimal ASCII, one 64 bit sample per line \-
+the input format of
+.BR esdm\-extractlsb (8).
+It is the first step of an SP800\-90B entropy assessment of the kernel based
+interrupt and scheduler entropy sources.
+.PP
+The kernel module exports one file per source below
+.IR /sys/kernel/debug/esdm_es/ ,
+and it only does so when built with its testing support. Reading debugfs
+requires root.
+.PP
+This tool is built with the meson option
+.BR validation\-helpers .
+It is for measurement and validation only and has no place in a production
+deployment. For the eBPF based entropy sources, which have no debugfs
+interface, use
+.BR esdm\-ebpf\-collect (8)
+instead.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-samples " \fINUM\fR"
+Number of samples to collect. Default: 1000. An SP800\-90B assessment needs at
+least 1,000,000.
+.TP
+.BR \-f ", " \-\-debugfs\-file " \fIFILE\fR"
+Interface to read from. Default:
+.IR /sys/kernel/debug/esdm_es/esdm_raw_sched_hires ,
+the high\-resolution time stamps of the scheduler entropy source. The interrupt
+entropy source is
+.I /sys/kernel/debug/esdm_es/esdm_raw_hires
+.TP
+.BR \-o ", " \-\-outfile " \fIFILE\fR"
+Write to
+.I FILE
+instead of standard output. The file must not exist \- an existing one is not
+overwritten, so a collection cannot silently clobber an earlier one.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit with a non\-zero status.
+.SH OUTPUT
+One decimal sample per line on standard output or in the output file. Progress
+is reported on standard error, so redirecting standard output keeps the data
+clean.
+.SH EXAMPLES
+The three steps of an assessment, using the NIST
+SP800\-90B_EntropyAssessment tools:
+.PP
+.RS
+.nf
+esdm\-getrawentropy \-s 1000000 \-o /tmp/data\-0001.out
+esdm\-extractlsb /tmp/data\-0001.out /tmp/data\-0001.extracted.out 1000000 FF
+ea_non_iid /tmp/data\-0001.extracted.out 8
+.fi
+.RE
+.SH NOTES
+This tool is taken from the LRNG project and adapted, see
+.I https://github.com/smuellerDD/lrng/tree/master/test/sp80090b
+.SH SEE ALSO
+.BR esdm\-extractlsb (8),
+.BR esdm\-ebpf\-collect (8),
+.BR esdm\-server (8)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

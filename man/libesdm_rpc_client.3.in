@@ -1,0 +1,207 @@
+.TH LIBESDM_RPC_CLIENT 3 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+libesdm_rpc_client \- client library for the ESDM server RPC interface
+.SH SYNOPSIS
+.nf
+.B #include <esdm/esdm_rpc_client.h>
+.PP
+.B pkg\-config \-\-cflags \-\-libs esdm_rpc_client
+.fi
+.SH DESCRIPTION
+.B libesdm_rpc_client
+gives an application access to a running
+.BR esdm\-server (8)
+over its RPC interface. This is the interface an application should use when
+it wants random data from the system's ESDM: the entropy accounting stays with
+the one daemon that owns the entropy sources, instead of every process running
+an ESDM of its own as it would with
+.BR libesdm (3).
+.PP
+The daemon offers two endpoints. The
+.B unprivileged
+one serves every user and carries the operations that only read state or
+produce random data. The
+.B privileged
+one is restricted by the permissions of its socket and carries the operations
+that change the state of the daemon. Each has its own set of init/fini calls,
+and an application initializes only the endpoints it needs.
+.SS Connection handling
+.TP
+.BI "int esdm_rpcc_init_unpriv_service(esdm_rpcc_interrupt_func_t " interrupt_func ");"
+Set up access to the unprivileged endpoint. The call is reference counted, so
+an application and a preloaded library may each call it without knowing about
+one another; only the first call establishes the connection. The optional
+.I interrupt_func
+is consulted to decide whether an ongoing RPC call shall be interrupted, and is
+registered only by the call that actually establishes the connection.
+.TP
+.BI "void esdm_rpcc_fini_unpriv_service(void);"
+Drop one reference. The connection is torn down when the last one goes away.
+.TP
+.BI "void esdm_rpcc_force_fini_unpriv_service(void);"
+Tear the connection down even though other users still hold references \- their
+later calls then fail with
+.BR \-EFAULT .
+For process shutdown paths where the other users cannot be reached.
+.TP
+.BI "int esdm_rpcc_init_priv_service(esdm_rpcc_interrupt_func_t " interrupt_func ");"
+.TP
+.BI "void esdm_rpcc_fini_priv_service(void);"
+.TP
+.BI "void esdm_rpcc_force_fini_priv_service(void);"
+The same for the privileged endpoint.
+.TP
+.BI "int esdm_rpcc_set_max_online_nodes(uint32_t " nodes ");"
+Limit the number of connection pool nodes the client keeps. Call before
+initializing a service.
+.PP
+Every RPC call listed below exists in two forms: a plain one, and one suffixed
+.BR _int ()
+that takes an additional
+.I void *int_data
+argument. That pointer is passed to the registered interrupt function and lets
+the application tell its own concurrent requests apart. The plain form is the
+.BR _int ()
+form with a NULL
+.IR int_data .
+.SS Obtaining random data
+.TP
+.BI "ssize_t esdm_rpcc_get_random_bytes(uint8_t *" buf ", size_t " buflen ");"
+Random data without a guarantee that the ESDM is fully seeded.
+.TP
+.BI "ssize_t esdm_rpcc_get_random_bytes_full(uint8_t *" buf ", size_t " buflen ");"
+Random data, blocking until the ESDM is fully seeded.
+.TP
+.BI "ssize_t esdm_rpcc_get_random_bytes_full_timeout(uint8_t *" buf ", size_t " buflen ", struct timespec *" ts ");"
+The same, bounded by a timeout.
+.TP
+.BI "ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *" buf ", size_t " buflen ");"
+Random data with prediction resistance.
+.TP
+.BI "ssize_t esdm_rpcc_get_seed(uint8_t *" buf ", size_t " buflen ", unsigned int " flags ");"
+Seed material taken directly from the entropy sources, for callers seeding a
+DRNG of their own.
+.I flags
+takes
+.B ESDM_GET_SEED_NONBLOCK
+and
+.BR ESDM_GET_SEED_FULLY_SEEDED ;
+see
+.BR libesdm (3)
+for the layout of the returned buffer.
+.SS Status
+.TP
+.BI "int esdm_rpcc_status(char *" buf ", size_t " buflen ");"
+Status of the ESDM and its entropy sources as human readable text.
+.TP
+.BI "int esdm_rpcc_status_json(char *" buf ", size_t " buflen ");"
+The same information as a JSON document.
+.TP
+.BI "int esdm_rpcc_jent_status(char *" buf ", size_t " buflen ");"
+Internal status of the Jitter RNG entropy source.
+.TP
+.BI "int esdm_rpcc_is_fully_seeded(bool *" fully_seeded ");"
+Whether the ESDM is fully seeded.
+.TP
+.BI "int esdm_rpcc_get_ent_lvl(unsigned int *" entlvl ");"
+Entropy level of the ESDM, in bits.
+.TP
+.BI "int esdm_rpcc_get_poolsize(unsigned int *" poolsize ");"
+Size of the entropy pool, in bits.
+.TP
+.BI "int esdm_rpcc_get_write_wakeup_thresh(unsigned int *" thresh ");"
+Entropy level below which polling writers are woken.
+.TP
+.BI "int esdm_rpcc_get_min_reseed_secs(unsigned int *" seconds ");"
+Minimum number of seconds between two reseed operations.
+.SS Administration
+These require the privileged endpoint.
+.TP
+.BI "int esdm_rpcc_write_data(const uint8_t *" data_buf ", size_t " data_buf_len ");"
+Write data into the auxiliary pool without crediting entropy.
+.TP
+.BI "int esdm_rpcc_set_write_wakeup_thresh(unsigned int " thresh ");"
+Set the write wakeup threshold.
+.TP
+.BI "int esdm_rpcc_set_min_reseed_secs(unsigned int " seconds ");"
+Set the minimum reseed interval.
+.TP
+.BI "int esdm_rpcc_set_pkcs11_config(const char *" token_label ", const char *" pin ");"
+Set the token label and user PIN of the PKCS#11 entropy source.
+.SS Linux random device IOCTLs
+These mirror the
+.BR ioctl (2)
+commands of the Linux random device and back the implementation in
+.BR esdm\-cuse\-random (8).
+.TP
+.BI "int esdm_rpcc_rnd_get_ent_cnt(unsigned int *" entcnt ");"
+.B RNDGETENTCNT
+.TP
+.BI "int esdm_rpcc_rnd_add_to_ent_cnt(unsigned int " entcnt ");"
+.B RNDADDTOENTCNT
+.TP
+.BI "int esdm_rpcc_rnd_add_entropy(const uint8_t *" entropy_buf ", size_t " entropy_buf_len ", uint32_t " entropy_cnt ");"
+.B RNDADDENTROPY
+.TP
+.BI "int esdm_rpcc_rnd_clear_pool(void);"
+.BR RNDCLEARPOOL / RNDZAPENTCNT
+.TP
+.BI "int esdm_rpcc_rnd_reseed_crng(void);"
+.B RNDRESEEDCRNG
+.SH RETURN VALUE
+Functions returning
+.B int
+return 0 on success, functions returning
+.B ssize_t
+return the number of bytes produced. Both return a negative errno value on
+error.
+.B \-EINTR
+means the connection was interrupted and the call may simply be repeated; the
+.B esdm_invoke()
+macro declared in the header does that up to five times.
+.B \-EFAULT
+means the service was never initialized or has been torn down underneath the
+caller.
+.SH THREAD SAFETY
+The library maintains a pool of connections. A call takes one out of the pool
+for its duration, so calls from several threads proceed concurrently as long as
+the pool has free entries and block on each other otherwise. Applications that
+manage connection handles themselves with
+.BR esdm_rpcc_get_unpriv_service ()
+must return them with
+.BR esdm_rpcc_put_unpriv_service ()
+as soon as the request completed, since a checked\-out handle is held
+exclusively.
+.SH EXAMPLE
+.nf
+#include <esdm/esdm_rpc_client.h>
+#include <errno.h>
+
+int get_random(uint8_t *buf, size_t buflen)
+{
+	ssize_t ret;
+
+	if (esdm_rpcc_init_unpriv_service(NULL))
+		return \-EFAULT;
+
+	esdm_invoke(esdm_rpcc_get_random_bytes_full(buf, buflen));
+
+	esdm_rpcc_fini_unpriv_service();
+
+	return (ret == (ssize_t)buflen) ? 0 : (int)ret;
+}
+.fi
+.PP
+Note that
+.B esdm_invoke()
+assigns to a variable named
+.I ret
+in the enclosing scope.
+.SH SEE ALSO
+.BR libesdm (3),
+.BR libesdm_egd_client (3),
+.BR libesdm_aux_client (3),
+.BR esdm\-server (8),
+.BR esdm\-tool (1)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

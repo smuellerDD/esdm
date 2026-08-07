@@ -1,7 +1,32 @@
 Changes 1.2.4
+* Add an optional EGD (Entropy Gathering Daemon) protocol interface to the
+esdm-server, enabled by starting esdm-server-egd.socket or with
+--egd_socket <path>, which serves legacy entropy consumers such as libgcrypt's
+rndegd backend or OpenSSL's RAND_egd()
+
+* Add libesdm_egd_client, a client library for the EGD interface, and
+libesdm-egd-provider.so, an OpenSSL 3 RAND provider based on it: both need
+nothing but the one EGD socket and therefore work where the RPC interface
+cannot be reached, OpenSSH's sandboxed pre-authentication child included
+
+* Add a second EGD socket serving the prediction resistance generator
+(esdm-server-egd-pr.socket, --egd_socket_pr) together with the matching
+libesdm-egd-provider-pr.so - the EGD protocol cannot ask for prediction
+resistance per request, so it is a property of the socket
+
+* Split the build option ais2031 into ais2031_ntg1 (NTG.1 seeding strategy) and
+ais2031_drg4 (DRG.4.10 reseeding limits), which can now be selected independently
+
+* NTG.1 seeding strategy: seed from the jitter RNG alone when it is operated in
+its own NTG.1 mode (es_jent_ntg1 with jitterentropy >= 3.7.0), as it is NTG.1
+conformant without a second entropy source
+
 * Add eBPF-based scheduler and interrupt entropy sources (es_sched_ebpf,
 es_irq_ebpf): no kernel patches required, in-program SP800-90B health tests,
-raw entropy measurement tooling in addon/es_ebpf_testing
+zeroization of every collected raw sample when the sources are unloaded - the
+in-program collection buffers and the ring buffer holding the events included -
+raw entropy measurement tooling including the SP800-90B restart test in
+addon/es_ebpf_testing
 
 * Centralize asynchronous buffer management to collect entropy from slow entropy sources
 

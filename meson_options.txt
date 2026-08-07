@@ -36,6 +36,11 @@ class). This internally also enables FIPS mode and health tests.
 Please make sure, that you configured jitterentropy according to
 entropy estimates on your target platform. Otherwise failing health tests
 may disable the output of this entropy source.
+
+The mode requires jitterentropy 3.7.0 or later with support for secure
+memory. A jitter RNG operated this way is NTG.1 conformant on its own, so
+the seeding strategy selected with 'ais2031_ntg1' lets it seed a DRNG
+without a second entropy source next to it.
 ''')
 
 option('es_jent_max_mem', type: 'integer', min: -1, max: 20, value: -1,
@@ -304,10 +309,15 @@ of a stock Linux kernel (BTF/CO-RE required, i.e. the kernel
 must be built with CONFIG_DEBUG_INFO_BTF).
 
 The event timestamps are health-tested (SP800-90B RCT and APT)
-inside the eBPF program, folded into per-CPU collection buffers
-and delivered to the ESDM server via a BPF ring buffer where
-they are conditioned with the configured hash into an entropy
-pool.
+inside the eBPF program, which collects the time between
+successive events of a CPU in per-CPU buffers - the spacing of
+the events is where the entropy is, and it is the signal the
+SP800-90B assessment measures. A buffer is handed to a BPF ring
+buffer once it is full, or after an idle deadline when its CPU
+falls quiet before that. The ESDM server reads them from there
+when it wants entropy, conditions them with the configured hash
+into an entropy pool and stops reading once that pool is full.
+Events collected while nobody reads are discarded.
 
 This entropy source is mutually exclusive with the es_sched
 and es_irq entropy sources with respect to entropy crediting:
@@ -325,9 +335,13 @@ option('es_sched_ebpf_entropy_rate', type: 'integer', min: 0, max: 256,
        description:'''eBPF scheduler-based entropy source entropy rate.
 
 The option defines the amount of entropy the ESDM applies to 256 bits of
-data obtained from the eBPF scheduler entropy source, i.e. the entropy
-credited per 256 context switch events. The ESDM enforces the limit that
-this value must be between 0 and 256 bits.
+data obtained from the eBPF scheduler entropy source. Every context switch
+event contributes its 64 bit time stamp, so 256 bits of data are four
+events. The ESDM enforces the limit that this value must be between 0 and
+256 bits.
+
+The credited entropy is additionally capped by the oversampling rate
+(es_sched_ebpf_osr), which states the assessed min-entropy of one event.
 
 The default of 0 means the entropy source is not credited with any
 entropy until the entropy rate of the deployment environment has been
@@ -338,6 +352,27 @@ Note: The events for the interrupt-based and scheduler-based entropy
 sources have dependencies. Thus it is not permissible to award more than
 one of the es_irq, es_sched, es_irq_ebpf and es_sched_ebpf entropy
 sources an entropy rate greater than zero.
+''')
+
+# Option for: ESDM_SCHED_EBPF_OSR
+option('es_sched_ebpf_osr', type: 'integer', min: 1, max: 256, value: 1,
+       description:'''eBPF scheduler-based entropy source oversampling rate.
+
+The option defines the oversampling rate the SP800-90B health tests of the
+eBPF scheduler entropy source are parameterized with: the tests assume a
+min-entropy of H = 1 / OSR bits per event, i.e. OSR events are required per
+bit of entropy. It determines the RCT and APT cutoffs applied inside the
+eBPF program.
+
+Set it from the min-entropy measured with the es_ebpf_testing support:
+OSR = ceil(1 / H), rounded up so that the cutoffs are never less strict
+than the measurement warrants. The value must be consistent with
+es_sched_ebpf_entropy_rate: as 256 bits of data are four events, a rate of
+4 / OSR bits per 256 data bits is the most the assessment supports. The
+accounting caps anything above that and the server logs a warning.
+
+The default of 1 is the strictest setting (one bit of entropy per event)
+and matches the shipped entropy rate of 0, which credits no entropy at all.
 ''')
 
 # Option for: ESDM_ES_IRQ_EBPF
@@ -373,9 +408,12 @@ option('es_irq_ebpf_entropy_rate', type: 'integer', min: 0, max: 256,
        description:'''eBPF interrupt-based entropy source entropy rate.
 
 The option defines the amount of entropy the ESDM applies to 256 bits of
-data obtained from the eBPF interrupt entropy source, i.e. the entropy
-credited per 256 interrupt events. The ESDM enforces the limit that this
-value must be between 0 and 256 bits.
+data obtained from the eBPF interrupt entropy source. Every interrupt event
+contributes its 64 bit time stamp, so 256 bits of data are four events. The
+ESDM enforces the limit that this value must be between 0 and 256 bits.
+
+The credited entropy is additionally capped by the oversampling rate
+(es_irq_ebpf_osr), which states the assessed min-entropy of one event.
 
 The default of 0 means the data of this entropy source is mixed in as
 uncredited bonus data. This is the recommended setting because the
@@ -387,14 +425,36 @@ one of the es_irq, es_sched, es_irq_ebpf and es_sched_ebpf entropy
 sources an entropy rate greater than zero.
 ''')
 
+# Option for: ESDM_IRQ_EBPF_OSR
+option('es_irq_ebpf_osr', type: 'integer', min: 1, max: 256, value: 1,
+       description:'''eBPF interrupt-based entropy source oversampling rate.
+
+The option defines the oversampling rate the SP800-90B health tests of the
+eBPF interrupt entropy source are parameterized with: the tests assume a
+min-entropy of H = 1 / OSR bits per event, i.e. OSR events are required per
+bit of entropy. It determines the RCT and APT cutoffs applied inside the
+eBPF program.
+
+Set it from the min-entropy measured with the es_ebpf_testing support:
+OSR = ceil(1 / H), rounded up so that the cutoffs are never less strict
+than the measurement warrants. The value must be consistent with
+es_irq_ebpf_entropy_rate: as 256 bits of data are four events, a rate of
+4 / OSR bits per 256 data bits is the most the assessment supports. The
+accounting caps anything above that and the server logs a warning.
+
+The default of 1 is the strictest setting (one bit of entropy per event)
+and matches the shipped entropy rate of 0, which credits no entropy at all.
+''')
+
 # Option for: ESDM_ES_EBPF_TESTING
 option('es_ebpf_testing', type: 'feature', value: 'disabled',
        description: '''Enable raw measurement support of the eBPF entropy sources.
 
 This option enables the raw event timestamp recording support in the
-eBPF programs and builds the esdm-ebpf-collect tool that gathers raw,
-unconditioned event timestamps for SP800-90B / AIS 20/31 entropy
-assessment.
+eBPF programs and builds the esdm-ebpf-collect tool, which gathers the
+raw, unconditioned time between events as decimal ASCII for SP800-90B
+entropy assessment. Enable validation-helpers alongside it for
+esdm-extractlsb, which turns that into the byte stream the NIST tools read.
 
 THIS OPTION IS FOR MEASUREMENT AND VALIDATION ONLY - DO NOT ENABLE IN
 PRODUCTION BUILDS. The collection tool refuses to operate when the
@@ -633,8 +693,8 @@ The following oversampling is applied:
 ''')
 
 # Option for: ESDM_AIS2031_NTG1_SEEDING_STRATEGY
-option('ais2031', type: 'boolean', value: false,
-       description:'''German AIS 20/31 3.0 (2024) compliance.
+option('ais2031_ntg1', type: 'boolean', value: false,
+       description:'''German AIS 20/31 3.0 (2024) NTG.1 seeding strategy.
 
 When enabling this option, two entropy sources must
 deliver 240 bits of entropy each to consider a DRNG
@@ -647,9 +707,36 @@ to provide less than 240 bits of entropy.
 The strategy is consistent with the requirements for
 NTG.1 compliance in German AIS 20/31 3.0 from 2024.
 
+The requirement of two entropy sources does not apply
+when the jitter RNG is operated in its own NTG.1 mode
+(option 'es_jent_ntg1' together with jitterentropy 3.7.0
+or later). Such a jitter RNG is NTG.1 conformant on its
+own and therefore seeds a DRNG without a second entropy
+source; 240 bits of entropy from it are then sufficient.
+
 Compliance with German AIS 20/31 from 2011 is always
 present when using /dev/random with the flag O_SYNC or
 getrandom(2) with GRND_RANDOM.
+
+The DRG.4 reseeding limits of the same standard are
+configured independently with the option 'ais2031_drg4'.
+''')
+
+option('ais2031_drg4', type: 'boolean', value: false,
+       description:'''German AIS 20/31 3.0 (2024) DRG.4 reseeding limits.
+
+When enabling this option, the request size based reseeding
+limits are capped to the values required by DRG.4.10 of
+German AIS 20/31 3.0 from 2024: a DRNG instance tries to
+reseed after 2**16 output bits at the latest and loses its
+fully seeded state after 2**17 output bits without a
+successful reseed.
+
+Smaller values configured through 'drng_reseed_threshold_bits'
+and 'drng_max_reseed_bits' are kept as they are.
+
+The NTG.1 seeding strategy of the same standard is configured
+independently with the option 'ais2031_ntg1'.
 ''')
 
 # Option for: THREADING_MAX_WORKER_THREADS
@@ -707,8 +794,8 @@ option('drng_reseed_threshold_bits', type: 'integer', value: 0xffffffff,
        'drng_max_reseed_bits' to 131072 (2**17).
 
        Both specified limits of 2**17 and 2**16 are applied unless smaller
-       values are configured when the options sp80090c and/or ais2031 are
-       defined.
+       values are configured when the options sp80090c and/or ais2031_drg4
+       are defined.
        ''')
 
 option('drng_max_reseed_bits', type: 'integer', value: 0xffffffff,
@@ -767,13 +854,18 @@ option('crypto_backend', type: 'combo', value: 'builtin',
 		 'leancrypto',
 		 'openssl',
 		 'botan',
-		 # 'gnutls' - GnuTLS disabled as DRBG only runs without DF
+		 'gnutls',
 		],
        description: '''Select the cryptographic backend
 
 The cryptographic backend provides the cryptographic primitives used by the
 ESDM for the conditioning operation as well as random number generation. Only
 one backend can be enabled.
+
+Note on 'gnutls': its SP800-90A CTR DRBG is operated without a derivation
+function. Seed material must therefore be provided as full-entropy input of
+exactly the DRBG seed length - which is what ESDM feeds it - but it does mean
+this backend has a narrower input contract than the others.
 ''')
 
 option('openssl_drng_type', type: 'combo', value: 'hash',
@@ -847,6 +939,24 @@ option('esdm-server-rpc-path-unprivileged', type: 'string', value: '/run',
 
        Use this e.g. combination with chroot to create a directory
        with only the unprivileged endpoint.
+       ''')
+
+option('esdm-server-egd-socket-path', type: 'string', value: '/run/esdm-egd.socket',
+       description: '''Path of the optional EGD compatibility socket (default: /run/esdm-egd.socket)
+
+       The path is used by the esdm-server-egd.socket systemd unit. The EGD
+       interface is opt-in: it is only served when that socket unit is started
+       or when the esdm-server is invoked with --egd_socket <path>, so this
+       option merely defines where the socket unit places it.
+       ''')
+
+option('esdm-server-egd-pr-socket-path', type: 'string', value: '/run/esdm-egd-pr.socket',
+       description: '''Path of the optional prediction resistance EGD socket
+
+       Counterpart of esdm-server-egd-socket-path serving the prediction
+       resistance generator. The EGD protocol cannot ask for prediction
+       resistance per request, so it is a property of the socket: everything
+       arriving here is answered from esdm_get_random_bytes_pr().
        ''')
 
 option('esdm-server-rpc-path-privileged', type: 'string', value: '/run',

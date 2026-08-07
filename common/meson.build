@@ -26,7 +26,7 @@ conf_data.set('ESDM_SYSTEMD_SUPPORT', get_option('systemd').enabled())
 
 conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
 	      get_option('sp80090c') or get_option('fips140'))
-conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031'))
+conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031_ntg1'))
 if get_option('sp80090c') or get_option('fips140')
 	conf_data.set('ESDM_SEED_BUFFER_INIT_ADD_BITS', 128)
 	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 64)
@@ -145,10 +145,14 @@ endif
 conf_data.set('ESDM_ES_SCHED_EBPF', get_option('es_sched_ebpf').enabled())
 conf_data.set('ESDM_SCHED_EBPF_ENTROPY_RATE',
 	      get_option('es_sched_ebpf_entropy_rate'))
+conf_data.set('ESDM_SCHED_EBPF_OSR',
+	      get_option('es_sched_ebpf_osr'))
 
 conf_data.set('ESDM_ES_IRQ_EBPF', get_option('es_irq_ebpf').enabled())
 conf_data.set('ESDM_IRQ_EBPF_ENTROPY_RATE',
 	      get_option('es_irq_ebpf_entropy_rate'))
+conf_data.set('ESDM_IRQ_EBPF_OSR',
+	      get_option('es_irq_ebpf_osr'))
 
 conf_data.set('ESDM_ES_EBPF_TESTING', get_option('es_ebpf_testing').enabled())
 
@@ -232,11 +236,11 @@ conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'
 conf_data.set('ESDM_LINUX_RESEED_INTERVAL_SEC', get_option('linux-reseed-interval'))
 conf_data.set('ESDM_LINUX_RESEED_ENTROPY_COUNT', get_option('linux-reseed-entropy-count'))
 
-if get_option('sp80090c') or get_option('ais2031')
+if get_option('sp80090c') or get_option('ais2031_drg4')
 	reseed_thresh = get_option('drng_reseed_threshold_bits')
 	max_reseed = get_option('drng_max_reseed_bits')
 
-	# SP800-90C defines that
+	# SP800-90C and AIS 20/31 DRG.4.10 define that
 	if reseed_thresh > 65536
 		reseed_thresh = 65536
 	endif
@@ -254,6 +258,12 @@ endif
 
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH_UNPRIVILEGED', get_option('esdm-server-rpc-path-unprivileged'))
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH_PRIVILEGED', get_option('esdm-server-rpc-path-privileged'))
+
+# Default socket of the optional EGD interface: where the esdm-server-egd.socket
+# unit places it, and therefore where an EGD client looks for it unless it is
+# told otherwise.
+conf_data.set_quoted('ESDM_SERVER_EGD_SOCKET_PATH', get_option('esdm-server-egd-socket-path'))
+conf_data.set_quoted('ESDM_SERVER_EGD_PR_SOCKET_PATH', get_option('esdm-server-egd-pr-socket-path'))
 
 conf_data.set('ESDM_RPC_IDLE_TIMEOUT_USEC', get_option('esdm-server-rpc-idle-timeout-usec'))
 

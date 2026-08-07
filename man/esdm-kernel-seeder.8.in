@@ -1,0 +1,67 @@
+.TH ESDM\-KERNEL\-SEEDER 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-kernel\-seeder \- periodically seed the Linux kernel RNG from the ESDM
+.SH SYNOPSIS
+.B esdm\-kernel\-seeder
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B esdm\-kernel\-seeder
+draws random data from
+.BR esdm\-server (8)
+over the unprivileged RPC interface and inserts it into the Linux kernel RNG,
+crediting it with entropy. It fills the role an
+.BR rngd (8)
+has for the kernel, but with the ESDM as the source.
+.PP
+This is required whenever the ESDM runs the interrupt entropy source, because
+that source deprives the kernel RNG of its main entropy input. It is
+worthwhile in every other configuration as well, since the kernel then also
+benefits from the entropy sources only the ESDM has access to.
+.PP
+The daemon inserts data at start\-up and afterwards once per seeding interval.
+Until the first insertion has succeeded it retries every two seconds instead
+of waiting out the full interval, so that a freshly booted kernel is topped up
+without delay. Data is handed to the CUSE device provided by
+.BR esdm\-cuse\-random (8)
+if it is present, and to
+.I /dev/random
+directly otherwise.
+.PP
+.B esdm\-kernel\-seeder
+must be started as root, as inserting entropy into the kernel requires the
+.B CAP_SYS_ADMIN
+capability. On systemd installations it is normally started through the
+shipped
+.B esdm\-kernel\-seeder.service
+unit.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.TP
+.BR \-i ", " \-\-interval " \fISECS\fR"
+Seconds between two seeding operations. A non\-numeric argument is rejected.
+.TP
+.BR \-v ", " \-\-verbosity
+Increase the logging verbosity. May be given repeatedly.
+.TP
+.BR \-s ", " \-\-syslog
+Log to syslog instead of standard output and standard error.
+.TP
+.BR \-p ", " \-\-force\-pr
+Draw the data from the prediction\-resistance generator of the ESDM, and force
+a reseed of the kernel CRNG right after every insertion. This mode is selected
+automatically when the ESDM was built for the AIS 20/31 NTG.1 seeding
+strategy.
+.SH SIGNALS
+.TP
+.BR SIGTERM ", " SIGINT ", " SIGQUIT ", " SIGHUP
+Terminate the daemon. The pending sleep between two seeding operations is
+interrupted, so the shutdown does not wait for the interval to expire.
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-cuse\-random (8),
+.BR esdm\-tool (1),
+.BR random (4)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

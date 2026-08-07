@@ -1,0 +1,76 @@
+.TH ESDM\-EXTRACTLSB 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-extractlsb \- extract the significant bits of raw noise samples
+.SH SYNOPSIS
+.B esdm\-extractlsb
+.I INPUTFILE OUTFILE MAXEVENTS MASK
+.SH DESCRIPTION
+.B esdm\-extractlsb
+turns the decimal samples produced by
+.BR esdm\-getrawentropy (8)
+or
+.BR esdm\-ebpf\-collect (8)
+into the binary byte stream the NIST SP800\-90B entropy assessment tools
+expect. For every input line it selects the bits named by
+.I MASK
+from the 64 bit sample, packs them down into one byte and writes that byte.
+.PP
+The mask is what makes the assessment meaningful: the timing entropy of these
+sources sits in the low\-order bits, so
+.B FF
+\- the low 8 \- is the usual choice, and the one the assessment scripts use.
+.PP
+This tool is built with the meson option
+.BR validation\-helpers .
+It is for measurement and validation only.
+.SH ARGUMENTS
+.TP
+.I INPUTFILE
+File of decimal samples, one per line.
+.TP
+.I OUTFILE
+Binary output file, one byte per input sample. It must not exist \- an existing
+file is not overwritten.
+.TP
+.I MAXEVENTS
+Stop after this many input samples.
+.TP
+.I MASK
+Up to 16 hexadecimal digits naming the bits to keep. At most 8 bits may be
+set, since the SP800\-90B tools assess at most 8 bits per sample.
+.SH OUTPUT
+Besides the binary file, a summary is printed:
+.RS
+.IP \(bu 2
+the number of samples processed, the mask and how many bits it selects,
+.IP \(bu 2
+the bits that were constant 0 across every sample, and
+.IP \(bu 2
+the bits that were constant 1 across every sample.
+.RE
+.PP
+The two constant\-bit lines are worth reading. A bit that never changes carries
+no entropy, so a mask selecting such bits inflates the sample count without
+adding signal, and a stream whose selected bits are largely constant indicates
+a clock source too coarse for the source to be credited in this environment.
+.SH EXIT STATUS
+Returns 0 on success, and 1 on a malformed mask, a mask selecting more than 8
+bits, or an I/O error.
+.SH EXAMPLES
+Keep the low 8 bits of a million samples and run the non\-IID estimator:
+.PP
+.RS
+.nf
+esdm\-extractlsb /tmp/data\-0001.out /tmp/data\-0001.extracted.out 1000000 FF
+ea_non_iid /tmp/data\-0001.extracted.out 8
+.fi
+.RE
+.SH NOTES
+This tool is taken from the LRNG project and adapted, see
+.I https://github.com/smuellerDD/lrng/tree/master/test/sp80090b
+.SH SEE ALSO
+.BR esdm\-getrawentropy (8),
+.BR esdm\-ebpf\-collect (8),
+.BR esdm\-server (8)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

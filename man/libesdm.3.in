@@ -1,0 +1,233 @@
+.TH LIBESDM 3 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+libesdm \- Entropy Source and DRNG Manager library
+.SH SYNOPSIS
+.nf
+.B #include <esdm/esdm.h>
+.B #include <esdm/esdm_config.h>
+.PP
+.B pkg\-config \-\-cflags \-\-libs esdm
+.fi
+.SH DESCRIPTION
+.B libesdm
+is the ESDM itself: it manages the entropy sources, maintains the
+deterministic random number generators seeded from them, and hands out random
+data. Linking against it embeds a complete ESDM instance into the calling
+process.
+.PP
+This is not what most applications want. An application that needs random data
+from the system's ESDM should talk to
+.BR esdm\-server (8)
+through
+.BR libesdm_rpc_client (3)
+instead, so that it shares one entropy accounting with the rest of the system.
+.B libesdm
+is for building a daemon like
+.BR esdm\-server (8)
+itself, or for a self\-contained application that deliberately runs its own
+ESDM.
+.PP
+Symbols are versioned. The supported API described here is exported under the
+version node
+.BR LIBESDM_1.0 .
+Symbols carrying the
+.B LIBESDM_PRIVATE_1.0
+node exist for the programs shipped with the ESDM and are not API.
+.SH LIFE CYCLE
+.TP
+.BI "int esdm_init(void);"
+Initialize the library: configuration, DRNG manager, entropy sources and the
+status shared memory segment. Must be called before any other function.
+Returns 0 on success and a negative errno value on error.
+.TP
+.BI "int esdm_reinit(void);"
+Reinitialize configuration, DRNG manager and entropy sources without losing
+state or entropy \- for instance after a configuration change. Must not run
+concurrently with
+.BR esdm_init ().
+.TP
+.BI "int esdm_init_monitor(void (*" priv_init_completion ")(void));"
+Run the entropy source monitor. The monitor watches the entropy sources for
+newly arriving entropy while not all DRNGs are seeded yet, and it is what
+performs the periodic collection from the slow entropy sources afterwards.
+The call blocks until the ESDM is finalized, so it is normally run on a thread
+of its own; running it in the calling thread is a way to synchronously wait
+for all DRNGs to be initialized. The optional
+.I priv_init_completion
+callback is invoked once the part of the initialization that requires
+privileges has completed, which is the point at which a daemon may drop them.
+.TP
+.BI "void esdm_fini(void);"
+Terminate the entropy sources and the DRNG manager and release all resources.
+This also stops a monitor started with
+.BR esdm_init_monitor ().
+.SH OBTAINING RANDOM DATA
+.TP
+.BI "ssize_t esdm_get_random_bytes(uint8_t *" buf ", size_t " nbytes ");"
+Random data without a guarantee that the ESDM is fully seeded.
+.TP
+.BI "ssize_t esdm_get_random_bytes_full(uint8_t *" buf ", size_t " nbytes ");"
+Random data, blocking until the ESDM is fully seeded.
+.TP
+.BI "ssize_t esdm_get_random_bytes_full_noblock(uint8_t *" buf ", size_t " nbytes ");"
+The same, but returning an error instead of blocking.
+.TP
+.BI "ssize_t esdm_get_random_bytes_pr(uint8_t *" buf ", size_t " nbytes ");"
+Random data with prediction resistance: the DRNG is reseeded from the entropy
+sources for this request.
+.TP
+.BI "ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *" buf ", size_t " nbytes ");"
+The same, but returning an error instead of blocking.
+.TP
+.BI "ssize_t esdm_get_seed(uint64_t *" buf ", size_t " nbytes ", enum esdm_get_seed_flags " flags ");"
+Fill
+.I buf
+with seed material taken directly from the entropy sources, for callers that
+want to seed a DRNG of their own rather than use the ESDM's. The buffer
+receives the seed length, the entropy rate in bits and the seed data itself.
+If the buffer is too small,
+.B \-EINVAL
+or
+.B \-EMSGSIZE
+is returned, the latter with the required length stored in the buffer.
+.I flags
+is a combination of
+.B ESDM_GET_SEED_NONBLOCK
+(return
+.B \-EAGAIN
+instead of blocking) and
+.B ESDM_GET_SEED_FULLY_SEEDED
+(the caller's DRNG is already seeded, so the smaller runtime entropy rate
+suffices instead of the initial seeding rate).
+.PP
+All of these return the number of bytes written, or a negative errno value.
+.SH STATUS
+.TP
+.BI "void esdm_status(char *" buf ", size_t " buflen ");"
+Status of the ESDM and its entropy sources as human readable text.
+.TP
+.BI "void esdm_status_json(char *" buf ", size_t " buflen ");"
+The same information as a JSON document.
+.TP
+.BI "void esdm_status_machine(struct esdm_status_st *" status ");"
+The same information in a structure meant for programmatic use.
+.TP
+.BI "void esdm_version(char *" buf ", size_t " buflen ");"
+Version information.
+.TP
+.BI "int esdm_state_operational(void);"
+Whether the ESDM is operational.
+.TP
+.BI "int esdm_state_fully_seeded(void);"
+Whether the ESDM is fully seeded.
+.TP
+.BI "int esdm_sp80090c_compliant(void);"
+Whether the current configuration meets SP800\-90C.
+.TP
+.BI "int esdm_ntg1_compliant(void);"
+Whether it meets AIS 20/31 NTG.1.
+.TP
+.BI "int esdm_ntg1_2024_compliant(void);"
+Whether it meets NTG.1 as of the 2024 revision.
+.SH ENTROPY POOL
+.TP
+.BI "int esdm_pool_insert_aux(const uint8_t *" inbuf ", size_t " inbuflen ", uint32_t " entropy_bits ");"
+Insert data into the auxiliary pool and credit it with
+.I entropy_bits
+bits of entropy.
+.TP
+.BI "uint32_t esdm_avail_entropy(void);"
+Entropy currently held by the ESDM, in bits.
+.TP
+.BI "uint32_t esdm_avail_entropy_aux(void);"
+Entropy currently held by the auxiliary pool, in bits.
+.TP
+.BI "uint32_t esdm_avail_poolsize_aux(void);"
+Size of the auxiliary pool, in bits.
+.TP
+.BI "uint32_t esdm_get_aux_ent(void);"
+Entropy accounted for in the auxiliary pool, in bits.
+.TP
+.BI "uint32_t esdm_get_digestsize(void);"
+Digest size of the conditioning hash, in bits.
+.TP
+.BI "void esdm_pool_set_entropy(uint32_t " entropy_bits ");"
+Set the entropy accounted for in the auxiliary pool.
+.TP
+.BI "void esdm_drng_force_reseed(void);"
+Force a reseed of the DRNGs from the entropy sources.
+.TP
+.BI "uint32_t esdm_get_write_wakeup_bits(void);"
+Entropy level below which writers polling the random device are woken.
+.TP
+.BI "void esdm_set_write_wakeup_bits(uint32_t " val ");"
+Set that level.
+.TP
+.BI "uint32_t esdm_get_reseed_max_time(void);"
+Maximum time in seconds between two reseed operations.
+.TP
+.BI "void esdm_set_reseed_max_time(uint32_t " seconds ");"
+Set that time.
+.SH CONFIGURATION
+.I esdm_config.h
+declares the settings that may be queried and changed at runtime, in
+particular the per\-entropy\-source entropy rates
+.RB ( esdm_config_es_ *_entropy_rate ()
+and their
+.BR _set ()
+counterparts), the number of DRNG nodes
+.RB ( esdm_config_max_nodes (),
+.BR esdm_config_online_nodes ()),
+and the compliance settings
+.RB ( esdm_config_fips_enabled (),
+.BR esdm_config_sp80090c_compliant (),
+.BR esdm_config_force_fips_set ()).
+Changing an entropy rate takes effect on the next reseed.
+.SH RETURN VALUE
+Functions returning
+.B int
+return 0 on success and a negative errno value on error. Functions returning
+.B ssize_t
+return the number of bytes produced, or a negative errno value.
+.SH EXAMPLE
+.nf
+#include <esdm/esdm.h>
+#include <stdio.h>
+
+int main(void)
+{
+	uint8_t buf[32];
+	ssize_t ret;
+
+	if (esdm_init())
+		return 1;
+
+	ret = esdm_get_random_bytes_full(buf, sizeof(buf));
+	if (ret != (ssize_t)sizeof(buf)) {
+		esdm_fini();
+		return 1;
+	}
+
+	/* use buf */
+
+	esdm_fini();
+	return 0;
+}
+.fi
+.PP
+Note that this program blocks in
+.BR esdm_get_random_bytes_full ()
+until its own ESDM instance is fully seeded, which is exactly the cost that
+using
+.BR libesdm_rpc_client (3)
+against a running
+.BR esdm\-server (8)
+avoids.
+.SH SEE ALSO
+.BR libesdm_rpc_client (3),
+.BR libesdm_egd_client (3),
+.BR libesdm_aux_client (3),
+.BR esdm\-server (8),
+.BR esdm\-tool (1)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

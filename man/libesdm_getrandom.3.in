@@ -1,0 +1,101 @@
+.TH LIBESDM_GETRANDOM 3 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+libesdm_getrandom \- route getrandom(2) and getentropy(3) to the ESDM
+.SH SYNOPSIS
+.nf
+.B LD_PRELOAD=libesdm\-getrandom.so
+.RI < program >
+.PP
+.BI "cc ... " "\-Wl,\-\-wrap=getrandom \-Wl,\-\-wrap=getentropy" " \-lesdm\-getrandom"
+.PP
+.B pkg\-config \-\-cflags \-\-libs esdm\-getrandom
+.fi
+.SH DESCRIPTION
+.B libesdm_getrandom
+replaces
+.BR getrandom (2)
+and
+.BR getentropy (3)
+so that they are answered by
+.BR esdm\-server (8)
+instead of by the kernel RNG, without touching the application.
+.PP
+There are two ways to use it. Preloading it with
+.B LD_PRELOAD
+interposes the libc symbols at run time and needs no rebuild of the program.
+Linking against it with
+.B \-\-wrap
+redirects the calls at link time; the library then also provides
+.BR __wrap_getrandom ()
+and
+.BR __wrap_getentropy (),
+and keeps
+.BR __real_getrandom ()
+and
+.BR __real_getentropy ()
+available for the original kernel behaviour.
+.PP
+Should the ESDM be unreachable, the call falls back to the
+.BR getrandom (2)
+system call, so preloading the library cannot leave a program without random
+data.
+.SH FLAGS
+The
+.I flags
+argument of
+.BR getrandom (2)
+keeps its usual meaning:
+.B GRND_NONBLOCK
+does not wait for the ESDM to be seeded,
+.B GRND_RANDOM
+selects the prediction\-resistance generator, and
+.B GRND_INSECURE
+accepts data from a not fully seeded state. Two additional flags reach the
+parts of the ESDM the system call has no equivalent for:
+.TP
+.B GRND_SEED
+(0x0010) Return seed material taken directly from the entropy sources rather
+than DRNG output \- the behaviour of
+.BR esdm_get_seed ()
+described in
+.BR libesdm (3).
+.TP
+.B GRND_FULLY_SEEDED
+(0x0020) Together with
+.BR GRND_SEED :
+the caller's DRNG is already fully seeded, so the smaller runtime entropy rate
+suffices instead of the initial seeding rate.
+.PP
+.BR GRND_INSECURE " with " GRND_RANDOM ", " GRND_INSECURE " with " GRND_SEED ,
+and
+.BR GRND_RANDOM " with " GRND_SEED
+are contradictory combinations and are rejected with
+.BR EINVAL ,
+as is any unknown flag.
+.SH RETURN VALUE
+.BR getrandom ()
+returns the number of bytes written or \-1 with
+.I errno
+set;
+.BR getentropy ()
+returns 0 or \-1 with
+.I errno
+set and rejects a length above 256 bytes with
+.BR EIO .
+Both follow their libc counterparts.
+.SH EXAMPLE
+Run a program against the ESDM without rebuilding it:
+.PP
+.RS
+.nf
+LD_PRELOAD=libesdm\-getrandom.so ./myprogram
+.fi
+.RE
+.SH SEE ALSO
+.BR libesdm_rpc_client (3),
+.BR libesdm (3),
+.BR esdm\-server (8),
+.BR getrandom (2),
+.BR getentropy (3)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

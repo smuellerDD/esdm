@@ -1,0 +1,127 @@
+.TH ESDM\-CUSE\-RANDOM 8 "2026-08-05" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-cuse\-random, esdm\-cuse\-urandom \- serve /dev/random and /dev/urandom
+from the ESDM
+.SH SYNOPSIS
+.B esdm\-cuse\-random
+.RI [ OPTIONS ]
+.br
+.B esdm\-cuse\-urandom
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+These two daemons provide the Linux character devices
+.I /dev/random
+and
+.I /dev/urandom
+from
+.BR esdm\-server (8)
+instead of from the kernel RNG, using the CUSE (character device in userspace)
+facility of FUSE.
+.PP
+Each daemon registers a CUSE device of its own \-
+.I /dev/esdm
+for
+.B esdm\-cuse\-random
+and
+.I /dev/uesdm
+for
+.B esdm\-cuse\-urandom
+\- which is then bind\-mounted over the well\-known device path. Applications
+therefore keep using
+.I /dev/random
+and
+.I /dev/urandom
+unchanged, including the
+.BR ioctl (2)
+commands
+.BR RNDGETENTCNT ,
+.BR RNDADDTOENTCNT ,
+.BR RNDADDENTROPY ,
+.B RNDZAPENTCNT/RNDCLEARPOOL
+and
+.BR RNDRESEEDCRNG ,
+and including
+.BR poll (2)
+on the write side.
+.PP
+.B esdm\-cuse\-random
+serves the blocking semantics: reads wait until the ESDM is fully seeded.
+.B esdm\-cuse\-urandom
+serves the non\-blocking semantics.
+.PP
+Both daemons must be started as root and drop to an unprivileged user after
+the device has been created. On systemd installations they are normally
+started through the shipped
+.BR esdm\-cuse\-random.service " and " esdm\-cuse\-urandom.service
+units, which are pulled in by
+.BR esdm\-linux\-compat.target .
+.PP
+The options are handled by FUSE, so the general FUSE and CUSE options are
+accepted in addition to the ones listed below.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.TP
+.BR \-M ", " \-\-maj= \fIMAJ\fR
+Major number of the device to create.
+.TP
+.BR \-m ", " \-\-min= \fIMIN\fR
+Minor number of the device to create.
+.TP
+.BR \-n ", " \-\-name= \fINAME\fR
+Name of the device to create below
+.IR /dev .
+Mandatory.
+.TP
+.BR \-v ", " \-\-verbosity= \fINUM\fR
+Logging verbosity level.
+.TP
+.BR \-u ", " \-\-username " \fIUSER\fR"
+Unprivileged user to switch to once the device exists. Defaults to
+.BR nobody .
+.TP
+.B \-\-pid_namespace
+Fork the daemon into an isolating PID namespace.
+.TP
+.BR \-d ", " "\-o debug"
+Enable debug output. Implies
+.BR \-f .
+.TP
+.B \-f
+Run in the foreground.
+.TP
+.B \-s
+Disable multi\-threaded operation.
+.TP
+.BR \-S ", " \-\-syslog
+Log via syslog.
+.SH FILES
+.TP
+.I /dev/esdm
+CUSE device registered by
+.BR esdm\-cuse\-random .
+.TP
+.I /dev/uesdm
+CUSE device registered by
+.BR esdm\-cuse\-urandom .
+.SH NOTES
+Before each daemon overlays the kernel device with its own, it keeps a file
+descriptor on the original kernel
+.IR /dev/random " respectively " /dev/urandom
+open. Should a request to
+.BR esdm\-server (8)
+fail, the daemon serves it from that descriptor rather than failing the
+.BR read (2)
+or
+.BR write (2),
+so that a stopped or crashed ESDM does not take the system's random device
+down with it.
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-proc (8),
+.BR esdm\-kernel\-seeder (8),
+.BR random (4),
+.BR cuse (4)
+.SH AUTHOR
+Stephan Mueller <smueller@chronox.de>

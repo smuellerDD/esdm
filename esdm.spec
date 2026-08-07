@@ -116,7 +116,7 @@ This subpackage holds the OpenSSL 3 RAND provider
 
 %build
 # No SELinux support
-%meson -Dais2031=true -Dsp80090c=true -Dcrypto_backend=leancrypto -Dselinux=disabled -Dopenssl-rand-provider=enabled
+%meson -Dais2031_ntg1=true -Dais2031_drg4=true -Dsp80090c=true -Dcrypto_backend=leancrypto -Dselinux=disabled -Dopenssl-rand-provider=enabled
 %meson_build
 
 %check
@@ -219,6 +219,10 @@ This subpackage holds the OpenSSL 3 RAND provider
 %{_unitdir}/esdm-server*
 %{_unitdir}/esdm-kernel-seeder*
 %{_unitdir}/esdm-wait-until-fully-seeded*
+%{_mandir}/man1/esdm-tool.1*
+%{_mandir}/man3/lib%{name}*.3*
+%{_mandir}/man8/esdm-server*.8*
+%{_mandir}/man8/esdm-kernel-seeder.8*
 
 %files -n %{name}-cuse
 %{_bindir}/esdm-cuse*
@@ -226,10 +230,14 @@ This subpackage holds the OpenSSL 3 RAND provider
 %{_unitdir}/esdm-cuse*
 %{_unitdir}/esdm-proc.service
 %{_unitdir}/esdm-linux-compat.target
+%{_mandir}/man8/esdm-cuse-random.8*
+%{_mandir}/man8/esdm-cuse-urandom.8*
+%{_mandir}/man8/esdm-proc.8*
 
 %files -n %{name}-openssl
 %{_libdir}/lib%{name}-rng-provider*.so*
 %{_libdir}/lib%{name}-seed-src-provider*.so*
+%{_mandir}/man7/esdm-openssl-provider.7*
 
 %files devel
 %doc CHANGES.md
