@@ -256,18 +256,18 @@ int esdm_cuse_file_name(char *outfile, size_t outfilelen, const char *name)
 	return 0;
 }
 
-int esdm_cuse_bind_mount(const char *mount_src, const char *mount_dst)
+int esdm_cuse_bind_mount(const char *src, const char *dst)
 {
-	(void)mount_src;
-	(void)mount_dst;
+	(void)src;
+	(void)dst;
 
 	return 0;
 }
 
-int esdm_cuse_bind_unmount(char **mount_src, char **mount_dst)
+int esdm_cuse_bind_unmount(char **src, char **dst)
 {
-	(void)mount_src;
-	(void)mount_dst;
+	(void)src;
+	(void)dst;
 
 	return 0;
 }
