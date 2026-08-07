@@ -17,6 +17,7 @@ BuildRequires:  fuse3
 BuildRequires:  fuse3-devel
 BuildRequires:  leancrypto-devel
 BuildRequires:  libjitterentropy3
+BuildRequires:  libjson-c-devel
 BuildRequires:  libprotobuf-c-devel
 BuildRequires:  pkgconfig
 BuildRequires:  libopenssl-devel
