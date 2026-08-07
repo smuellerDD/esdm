@@ -70,7 +70,14 @@ int esdm_rpcc_jent_status_int(char *buf, size_t buflen, void *int_data)
 	unpriv_access__rpc_jent_status(&rpc_conn->service, &msg,
 				       esdm_rpcc_jent_status_cb, &buffer);
 
-	ret = buffer.ret;
+	/*
+	 * The callback only runs once a response was received - without one
+	 * buffer.ret still holds the placeholder set above, which would
+	 * report every transport failure as a timeout.
+	 */
+	ret = esdm_rpcc_last_error(rpc_conn);
+	if (!ret)
+		ret = buffer.ret;
 
 out:
 	esdm_rpcc_put_unpriv_service(rpc_conn);

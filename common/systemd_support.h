@@ -47,6 +47,21 @@ int systemd_notify_mainpid(pid_t pid);
 int systemd_notify_access(char *mode);
 int systemd_notify_status(char *msg);
 
+/*
+ * Latch the socket activation state handed over by systemd.
+ *
+ * Reads and validates LISTEN_PID / LISTEN_FDS once and caches the outcome, so
+ * every later query is independent of the environment. Call this from the
+ * initial process before the server forks: LISTEN_PID names the process
+ * systemd started, which is no longer our PID afterwards - most notably the
+ * PID namespace prefork turns the daemon into PID 1 of its own namespace.
+ *
+ * The call is optional in the sense that systemd_listen_fds() performs the
+ * same initialization on first use, but that is only correct as long as no
+ * fork has happened yet. Not thread safe - call it while single threaded.
+ */
+void systemd_listen_fds_init(void);
+
 int systemd_listen_pid(void);
 int systemd_listen_fds(void);
 int systemd_listen_fd_for_name(const char *name);
@@ -85,6 +100,9 @@ static inline int systemd_notify_status(char *msg)
 	return 0;
 }
 
+static inline void systemd_listen_fds_init(void)
+{
+}
 static inline int systemd_listen_pid(void)
 {
 	return 0;

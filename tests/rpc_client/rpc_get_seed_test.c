@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = esdm_rpcc_get_seed((uint8_t *)&buf, sizeof(buf),
+	rc = esdm_rpcc_get_seed((uint8_t *)buf, buflen,
 				ESDM_GET_SEED_FULLY_SEEDED);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);

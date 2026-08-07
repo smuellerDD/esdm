@@ -27,6 +27,7 @@
 #endif
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +37,14 @@
 
 uint32_t esdm_online_nodes(void)
 {
-	static uint32_t cpus = UINT32_MAX;
+	/*
+	 * Atomic as the lazy caching is otherwise a data race: concurrent
+	 * first-time callers (e.g. the privileged and the unprivileged RPC
+	 * client init running in different threads) both evaluate and store it.
+	 * Doing so is harmless - the value is the same for everybody - but it
+	 * has to be a defined operation.
+	 */
+	static _Atomic uint32_t cpus = UINT32_MAX;
 
 	/* We do not need more DRNGs than we have CPUs */
 	if (cpus == UINT32_MAX) {

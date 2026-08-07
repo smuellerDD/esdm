@@ -64,7 +64,14 @@ int esdm_rpcc_rnd_add_entropy_int(const uint8_t *entropy_buf,
 
 	priv_access__rpc_rnd_add_entropy(&rpc_conn->service, &msg,
 					 esdm_rpcc_rnd_add_entropy_cb, &buffer);
-	ret = buffer.ret;
+	/*
+	 * The callback only runs once a response was received - without one
+	 * buffer.ret still holds the placeholder set above, which would
+	 * report every transport failure as a timeout.
+	 */
+	ret = esdm_rpcc_last_error(rpc_conn);
+	if (!ret)
+		ret = buffer.ret;
 
 out:
 	esdm_rpcc_put_priv_service(rpc_conn);

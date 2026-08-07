@@ -66,6 +66,17 @@ int esdm_rpcc_write_data_int(const uint8_t *data_buf, size_t data_buf_len,
 		unpriv_access__rpc_write_data(&rpc_conn->service, &msg,
 					      esdm_rpcc_write_data_cb, &buffer);
 
+		/*
+		 * The callback only runs once a response was received. When the
+		 * request failed before that - no server listening, a refused
+		 * or broken connection - buffer.ret still holds the placeholder
+		 * set above, which would report every such failure as a
+		 * timeout. Report what actually went wrong instead.
+		 */
+		ret = esdm_rpcc_last_error(rpc_conn);
+		if (ret)
+			goto out;
+
 		ret = buffer.ret;
 		if (ret)
 			goto out;

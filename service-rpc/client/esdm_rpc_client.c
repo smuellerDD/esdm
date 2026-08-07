@@ -71,8 +71,7 @@ static __thread uint8_t esdm_rpcc_reqbuf[ESDM_RPC_MAX_MSG_SIZE]
  */
 static __thread uint8_t esdm_rpcc_unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
 
-static void register_fork_handler_unprivileged(void);
-static void register_fork_handler_privileged(void);
+static void register_fork_handler(void);
 
 static void reset_conn_socket(esdm_rpc_client_connection_t *rpc_conn)
 {
@@ -368,7 +367,12 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		(1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
-	ssize_t received;
+	/*
+	 * Must start at 0: the interrupt check below can break out of the read
+	 * loop before the first read() ever runs, and the zeroization at out:
+	 * uses this as the length of the data to wipe.
+	 */
+	ssize_t received = 0;
 	unsigned int retries = 0;
 	int ret = 0;
 	int pret;
@@ -417,9 +421,24 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		/* Handle a read timeout */
 		if (received < 0) {
 			if (pret == 0) {
-				/* Trigger the re-submission of the request */
-				ret = -EAGAIN;
-				goto out;
+				/*
+				 * Keep waiting rather than asking again. The
+				 * request is already at the server - this is a
+				 * connected SOCK_SEQPACKET socket, so it cannot
+				 * have been lost - and it answers everything it
+				 * accepted. Re-sending only makes it produce the
+				 * whole answer a second time, which for the
+				 * random calls means generating the data twice,
+				 * and leaves the first answer queued to be
+				 * handed out as the reply to whatever is asked
+				 * next, because responses are matched purely by
+				 * order.
+				 *
+				 * The retry budget of the loop bounds the wait;
+				 * re-submission stays available for when it is
+				 * exhausted, below.
+				 */
+				continue;
 			}
 
 			ret = -errno;
@@ -462,6 +481,14 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			break;
 		}
 	} while (received <= 0 && retries <= ESDM_MAX_RX_TX_RETRIES);
+
+	/*
+	 * The answer never came within the whole budget. Ask again from a clean
+	 * slate - the caller resets the connection first, so the answer to the
+	 * abandoned request cannot turn up later and be taken for the next one.
+	 */
+	if (!interrupted && received < 0 && !ret)
+		ret = -EAGAIN;
 
 	if (!interrupted && header &&
 	    header->status_code == PROTOBUF_C_RPC_STATUS_CODE_SUCCESS) {
@@ -554,7 +581,6 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		closure(msg, closure_data);
 	}
 
-out:
 	if (received > 0) {
 		memset_secure(esdm_rpcc_reqbuf, 0, (size_t)received);
 	}
@@ -576,7 +602,18 @@ static void esdm_client_invoke(ProtobufCService *service,
 	int64_t used_before_ns;
 	int ret;
 
-	mutex_w_lock(&rpc_conn->lock);
+	/*
+	 * EOWNERDEAD means the lock was taken over from a thread that died in
+	 * the middle of its request. The lock is consistent again, but the
+	 * connection is not: a partially written request or an unconsumed
+	 * response would desynchronize every later request on this socket, as
+	 * the client matches responses purely by order. Drop the socket so the
+	 * loop below establishes a fresh one.
+	 */
+	if (mutex_w_lock(&rpc_conn->lock) == EOWNERDEAD)
+		reset_conn_socket(rpc_conn);
+
+	rpc_conn->last_error = 0;
 
 	do {
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
@@ -612,9 +649,28 @@ static void esdm_client_invoke(ProtobufCService *service,
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 				    "Receiving of data failed: %d\n", ret);
 		}
+
+		/*
+		 * Re-submitting means the answer to the request just sent was
+		 * given up on. Drop the socket so that answer cannot arrive
+		 * afterwards: responses carry nothing that ties them to a
+		 * request and are matched purely by order, so a late one would
+		 * be handed out as the reply to the next call on this
+		 * connection.
+		 */
+		if (ret == -EAGAIN)
+			reset_conn_socket(rpc_conn);
 	} while (ret == -EAGAIN);
 
 out:
+	/*
+	 * Hand the reason for a failed request to the caller: the closure is
+	 * not invoked when the RPC never reached the server, so this is the
+	 * only place the actual errno survives.
+	 */
+	if (ret < 0)
+		rpc_conn->last_error = ret;
+
 	mutex_w_unlock(&rpc_conn->lock);
 }
 
@@ -653,10 +709,37 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	service->invoke = esdm_client_invoke;
 	service->destroy = esdm_client_destroy;
 
-	mutex_w_init(&rpc_conn->ref_cnt, 0, 0);
+	/*
+	 * Both mutexes are robust. A connection is owned by one caller from
+	 * esdm_rpcc_get_*_service() until it is returned, and that caller holds
+	 * ref_cnt for that whole span and rpc_conn->lock across the request
+	 * itself. If such a thread is killed - which the interrupt callbacks
+	 * exist for in the first place - a plain mutex would stay locked
+	 * forever, permanently wedging that connection for the rest of the
+	 * process lifetime and making the teardown leak it. A robust mutex
+	 * hands the lock to the next taker with EOWNERDEAD instead, which the
+	 * mutex_w_* wrappers recover from.
+	 *
+	 * A failed mutex initialization must not be published: the connection
+	 * would be handed out with a lock that neither serializes its callers
+	 * nor can be destroyed again.
+	 */
+	CKINT(mutex_w_init(&rpc_conn->ref_cnt, 0, 1));
 	rpc_conn->fd = -1;
 	reset_conn_socket(rpc_conn);
-	mutex_w_init(&rpc_conn->lock, 0, 0);
+
+	ret = mutex_w_init(&rpc_conn->lock, 0, 1);
+	if (ret) {
+		/*
+		 * Undo the ref_cnt initialization here: the caller only runs
+		 * esdm_fini_proto_service() over the connections that were
+		 * initialized completely, so this one is not covered there.
+		 */
+		mutex_w_destroy(&rpc_conn->ref_cnt);
+		goto out;
+	}
+
+	/* Only a fully constructed connection may be handed out. */
 	atomic_store(&rpc_conn->state, esdm_rpcc_initialized);
 
 out:
@@ -666,7 +749,14 @@ out:
 /******************************************************************************
  * General service handlers
  ******************************************************************************/
-static uint32_t esdm_rpcc_max_nodes = UINT32_MAX;
+/*
+ * Upper bound for the number of connections of a service. Only ever lowered
+ * (see esdm_rpcc_set_max_online_nodes), which together with the caching in
+ * esdm_online_nodes() is what makes the connection count of a service
+ * non-growing - see esdm_rpcc_init_service(). Atomic as the getters read it
+ * outside of any lock.
+ */
+static _Atomic uint32_t esdm_rpcc_max_nodes = UINT32_MAX;
 
 /*
  * Guards the pairing of a connection-array pointer and its count across
@@ -688,8 +778,20 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes)
 	 * value, so accepting 0 would turn every later service lookup into a
 	 * SIGFPE.
 	 */
-	esdm_rpcc_max_nodes =
-		min_uint32(esdm_rpcc_max_nodes, max_uint32(nodes, 1));
+	uint32_t new_nodes = max_uint32(nodes, 1);
+	uint32_t curr = atomic_load(&esdm_rpcc_max_nodes);
+
+	/*
+	 * Lower the limit, never raise it. The loop keeps that true also when
+	 * two callers race, which the read-modify-write of a plain variable
+	 * would not - and the whole connection handling relies on the limit
+	 * being monotonic (see esdm_rpcc_init_service).
+	 */
+	while (new_nodes < curr &&
+	       !atomic_compare_exchange_weak(&esdm_rpcc_max_nodes, &curr,
+					     new_nodes))
+		;
+
 	return 0;
 }
 
@@ -703,35 +805,29 @@ static uint32_t esdm_rpcc_curr_node(void)
 	return (esdm_curr_node() % esdm_rpcc_max_nodes);
 }
 
-static void esdm_rpcc_fini_service(
-	_Atomic(esdm_rpc_client_connection_t *) *rpc_conn, uint32_t *num)
+/*
+ * Release a connection array that is not reachable through the global service
+ * pointer any more.
+ *
+ * The caller must have removed the array from that pointer first, so that no
+ * getter can pick up one of its connections any more. Invoke this without
+ * holding esdm_rpcc_conn_lock: waiting for the in-flight callers can take up
+ * to a second per connection, which must not block getters of a connection
+ * array that is meanwhile installed.
+ */
+static void esdm_rpcc_release_conns(
+	esdm_rpc_client_connection_t *rpc_conn_array, uint32_t num_conn)
 {
 	struct timespec abstime;
-	esdm_rpc_client_connection_t *rpc_conn_array;
 	esdm_rpc_client_connection_t *rpc_conn_p;
-	uint32_t i, num_conn = *num;
-	int lock_res;
+	uint32_t i;
+	bool still_in_use = false;
 
-	/*
-	 * Swap out the pointer/count pair under the writer side of the
-	 * connection lock: getters read both and acquire their connection's
-	 * ref_cnt under the reader side, so after this critical section every
-	 * getter either sees NULL or already owns a ref_cnt that the timedlock
-	 * loop below waits for.
-	 */
-	mutex_lock(&esdm_rpcc_conn_lock);
-	rpc_conn_array = atomic_exchange(rpc_conn, NULL);
-	*num = 0;
-	mutex_unlock(&esdm_rpcc_conn_lock);
 	if (!rpc_conn_array)
 		return;
 
-	rpc_conn_p = rpc_conn_array;
-
-	esdm_test_shm_status_fini();
-
 	/* Tell everybody that the connection is about to terminate */
-	for (i = 0; i < num_conn; i++, rpc_conn_p++)
+	for (i = 0, rpc_conn_p = rpc_conn_array; i < num_conn; i++, rpc_conn_p++)
 		atomic_store(&rpc_conn_p->state, esdm_rpcc_in_termination);
 
 	/*
@@ -741,37 +837,135 @@ static void esdm_rpcc_fini_service(
 	for (i = 0, rpc_conn_p = rpc_conn_array; i < num_conn;
 	     i++, rpc_conn_p++) {
 		/*
-		 * Do not wait forever as during shutdown, the thread using
-		 * the handle may have been already killed. In this case,
-		 * we want to avoid a deadlock as the lock will not be released
-		 * by a killed thread.
+		 * Do not wait forever: a caller that is still working on its
+		 * request would otherwise block the shutdown for as long as it
+		 * takes. A handle whose owner was killed does not need the
+		 * timeout - ref_cnt is robust, so it is handed over right away.
 		 */
 		clock_gettime(CLOCK_MONOTONIC, &abstime);
 		abstime.tv_sec += 1;
-		lock_res = mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime);
-		if (lock_res == 0 || lock_res == ETIMEDOUT)
-			mutex_w_unlock(&rpc_conn_p->ref_cnt);
+		if (mutex_w_timedlock(&rpc_conn_p->ref_cnt, &abstime)) {
+			/*
+			 * A live caller still owns this connection and did not
+			 * return it within the timeout. Leave the handle alone:
+			 * neither the mutexes nor the socket may be recycled
+			 * while a running request can still reach them, so the
+			 * whole array is leaked below rather than risking a
+			 * use-after-free.
+			 *
+			 * A connection whose owner died without returning it is
+			 * no longer part of this case: ref_cnt is robust, so
+			 * the timedlock takes it over and reports success, and
+			 * the handle is torn down normally below.
+			 */
+			still_in_use = true;
+			continue;
+		}
+		mutex_w_unlock(&rpc_conn_p->ref_cnt);
 
 		/* Terminate the handle */
 		esdm_fini_proto_service(rpc_conn_p);
 	}
 
+	if (still_in_use) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_RPC,
+			"Connection handles still in use on termination - leaking the connection memory\n");
+		return;
+	}
+
 	free(rpc_conn_array);
 }
 
+/*
+ * Release the connections of a service.
+ *
+ * @param force If false, this is one matching counterpart of an init call: the
+ *		connections are only torn down once as many finis as inits were
+ *		seen. If true, the connections are released regardless of how
+ *		many init calls are still outstanding.
+ */
+static void esdm_rpcc_fini_service(
+	_Atomic(esdm_rpc_client_connection_t *) *rpc_conn, uint32_t *num,
+	uint32_t *init_ref, bool force)
+{
+	esdm_rpc_client_connection_t *rpc_conn_array;
+	uint32_t num_conn;
+
+	/*
+	 * Swap out the pointer/count pair under the writer side of the
+	 * connection lock: getters read both and acquire their connection's
+	 * ref_cnt under the reader side, so after this critical section every
+	 * getter either sees NULL or already owns a ref_cnt that the timedlock
+	 * loop below waits for. The same lock guards the init reference count,
+	 * so the decision to tear down and the pointer swap are one atomic step
+	 * with respect to a concurrent init.
+	 */
+	mutex_lock(&esdm_rpcc_conn_lock);
+
+	/* Not initialized, or already released - nothing to do. */
+	if (!*init_ref) {
+		mutex_unlock(&esdm_rpcc_conn_lock);
+		return;
+	}
+
+	/* Other users are still around - keep the connections alive. */
+	if (!force && --(*init_ref)) {
+		mutex_unlock(&esdm_rpcc_conn_lock);
+		return;
+	}
+
+	*init_ref = 0;
+	num_conn = *num;
+	rpc_conn_array = atomic_exchange(rpc_conn, NULL);
+	*num = 0;
+	mutex_unlock(&esdm_rpcc_conn_lock);
+	if (!rpc_conn_array)
+		return;
+
+	/*
+	 * Counterpart of the one esdm_test_shm_status_init() that the initial
+	 * allocation of this service performed - a mere replacement of the
+	 * connections keeps the shared memory attached.
+	 */
+	esdm_test_shm_status_fini();
+
+	esdm_rpcc_release_conns(rpc_conn_array, num_conn);
+}
+
+/*
+ * Set up the connections of a service.
+ *
+ * Every successful call adds one reference which esdm_rpcc_fini_service()
+ * consumes again - the connections stay alive until as many finis as inits
+ * were seen. This allows independent users within one process (e.g. an
+ * application and a preloaded library) to init and fini without one of them
+ * pulling the connections away from the other.
+ *
+ * The connections are allocated by the first init and are released by the last
+ * fini only - an init never replaces an existing set. This is what makes a
+ * connection handle that esdm_rpcc_get_service() handed out safe to use: no
+ * concurrent init can free it underneath its caller.
+ *
+ * Doing so costs nothing because the number of nodes cannot grow during the
+ * lifetime of a process: esdm_rpcc_set_max_online_nodes() only ever lowers its
+ * limit and esdm_online_nodes() caches the CPU count on its first call. A
+ * later init can therefore never ask for more connections than the first one
+ * already allocated.
+ */
 static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 				  const char *socketname,
 				  esdm_rpcc_interrupt_func_t interrupt_func,
 				  _Atomic(esdm_rpc_client_connection_t *) *rpc_conn,
-				  uint32_t *num_conn)
+				  uint32_t *num_conn, uint32_t *init_ref)
 {
-	esdm_rpc_client_connection_t *tmp, *tmp_p;
+	esdm_rpc_client_connection_t *tmp = NULL, *tmp_p, *curr_conn_array;
 	uint32_t i = 0, nodes = esdm_rpcc_get_online_nodes();
 	int ret = 0;
 
 	/* Serialize against concurrent init/fini and exclude getters. */
 	mutex_lock(&esdm_rpcc_conn_lock);
-	tmp = atomic_load(rpc_conn);
+	curr_conn_array = atomic_load(rpc_conn);
 
 	/*
 	 * It is a legitimate scenario that this function is called twice for
@@ -783,53 +977,43 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 	 * Note, the esdm_rpcc_fini_service will ensure that there is also no
 	 * double free.
 	 */
-	if (tmp) {
+	if (curr_conn_array) {
 		/*
-		 * If the existing nodes are already sufficient, do not allocate
-		 * more.
+		 * The interrupt function is a property of the connection and
+		 * thus shared by all users of the service. The one supplied
+		 * with the first init stays in effect - replacing it would
+		 * silently disable the interrupt handling of its owner.
 		 */
-		if (*num_conn >= nodes)
-			goto out;
+		if (interrupt_func &&
+		    interrupt_func != curr_conn_array->interrupt_func) {
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_RPC,
+				"Interrupt function for socket %s ignored: the connections are already established\n",
+				socketname);
+		}
 
 		/*
-		 * The caller wants more ESDM connections now - release all
-		 * connections to allocate them anew.
-		 *
-		 * It is inefficient to release the connections, free the memory
-		 * and allocate it anew. Yet, it is the hope that this code
-		 * is never called by assuming the user avoids such situations.
-		 *
-		 * But it is conceivable to have such situations:
-		 * libesdm_getrandom allocates memory for one connection. If
-		 * this library is preloaded, and the application itself wants
-		 * to allow a larger set of ESDM connections, we end up in this
-		 * code path.
-		 *
-		 * NOTE: This is only permissible when assuming that the
-		 * init_service call is done at the beginning of an application,
-		 * i.e. when there is no transaction running.
+		 * Cannot happen as the node count never grows (see above). Do
+		 * not silently hand out fewer connections than asked for if it
+		 * ever does - the existing ones are kept either way, as freeing
+		 * them would break the callers currently using them.
 		 */
-		for (i = 0, tmp_p = tmp; i < *num_conn; i++, tmp_p++)
-			esdm_fini_proto_service(tmp_p);
-		if (tmp)
-			free(tmp);
-		tmp = NULL;
-		/*
-		 * Clear the global pointer as well: it still references the
-		 * memory just freed. Otherwise the compare-and-swap below sees a
-		 * stale non-NULL value, fails, and both discards the freshly
-		 * built array and leaves the global dangling (later double free).
-		 */
-		atomic_store(rpc_conn, NULL);
-		*num_conn = 0;
-		/*
-		 * Reset the loop counter: on an allocation failure below, the
-		 * error path unwinds i connections of the new array - with the
-		 * old count left in i and tmp NULL it would dereference NULL.
-		 */
-		i = 0;
+		if (*num_conn < nodes) {
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_RPC,
+				"Keeping the %u existing connections for socket %s although %u are requested\n",
+				*num_conn, socketname, nodes);
+		}
+
+		(*init_ref)++;
+		goto out;
 	}
 
+	/*
+	 * Build the connections completely before publishing them: a failure
+	 * thus leaves the service in the uninitialized state it had before
+	 * instead of a half-built one.
+	 */
 	tmp = calloc(nodes, sizeof(*tmp));
 	CKNULL(tmp, -ENOMEM);
 
@@ -838,15 +1022,20 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 					      interrupt_func, tmp_p));
 	}
 
+	/* Paired with the fini in esdm_rpcc_fini_service(). */
 	CKINT(esdm_test_shm_status_init());
 
-	esdm_rpc_client_connection_t *cas_expected = NULL;
-
-	if (!atomic_compare_exchange_strong(rpc_conn, &cas_expected, tmp)) {
-		ret = -EAGAIN;
-		goto out;
-	}
+	/*
+	 * Publish the connections. A plain store is sufficient: the pointer is
+	 * NULL at this point and only init and fini ever write it, both under
+	 * the writer side of the connection lock which is held throughout.
+	 */
+	atomic_store(rpc_conn, tmp);
 	*num_conn = nodes;
+	(*init_ref)++;
+
+	/* The connection array is owned by the service now. */
+	tmp = NULL;
 
 	esdm_logger(
 		LOGGER_DEBUG, LOGGER_C_ANY,
@@ -854,7 +1043,8 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		nodes, socketname);
 
 out:
-	if (ret && tmp) {
+	/* Only still set if the connections were not published. */
+	if (tmp) {
 		uint32_t j;
 
 		for (j = 0, tmp_p = tmp; j < i; j++, tmp_p++)
@@ -863,6 +1053,7 @@ out:
 		free(tmp);
 	}
 	mutex_unlock(&esdm_rpcc_conn_lock);
+
 	return ret;
 }
 
@@ -902,8 +1093,12 @@ static int esdm_rpcc_get_service(
 		goto out;
 	}
 
-	/* Protection against client programming errors */
-	node = min_uint32(esdm_rpcc_curr_node(), num_conn);
+	/*
+	 * Protection against client programming errors: esdm_rpcc_curr_node()
+	 * is bounded by the node limit, which may exceed the number of
+	 * connections this service actually holds.
+	 */
+	node = min_uint32(esdm_rpcc_curr_node(), num_conn - 1);
 
 	/*
 	 * Always using a fixed connection based on the current
@@ -966,6 +1161,8 @@ static void esdm_rpcc_put_service(esdm_rpc_client_connection_t *rpc_conn)
  ******************************************************************************/
 static _Atomic(esdm_rpc_client_connection_t *) unpriv_rpc_conn = NULL;
 static uint32_t unpriv_rpc_conn_num = 0;
+/* Number of outstanding init calls, guarded by esdm_rpcc_conn_lock */
+static uint32_t unpriv_rpc_conn_init_ref = 0;
 
 DSO_PUBLIC
 int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
@@ -984,17 +1181,26 @@ void esdm_rpcc_put_unpriv_service(esdm_rpc_client_connection_t *rpc_conn)
 DSO_PUBLIC
 int esdm_rpcc_init_unpriv_service(esdm_rpcc_interrupt_func_t interrupt_func)
 {
-	register_fork_handler_unprivileged();
+	register_fork_handler();
 
 	return esdm_rpcc_init_service(&unpriv_access__descriptor,
 				      ESDM_RPC_UNPRIV_SOCKET, interrupt_func,
-				      &unpriv_rpc_conn, &unpriv_rpc_conn_num);
+				      &unpriv_rpc_conn, &unpriv_rpc_conn_num,
+				      &unpriv_rpc_conn_init_ref);
 }
 
 DSO_PUBLIC
 void esdm_rpcc_fini_unpriv_service(void)
 {
-	esdm_rpcc_fini_service(&unpriv_rpc_conn, &unpriv_rpc_conn_num);
+	esdm_rpcc_fini_service(&unpriv_rpc_conn, &unpriv_rpc_conn_num,
+			       &unpriv_rpc_conn_init_ref, false);
+}
+
+DSO_PUBLIC
+void esdm_rpcc_force_fini_unpriv_service(void)
+{
+	esdm_rpcc_fini_service(&unpriv_rpc_conn, &unpriv_rpc_conn_num,
+			       &unpriv_rpc_conn_init_ref, true);
 }
 
 /******************************************************************************
@@ -1002,6 +1208,8 @@ void esdm_rpcc_fini_unpriv_service(void)
  ******************************************************************************/
 static _Atomic(esdm_rpc_client_connection_t *) priv_rpc_conn = NULL;
 static uint32_t priv_rpc_conn_num = 0;
+/* Number of outstanding init calls, guarded by esdm_rpcc_conn_lock */
+static uint32_t priv_rpc_conn_init_ref = 0;
 
 DSO_PUBLIC
 int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
@@ -1020,83 +1228,129 @@ void esdm_rpcc_put_priv_service(esdm_rpc_client_connection_t *rpc_conn)
 DSO_PUBLIC
 int esdm_rpcc_init_priv_service(esdm_rpcc_interrupt_func_t interrupt_func)
 {
-	register_fork_handler_privileged();
+	register_fork_handler();
 
 	return esdm_rpcc_init_service(&priv_access__descriptor,
 				      ESDM_RPC_PRIV_SOCKET, interrupt_func,
-				      &priv_rpc_conn, &priv_rpc_conn_num);
+				      &priv_rpc_conn, &priv_rpc_conn_num,
+				      &priv_rpc_conn_init_ref);
 }
 
 DSO_PUBLIC
 void esdm_rpcc_fini_priv_service(void)
 {
-	esdm_rpcc_fini_service(&priv_rpc_conn, &priv_rpc_conn_num);
+	esdm_rpcc_fini_service(&priv_rpc_conn, &priv_rpc_conn_num,
+			       &priv_rpc_conn_init_ref, false);
+}
+
+DSO_PUBLIC
+void esdm_rpcc_force_fini_priv_service(void)
+{
+	esdm_rpcc_fini_service(&priv_rpc_conn, &priv_rpc_conn_num,
+			       &priv_rpc_conn_init_ref, true);
 }
 
 /******************************************************************************
  * Fork Handling
  ******************************************************************************/
-static pid_t owner_pid_unprivileged = -1;
-static pid_t owner_pid_privileged = -1;
+/*
+ * The child handler below runs in the child of a fork, where only the forking
+ * thread exists: the connections are inherited from the parent with sockets
+ * that are now shared and with mutexes that may have been left locked by a
+ * thread which does not exist here any more.
+ *
+ * The handlers are registered from the init calls, which may run concurrently -
+ * hence pthread_once. A plain "did I register already" flag races: two
+ * initializing threads both see it unset, register the handler twice and,
+ * worse, both run the cleanup right away, which destroys and re-initializes the
+ * mutexes of connections that a third thread may be using at that moment.
+ *
+ * One registration covers both services rather than one per service: they share
+ * esdm_rpcc_conn_lock, and the prepare handler below takes its non-recursive
+ * writer side - two prepare handlers doing that would deadlock the fork. Having
+ * the child touch a service that was never initialized is harmless, as its
+ * connection array is NULL and its count 0 then.
+ */
+static pthread_once_t fork_handler_once = PTHREAD_ONCE_INIT;
 
-/* does nothing, if no connections were allocated and nums are 0 */
-static void cleanup_after_fork_unprivileged(void)
+/*
+ * Hold the connection lock across the fork. Without it the child can come up
+ * with a torn view of a service: init and fini publish the connection array
+ * pointer and its count as two separate stores, so a fork in between leaves the
+ * child with a NULL array and a non-zero count (fini) or with an array the
+ * child considers empty forever (init). Holding the lock also means the child
+ * does not inherit it locked by a thread that no longer exists, which would
+ * deadlock the first esdm_rpcc_get_service() there.
+ *
+ * The price is that a fork waits for an in-flight esdm_rpcc_get_service() to
+ * hand out its connection, as that holds the reader side while it waits for a
+ * free connection handle. That wait is bounded by one RPC round trip and only
+ * occurs when all connections are busy.
+ */
+static void prepare_fork(void)
 {
+	mutex_lock(&esdm_rpcc_conn_lock);
+}
+
+static void cleanup_after_fork_parent(void)
+{
+	mutex_unlock(&esdm_rpcc_conn_lock);
+}
+
+/* does nothing, if no connections were allocated and num_conn is 0 */
+static void reinit_conns_after_fork(
+	_Atomic(esdm_rpc_client_connection_t *) *rpc_conn, uint32_t num_conn)
+{
+	esdm_rpc_client_connection_t *rpc_conn_array = atomic_load(rpc_conn);
 	uint32_t i;
 
-	/* close all unprivileged sockets and reinit robust mutexes */
-	for (i = 0; i < unpriv_rpc_conn_num; ++i) {
-		reset_conn_socket(&unpriv_rpc_conn[i]);
-		mutex_w_destroy(&unpriv_rpc_conn[i].ref_cnt);
-		mutex_w_destroy(&unpriv_rpc_conn[i].lock);
-		mutex_w_init(&unpriv_rpc_conn[i].ref_cnt, 0, 0);
-		mutex_w_init(&unpriv_rpc_conn[i].lock, 0, 0);
+	if (!rpc_conn_array)
+		return;
+
+	/*
+	 * Close all sockets and reinit the mutexes - robust, matching
+	 * esdm_init_proto_service(). Recreating them rather than recovering
+	 * them is what is needed here: a mutex left locked by a thread of the
+	 * parent has no owner in this process at all, so there is nobody for
+	 * the robustness protocol to hand it over to.
+	 */
+	for (i = 0; i < num_conn; ++i) {
+		reset_conn_socket(&rpc_conn_array[i]);
+		mutex_w_destroy(&rpc_conn_array[i].ref_cnt);
+		mutex_w_destroy(&rpc_conn_array[i].lock);
+		mutex_w_init(&rpc_conn_array[i].ref_cnt, 0, 1);
+		mutex_w_init(&rpc_conn_array[i].lock, 0, 1);
 	}
 }
 
-/* does nothing, if no connections were allocated and nums are 0 */
-static void cleanup_after_fork_privileged(void)
+static void cleanup_after_fork_child(void)
 {
-	uint32_t i;
+	reinit_conns_after_fork(&unpriv_rpc_conn, unpriv_rpc_conn_num);
+	reinit_conns_after_fork(&priv_rpc_conn, priv_rpc_conn_num);
 
-	/* close all privileged sockets and reinit robust mutexes */
-	for (i = 0; i < priv_rpc_conn_num; ++i) {
-		reset_conn_socket(&priv_rpc_conn[i]);
-		mutex_w_destroy(&priv_rpc_conn[i].ref_cnt);
-		mutex_w_destroy(&priv_rpc_conn[i].lock);
-		mutex_w_init(&priv_rpc_conn[i].ref_cnt, 0, 0);
-		mutex_w_init(&priv_rpc_conn[i].lock, 0, 0);
-	}
+	/*
+	 * Drop the lock taken by prepare_fork(). Re-initializing rather than
+	 * unlocking discards any waiter state inherited from the parent's
+	 * threads, none of which exist here. This is safe precisely because
+	 * prepare_fork() ran: the sole surviving thread is the owner, so no
+	 * other thread in this process can be inside the lock.
+	 */
+	mutex_init(&esdm_rpcc_conn_lock, 0);
 }
 
-/* need different handlers in order to not interfere with the other case, when opened
- * in two threads at different times */
-static void register_fork_handler_unprivileged(void)
+static void do_register_fork_handler(void)
 {
-	/* handlers stay registered after fork, only register once */
-	if (owner_pid_unprivileged == -1) {
-		pthread_atfork(NULL, NULL, &register_fork_handler_unprivileged);
-	}
-
-	/* also works in the initial call */
-	if (getpid() != owner_pid_unprivileged) {
-		owner_pid_unprivileged = getpid();
-		cleanup_after_fork_unprivileged();
-	}
+	pthread_atfork(&prepare_fork, &cleanup_after_fork_parent,
+		       &cleanup_after_fork_child);
 }
 
-/* need different handlers in order to not interfere with the other case, when opened
- * in two threads at different times */
-static void register_fork_handler_privileged(void)
+/*
+ * The registration survives a fork, so the child does not need to repeat it -
+ * which is what the inherited pthread_once state provides. As the handler is
+ * installed before any connection can be allocated, every fork after that
+ * point runs the cleanup in the child.
+ */
+static void register_fork_handler(void)
 {
-	/* handlers stay registered after fork, only register once */
-	if (owner_pid_privileged == -1) {
-		pthread_atfork(NULL, NULL, &register_fork_handler_privileged);
-	}
-
-	/* also works in the initial call */
-	if (getpid() != owner_pid_privileged) {
-		owner_pid_privileged = getpid();
-		cleanup_after_fork_privileged();
-	}
+	pthread_once(&fork_handler_once, do_register_fork_handler);
 }

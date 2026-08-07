@@ -96,6 +96,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 	struct timespec timeout;
 	ssize_t ret = 0;
 	esdm_rpcc_interrupt_func_t old_interrupt_func = NULL;
+	bool interrupt_func_replaced = false;
 
 	CKNULL(ts, -EINVAL);
 
@@ -113,6 +114,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 		old_interrupt_func = rpc_conn->interrupt_func;
 		rpc_conn->interrupt_func = int_connection_after_timeout;
+		interrupt_func_replaced = true;
 	} else {
 		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 	}
@@ -129,6 +131,35 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 		unpriv_access__rpc_get_random_bytes_full(
 			&rpc_conn->service, &msg,
 			esdm_rpcc_get_random_bytes_full_timeout_cb, &buffer);
+
+		/*
+		 * The callback only runs once a response was received. When the
+		 * request failed before that - no server listening, a refused
+		 * or broken connection - buffer.ret still holds the placeholder
+		 * set above, which would report every such failure as a
+		 * timeout. Report what actually went wrong instead.
+		 */
+		ret = esdm_rpcc_last_error(rpc_conn);
+		if (ret)
+			goto out;
+
+		/*
+		 * Our own interrupt handler firing means the deadline passed.
+		 * It surfaces differently depending on the phase it hit: the
+		 * write phase leaves the -ETIMEDOUT placeholder untouched (no
+		 * closure call, and esdm_rpcc_last_error() deliberately hides
+		 * the -EAGAIN behind it), while the read phase invokes the
+		 * closure with -EINTR. Report the deadline as -ETIMEDOUT in
+		 * both cases - propagating -EINTR would make the caller's
+		 * esdm_invoke() restart the request up to five more times, each
+		 * with a freshly computed deadline, so a call could block for
+		 * several times the requested timeout.
+		 */
+		if (interrupt_func_replaced && buffer.ret == -EINTR &&
+		    int_connection_after_timeout(&timeout)) {
+			ret = -ETIMEDOUT;
+			goto out;
+		}
 
 		if (buffer.ret < -255) {
 			size_t new_max = (size_t)(-buffer.ret);
@@ -161,7 +192,14 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 	}
 
 out:
-	if (old_interrupt_func) {
+	/*
+	 * Restore whatever was registered before - including NULL, which is
+	 * what a service initialized without an interrupt function has. Keying
+	 * this off old_interrupt_func being non-NULL would leave our handler
+	 * installed on the shared connection for good in exactly that case,
+	 * together with an interrupt_data pointing at this stack frame.
+	 */
+	if (interrupt_func_replaced) {
 		rpc_conn->interrupt_func = old_interrupt_func;
 	}
 

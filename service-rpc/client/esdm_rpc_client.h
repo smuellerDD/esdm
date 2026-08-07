@@ -67,9 +67,14 @@ typedef struct esdm_rpc_client_connection esdm_rpc_client_connection_t;
  * requests to be processed as CPUs are available to be allocated. To limit
  * this, set maximum number of online nodes here.
  *
+ * The limit can only be lowered - every call keeps the smaller of the current
+ * and the requested value. It must be set before the service is initialized:
+ * the connections of an already initialized service are not resized any more,
+ * as releasing them would break the callers currently using them.
+ *
  * @param [in] nodes Number of maximum online nodes
  *
- * @return 0 on success, 0 < on error
+ * @return 0 on success, < 0 on error
  */
 int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
 
@@ -78,18 +83,23 @@ int esdm_rpcc_set_max_online_nodes(uint32_t nodes);
  ******************************************************************************/
 
 /**
- * @brief Initiate connection
+ * @brief Check out a client connection handle
  *
- * It will be transparently initialized if it does not exist before. terminate
- * the connection with esdm_rpc_client_fini_unpriv_service. Release the
- * connection with esdm_rpcc_put_unpriv_service.
+ * The service must have been set up with esdm_rpcc_init_unpriv_service before -
+ * this call does not establish it and fails with -EFAULT if it was never
+ * initialized. Return the handle with esdm_rpcc_put_unpriv_service as soon as
+ * the request completed: it is checked out exclusively and blocks another
+ * caller from using that connection until then.
  *
- * @param [in] rpc_conn Connection handle that shall be used. This handle can be
- *		   	located on the stack.
+ * @param [out] rpc_conn Set to the connection handle to be used. The handle
+ *			 points into the connection pool of the service and is
+ *			 owned by it - do not free it. It stays valid until the
+ *			 matching esdm_rpcc_put_unpriv_service.
  * @param [in] int_data Opaque data pointer used when invoking the interrupt
  *			function. This may be NULL.
  *
- * @return 0 on success, < 0 on error
+ * @return 0 on success, < 0 on error (-EFAULT if the service is not
+ *	   initialized, -ESHUTDOWN if it is being torn down)
  */
 int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
 				 void *int_data);
@@ -99,43 +109,75 @@ int esdm_rpcc_get_unpriv_service(esdm_rpc_client_connection_t **rpc_conn,
  *
  * Release for the next service request.
  *
- * @param [in] rpc_conn Connection handle that shall be used. This handle can be
- *		    	located on the stack.
+ * @param [in] rpc_conn Connection handle obtained from
+ *			esdm_rpcc_get_unpriv_service. Passing NULL is a no-op,
+ *			so an error path may call this unconditionally.
  */
 void esdm_rpcc_put_unpriv_service(esdm_rpc_client_connection_t *rpc_conn);
 
 /**
  * @brief Initiate the memory for accessing the unprivileged RPC connection.
  *
+ * The call may be issued multiple times within one process, e.g. by an
+ * application and a preloaded library independently of each other. The
+ * connection is reference counted: only the first call sets it up and it is
+ * released once esdm_rpcc_fini_unpriv_service was called as often as this
+ * function returned successfully.
+ *
  * @param [in] interrupt_func Function pointer invoked to check when the
- *			      operation shall be interrupted.
+ *			      operation shall be interrupted. It is only
+ *			      registered by the call actually establishing the
+ *			      connection.
  *
  * @return 0 on success, < 0 on error
  */
 int esdm_rpcc_init_unpriv_service(esdm_rpcc_interrupt_func_t interrupt_func);
 
 /**
- * @brief Release all resources around the RPC connection.
+ * @brief Drop one reference obtained with esdm_rpcc_init_unpriv_service.
+ *
+ * All resources around the RPC connection are released once the last reference
+ * is dropped. The call is a no-op if no reference is held.
  */
 void esdm_rpcc_fini_unpriv_service(void);
+
+/**
+ * @brief Release all resources around the RPC connection unconditionally.
+ *
+ * Unlike esdm_rpcc_fini_unpriv_service, the connection is torn down even when
+ * other users still hold a reference to it - their subsequent service requests
+ * fail with -EFAULT and their fini calls become a no-op. Use this only where
+ * the connection must be gone irrespective of the remaining users, e.g. when
+ * shutting down a process whose other users cannot be reached anymore.
+ *
+ * A connection handle that is checked out with esdm_rpcc_get_unpriv_service at
+ * that moment is deliberately not freed - its memory is retained so that the
+ * caller owning it can complete and release it safely.
+ */
+void esdm_rpcc_force_fini_unpriv_service(void);
 
 /******************************************************************************
  * Privileged ESDM interface
  ******************************************************************************/
 
 /**
- * @brief Get the client connection handle
+ * @brief Check out a client connection handle
  *
- * It will be transparently initialized if it does not exist before. Terminate
- * the connection with esdm_rpc_client_fini_priv_service. Release the
- * connection with esdm_rpcc_put_priv_service.
+ * The service must have been set up with esdm_rpcc_init_priv_service before -
+ * this call does not establish it and fails with -EFAULT if it was never
+ * initialized. Return the handle with esdm_rpcc_put_priv_service as soon as the
+ * request completed: it is checked out exclusively and blocks another caller
+ * from using that connection until then.
  *
- * @param [in] rpc_conn Connection handle that shall be used. This handle can be
- *		    	located on the stack.
+ * @param [out] rpc_conn Set to the connection handle to be used. The handle
+ *			 points into the connection pool of the service and is
+ *			 owned by it - do not free it. It stays valid until the
+ *			 matching esdm_rpcc_put_priv_service.
  * @param [in] int_data Opaque data pointer used when invoking the interrupt
  *			function. This may be NULL.
  *
- * @return 0 on success, < 0 on error
+ * @return 0 on success, < 0 on error (-EFAULT if the service is not
+ *	   initialized, -ESHUTDOWN if it is being torn down)
  */
 int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
 			       void *int_data);
@@ -145,25 +187,52 @@ int esdm_rpcc_get_priv_service(esdm_rpc_client_connection_t **rpc_conn,
  *
  * Release for the next service request.
  *
- * @param [in] rpc_conn Connection handle that shall be used. This handle can be
- *		    	located on the stack.
+ * @param [in] rpc_conn Connection handle obtained from
+ *			esdm_rpcc_get_priv_service. Passing NULL is a no-op, so
+ *			an error path may call this unconditionally.
  */
 void esdm_rpcc_put_priv_service(esdm_rpc_client_connection_t *rpc_conn);
 
 /**
  * @brief Initiate the memory for accessing the privileged RPC connection.
  *
+ * The call may be issued multiple times within one process, e.g. by an
+ * application and a preloaded library independently of each other. The
+ * connection is reference counted: only the first call sets it up and it is
+ * released once esdm_rpcc_fini_priv_service was called as often as this
+ * function returned successfully.
+ *
  * @param [in] interrupt_func Function pointer invoked to check when the
- *			      operation shall be interrupted.
+ *			      operation shall be interrupted. It is only
+ *			      registered by the call actually establishing the
+ *			      connection.
  *
  * @return 0 on success, < 0 on error
  */
 int esdm_rpcc_init_priv_service(esdm_rpcc_interrupt_func_t interrupt_func);
 
 /**
- * @brief Release all resources around the RPC connection.
+ * @brief Drop one reference obtained with esdm_rpcc_init_priv_service.
+ *
+ * All resources around the RPC connection are released once the last reference
+ * is dropped. The call is a no-op if no reference is held.
  */
 void esdm_rpcc_fini_priv_service(void);
+
+/**
+ * @brief Release all resources around the RPC connection unconditionally.
+ *
+ * Unlike esdm_rpcc_fini_priv_service, the connection is torn down even when
+ * other users still hold a reference to it - their subsequent service requests
+ * fail with -EFAULT and their fini calls become a no-op. Use this only where
+ * the connection must be gone irrespective of the remaining users, e.g. when
+ * shutting down a process whose other users cannot be reached anymore.
+ *
+ * A connection handle that is checked out with esdm_rpcc_get_priv_service at
+ * that moment is deliberately not freed - its memory is retained so that the
+ * caller owning it can complete and release it safely.
+ */
+void esdm_rpcc_force_fini_priv_service(void);
 
 /******************************************************************************
  * RPC Service Call APIs
@@ -192,6 +261,30 @@ int esdm_rpcc_status(char *buf, size_t buflen);
  * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
  */
 int esdm_rpcc_status_int(char *buf, size_t buflen, void *int_data);
+
+/**
+ * @brief RPC-version of esdm_status_json
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * @param [out] buf Buffer to be filled with the status information rendered as
+ *		    a JSON object. The string will be NULL-terminated.
+ * @param [in] buflen Size of the buffer provided by the caller.
+ *
+ * @return: 0 on success, < 0 on error (-EINTR means connection was interrupted
+ *	    and the caller may try again)
+ */
+int esdm_rpcc_status_json(char *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_status_json
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+int esdm_rpcc_status_json_int(char *buf, size_t buflen, void *int_data);
 
 /**
  * @brief RPC-version of esdm_avail_entropy

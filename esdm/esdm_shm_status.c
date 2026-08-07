@@ -473,9 +473,10 @@ static void esdm_shm_status_exit_common(bool cleanup_ipc)
 	 * the SHM segment and the semaphores, and keeping them allows the
 	 * clients to survive a server restart without being restarted too -
 	 * see esdm_config_ipc_cleanup_set(). Note that this in-process attempt
-	 * fails with EPERM once the server permanently dropped its privileges;
-	 * the esdm-server therefore repeats the cleanup in its (privileged)
-	 * PID namespace supervisor - see esdm_rpc_server_cleanup().
+	 * fails with EPERM once the caller permanently dropped its privileges;
+	 * the esdm-server therefore disables it and delegates the cleanup to
+	 * its privileged PID namespace supervisor - see
+	 * esdm_rpc_server_cleanup().
 	 */
 	if (cleanup_ipc && esdm_config_ipc_cleanup())
 		esdm_shm_status_cleanup_ipc();

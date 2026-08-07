@@ -92,6 +92,17 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 			esdm_rpcc_get_random_bytes_pr_cb, &buffer);
 
 		/*
+		 * The callback only runs once a response was received. When the
+		 * request failed before that - no server listening, a refused
+		 * or broken connection - buffer.ret still holds the placeholder
+		 * set above, which would report every such failure as a
+		 * timeout. Report what actually went wrong instead.
+		 */
+		ret = esdm_rpcc_last_error(rpc_conn);
+		if (ret)
+			goto out;
+
+		/*
 		 * maxbuflen is larger than ESDM_RPC_MAX_PR_REQUEST_SIZE in this case
 		 * and skipped in the check above. Keep this for compatibility with
 		 * server code or if ESDM_RPC_MAX_PR_REQUEST_SIZE is changed to a
