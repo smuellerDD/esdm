@@ -240,13 +240,30 @@ if get_option('sp80090c') or get_option('ais2031_drg4')
 	reseed_thresh = get_option('drng_reseed_threshold_bits')
 	max_reseed = get_option('drng_max_reseed_bits')
 
-	# SP800-90C and AIS 20/31 DRG.4.10 define that
-	if reseed_thresh > 65536
-		reseed_thresh = 65536
-	endif
-
+	# SP800-90C and AIS 20/31 DRG.4.10 cap the bits a DRNG may produce
+	# without a full reseed at 2**17.
 	if max_reseed > 131072
 		max_reseed = 131072
+	endif
+
+	# Where inside that limit the reseed is triggered decides two things
+	# that pull against each other: how often the entropy sources are
+	# walked, and how much output a DRNG has left to cover the walk with.
+	# The reseed of a node DRNG is handed to a worker, and everything the
+	# DRNG may still produce before the limit above is the budget that
+	# worker has to finish in.
+	#
+	# Three quarters, measured rather than picked: reseeding is expensive
+	# enough that the frequency dominates. Moving the trigger from a half to
+	# three quarters gains 13-16% throughput, and the remaining quarter -
+	# 32768 bits of output - is what the asynchronous reseed gets to land
+	# in. Going further flattens out (87% and 100% add a few percent more)
+	# and at the limit itself the headroom is gone: every node DRNG then
+	# reaches the maximum at the moment it asks to be reseeded and drops out
+	# of the fully seeded state until the worker catches up, which only a
+	# machine with several nodes can absorb.
+	if reseed_thresh > (max_reseed / 4) * 3
+		reseed_thresh = (max_reseed / 4) * 3
 	endif
 
 	conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', reseed_thresh)
