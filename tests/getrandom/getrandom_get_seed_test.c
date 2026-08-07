@@ -42,7 +42,15 @@ static inline ssize_t getrandom_seed_n(uint8_t *buffer, size_t bufferlen)
 
 int main(int argc, char *argv[])
 {
-	uint64_t buf[512 / sizeof(uint64_t)];
+	/*
+	 * Sized from what the seed call reports rather than from a constant:
+	 * struct entropy_buf carries one entry per compiled-in entropy source,
+	 * so the seed grows whenever another source is enabled. A fixed buffer
+	 * silently becomes too small - enabling the eBPF sources already pushes
+	 * the requirement past the 512 bytes this used to reserve.
+	 */
+	uint64_t *buf = NULL;
+	size_t buflen = 0;
 	uint64_t buf2;
 	uint64_t size = 0;
 	int ret;
@@ -70,15 +78,15 @@ int main(int argc, char *argv[])
 		ret = 1;
 		goto out;
 	}
-	if (size > sizeof(buf)) {
-		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64
-		       "\n",
-		       size);
+	buflen = (size_t)size;
+	buf = malloc(buflen);
+	if (!buf) {
+		printf("cannot allocate a %zu byte seed buffer\n", buflen);
 		ret = 1;
 		goto out;
 	}
 
-	rc = getrandom_seed_n((uint8_t *)buf, sizeof(buf));
+	rc = getrandom_seed_n((uint8_t *)buf, buflen);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %d\n", errno);
 		ret = 1;
@@ -91,7 +99,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (buf[0] > sizeof(buf)) {
+	if (buf[0] > buflen) {
 		printf("esdm_get_seed returned a strange size value %" PRIu64
 		       "\n",
 		       buf[0]);
@@ -111,7 +119,7 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = getrandom_seed_n((uint8_t *)buf, sizeof(buf));
+	rc = getrandom_seed_n((uint8_t *)buf, buflen);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %d\n", errno);
 		ret = 1;
@@ -137,6 +145,7 @@ int main(int argc, char *argv[])
 	}
 
 out:
+	free(buf);
 	env_fini();
 	return ret;
 }

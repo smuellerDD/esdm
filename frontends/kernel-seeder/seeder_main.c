@@ -60,9 +60,18 @@ static int64_t parse_int64_arg(const char *str, const char *name)
 	errno = 0;
 	val = strtoll(str, &endptr, 10);
 	if (errno || endptr == str || (endptr && *endptr != '\0')) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
-			    "conversion of %s failed: %s\n", name,
-			    strerror(errno ? errno : EINVAL));
+		/*
+		 * Deliberately not esdm_logger(): this runs while the command
+		 * line is still being parsed, so no -v has been applied yet and
+		 * a LOGGER_ERR record sits below the logger's default
+		 * threshold. Logging it would swallow the only explanation the
+		 * user gets for the exit right below - no amount of -v could
+		 * bring it back, as the option loop has not finished. A usage
+		 * error belongs on stderr anyway, next to usage() itself.
+		 */
+		fprintf(stderr,
+			"esdm-kernel-seeder: conversion of %s failed: %s\n",
+			name, strerror(errno ? errno : EINVAL));
 		exit(EXIT_FAILURE);
 	}
 	return (int64_t)val;
@@ -261,15 +270,21 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 
 		pret = ppoll(&pfd, 1, &ts, NULL);
 
-		/* error */
+		/* error - the wait itself broke, which is a failure */
 		if (pret == -1 && errno != EINTR) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 				    "ppoll returned with error %s\n",
 				    strerror(errno));
+			fn_ret = EXIT_FAILURE;
 			goto out;
 		}
 
-		/* activity */
+		/*
+		 * Activity on the notification fd. Only sig_term() ever writes
+		 * to it, so this is the requested shutdown and therefore a
+		 * successful exit - reporting a failure here would make every
+		 * ordinary "systemctl stop" mark the unit as failed.
+		 */
 		if (pret > 0) {
 			uint64_t event;
 			ssize_t read_ret;
@@ -277,7 +292,8 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 			/* make compiler happy */
 			read_ret = read(notify_fd, &event, sizeof(event));
 			(void)read_ret;
-			fn_ret = EXIT_FAILURE;
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_SEEDER,
+				    "Termination requested, stopping\n");
 			goto out;
 		}
 	}
@@ -396,7 +412,16 @@ int main(int argc, char **argv)
 		}
 	}
 
-	esdm_logger_set_verbosity((enum esdm_logger_verbosity)verbosity);
+	/*
+	 * Only lower the threshold, never raise it: without -v the count is 0,
+	 * and setting the level to it would mean LOGGER_NONE - quieter than the
+	 * logger's own default of LOGGER_STATUS, and quiet enough to swallow
+	 * the LOGGER_ERR diagnostics below. The daemon would then fail with no
+	 * output whatsoever. This matches how esdm-server and esdm-tool treat
+	 * their -v counts.
+	 */
+	if (verbosity)
+		esdm_logger_set_verbosity((enum esdm_logger_verbosity)verbosity);
 
 	if (help) {
 		usage();

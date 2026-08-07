@@ -33,7 +33,15 @@
 
 int main(int argc, char *argv[])
 {
-	uint64_t buf[512 / sizeof(uint64_t)];
+	/*
+	 * Sized from what esdm_get_seed() reports rather than from a constant:
+	 * struct entropy_buf carries one entry per compiled-in entropy source,
+	 * so the seed grows whenever another source is enabled. A fixed buffer
+	 * silently becomes too small - enabling the eBPF sources already pushes
+	 * the requirement past the 512 bytes this used to reserve.
+	 */
+	uint64_t *buf = NULL;
+	size_t buflen = 0;
 	uint64_t buf2;
 	uint64_t size;
 	uint32_t cpu;
@@ -83,10 +91,10 @@ int main(int argc, char *argv[])
 		ret = 1;
 		goto out;
 	}
-	if (size > sizeof(buf)) {
-		printf("esdm_get_seed specifies a buffer that is too large: %" PRIu64
-		       "\n",
-		       size);
+	buflen = (size_t)size;
+	buf = malloc(buflen);
+	if (!buf) {
+		printf("cannot allocate a %zu byte seed buffer\n", buflen);
 		ret = 1;
 		goto out;
 	}
@@ -97,7 +105,7 @@ int main(int argc, char *argv[])
 	 * number of DRNGs.
 	 */
 	for_each_online_node (cpu) {
-		rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
+		rc = esdm_get_seed(buf, buflen, ESDM_GET_SEED_NONBLOCK);
 		if (rc != -EAGAIN)
 			break;
 	}
@@ -105,7 +113,7 @@ int main(int argc, char *argv[])
 	/*
 	 * Now that we guaranteed that all DRNGs are initialized, get the seed
 	 */
-	rc = esdm_get_seed(buf, sizeof(buf), ESDM_GET_SEED_NONBLOCK);
+	rc = esdm_get_seed(buf, buflen, ESDM_GET_SEED_NONBLOCK);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error %zd\n", rc);
 		ret = 1;
@@ -118,7 +126,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (buf[0] > sizeof(buf)) {
+	if (buf[0] > buflen) {
 		printf("esdm_get_seed returned a strange size value %" PRIu64
 		       "\n",
 		       buf[0]);
@@ -138,7 +146,7 @@ int main(int argc, char *argv[])
 		       buf[0], buf[1]);
 	}
 
-	rc = esdm_get_seed(buf, sizeof(buf),
+	rc = esdm_get_seed(buf, buflen,
 			   ESDM_GET_SEED_NONBLOCK | ESDM_GET_SEED_FULLY_SEEDED);
 	if (rc < 0) {
 		printf("esdm_get_seed returned an error for fully seeded request %zd\n",
@@ -166,6 +174,7 @@ int main(int argc, char *argv[])
 	}
 
 out:
+	free(buf);
 	esdm_fini();
 	return ret;
 }

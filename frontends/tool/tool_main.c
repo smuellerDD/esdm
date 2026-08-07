@@ -57,6 +57,14 @@ enum RANDOM_MODE {
 /*
  * Safe strtol wrapper: initializes errno, validates endptr, and exits on
  * conversion failure (trailing garbage, empty string, overflow).
+ *
+ * The complaint goes to stderr rather than through esdm_logger(), as does
+ * every other command line error below. They are all raised while the option
+ * loop is still running, so the -v counts it collects have not been applied
+ * yet and a LOGGER_ERR record sits below the logger's default threshold: the
+ * message would be swallowed and the exit that follows would carry no
+ * explanation at all, with no way for the user to ask for one. A usage error
+ * belongs on stderr anyway, next to usage() itself.
  */
 static long parse_long_arg(const char *str, const char *name)
 {
@@ -66,9 +74,8 @@ static long parse_long_arg(const char *str, const char *name)
 	errno = 0;
 	val = strtol(str, &endptr, 10);
 	if (errno || endptr == str || (endptr && *endptr != '\0')) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-			    "conversion of %s failed: %s\n", name,
-			    strerror(errno ? errno : EINVAL));
+		fprintf(stderr, "esdm-tool: conversion of %s failed: %s\n",
+			name, strerror(errno ? errno : EINVAL));
 		exit(EXIT_FAILURE);
 	}
 	return val;
@@ -146,8 +153,8 @@ static char *resolve_pkcs11_pin_arg(const char *arg)
 	}
 
 	if (!pin) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-			    "failed to read PKCS#11 PIN from stdin\n");
+		fprintf(stderr,
+			"esdm-tool: failed to read PKCS#11 PIN from stdin\n");
 		return NULL;
 	}
 
@@ -186,6 +193,8 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t-s --status\t\t\tShow status string of all entropy sources.\n");
 	fprintf(stderr,
+		"\t--status-json\t\t\tShow status of all entropy sources as a JSON document.\n");
+	fprintf(stderr,
 		"\t-J --jent-status\t\t\tShow internal status string of jitterentropy source.\n");
 	fprintf(stderr,
 		"\t-S --is-fully-seeded\t\tCheck if ESDM is ready to return random bytes\n");
@@ -203,6 +212,8 @@ static void handle_usage(void)
 		"\t-B --write-entropy-bits BITS\tSet number of bits to account the write to aux. pool with.\n");
 	fprintf(stderr,
 		"\t-b --benchmark\t\t\tRun a small speed test in _full and _pr mode with different buffer sizes.\n");
+	fprintf(stderr,
+		"\t--benchmark-mode MODE\t\tRestrict the benchmark to one request mode: full, pr or both (Default: both). Implies --benchmark.\n");
 	fprintf(stderr,
 		"\t-v --verbose\t\t\tIncrease logging verbosity (can be used multiple times).\n");
 	fprintf(stderr,
@@ -223,6 +234,8 @@ static void handle_usage(void)
 		"\t--stress-cpu-usage\t\tShow CPU usage during stress test.\n");
 	fprintf(stderr,
 		"\t--stress-fork\t\t\tchecks fork handling on current platform\n");
+	fprintf(stderr,
+		"\t--stress-init-fini\t\tStress the RPC client library init/fini reference counting from multiple threads\n");
 	fprintf(stderr,
 		"\t--clear-pool\t\t\tClear the entropy pool for testing (needs root)\n");
 	fprintf(stderr,
@@ -276,6 +289,25 @@ static void handle_status(void)
 	} else {
 		esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Status --\n%s",
 			    status_buffer);
+	}
+}
+
+static void handle_status_json(void)
+{
+	char status_buffer[ESDM_RPC_MAX_DATA];
+	memset(&status_buffer[0], 0, ESDM_RPC_MAX_DATA);
+	int ret;
+	esdm_invoke(
+		esdm_rpcc_status_json(&status_buffer[0], ESDM_RPC_MAX_DATA));
+	if (ret != 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Fetching ESDM status failed!\n");
+	} else {
+		/*
+		 * Written to stdout unadorned so that the document can be piped
+		 * into a JSON consumer.
+		 */
+		printf("%s", status_buffer);
 	}
 }
 
@@ -492,6 +524,13 @@ static int handle_write_to_aux_pool(const char *aux_data,
 
 static const size_t MAX_BENCHMARK_BUFFER_EXP = 16;
 
+/* Which of the two request modes the benchmark exercises */
+enum BENCHMARK_MODE {
+	BENCH_MODE_BOTH = 0,
+	BENCH_MODE_FULL,
+	BENCH_MODE_PR,
+};
+
 static int do_benchmark_single(bool pr, size_t buffer_size)
 {
 	struct timespec before, after;
@@ -563,9 +602,14 @@ static int do_benchmark_single(bool pr, size_t buffer_size)
 	return EXIT_SUCCESS;
 }
 
-static int do_benchmark(void)
+static int do_benchmark(enum BENCHMARK_MODE mode)
 {
 	for (int pr = 0; pr < 2; ++pr) {
+		if (pr && mode == BENCH_MODE_FULL)
+			continue;
+		if (!pr && mode == BENCH_MODE_PR)
+			continue;
+
 		for (size_t exp = 0; exp <= MAX_BENCHMARK_BUFFER_EXP; ++exp) {
 			/* skip larger tests for prediction resistant mode, as this is mostly
 			 * used for seeding purposes with <= 512 Bit */
@@ -916,6 +960,7 @@ int main(int argc, char **argv)
 	bool write_to_aux_pool = false;
 	uint32_t write_entropy_bits = 0;
 	bool benchmark = false;
+	enum BENCHMARK_MODE benchmark_mode = BENCH_MODE_BOTH;
 	char *aux_data = NULL;
 	bool stress_delay = false;
 	bool stress_process = false;
@@ -926,6 +971,7 @@ int main(int argc, char **argv)
 	bool seed_via_os = false;
 	bool reseed_via_os = false;
 	bool jent_status = false;
+	bool status_json = false;
 	int verbosity = 2;
 	bool use_syslog = false;
 	int return_val = EXIT_SUCCESS;
@@ -941,6 +987,7 @@ int main(int argc, char **argv)
 	uint32_t stress_request_size = 4;
 	bool stress_cpu_usage = false;
 	bool stress_fork = false;
+	bool stress_init_fini = false;
 	char *fips_target_file = NULL;
 	char *fips_check_file = NULL;
 	bool set_pkcs11_config = false;
@@ -994,6 +1041,9 @@ int main(int argc, char **argv)
 			{ "jent-status", 0, 0, 0 },
 			{ "pkcs11-pin", 1, 0, 0 },
 			{ "pkcs11-token-label", 1, 0, 0 },
+			{ "stress-init-fini", 0, 0, 0 },
+			{ "benchmark-mode", 1, 0, 0 },
+			{ "status-json", 0, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:J", opts,
@@ -1023,10 +1073,8 @@ int main(int argc, char **argv)
 						parse_long_arg(optarg, "bytes");
 
 					if (val < 0) {
-						esdm_logger(
-							LOGGER_ERR,
-							LOGGER_C_TOOL,
-							"bytes must be non-negative\n");
+						fprintf(stderr,
+							"esdm-tool: bytes must be non-negative\n");
 						exit(EXIT_FAILURE);
 					}
 					num_rand_bytes = (size_t)val;
@@ -1053,8 +1101,8 @@ int main(int argc, char **argv)
 					free(aux_data);
 				aux_data = strdup(optarg);
 				if (!aux_data) {
-					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-						    "allocation failure\n");
+					fprintf(stderr,
+						"esdm-tool: allocation failure\n");
 					exit(EXIT_FAILURE);
 				}
 				break;
@@ -1066,10 +1114,8 @@ int main(int argc, char **argv)
 
 					if (val < 0 ||
 					    (unsigned long)val > UINT32_MAX) {
-						esdm_logger(
-							LOGGER_ERR,
-							LOGGER_C_TOOL,
-							"entropy bits out of range\n");
+						fprintf(stderr,
+							"esdm-tool: entropy bits out of range\n");
 						exit(EXIT_FAILURE);
 					}
 					write_entropy_bits = (uint32_t)val;
@@ -1172,10 +1218,8 @@ int main(int argc, char **argv)
 
 					if (val < 0 ||
 					    (unsigned long)val > UINT32_MAX) {
-						esdm_logger(
-							LOGGER_ERR,
-							LOGGER_C_TOOL,
-							"stress-request-size out of range\n");
+						fprintf(stderr,
+							"esdm-tool: stress-request-size out of range\n");
 						exit(EXIT_FAILURE);
 					}
 					stress_request_size = (uint32_t)val;
@@ -1221,11 +1265,34 @@ int main(int argc, char **argv)
 				free(pkcs11_token_label);
 				pkcs11_token_label = strdup(optarg);
 				if (!pkcs11_token_label) {
-					esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-						    "allocation failure\n");
+					fprintf(stderr,
+						"esdm-tool: allocation failure\n");
 					return_val = EXIT_FAILURE;
 					goto out;
 				}
+				break;
+			case 38:
+				/* stress-init-fini */
+				stress_init_fini = true;
+				break;
+			case 39:
+				/* benchmark-mode */
+				benchmark = true;
+				if (!strcmp(optarg, "full")) {
+					benchmark_mode = BENCH_MODE_FULL;
+				} else if (!strcmp(optarg, "pr")) {
+					benchmark_mode = BENCH_MODE_PR;
+				} else if (!strcmp(optarg, "both")) {
+					benchmark_mode = BENCH_MODE_BOTH;
+				} else {
+					fprintf(stderr,
+						"esdm-tool: benchmark mode must be one of full, pr or both\n");
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 40:
+				/* status-json */
+				status_json = true;
 				break;
 			}
 			break;
@@ -1244,9 +1311,8 @@ int main(int argc, char **argv)
 				long val = parse_long_arg(optarg, "bytes");
 
 				if (val < 0) {
-					esdm_logger(
-						LOGGER_ERR, LOGGER_C_TOOL,
-						"bytes must be non-negative\n");
+					fprintf(stderr,
+						"esdm-tool: bytes must be non-negative\n");
 					exit(EXIT_FAILURE);
 				}
 				num_rand_bytes = (size_t)val;
@@ -1268,8 +1334,8 @@ int main(int argc, char **argv)
 				free(aux_data);
 			aux_data = strdup(optarg);
 			if (!aux_data) {
-				esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-					    "allocation failure\n");
+				fprintf(stderr,
+					"esdm-tool: allocation failure\n");
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -1277,8 +1343,8 @@ int main(int argc, char **argv)
 			long val = parse_long_arg(optarg, "entropy bits");
 
 			if (val < 0 || (unsigned long)val > UINT32_MAX) {
-				esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-					    "entropy bits out of range\n");
+				fprintf(stderr,
+					"esdm-tool: entropy bits out of range\n");
 				exit(EXIT_FAILURE);
 			}
 			write_entropy_bits = (uint32_t)val;
@@ -1357,6 +1423,8 @@ int main(int argc, char **argv)
 #endif
 	} else if (status) {
 		handle_status();
+	} else if (status_json) {
+		handle_status_json();
 	} else if (jent_status) {
 		handle_jent_status();
 	} else if (is_fully_seeded) {
@@ -1376,7 +1444,7 @@ int main(int argc, char **argv)
 		free(aux_data);
 		aux_data = NULL;
 	} else if (benchmark) {
-		return_val = do_benchmark();
+		return_val = do_benchmark(benchmark_mode);
 	} else if (stress_delay) {
 		handle_stress_thread((double)stress_duration_sec, 1,
 				     stress_request_size, stress_cpu_usage);
@@ -1389,6 +1457,10 @@ int main(int argc, char **argv)
 				     stress_request_size, stress_cpu_usage);
 	} else if (stress_fork) {
 		return_val = handle_stress_fork();
+	} else if (stress_init_fini) {
+		/* -1 means no thread restriction (use number of cores online) */
+		return_val = handle_stress_init_fini(
+			(double)stress_duration_sec, -1);
 	} else if (is_running) {
 		return_val = handle_is_running();
 	} else if (get_seed) {
@@ -1428,5 +1500,11 @@ out:
 		free(pkcs11_pin);
 	}
 	free(pkcs11_token_label);
+	/*
+	 * The command that consumes it frees it and clears the pointer, so this
+	 * is what is left when one of the paths above jumped here instead -
+	 * "-W" refused for want of root, most of all.
+	 */
+	free(aux_data);
 	return return_val;
 }

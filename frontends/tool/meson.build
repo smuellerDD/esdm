@@ -4,6 +4,7 @@ esdm_tool_src = [
 	'stress_delay.c',
 	'stress_process.c',
 	'stress_thread.c',
+	'stress_init_fini.c',
 ]
 
 esdm_tool = executable(
