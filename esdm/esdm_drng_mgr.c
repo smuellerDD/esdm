@@ -35,6 +35,7 @@
 #include "esdm_crypto.h"
 #include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_jent.h"
 #include "esdm_es_mgr.h"
 #include "esdm_botan.h"
 #include "esdm_gnutls.h"
@@ -462,7 +463,14 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	memset(&seedbuf, 0, sizeof(seedbuf));
 	memset(&addtl, 0, sizeof(addtl));
 
-	if (esdm_ntg1_2024_compliant() && do_full_init)
+	/*
+	 * NTG.1 needs two entropy sources to deliver, so keep the emergency
+	 * reseeding loop below going as long as that many contribute. An NTG.1
+	 * conformant jitter RNG is a sufficient source on its own, in which
+	 * case one delivering source keeps the loop alive - whether the
+	 * collected entropy is acceptable remains esdm_fully_seeded()'s call.
+	 */
+	if (esdm_ntg1_2024_compliant() && do_full_init && !esdm_jent_ntg1())
 		es_delivered_threshold = 2;
 
 	do {
