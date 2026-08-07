@@ -1,3 +1,14 @@
+es_mgr_monitor_tester = executable(
+	'es_mgr_monitor_tester',
+	[ 'es_mgr_monitor_test.c' ],
+	dependencies: dependencies_server,
+	include_directories: include_dirs_server,
+	link_with: esdm_static_lib,
+)
+
+test('ES manager monitor', es_mgr_monitor_tester, timeout: 120,
+	is_parallel: false)
+
 if get_option('es_jent').enabled()
 	es_jent_tester = executable(
 		'es_jent_tester',

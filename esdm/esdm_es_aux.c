@@ -69,6 +69,9 @@ struct esdm_pool {
 
 	/* Aux pool initialized? */
 	bool initialized;
+
+	/* Was lock above initialized? Never reset - the lock is not destroyed */
+	bool lock_initialized;
 } __aligned(ESDM_KCAPI_ALIGN);
 
 /*
@@ -124,6 +127,21 @@ static void esdm_set_wakeup_bits(void)
 	esdm_write_wakeup_bits = ESDM_NUM_AUX_POOLS * digestsize;
 }
 
+static void esdm_aux_fini_pool(struct esdm_pool *pool)
+{
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	const struct esdm_hash_cb *hash_cb;
+
+	hash_cb = drng->hash_cb;
+	if (hash_cb->hash_dealloc) {
+		hash_cb->hash_dealloc(pool->aux_pool_state);
+		hash_cb->hash_dealloc(pool->aux_pool_out);
+	}
+	pool->aux_pool_state = NULL;
+	pool->aux_pool_out = NULL;
+	pool->initialized = false;
+}
+
 static int esdm_aux_init_pool(struct esdm_pool *pool)
 {
 	struct esdm_drng *drng = esdm_drng_init_instance();
@@ -167,14 +185,36 @@ static int esdm_aux_init(void)
 	 * during compile time.
 	 */
 	for (i = 0; i < (uint16_t)ESDM_NUM_AUX_POOLS; ++i) {
-		esdm_pools[i].aux_pool_state = NULL;
-		esdm_pools[i].aux_pool_out = NULL;
-		atomic_store(&esdm_pools[i].aux_entropy_bits, 0);
-		atomic_store(&esdm_pools[i].digestsize, ESDM_MAX_DIGESTSIZE);
-		esdm_pools[i].initialized = false;
-		mutex_w_init(&esdm_pools[i].lock, 0, 0);
-		esdm_pools[i].idx = i;
-		CKINT(esdm_aux_init_pool(&esdm_pools[i]));
+		struct esdm_pool *pool = &esdm_pools[i];
+
+		/*
+		 * Allow the init function to be called multiple times: this is
+		 * also the reinit callback (esdm_es_mgr_reinitialize()), and
+		 * there the pool already carries the two hash states of the
+		 * previous round plus a live lock. Release the states instead
+		 * of overwriting the pointers - the latter leaks them on every
+		 * esdm_reinit() - and touch the lock only once, as re-running
+		 * mutex_w_init() on an initialized mutex is undefined
+		 * behaviour. The lock outlives esdm_aux_fini(), so an init
+		 * after a fini takes the same path with the states already
+		 * NULL, which the deallocation tolerates.
+		 */
+		if (pool->lock_initialized) {
+			mutex_w_lock(&pool->lock);
+			esdm_aux_fini_pool(pool);
+			mutex_w_unlock(&pool->lock);
+		} else {
+			CKINT(mutex_w_init(&pool->lock, 0, 0));
+			pool->lock_initialized = true;
+		}
+
+		pool->aux_pool_state = NULL;
+		pool->aux_pool_out = NULL;
+		atomic_store(&pool->aux_entropy_bits, 0);
+		atomic_store(&pool->digestsize, ESDM_MAX_DIGESTSIZE);
+		pool->initialized = false;
+		pool->idx = i;
+		CKINT(esdm_aux_init_pool(pool));
 	}
 
 	esdm_set_wakeup_bits();
@@ -189,21 +229,6 @@ static int esdm_aux_init(void)
 
 out:
 	return ret;
-}
-
-static void esdm_aux_fini_pool(struct esdm_pool *pool)
-{
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_hash_cb *hash_cb;
-
-	hash_cb = drng->hash_cb;
-	if (hash_cb->hash_dealloc) {
-		hash_cb->hash_dealloc(pool->aux_pool_state);
-		hash_cb->hash_dealloc(pool->aux_pool_out);
-	}
-	pool->aux_pool_state = NULL;
-	pool->aux_pool_out = NULL;
-	pool->initialized = false;
 }
 
 static void esdm_aux_fini(void)
