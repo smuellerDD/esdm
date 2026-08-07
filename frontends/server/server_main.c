@@ -35,6 +35,7 @@
 
 #include "esdm.h"
 #include "esdm_config.h"
+#include "esdm_egd_server.h"
 #include "esdm_rpc_server.h"
 #include "esdm_logger.h"
 #include "helper.h"
@@ -118,6 +119,15 @@ static void usage(void)
 		"\t   --pid_namespace\tFork the daemon into an isolating PID namespace;\n");
 	fprintf(stderr,
 		"\t\t\tthe starting process remains as supervisor\n");
+	fprintf(stderr,
+		"\t-e --egd_socket <PATH>\tAdditionally serve the EGD protocol on the\n");
+	fprintf(stderr,
+		"\t\t\tUnix domain socket PATH (disabled by default)\n");
+	fprintf(stderr,
+		"\t-E --egd_socket_pr <PATH>\tThe same, but serving the prediction\n");
+	fprintf(stderr,
+		"\t\t\tresistance generator - the EGD protocol cannot select it\n");
+	fprintf(stderr, "\t\t\tper request, so it gets a socket of its own\n");
 	exit(1);
 }
 
@@ -145,9 +155,12 @@ static void parse_opts(int argc, char *argv[])
 			{ "small_memory", 0, 0, 0 },
 			{ "keep_ipc", 0, 0, 0 },
 			{ "pid_namespace", 0, 0, 0 },
+			{ "egd_socket", 1, 0, 0 },
+			{ "egd_socket_pr", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
-		c = getopt_long(argc, argv, "hvp:u:fisSPg:mM", opts, &opt_index);
+		c = getopt_long(argc, argv, "hvp:u:fisSPg:mMe:E:", opts,
+				&opt_index);
 		if (-1 == c)
 			break;
 		switch (c) {
@@ -228,6 +241,16 @@ static void parse_opts(int argc, char *argv[])
 				/* pid_namespace */
 				pid_namespace = 1;
 				break;
+			case 16:
+				/* egd_socket */
+				if (esdm_egd_server_enable(optarg))
+					exit(1);
+				break;
+			case 17:
+				/* egd_socket_pr */
+				if (esdm_egd_server_enable_pr(optarg))
+					exit(1);
+				break;
 
 			default:
 				usage();
@@ -279,6 +302,16 @@ static void parse_opts(int argc, char *argv[])
 		case 'M':
 			/* small_memory */
 			small_memory = 1;
+			break;
+		case 'e':
+			/* egd_socket */
+			if (esdm_egd_server_enable(optarg))
+				exit(1);
+			break;
+		case 'E':
+			/* egd_socket_pr */
+			if (esdm_egd_server_enable_pr(optarg))
+				exit(1);
 			break;
 
 		default:
