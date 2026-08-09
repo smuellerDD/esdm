@@ -379,6 +379,10 @@ to constitute a stable API that should be used to program against.
 
 See the documentation in the `doc/` directory.
 
+# THANKS
+
+Special thanks go to Markus Theil for supporting the project.
+
 # Author
 
 Stephan Mueller <smueller@chronox.de>
