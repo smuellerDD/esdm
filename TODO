@@ -2,3 +2,5 @@
   check that entropy reaches the kernel) needs root and is therefore skipped in
   an unprivileged CI run. Wire it into one of the NixOS VM checks so it is
   actually executed somewhere.
+
+- replace double-hash operations maintaining the different pools in favor of an XDRBG construction
