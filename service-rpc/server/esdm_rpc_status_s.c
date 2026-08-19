@@ -58,8 +58,11 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 		return;
 	}
 
-	esdm_status(status, alloc_size);
-	response.ret = 0;
+	/*
+	 * A report that did not fit is sent as far as it got, with -EMSGSIZE
+	 * saying so - it is text, which stays readable when it ends early.
+	 */
+	response.ret = esdm_status(status, alloc_size);
 	response.buffer = status;
 	closure(&response, closure_data);
 

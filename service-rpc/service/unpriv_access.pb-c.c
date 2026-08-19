@@ -322,6 +322,51 @@ void   get_seed_request__free_unpacked
   assert(message->base.descriptor == &get_seed_request__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   drng_status_request__init
+                     (DrngStatusRequest         *message)
+{
+  static const DrngStatusRequest init_value = DRNG_STATUS_REQUEST__INIT;
+  *message = init_value;
+}
+size_t drng_status_request__get_packed_size
+                     (const DrngStatusRequest *message)
+{
+  assert(message->base.descriptor == &drng_status_request__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t drng_status_request__pack
+                     (const DrngStatusRequest *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &drng_status_request__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t drng_status_request__pack_to_buffer
+                     (const DrngStatusRequest *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &drng_status_request__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+DrngStatusRequest *
+       drng_status_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (DrngStatusRequest *)
+     protobuf_c_message_unpack (&drng_status_request__descriptor,
+                                allocator, len, data);
+}
+void   drng_status_request__free_unpacked
+                     (DrngStatusRequest *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &drng_status_request__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 void   write_data_request__init
                      (WriteDataRequest         *message)
 {
@@ -698,6 +743,70 @@ const ProtobufCMessageDescriptor get_seed_request__descriptor =
   (ProtobufCMessageInit) get_seed_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+static const ProtobufCFieldDescriptor drng_status_request__field_descriptors[3] =
+{
+  {
+    "maxlen",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(DrngStatusRequest, maxlen),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "node",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(DrngStatusRequest, node),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "prediction_resistance",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_BOOL,
+    0,   /* quantifier_offset */
+    offsetof(DrngStatusRequest, prediction_resistance),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned drng_status_request__field_indices_by_name[] = {
+  0,   /* field[0] = maxlen */
+  1,   /* field[1] = node */
+  2,   /* field[2] = prediction_resistance */
+};
+static const ProtobufCIntRange drng_status_request__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor drng_status_request__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "DrngStatusRequest",
+  "DrngStatusRequest",
+  "DrngStatusRequest",
+  "",
+  sizeof(DrngStatusRequest),
+  3,
+  drng_status_request__field_descriptors,
+  drng_status_request__field_indices_by_name,
+  1,  drng_status_request__number_ranges,
+  (ProtobufCMessageInit) drng_status_request__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
 static const ProtobufCFieldDescriptor write_data_request__field_descriptors[1] =
 {
   {
@@ -736,7 +845,7 @@ const ProtobufCMessageDescriptor write_data_request__descriptor =
   (ProtobufCMessageInit) write_data_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[14] =
+static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[15] =
 {
   { "RpcStatus", &status_request__descriptor, &status_response__descriptor },
   { "RpcGetEntLvl", &empty_request__descriptor, &val_response__descriptor },
@@ -752,8 +861,10 @@ static const ProtobufCMethodDescriptor unpriv_access__method_descriptors[14] =
   { "RpcGetMinReseedSecs", &empty_request__descriptor, &val_response__descriptor },
   { "RpcJentStatus", &status_request__descriptor, &status_response__descriptor },
   { "RpcStatusJson", &status_request__descriptor, &status_response__descriptor },
+  { "RpcDrngStatusJson", &drng_status_request__descriptor, &status_response__descriptor },
 };
 const unsigned unpriv_access__method_indices_by_name[] = {
+  14,        /* RpcDrngStatusJson */
   1,        /* RpcGetEntLvl */
   11,        /* RpcGetMinReseedSecs */
   9,        /* RpcGetPoolsize */
@@ -776,7 +887,7 @@ const ProtobufCServiceDescriptor unpriv_access__descriptor =
   "UnprivAccess",
   "UnprivAccess",
   "",
-  14,
+  15,
   unpriv_access__method_descriptors,
   unpriv_access__method_indices_by_name
 };
@@ -891,6 +1002,14 @@ void unpriv_access__rpc_status_json(ProtobufCService *service,
 {
   assert(service->descriptor == &unpriv_access__descriptor);
   service->invoke(service, 13, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void unpriv_access__rpc_drng_status_json(ProtobufCService *service,
+                                         const DrngStatusRequest *input,
+                                         StatusResponse_Closure closure,
+                                         void *closure_data)
+{
+  assert(service->descriptor == &unpriv_access__descriptor);
+  service->invoke(service, 14, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void unpriv_access__init (UnprivAccess_Service *service,
                           UnprivAccess_ServiceDestroy destroy)

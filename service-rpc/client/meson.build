@@ -22,6 +22,7 @@ client_rpc_src = files([
 	'esdm_rpc_set_pkcs11_config_c.c',
 	'esdm_rpc_set_write_wakeup_thresh_c.c',
 	'esdm_rpc_status_c.c',
+	'esdm_rpc_drng_status_json_c.c',
 	'esdm_rpc_status_json_c.c',
 	'esdm_rpc_write_data_c.c'
 ])

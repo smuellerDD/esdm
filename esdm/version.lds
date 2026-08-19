@@ -37,6 +37,8 @@ LIBESDM_1.0 {
 		/* esdm.h - status reporting */
 		esdm_status;
 		esdm_status_json;
+		esdm_status_drng_json;
+		esdm_status_drng_pr_json;
 		esdm_status_machine;
 		esdm_version;
 		esdm_state_operational;

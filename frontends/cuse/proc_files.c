@@ -281,7 +281,12 @@ static int esdm_proc_get_status(struct esdm_proc_file *file)
 	int ret = 0;
 
 	esdm_invoke(esdm_rpcc_status(file->valdata, ESDM_PROC_BUF_LEN));
-	if (ret)
+
+	/*
+	 * A report that did not fit is served as far as it got: it stays
+	 * readable, and what is here is all the file has room for.
+	 */
+	if (ret && ret != -EMSGSIZE)
 		esdm_proc_empty_file(file);
 	else
 		file->vallen = strlen(file->valdata);
@@ -373,7 +378,7 @@ static int esdm_proc_pre_init(void)
 	char buf[ESDM_RPC_MAX_DATA];
 	size_t data_read = 0;
 	ssize_t rc;
-	int fd;
+	int fd, ret;
 
 	fd = open("/proc/sys/kernel/random/boot_id", O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -398,7 +403,8 @@ static int esdm_proc_pre_init(void)
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "boot_id: %s\n",
 		    file->valdata);
 
-	if (esdm_rpcc_status(buf, sizeof(buf))) {
+	ret = esdm_rpcc_status(buf, sizeof(buf));
+	if (ret && ret != -EMSGSIZE) {
 		esdm_logger(
 			LOGGER_WARN, LOGGER_C_CUSE,
 			"PROC client started but ESDM server not available!\n");

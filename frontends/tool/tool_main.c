@@ -33,6 +33,7 @@
 #endif
 #include <fcntl.h>
 #include <getopt.h>
+#include <json-c/json.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -195,6 +196,12 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--status-json\t\t\tShow status of all entropy sources as a JSON document.\n");
 	fprintf(stderr,
+		"\t--drng-status[=NODE|pr]\t\tShow the status of the DRNG instances as an indented JSON document.\n");
+	fprintf(stderr,
+		"\t\t\t\t\tOne instance with =NODE or =pr, all of them without.\n");
+	fprintf(stderr,
+		"\t--drng-status-json[=NODE|pr]\tThe same on a single line, for a JSON consumer.\n");
+	fprintf(stderr,
 		"\t-J --jent-status\t\t\tShow internal status string of jitterentropy source.\n");
 	fprintf(stderr,
 		"\t-S --is-fully-seeded\t\tCheck if ESDM is ready to return random bytes\n");
@@ -311,6 +318,118 @@ static void handle_status_json(void)
 		 */
 		printf("%s", status_buffer);
 	}
+}
+
+/*
+ * The DRNG instances a node is served by are asked for one at a time: there is
+ * one per CPU, so the status document leaves them out rather than growing with
+ * the size of the machine - see esdm_rpcc_drng_status_json().
+ */
+enum drng_status_target {
+	/* Every instance the ESDM has, as a JSON array */
+	DRNG_STATUS_ALL,
+	/* One node instance */
+	DRNG_STATUS_NODE,
+	/* The prediction resistance instance */
+	DRNG_STATUS_PR,
+};
+
+/* Fetch one instance and add it to @out, which may be an array or NULL */
+static int drng_status_add(struct json_object *out, uint32_t node, bool pr,
+			   struct json_object **obj)
+{
+	char status_buffer[ESDM_RPC_MAX_DATA];
+	int ret;
+
+	memset(&status_buffer[0], 0, sizeof(status_buffer));
+
+	if (pr) {
+		esdm_invoke(esdm_rpcc_drng_status_pr_json(
+			&status_buffer[0], sizeof(status_buffer)));
+	} else {
+		esdm_invoke(esdm_rpcc_drng_status_json(node, &status_buffer[0],
+						       sizeof(status_buffer)));
+	}
+
+	if (ret)
+		return ret;
+
+	*obj = json_tokener_parse(status_buffer);
+	if (!*obj) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "DRNG status is not a JSON document\n");
+		return -EINVAL;
+	}
+
+	if (out)
+		json_object_array_add(out, *obj);
+
+	return 0;
+}
+
+/* Print the status of one DRNG instance or of all of them. */
+static int handle_drng_status(enum drng_status_target target, uint32_t node,
+			      bool raw)
+{
+	struct json_object *doc = NULL, *obj = NULL;
+	const char *out;
+	int ret;
+
+	switch (target) {
+	case DRNG_STATUS_PR:
+		ret = drng_status_add(NULL, 0, true, &doc);
+		break;
+	case DRNG_STATUS_NODE:
+		ret = drng_status_add(NULL, node, false, &doc);
+		if (ret == -ENODEV) {
+			esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+				    "no DRNG instance serves node %u\n", node);
+		}
+		break;
+	case DRNG_STATUS_ALL:
+		doc = json_object_new_array();
+		if (!doc)
+			return -ENOMEM;
+
+		/*
+		 * The nodes are walked until the ESDM reports that there is no
+		 * further one, which is how their number is learned without
+		 * asking for it separately.
+		 */
+		for (node = 0;; node++) {
+			ret = drng_status_add(doc, node, false, &obj);
+			if (ret == -ENODEV) {
+				ret = 0;
+				break;
+			}
+			if (ret)
+				goto out;
+		}
+
+		ret = drng_status_add(doc, 0, true, &obj);
+		break;
+	}
+
+	if (ret)
+		goto out;
+
+	out = json_object_to_json_string_ext(
+		doc, raw ? JSON_C_TO_STRING_PLAIN : JSON_C_TO_STRING_PRETTY);
+	if (!out) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	/* Unadorned, so that the document can be piped into a JSON consumer */
+	printf("%s\n", out);
+
+out:
+	if (ret && ret != -ENODEV) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Fetching ESDM DRNG status failed: %d\n", ret);
+	}
+	json_object_put(doc);
+	return ret ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 static void handle_jent_status(void)
@@ -974,6 +1093,11 @@ int main(int argc, char **argv)
 	bool reseed_via_os = false;
 	bool jent_status = false;
 	bool status_json = false;
+	bool drng_status = false;
+	bool drng_status_raw = false;
+	enum drng_status_target drng_status_target = DRNG_STATUS_ALL;
+	uint32_t drng_status_node = 0;
+	bool selftest = false;
 	int verbosity = 2;
 	bool use_syslog = false;
 	int return_val = EXIT_SUCCESS;
@@ -1046,6 +1170,10 @@ int main(int argc, char **argv)
 			{ "stress-init-fini", 0, 0, 0 },
 			{ "benchmark-mode", 1, 0, 0 },
 			{ "status-json", 0, 0, 0 },
+			{ "max-reseed-secs", 1, 0, 0 },
+			{ "selftest", 0, 0, 0 },
+			{ "drng-status", 2, 0, 0 },
+			{ "drng-status-json", 2, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:J", opts,
@@ -1427,6 +1555,9 @@ int main(int argc, char **argv)
 		handle_status();
 	} else if (status_json) {
 		handle_status_json();
+	} else if (drng_status) {
+		return_val = handle_drng_status(
+			drng_status_target, drng_status_node, drng_status_raw);
 	} else if (jent_status) {
 		handle_jent_status();
 	} else if (is_fully_seeded) {

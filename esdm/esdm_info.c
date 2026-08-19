@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "esdm_config.h"
 #include "esdm.h"
@@ -59,17 +60,101 @@ void esdm_version(char *buf, size_t buflen)
 	snprintf(buf, buflen, "%slibrary version: %s\n", TESTMODE_STR, VERSION);
 }
 
+/*
+ * Render a wall clock time given in seconds since the epoch as an ISO 8601
+ * timestamp in UTC.
+ */
+static void esdm_time_str(long long wtime, char *buf, size_t buflen)
+{
+	time_t t = (time_t)wtime;
+	struct tm tm;
+
+	buf[0] = '\0';
+
+	if (!gmtime_r(&t, &tm))
+		return;
+
+	if (!strftime(buf, buflen, "%Y-%m-%dT%H:%M:%SZ", &tm))
+		buf[0] = '\0';
+}
+
+/* Rendering state of the DRNG section of the status text */
+struct esdm_drng_txt_state {
+	char *buf;
+	size_t buflen;
+	uint32_t idx;
+};
+
+/* Render the statistics of one DRNG instance into the status text */
+static void esdm_drng_status_txt(const struct esdm_drng_stats *stats,
+				 void *priv)
+{
+	struct esdm_drng_txt_state *txt = priv;
+	size_t len = esdm_used_buf_len(txt->buf, txt->buflen);
+	char node[16] = "";
+	char stamp[32] = "";
+	char reseed[32] = "";
+
+	/*
+	 * A value the DRNG does not have - the node of the DRNG that is not
+	 * bound to one, the seeding time of one that was never seeded - is
+	 * reported as N/A.
+	 */
+	if (stats->node_valid)
+		snprintf(node, sizeof(node), "%u", stats->node);
+	if (stats->seeded_wtime_valid)
+		esdm_time_str(stats->seeded_wtime, stamp, sizeof(stamp));
+	if (stats->seeded_time_valid)
+		snprintf(reseed, sizeof(reseed), "%lld",
+			 stats->seconds_since_reseed);
+
+	if (!node[0])
+		snprintf(node, sizeof(node), "N/A");
+	if (!stamp[0])
+		snprintf(stamp, sizeof(stamp), "N/A");
+	if (!reseed[0])
+		snprintf(reseed, sizeof(reseed), "N/A");
+
+	snprintf(txt->buf + len, txt->buflen - len,
+		 "DRNG instance %u properties:\n"
+		 " Type: %s\n"
+		 " Node: %s\n"
+		 " Name: %s\n"
+		 " Fully seeded: %s\n"
+		 " Initiated: %s\n"
+		 " Force reseed: %s\n"
+		 " Reseed pending: %s\n"
+		 " Requests until reseed: %d\n"
+		 " Seconds until reseed: %lld\n"
+		 " Requests since fully seeded: %u\n"
+		 " Generated bits since fully seeded: %u\n"
+		 " Seed generation: %lld\n"
+		 " Last seeding time: %s\n"
+		 " Seconds since last reseed: %s\n",
+		 txt->idx++, stats->type, node,
+		 stats->drng_name ? stats->drng_name : "N/A",
+		 stats->fully_seeded ? "true" : "false",
+		 stats->initiated ? "true" : "false",
+		 stats->force_reseed ? "true" : "false",
+		 stats->reseed_pending ? "true" : "false",
+		 stats->requests_until_reseed, stats->seconds_until_reseed,
+		 stats->requests_since_fully_seeded,
+		 stats->bits_since_fully_seeded, stats->seed_generation, stamp,
+		 reseed);
+}
+
 DSO_PUBLIC
-void esdm_status(char *buf, size_t buflen)
+int esdm_status(char *buf, size_t buflen)
 {
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	size_t len;
+	struct esdm_drng_txt_state txt;
 	uint32_t i;
 
-	if (!buf) {
+	if (!buf || !buflen) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Status information cannot be created\n");
-		return;
+		return -EINVAL;
 	}
 
 	snprintf(buf, buflen, "ESDM %slibrary version: %s\n", TESTMODE_STR,
@@ -107,6 +192,46 @@ void esdm_status(char *buf, size_t buflen)
 		len = esdm_used_buf_len(buf, buflen);
 		esdm_es[i]->state(buf + len, buflen - len);
 	}
+
+	/* The initial and the prediction resistance DRNG only. */
+	txt.buf = buf;
+	txt.buflen = buflen;
+	txt.idx = 0;
+	esdm_drng_stats_summary(esdm_drng_status_txt, &txt);
+
+	/*
+	 * The self tests of the hash and the DRNG implementation and of the
+	 * entropy sources.
+	 */
+	len = esdm_used_buf_len(buf, buflen);
+	snprintf(buf + len, buflen - len,
+		 "Periodic self test properties:\n"
+		 " State: %s\n"
+		 " Running: %s\n"
+		 " Completed self tests: %lld\n"
+		 " Self test interval in seconds: %u\n"
+		 " Entropy source state: %s\n"
+		 " Entropy sources tested: %u\n"
+		 " Entropy sources failed: %u\n",
+		 esdm_selftest_crypto_state_name(),
+		 esdm_selftest_periodic_running() ? "true" : "false",
+		 esdm_selftest_passes(), esdm_selftest_periodic_interval(),
+		 esdm_selftest_es_state_name(), esdm_selftest_es_sources(),
+		 esdm_selftest_es_failures());
+
+	/*
+	 * Every section above appends with snprintf(), which stops where the
+	 * buffer ends.
+	 */
+	if (esdm_used_buf_len(buf, buflen) + 1 >= buflen) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ANY,
+			"Status report does not fit into the buffer of %zu bytes\n",
+			buflen);
+		return -EMSGSIZE;
+	}
+
+	return 0;
 }
 
 /****************************** JSON status ***********************************/
@@ -247,25 +372,187 @@ static void esdm_json_es_state(struct json_object *es_obj, uint32_t es)
 	}
 }
 
+/* Render the statistics of one DRNG instance as a JSON object. */
+static struct json_object *
+esdm_drng_status_obj(const struct esdm_drng_stats *stats)
+{
+	struct json_object *obj = json_object_new_object();
+	char stamp[32] = "";
+
+	if (!obj)
+		return NULL;
+
+	json_object_object_add(obj, "type",
+			       json_object_new_string(stats->type));
+	/*
+	 * Every member is present on every DRNG: one the DRNG does not have -
+	 * the node of the DRNG that is not bound to one, the seeding time of
+	 * one that was never seeded - is reported as null rather than left out,
+	 * so a consumer can address it without checking for its existence.
+	 */
+	json_object_object_add(
+		obj, "node",
+		stats->node_valid ? json_object_new_int((int32_t)stats->node) :
+				    NULL);
+	/* A DRNG that is not allocated yet has no name to report */
+	json_object_object_add(
+		obj, "name",
+		stats->drng_name ? json_object_new_string(stats->drng_name) :
+				   NULL);
+	json_object_object_add(obj, "fully_seeded",
+			       json_object_new_boolean(stats->fully_seeded));
+	json_object_object_add(obj, "initiated",
+			       json_object_new_boolean(stats->initiated));
+	json_object_object_add(obj, "force_reseed",
+			       json_object_new_boolean(stats->force_reseed));
+	json_object_object_add(obj, "reseed_pending",
+			       json_object_new_boolean(stats->reseed_pending));
+	json_object_object_add(
+		obj, "requests_until_reseed",
+		json_object_new_int64(stats->requests_until_reseed));
+	json_object_object_add(
+		obj, "seconds_until_reseed",
+		json_object_new_int64(stats->seconds_until_reseed));
+	json_object_object_add(
+		obj, "requests_since_fully_seeded",
+		json_object_new_int64(stats->requests_since_fully_seeded));
+	json_object_object_add(
+		obj, "generated_bits_since_fully_seeded",
+		json_object_new_int64(stats->bits_since_fully_seeded));
+	json_object_object_add(obj, "seed_generation",
+			       json_object_new_int64(stats->seed_generation));
+	if (stats->seeded_wtime_valid)
+		esdm_time_str(stats->seeded_wtime, stamp, sizeof(stamp));
+	json_object_object_add(obj, "last_seeding_time",
+			       stamp[0] ? json_object_new_string(stamp) : NULL);
+	json_object_object_add(
+		obj, "seconds_since_last_reseed",
+		stats->seeded_time_valid ?
+			json_object_new_int64(stats->seconds_since_reseed) :
+			NULL);
+
+	return obj;
+}
+
+/* Render one DRNG instance as an object of the "drngs" array */
+static void esdm_drng_status_json(const struct esdm_drng_stats *stats,
+				  void *priv)
+{
+	struct json_object *drngs = priv;
+	struct json_object *obj = esdm_drng_status_obj(stats);
+
+	if (obj)
+		json_object_array_add(drngs, obj);
+}
+
+/* Collect the object of a single DRNG instance for the caller */
+static void esdm_drng_status_json_one(const struct esdm_drng_stats *stats,
+				      void *priv)
+{
+	struct json_object **out = priv;
+
+	*out = esdm_drng_status_obj(stats);
+}
+
+/* Serialize the object of a single DRNG instance into the caller's buffer. */
+static int esdm_json_write(const char *doc, char *buf, size_t buflen)
+{
+	int len;
+
+	if (!doc)
+		return -ENOMEM;
+
+	len = snprintf(buf, buflen, "%s\n", doc);
+	if (len < 0)
+		return -EFAULT;
+
+	/*
+	 * A JSON document that is cut in half is not a JSON document at all,
+	 * and a consumer that is handed one has no way to tell that from a
+	 * document the ESDM meant to send.
+	 */
+	if ((size_t)len >= buflen) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ANY,
+			"Status document of %d bytes does not fit into the buffer of %zu bytes\n",
+			len + 1, buflen);
+		buf[0] = '\0';
+		return -EMSGSIZE;
+	}
+
+	return 0;
+}
+
+static int esdm_drng_status_json_write(struct json_object *obj, char *buf,
+				       size_t buflen)
+{
+	int ret;
+
+	if (!obj)
+		return -ENOMEM;
+
+	ret = esdm_json_write(
+		json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN),
+		buf, buflen);
+
+	json_object_put(obj);
+	return ret;
+}
+
 DSO_PUBLIC
-void esdm_status_json(char *buf, size_t buflen)
+int esdm_status_drng_json(uint32_t node, char *buf, size_t buflen)
+{
+	struct json_object *obj = NULL;
+	int ret;
+
+	if (!buf || !buflen)
+		return -EINVAL;
+
+	buf[0] = '\0';
+
+	ret = esdm_drng_stats_node(node, esdm_drng_status_json_one, &obj);
+	if (ret)
+		return ret;
+
+	return esdm_drng_status_json_write(obj, buf, buflen);
+}
+
+DSO_PUBLIC
+int esdm_status_drng_pr_json(char *buf, size_t buflen)
+{
+	struct json_object *obj = NULL;
+
+	if (!buf || !buflen)
+		return -EINVAL;
+
+	buf[0] = '\0';
+
+	esdm_drng_stats_pr(esdm_drng_status_json_one, &obj);
+
+	return esdm_drng_status_json_write(obj, buf, buflen);
+}
+
+DSO_PUBLIC
+int esdm_status_json(char *buf, size_t buflen)
 {
 	struct esdm_drng *drng = esdm_drng_init_instance();
-	struct json_object *root, *compliance, *sources;
-	const char *doc;
+	struct json_object *root, *compliance, *sources, *drngs, *selftest;
+	int ret = -ENOMEM;
 	uint32_t i;
 
 	if (!buf || !buflen) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Status information cannot be created\n");
-		return;
+		return -EINVAL;
 	}
 	buf[0] = '\0';
 
 	root = json_object_new_object();
 	compliance = json_object_new_array();
 	sources = json_object_new_array();
-	if (!root || !compliance || !sources) {
+	drngs = json_object_new_array();
+	selftest = json_object_new_object();
+	if (!root || !compliance || !sources || !drngs || !selftest) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Status information cannot be created\n");
 		goto out;
@@ -329,19 +616,46 @@ void esdm_status_json(char *buf, size_t buflen)
 	json_object_object_add(root, "entropy_sources", sources);
 	sources = NULL;
 
-	/*
-	 * The document is truncated if it does not fit into the caller's
-	 * buffer - as with the plain status text, and detectable by the
-	 * consumer as the JSON is then incomplete.
-	 */
-	doc = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY);
-	if (doc)
-		snprintf(buf, buflen, "%s\n", doc);
+	/* The initial and the prediction resistance DRNG - see esdm_status() */
+	esdm_drng_stats_summary(esdm_drng_status_json, drngs);
+	json_object_object_add(root, "drngs", drngs);
+	drngs = NULL;
+
+	json_object_object_add(
+		selftest, "state",
+		json_object_new_string(esdm_selftest_crypto_state_name()));
+	json_object_object_add(
+		selftest, "running",
+		json_object_new_boolean(esdm_selftest_periodic_running()));
+	json_object_object_add(selftest, "completed_self_tests",
+			       json_object_new_int64(esdm_selftest_passes()));
+	json_object_object_add(
+		selftest, "self_test_interval_seconds",
+		json_object_new_int64(esdm_selftest_periodic_interval()));
+	json_object_object_add(
+		selftest, "entropy_source_state",
+		json_object_new_string(esdm_selftest_es_state_name()));
+	json_object_object_add(
+		selftest, "entropy_sources_tested",
+		json_object_new_int64(esdm_selftest_es_sources()));
+	json_object_object_add(
+		selftest, "entropy_sources_failed",
+		json_object_new_int64(esdm_selftest_es_failures()));
+	json_object_object_add(root, "periodic_self_test", selftest);
+	selftest = NULL;
+
+	ret = esdm_json_write(
+		json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY),
+		buf, buflen);
 
 out:
 	json_object_put(root);
 	json_object_put(compliance);
 	json_object_put(sources);
+	json_object_put(drngs);
+	json_object_put(selftest);
+
+	return ret;
 }
 
 DSO_PUBLIC

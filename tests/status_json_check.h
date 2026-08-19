@@ -26,6 +26,7 @@
 
 #include <json-c/json.h>
 #include <stdio.h>
+#include <string.h>
 
 static inline int esdm_status_json_member(struct json_object *obj,
 					  const char *key, json_type type)
@@ -47,10 +48,96 @@ static inline int esdm_status_json_member(struct json_object *obj,
 	return 0;
 }
 
+/*
+ * Like esdm_status_json_member(), but the member may also be null: the status
+ * document reports a property a DRNG does not have as null instead of leaving
+ * it out, so its presence is mandatory while its type is not.
+ */
+static inline int esdm_status_json_member_or_null(struct json_object *obj,
+						  const char *key,
+						  json_type type)
+{
+	struct json_object *val;
+
+	if (!json_object_object_get_ex(obj, key, &val)) {
+		printf("JSON status: member \"%s\" is missing\n", key);
+		return 1;
+	}
+
+	if (json_object_is_type(val, json_type_null))
+		return 0;
+
+	return esdm_status_json_member(obj, key, type);
+}
+
+/*
+ * Returns 0 if @drng is a well-formed DRNG instance object - the shape the
+ * status document carries below "drngs" and esdm_status_drng_json() returns
+ * on its own.
+ */
+static inline int esdm_status_json_drng(struct json_object *drng)
+{
+	struct json_object *generation;
+
+	if (!json_object_is_type(drng, json_type_object)) {
+		printf("JSON status: DRNG instance is no object\n");
+		return 1;
+	}
+
+	if (esdm_status_json_member(drng, "type", json_type_string) ||
+	    esdm_status_json_member(drng, "name", json_type_string) ||
+	    esdm_status_json_member(drng, "fully_seeded", json_type_boolean) ||
+	    esdm_status_json_member(drng, "requests_until_reseed",
+				    json_type_int) ||
+	    esdm_status_json_member(drng, "requests_since_fully_seeded",
+				    json_type_int) ||
+	    esdm_status_json_member(drng, "generated_bits_since_fully_seeded",
+				    json_type_int) ||
+	    esdm_status_json_member(drng, "seed_generation", json_type_int) ||
+	    esdm_status_json_member_or_null(drng, "node", json_type_int) ||
+	    esdm_status_json_member_or_null(drng, "last_seeding_time",
+					    json_type_string) ||
+	    esdm_status_json_member_or_null(drng, "seconds_since_last_reseed",
+					    json_type_int))
+		return 1;
+
+	/* A DRNG that was seeded reports when that happened */
+	json_object_object_get_ex(drng, "seed_generation", &generation);
+	if (json_object_get_int64(generation) &&
+	    esdm_status_json_member(drng, "last_seeding_time",
+				    json_type_string))
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Returns 0 if @doc is the status of a single DRNG instance
+ * (esdm_status_drng_json / esdm_rpcc_drng_status_json), 1 otherwise.
+ */
+static inline int esdm_status_drng_json_check(const char *doc)
+{
+	struct json_object *drng;
+	int ret;
+
+	drng = json_tokener_parse(doc);
+	if (!drng) {
+		printf("DRNG status is no JSON document: %s\n", doc);
+		return 1;
+	}
+
+	ret = esdm_status_json_drng(drng);
+	json_object_put(drng);
+
+	return ret;
+}
+
 /* Returns 0 if the document is a well-formed ESDM status, 1 otherwise */
 static inline int esdm_status_json_check(const char *doc)
 {
 	struct json_object *root, *sources, *source, *name;
+	struct json_object *drngs, *drng, *selftest;
+	struct json_object *state;
 	size_t i, n;
 	int ret = 1;
 
@@ -77,8 +164,37 @@ static inline int esdm_status_json_check(const char *doc)
 	    esdm_status_json_member(root, "fully_seeded", json_type_boolean) ||
 	    esdm_status_json_member(root, "entropy_level_bits",
 				    json_type_int) ||
-	    esdm_status_json_member(root, "entropy_sources", json_type_array))
+	    esdm_status_json_member(root, "entropy_sources", json_type_array) ||
+	    esdm_status_json_member(root, "drngs", json_type_array) ||
+	    esdm_status_json_member(root, "periodic_self_test",
+				    json_type_object))
 		goto out;
+
+	json_object_object_get_ex(root, "periodic_self_test", &selftest);
+	if (esdm_status_json_member(selftest, "state", json_type_string) ||
+	    esdm_status_json_member(selftest, "running", json_type_boolean) ||
+	    esdm_status_json_member(selftest, "completed_self_tests",
+				    json_type_int) ||
+	    esdm_status_json_member(selftest, "self_test_interval_seconds",
+				    json_type_int) ||
+	    esdm_status_json_member(selftest, "entropy_source_state",
+				    json_type_string) ||
+	    esdm_status_json_member(selftest, "entropy_sources_tested",
+				    json_type_int) ||
+	    esdm_status_json_member(selftest, "entropy_sources_failed",
+				    json_type_int))
+		goto out;
+
+	/*
+	 * A status is only handed out by an ESDM that produces random bits, and
+	 * that is exactly what a state other than "passed" rules out.
+	 */
+	json_object_object_get_ex(selftest, "state", &state);
+	if (strcmp(json_object_get_string(state), "passed")) {
+		printf("JSON status: self test state is \"%s\"\n",
+		       json_object_get_string(state));
+		goto out;
+	}
 
 	json_object_object_get_ex(root, "entropy_sources", &sources);
 	n = json_object_array_length(sources);
@@ -105,6 +221,30 @@ static inline int esdm_status_json_check(const char *doc)
 		if (!strlen(json_object_get_string(name))) {
 			printf("JSON status: entropy source %zu is unnamed\n",
 			       i);
+			goto out;
+		}
+	}
+
+	/*
+	 * The initial and the prediction resistance DRNG, and only those two:
+	 * the node instances follow the number of CPUs, so a document holding
+	 * them would grow past the buffers it is carried in - they are asked
+	 * for one at a time instead.
+	 */
+	json_object_object_get_ex(root, "drngs", &drngs);
+	n = json_object_array_length(drngs);
+	if (n != 2) {
+		printf("JSON status reports %zu DRNG instances, expected the initial and the prediction resistance one\n",
+		       n);
+		goto out;
+	}
+
+	/* Every DRNG instance is an object carrying at least its identity */
+	for (i = 0; i < n; i++) {
+		drng = json_object_array_get_idx(drngs, i);
+
+		if (esdm_status_json_drng(drng)) {
+			printf("JSON status: DRNG instance %zu\n", i);
 			goto out;
 		}
 	}
