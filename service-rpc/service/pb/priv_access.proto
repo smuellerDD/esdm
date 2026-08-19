@@ -96,6 +96,35 @@ message SetPkcs11ConfigRequest {
 }
 
 /******************************************************************************
+ * Self tests
+ ******************************************************************************/
+
+/**
+ * @brief Response reporting the outcome of the self tests.
+ *
+ * The two states carry the values the ESDM uses internally and reports in its
+ * status: 0 - the test has not run, 1 - it passed, 2 - it failed. They are
+ * separate because they mean different things: a failed crypto self test stops
+ * the ESDM from handing out random bits, while a failed entropy source is one
+ * of several and only stops being credited.
+ *
+ * @param ret 0 if every self test passed and the ESDM hands out random bits,
+ *	      < 0 otherwise - the error of the failing test, or -EOPNOTSUPP
+ *	      where an earlier self test failed and still holds the output back
+ * @param crypto_state State of the self tests of the hash and the DRNG
+ * @param es_state State of the self tests of the entropy sources
+ * @param es_sources Number of entropy sources the pass tested
+ * @param es_failures Number of entropy sources that failed their self test
+ */
+message SelftestResponse {
+	int32 ret = 1;
+	uint32 crypto_state = 2;
+	uint32 es_state = 3;
+	uint32 es_sources = 4;
+	uint32 es_failures = 5;
+}
+
+/******************************************************************************
  * Protocol handler
  ******************************************************************************/
 service PrivAccess {
@@ -111,4 +140,11 @@ service PrivAccess {
 
 	/* entropy source configuration */
 	rpc RpcSetPkcs11Config (SetPkcs11ConfigRequest) returns (RetResponse);
+
+	/*
+	 * New calls are appended here: the wire protocol addresses a call by
+	 * its index in this list, so inserting one anywhere above would make
+	 * an already installed client invoke a different call on the server.
+	 */
+	rpc RpcSelftest (EmptyRequest) returns (SelftestResponse);
 }

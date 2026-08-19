@@ -27,6 +27,7 @@
 #include "esdm_sha512.h"
 #include "esdm_sha3.h"
 #include "ret_checkers.h"
+#include "selftest_kat.h"
 
 static uint32_t esdm_sha512_hash_digestsize(void *hash)
 {
@@ -121,14 +122,22 @@ static int esdm_sha512_hash_selftest(void)
 		0x9f, 0x60, 0x0c, 0x79
 	};
 	uint8_t act[ESDM_SHA512_SIZE_DIGEST];
-	int ret = 0;
+	uint8_t mod[sizeof(msg_512)];
+	int ret;
 
 	esdm_hash_init(ctx);
-	esdm_hash_update(ctx, msg_512, 3);
+	esdm_hash_update(ctx, msg_512, sizeof(msg_512));
 	esdm_hash_final(ctx, act);
-	if (memcmp(act, exp_512, ESDM_SHA512_SIZE_DIGEST))
-		ret = -EFAULT;
+	CKINT(esdm_kat_check(act, exp_512, ESDM_SHA512_SIZE_DIGEST));
 
+	/* A message off by its first byte must not produce that digest */
+	CKINT(esdm_kat_modify(mod, msg_512, sizeof(mod)));
+	esdm_hash_init(ctx);
+	esdm_hash_update(ctx, mod, sizeof(mod));
+	esdm_hash_final(ctx, act);
+	CKINT(esdm_kat_check_differs(act, exp_512, ESDM_SHA512_SIZE_DIGEST));
+
+out:
 	esdm_hash_zero(ctx);
 	return ret;
 }
@@ -154,14 +163,22 @@ static int esdm_sha512_hash_selftest(void)
 		0x6E, 0xDE, 0x42, 0x91
 	};
 	uint8_t act[ESDM_SHA3_512_SIZE_DIGEST];
-	int ret = 0;
+	uint8_t mod[sizeof(msg_512)];
+	int ret;
 
 	esdm_hash_init(ctx);
-	esdm_hash_update(ctx, msg_512, 3);
+	esdm_hash_update(ctx, msg_512, sizeof(msg_512));
 	esdm_hash_final(ctx, act);
-	if (memcmp(act, exp_512, ESDM_SHA3_512_SIZE_DIGEST))
-		ret = -EFAULT;
+	CKINT(esdm_kat_check(act, exp_512, ESDM_SHA3_512_SIZE_DIGEST));
 
+	/* A message off by its first byte must not produce that digest */
+	CKINT(esdm_kat_modify(mod, msg_512, sizeof(mod)));
+	esdm_hash_init(ctx);
+	esdm_hash_update(ctx, mod, sizeof(mod));
+	esdm_hash_final(ctx, act);
+	CKINT(esdm_kat_check_differs(act, exp_512, ESDM_SHA3_512_SIZE_DIGEST));
+
+out:
 	esdm_hash_zero(ctx);
 	return ret;
 }

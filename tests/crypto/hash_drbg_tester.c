@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "esdm_hash_drbg_sha512.h"
+#include "selftest_kat.h"
 
 static int hash_drbg_tester(void)
 {
@@ -82,6 +83,7 @@ static int hash_drbg_tester(void)
 		0xcb, 0x1b, 0xbf, 0xd1, 0x1d, 0x2a
 	};
 	uint8_t act[sizeof(exp)];
+	uint8_t mod[sizeof(ent_nonce)];
 	ESDM_DRBG_HASH_CTX_ON_STACK(drbg_stack);
 	struct esdm_drbg_state *drbg = NULL;
 	int ret = 0;
@@ -100,7 +102,8 @@ static int hash_drbg_tester(void)
 	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 
-	ret += memcmp(act, exp, sizeof(exp)) ? 1 : 0;
+	/* Checks the output and that an output off by a byte is rejected */
+	ret += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
 
 	esdm_drbg_zero(drbg_stack);
 
@@ -114,7 +117,24 @@ static int hash_drbg_tester(void)
 	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 
-	ret += memcmp(act, exp, sizeof(exp)) ? 1 : 0;
+	ret += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
+
+	esdm_drbg_zero(drbg_stack);
+
+	/* Seed material off by its first byte must not produce that output */
+	if (esdm_kat_modify(mod, ent_nonce, sizeof(mod)))
+		goto out;
+
+	if (esdm_drbg_seed(drbg_stack, mod, sizeof(mod), pers, 32))
+		goto out;
+
+	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl1, 32) < 0)
+		goto out;
+
+	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
+		goto out;
+
+	ret += esdm_kat_check_differs(act, exp, sizeof(exp)) ? 1 : 0;
 
 	esdm_drbg_zero(drbg_stack);
 
@@ -260,7 +280,7 @@ static int hash_drbg_tester(void)
 		goto out;
 #endif
 
-	ret += memcmp(act, exp, sizeof(exp)) ? 1 : 0;
+	ret += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
 
 out:
 	esdm_drbg_zero_free(drbg);

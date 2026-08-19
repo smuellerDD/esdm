@@ -41,6 +41,7 @@
 
 #include "common_test.h"
 #include "fips.h"
+#include "fips_integrity.h"
 
 /* Set in the re-executed child that is meant to run the self test */
 #define POST_ENV "ESDM_TEST_RUN_FIPS_POST"
@@ -174,38 +175,19 @@ static void child_latched_after_unset(void)
 /*
  * Run the power-on self test by starting this binary again with the
  * configuration probe answering "FIPS". Its constructor then performs the
- * HMAC known answer test and the integrity check of the running binary before
+ * HMAC known answer test and the integrity test of the running binary before
  * main() is reached, and exits with the errno of whatever failed - so the exit
- * status of the child is the verdict.
+ * status of the child is the verdict. Returns that status, or -1 if the child
+ * could not be run at all.
  */
-static void test_post(void)
+static int run_post_child(const char *self)
 {
-	char self[4096], hmacfile[4200];
-	const char *slash;
-	ssize_t len;
-	pid_t pid;
+	pid_t pid = fork();
 	int status;
 
-	len = readlink("/proc/self/exe", self, sizeof(self) - 1);
-	if (len <= 0) {
-		CHECK(0, "cannot read /proc/self/exe: %s", strerror(errno));
-		return;
-	}
-	self[len] = '\0';
-
-	/* The integrity check creates this next to the binary */
-	slash = strrchr(self, '/');
-	if (slash)
-		snprintf(hmacfile, sizeof(hmacfile), "%.*s.%s.hmac",
-			 (int)(slash - self + 1), self, slash + 1);
-	else
-		snprintf(hmacfile, sizeof(hmacfile), ".%s.hmac", self);
-	unlink(hmacfile);
-
-	pid = fork();
 	if (pid < 0) {
 		CHECK(0, "fork() failed: %s", strerror(errno));
-		return;
+		return -1;
 	}
 
 	if (!pid) {
@@ -217,22 +199,57 @@ static void test_post(void)
 	if (waitpid(pid, &status, 0) != pid) {
 		CHECK(0, "waitpid() for the self test failed: %s",
 		      strerror(errno));
-		return;
+		return -1;
 	}
 
 	CHECK(WIFEXITED(status), "the self test died abnormally (status %d)",
 	      status);
-	if (!WIFEXITED(status))
+
+	return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+static void test_post(void)
+{
+	char self[4096], hmacfile[4200];
+	const char *slash;
+	ssize_t len;
+	int ret;
+
+	len = readlink("/proc/self/exe", self, sizeof(self) - 1);
+	if (len <= 0) {
+		CHECK(0, "cannot read /proc/self/exe: %s", strerror(errno));
 		return;
+	}
+	self[len] = '\0';
+
+	/* Where the integrity test looks for the reference value */
+	slash = strrchr(self, '/');
+	if (slash)
+		snprintf(hmacfile, sizeof(hmacfile), "%.*s.%s.hmac",
+			 (int)(slash - self + 1), self, slash + 1);
+	else
+		snprintf(hmacfile, sizeof(hmacfile), ".%s.hmac", self);
+	unlink(hmacfile);
+
+	/* A binary that was never attested does not start. */
+	ret = run_post_child(self);
+	if (ret < 0)
+		return;
+	CHECK(ret == ENOENT,
+	      "an unattested binary passed the self test (exit %d)", ret);
 
 	/*
-	 * EIO means the integrity check could not create its HMAC file because
-	 * the binary sits in a directory it may not write to - an installed
-	 * tree rather than a build one. That is the environment, not a failing
-	 * self test, so accept it; anything else is a genuine POST failure.
+	 * With the reference value in place - written the way an installation
+	 * writes it - the self test passes. Creating it needs a writable
+	 * directory, which the build tree is but an installed tree need not be,
+	 * so a failure to write it skips the rest.
 	 */
-	CHECK(WEXITSTATUS(status) == 0 || WEXITSTATUS(status) == EIO,
-	      "the power-on self test failed with %d", WEXITSTATUS(status));
+	if (fips_create_checkfile(hmacfile, self))
+		return;
+
+	ret = run_post_child(self);
+	if (ret >= 0)
+		CHECK(ret == 0, "the power-on self test failed with %d", ret);
 
 	unlink(hmacfile);
 }

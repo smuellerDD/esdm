@@ -343,6 +343,13 @@ static void test_privileged_commands(void)
 	check_ok(clear);
 	check_ok(reseed);
 
+	{
+		/* The self tests, run on demand. */
+		const char *const selftest[] = { "--selftest", NULL };
+
+		check_says(selftest, "Self tests passed");
+	}
+
 #ifdef ESDM_HAS_AUX_CLIENT
 	{
 		/* Single shot seeding from the OS - the aux pool test helper */

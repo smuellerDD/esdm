@@ -35,6 +35,7 @@
 #include "esdm_es_sched.h"
 #include "esdm_info.h"
 #include "esdm_logger.h"
+#include "esdm_selftest.h"
 #include "test_pertubation.h"
 #include "visibility.h"
 

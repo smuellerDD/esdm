@@ -528,6 +528,24 @@ static bool esdm_es_pkcs11_active(void)
 	return ESDM_PKCS11_MODULE_PATH[0] != '\0';
 }
 
+/* The token is still there and the session still usable. */
+static int esdm_es_pkcs11_selftest(void)
+{
+	bool usable;
+
+	mutex_lock(&pkcs11_mutex);
+	usable = (pkcs11_module_loaded && pkcs11_slot != NULL);
+	mutex_unlock(&pkcs11_mutex);
+
+	if (!usable) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "PKCS11 ES: no token - nothing to test\n");
+		return 0;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_pkcs11 = {
 	.name = "PKCS#11",
 	.init = esdm_es_pkcs11_init,
@@ -543,6 +561,7 @@ struct esdm_es_cb esdm_es_pkcs11 = {
 	.state = esdm_es_pkcs11_es_state,
 	.reset = NULL,
 	.active = esdm_es_pkcs11_active,
+	.selftest = esdm_es_pkcs11_selftest,
 };
 
 DSO_PUBLIC

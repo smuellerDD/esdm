@@ -33,6 +33,38 @@
 
 #define FIPS_LOGGER_PREFIX "FIPS POST: "
 
+/*
+ * An address inside this object, which is what identifies the file the ESDM was
+ * loaded from - see the integrity test below.
+ */
+static const char fips_module_marker[] = "ESDM";
+
+/*
+ * The shared objects that make up the module next to libesdm.so: the entropy
+ * source, and the library providing the cryptography where that is not the
+ * built-in implementation.
+ */
+static const char *const fips_module_objects[] = {
+#ifdef ESDM_ES_JENT
+	"libjitterentropy.so",
+#endif
+#ifdef ESDM_OPENSSL
+	"libcrypto.so",
+#endif
+#ifdef ESDM_GNUTLS
+	"libgnutls.so",
+	/* The SP800-90A CTR DRBG of that backend is nettle's */
+	"libnettle.so",
+#endif
+#ifdef ESDM_BOTAN
+	"libbotan-",
+#endif
+#ifdef ESDM_LEANCRYPTO
+	"libleancrypto.so",
+#endif
+	NULL
+};
+
 static int fips_post_hmac_sha256(void)
 {
 	ESDM_HMAC_CTX_ON_STACK(hmac_ctx, esdm_sha256);
@@ -72,6 +104,26 @@ out:
 	return ret;
 }
 
+static void fips_post_objects(void)
+{
+	unsigned int i;
+
+	for (i = 0; fips_module_objects[i]; i++) {
+		int ret = fips_post_integrity_loaded(fips_module_objects[i]);
+
+		if (ret < 0)
+			exit(-ret);
+
+		/* Nothing of that name is loaded. */
+		if (!ret) {
+			fprintf(stderr,
+				FIPS_LOGGER_PREFIX
+				"%s* is not loaded as a shared object - it is covered only where it is linked into an attested file\n",
+				fips_module_objects[i]);
+		}
+	}
+}
+
 ESDM_DEFINE_CONSTRUCTOR(fips_post);
 static void fips_post(void)
 {
@@ -84,9 +136,18 @@ static void fips_post(void)
 	if (ret)
 		exit(-ret);
 
+	/* The executable ... */
 	ret = fips_post_integrity(NULL);
 	if (ret)
 		exit(-ret);
+
+	/* ... and the ESDM itself. */
+	ret = fips_post_integrity_obj(fips_module_marker);
+	if (ret)
+		exit(-ret);
+
+	/* ... and the libraries it was built against, where they are loaded */
+	fips_post_objects();
 }
 
 bool fips_enabled(void)

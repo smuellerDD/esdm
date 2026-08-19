@@ -8,6 +8,7 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
+#include "esdm_drng_mgr.h"
 #include "esdm_es_mgr_cb.h"
 
 /*************************** General ESDM parameter ***************************/

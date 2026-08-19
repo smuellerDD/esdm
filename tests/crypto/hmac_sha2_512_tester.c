@@ -23,6 +23,7 @@
 
 #include "esdm_hmac.h"
 #include "esdm_sha512.h"
+#include "selftest_kat.h"
 
 static int hmac_sha2_512_tester(void)
 {
@@ -136,13 +137,29 @@ static int hmac_sha2_512_tester(void)
 		0x0e, 0xf7, 0x3b, 0x7b
 	};
 	uint8_t act[ESDM_SHA512_SIZE_DIGEST];
+	uint8_t mod[sizeof(msg_512)];
 
 	esdm_hmac_init(hmac, key_512, sizeof(key_512));
 	esdm_hmac_update(hmac, msg_512, sizeof(msg_512));
 	esdm_hmac_final(hmac, act);
 	esdm_hmac_zero(hmac);
 
-	return memcmp(act, exp_512, ESDM_SHA512_SIZE_DIGEST) ? 1 : 0;
+	/* Checks the MAC and that a MAC off by a byte is rejected */
+	if (esdm_kat_check(act, exp_512, ESDM_SHA512_SIZE_DIGEST))
+		return 1;
+
+	/* A message off by its first byte must not produce that MAC */
+	if (esdm_kat_modify(mod, msg_512, sizeof(mod)))
+		return 1;
+
+	esdm_hmac_init(hmac, key_512, sizeof(key_512));
+	esdm_hmac_update(hmac, mod, sizeof(mod));
+	esdm_hmac_final(hmac, act);
+	esdm_hmac_zero(hmac);
+
+	return esdm_kat_check_differs(act, exp_512, ESDM_SHA512_SIZE_DIGEST) ?
+		       1 :
+		       0;
 }
 
 int main(int argc, char *argv[])

@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "esdm_sha256.h"
+#include "selftest_kat.h"
 
 static int sha256_tester(void)
 {
@@ -33,13 +34,23 @@ static int sha256_tester(void)
 					   0xa7, 0x7f, 0x77, 0xcb, 0x97, 0x89,
 					   0x6f, 0xf4 };
 	uint8_t act[ESDM_SHA256_SIZE_DIGEST];
+	uint8_t mod[sizeof(msg_256)];
 
 	printf("hash ctx len %lu\n", ESDM_HASH_CTX_SIZE(esdm_sha256));
 	esdm_hash(esdm_sha256, msg_256, sizeof(msg_256), act);
-	if (memcmp(act, exp_256, ESDM_SHA256_SIZE_DIGEST))
+
+	/* Checks the digest and that a digest off by a byte is rejected */
+	if (esdm_kat_check(act, exp_256, ESDM_SHA256_SIZE_DIGEST))
 		return 1;
 
-	return 0;
+	/* A message off by its first byte must not produce that digest */
+	if (esdm_kat_modify(mod, msg_256, sizeof(mod)))
+		return 1;
+	esdm_hash(esdm_sha256, mod, sizeof(mod), act);
+
+	return esdm_kat_check_differs(act, exp_256, ESDM_SHA256_SIZE_DIGEST) ?
+		       1 :
+		       0;
 }
 
 int main(int argc, char *argv[])

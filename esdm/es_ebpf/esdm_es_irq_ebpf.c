@@ -314,6 +314,34 @@ static bool esdm_irq_ebpf_active(void)
 	return esdm_irq_ebpf_es.loaded;
 }
 
+/*
+ * The SP800-90B health tests of this source run in the eBPF program over every
+ * event it observes; what a self test can do from here is report their verdict.
+ */
+static int esdm_irq_ebpf_selftest(void)
+{
+	if (!esdm_irq_ebpf_es.loaded) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "IRQEBPF ES: not loaded - nothing to test\n");
+		return 0;
+	}
+
+	if (!esdm_irq_ebpf_es.health_enabled) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "IRQEBPF ES: SP800-90B health tests not enabled\n");
+		return 0;
+	}
+
+	if (esdm_irq_ebpf_es.perm_failure) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"IRQEBPF ES: SP800-90B health tests in permanent failure\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_irq_ebpf = {
 	.name = "InterruptEBPF",
 	.init = esdm_irq_ebpf_initialize,
@@ -325,4 +353,5 @@ struct esdm_es_cb esdm_es_irq_ebpf = {
 	.state = esdm_irq_ebpf_es_state,
 	.reset = esdm_irq_ebpf_reset,
 	.active = esdm_irq_ebpf_active,
+	.selftest = esdm_irq_ebpf_selftest,
 };

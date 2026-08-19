@@ -236,6 +236,49 @@ static bool esdm_jent_kernel_active(void)
 	return ret;
 }
 
+/*
+ * Read from the kernel's jitterentropy RNG and require two different answers.
+ */
+static int esdm_jent_kernel_selftest(void)
+{
+	uint8_t first[16], second[16];
+	int ret = 0;
+
+	mutex_lock(&jent_rng_mutex);
+
+	if (jent_rng == NULL) {
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"KernelJitterRNG ES: not initialized - nothing to test\n");
+		goto out;
+	}
+
+	if (kcapi_rng_generate(jent_rng, first, sizeof(first)) !=
+		    (ssize_t)sizeof(first) ||
+	    kcapi_rng_generate(jent_rng, second, sizeof(second)) !=
+		    (ssize_t)sizeof(second)) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"KernelJitterRNG ES: the kernel jitterentropy RNG did not deliver\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (!memcmp(first, second, sizeof(first))) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"KernelJitterRNG ES: the kernel jitterentropy RNG repeated its output\n");
+		ret = -EFAULT;
+	}
+
+out:
+	mutex_unlock(&jent_rng_mutex);
+	memset_secure(first, 0, sizeof(first));
+	memset_secure(second, 0, sizeof(second));
+
+	return ret;
+}
+
 struct esdm_es_cb esdm_es_jent_kernel = {
 	.name = "KernelJitterRNG",
 	.init = esdm_jent_kernel_init,
@@ -251,4 +294,5 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.state = esdm_jent_kernel_es_state,
 	.reset = NULL,
 	.active = esdm_jent_kernel_active,
+	.selftest = esdm_jent_kernel_selftest,
 };

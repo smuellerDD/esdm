@@ -301,26 +301,10 @@ static void esdm_jent_finalize(void)
 	esdm_jent_finalize_internal(true);
 }
 
-static int esdm_jent_initialize(void)
+/* The flags the Jitter RNG is operated with. */
+static unsigned int esdm_jent_flags(void)
 {
 	unsigned int flags = 0;
-	int ret;
-
-	/*
-	 * Allow the init function to be called multiple times. Use the
-	 * async-preserving teardown: on reinit the monitor thread is NOT joined
-	 * (unlike shutdown), so the async cache/collector must be reset in place
-	 * rather than freed under the lock-free monitor/consumer readers.
-	 */
-	esdm_jent_finalize_internal(false);
-
-	/*
-	 * esdm_jent_lock is statically initialized (DEFINE_MUTEX_W_UNLOCKED) and
-	 * left unlocked by esdm_jent_finalize() above, so just acquire it.
-	 * Re-running mutex_w_init() here on the already-initialized mutex (the
-	 * reinit path) is undefined behaviour and leaks the mutexattr.
-	 */
-	mutex_w_lock(&esdm_jent_lock);
 
 	if (esdm_config_sp80090c_compliant() || esdm_config_fips_enabled() ||
 	    esdm_ntg1_2024_compliant()) {
@@ -423,6 +407,23 @@ static int esdm_jent_initialize(void)
 	}
 #endif /* JENT_VERSION >= 3070000 */
 
+	return flags;
+}
+
+static int esdm_jent_initialize(void)
+{
+	unsigned int flags = esdm_jent_flags();
+	int ret;
+
+	/* Allow the init function to be called multiple times. */
+	esdm_jent_finalize_internal(false);
+
+	/*
+	 * esdm_jent_lock is statically initialized (DEFINE_MUTEX_W_UNLOCKED)
+	 * and left unlocked by esdm_jent_finalize() above, so just acquire it.
+	 */
+	mutex_w_lock(&esdm_jent_lock);
+
 	CKINT(jent_entropy_init_ex(ESDM_JENT_OSR, flags));
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
@@ -493,6 +494,42 @@ static bool esdm_jent_active(void)
 	return (esdm_jent_state != NULL);
 }
 
+/*
+ * SP800-90B section 4.3 asks an entropy source for its start-up health tests,
+ * and IG 10.3.A for the same tests on demand.
+ */
+static int esdm_jent_selftest(void)
+{
+	int ret;
+
+	if (!atomic_load(&esdm_jent_initialized)) {
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"JitterRNG ES: not initialized - nothing to test\n");
+		return 0;
+	}
+
+	/*
+	 * Under the ES lock, which is what the initialization holds while it
+	 * runs the very same call: the library keeps state of its own behind
+	 * it, and a self test landing in the middle of a reinitialization would
+	 * be two of these at once.
+	 */
+	mutex_w_lock(&esdm_jent_lock);
+	ret = jent_entropy_init_ex(ESDM_JENT_OSR, esdm_jent_flags());
+	mutex_w_unlock(&esdm_jent_lock);
+
+	if (ret) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"JitterRNG ES: SP800-90B health tests failed: %d\n",
+			ret);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_jent = {
 	.name = "JitterRNG",
 	.init = esdm_jent_initialize,
@@ -508,4 +545,5 @@ struct esdm_es_cb esdm_es_jent = {
 	.state = esdm_jent_es_state,
 	.reset = NULL,
 	.active = esdm_jent_active,
+	.selftest = esdm_jent_selftest,
 };

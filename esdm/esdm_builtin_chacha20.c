@@ -27,6 +27,7 @@
 #include "esdm_chacha20_private.h"
 #include "esdm_builtin_chacha20.h"
 #include "esdm_logger.h"
+#include "selftest_kat.h"
 
 static int esdm_chacha20_seed(void *drng, const uint8_t *inbuf, size_t inbuflen,
 			      const uint8_t *addtl, size_t addtllen)
@@ -101,6 +102,8 @@ static int esdm_chacha20_drng_selftest(void)
 	struct esdm_sym_state *chacha20_state = sym_ctx->sym_state;
 	uint8_t outbuf[ESDM_CC20_KEY_SIZE * 2]
 		__attribute__((aligned(sizeof(uint32_t))));
+	int ret;
+	uint8_t mod[ESDM_CC20_KEY_SIZE * 2];
 	uint8_t seed[ESDM_CC20_KEY_SIZE * 2] = {
 		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
 		0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
@@ -174,8 +177,14 @@ static int esdm_chacha20_drng_selftest(void)
 	chacha20_state->counter = 0;
 
 	esdm_cc20_drng_generate(cc20_ctx, outbuf, sizeof(expected_block));
-	if (memcmp(outbuf, expected_block, sizeof(expected_block)))
-		return -EFAULT;
+	ret = esdm_kat_check(outbuf, expected_block, sizeof(expected_block));
+	if (ret)
+		return ret;
+
+	/*
+	 * No negative test over the input for this one: its input is the zero
+	 * state, and modifying that is the seeded case below.
+	 */
 
 	/* Clear state of DRNG */
 	esdm_cc20_drng_zero(cc20_ctx);
@@ -184,8 +193,10 @@ static int esdm_chacha20_drng_selftest(void)
 	chacha20_state->counter = 0;
 	esdm_cc20_drng_seed(cc20_ctx, seed, sizeof(expected_twoblocks));
 	esdm_cc20_drng_generate(cc20_ctx, outbuf, sizeof(expected_twoblocks));
-	if (memcmp(outbuf, expected_twoblocks, sizeof(expected_twoblocks)))
-		return -EFAULT;
+	ret = esdm_kat_check(outbuf, expected_twoblocks,
+			     sizeof(expected_twoblocks));
+	if (ret)
+		return ret;
 
 	/* Clear state of DRNG */
 	esdm_cc20_drng_zero(cc20_ctx);
@@ -195,11 +206,25 @@ static int esdm_chacha20_drng_selftest(void)
 	esdm_cc20_drng_seed(cc20_ctx, seed, sizeof(expected_block_nonaligned));
 	esdm_cc20_drng_generate(cc20_ctx, outbuf,
 			      sizeof(expected_block_nonaligned));
-	if (memcmp(outbuf, expected_block_nonaligned,
-		   sizeof(expected_block_nonaligned)))
-		return -EFAULT;
+	ret = esdm_kat_check(outbuf, expected_block_nonaligned,
+			     sizeof(expected_block_nonaligned));
+	if (ret)
+		return ret;
 
-	return 0;
+	/* Clear state of DRNG */
+	esdm_cc20_drng_zero(cc20_ctx);
+
+	/* Seed material off by its first byte must not produce that output */
+	ret = esdm_kat_modify(mod, seed, sizeof(mod));
+	if (ret)
+		return ret;
+
+	chacha20_state->counter = 0;
+	esdm_cc20_drng_seed(cc20_ctx, mod, sizeof(expected_twoblocks));
+	esdm_cc20_drng_generate(cc20_ctx, outbuf, sizeof(expected_twoblocks));
+
+	return esdm_kat_check_differs(outbuf, expected_twoblocks,
+				      sizeof(expected_twoblocks));
 }
 const struct esdm_drng_cb esdm_builtin_chacha20_cb = {
 	.drng_name = esdm_chacha20_name,

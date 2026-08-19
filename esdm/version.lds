@@ -140,10 +140,33 @@ LIBESDM_PRIVATE_1.0 {
 		/* esdm_shm_status.h */
 		esdm_shm_status_cleanup_ipc;
 
-		/* threading_support.h */
+		/*
+		 * esdm_drng_mgr.h / esdm_es_mgr.h - the self tests the server
+		 * runs on demand for its privileged RPC endpoint, and the
+		 * states it reports back.
+		 */
+		esdm_selftest_run;
+		esdm_selftest_crypto_passed;
+		esdm_selftest_crypto_state;
+		esdm_selftest_es_failures;
+		esdm_selftest_es_sources;
+		esdm_selftest_es_state;
+
+		/*
+		 * threading_support.h - the thread pool keeps its state in the
+		 * static library, so every module linking it holds a copy.
+		 * Everything the ESDM itself calls has to be named here: an
+		 * unexported one resolves to this library's copy while the rest
+		 * resolves to the copy of whoever links it next to us (the ESDM
+		 * server does), which would put a thread into one pool and wait
+		 * for it in another.
+		 */
+		thread_available;
 		thread_get_name;
+		thread_init;
 		thread_release;
 		thread_set_name;
 		thread_start;
+		thread_wait;
 		thread_wait_all;
 } LIBESDM_1.0;

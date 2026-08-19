@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "esdm_sha512.h"
+#include "selftest_kat.h"
 
 static int sha512_tester(void)
 {
@@ -37,14 +38,28 @@ static int sha512_tester(void)
 		0x9f, 0x60, 0x0c, 0x79
 	};
 	uint8_t act[ESDM_SHA512_SIZE_DIGEST];
+	uint8_t mod[sizeof(msg_512)];
 	int ret;
 
 	if (esdm_hash_alloc(esdm_sha512, &ctx512))
 		return 1;
 	esdm_hash_init(ctx512);
-	esdm_hash_update(ctx512, msg_512, 3);
+	esdm_hash_update(ctx512, msg_512, sizeof(msg_512));
 	esdm_hash_final(ctx512, act);
-	ret = memcmp(act, exp_512, ESDM_SHA512_SIZE_DIGEST);
+	/* Checks the digest and that a digest off by a byte is rejected */
+	ret = esdm_kat_check(act, exp_512, ESDM_SHA512_SIZE_DIGEST);
+
+	/* A message off by its first byte must not produce that digest */
+	if (!ret)
+		ret = esdm_kat_modify(mod, msg_512, sizeof(mod));
+	if (!ret) {
+		esdm_hash_init(ctx512);
+		esdm_hash_update(ctx512, mod, sizeof(mod));
+		esdm_hash_final(ctx512, act);
+		ret = esdm_kat_check_differs(act, exp_512,
+					     ESDM_SHA512_SIZE_DIGEST);
+	}
+
 	esdm_hash_zero_free(ctx512);
 	return ret ? 1 : 0;
 }

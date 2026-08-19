@@ -519,6 +519,18 @@ static bool esdm_es_tpm2_active(void)
 	return ret;
 }
 
+/* The connection to the TPM is still there. */
+static int esdm_es_tpm2_selftest(void)
+{
+	if (tpm2_fd < 0) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "TPM2 ES: no device - nothing to test\n");
+		return 0;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_tpm2 = {
 	.name = "TPM2.0",
 	.init = esdm_es_tpm2_init,
@@ -534,4 +546,5 @@ struct esdm_es_cb esdm_es_tpm2 = {
 	.state = esdm_es_tpm2_es_state,
 	.reset = NULL,
 	.active = esdm_es_tpm2_active,
+	.selftest = esdm_es_tpm2_selftest,
 };

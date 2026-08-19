@@ -21,10 +21,14 @@
 #include "esdm.h"
 #include "esdm_config_internal.h"
 #include "esdm_crypto.h"
+#include "esdm_drng_mgr.h"
 #include "esdm_es_mgr.h"
+#include "esdm_logger.h"
 #include "esdm_node.h"
+#include "esdm_selftest.h"
 #include "esdm_shm_status.h"
 #include "ret_checkers.h"
+#include "threading_support.h"
 #include "visibility.h"
 
 DSO_PUBLIC
@@ -53,6 +57,12 @@ int esdm_init(void)
 
 	/* Initialize all nodes */
 	esdm_drngs_node_alloc();
+
+	/*
+	 * The initial self test pass, now that there are entropy sources to
+	 * ask.
+	 */
+	esdm_selftest_run();
 
 	/* Initialize the status ESDM shared memory segment */
 	CKINT(esdm_shm_status_init());
@@ -84,6 +94,12 @@ int esdm_reinit(void)
 
 	/* Reinitialize the entropy source manager */
 	CKINT(esdm_es_mgr_reinitialize());
+
+	/*
+	 * The implementations and the entropy sources may all be different ones
+	 * now, so they are put through the same pass as at start up.
+	 */
+	esdm_selftest_run();
 
 	/* Reinitialize the status ESDM shared memory segment */
 	CKINT(esdm_shm_status_reinit());

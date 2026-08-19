@@ -8,6 +8,7 @@ esdm_src = files([
 	'esdm_info.c',
 	'esdm_interface_dev_common.c',
 	'esdm_lib.c',
+	'esdm_selftest.c',
 	'esdm_shm_status.c',
 ])
 

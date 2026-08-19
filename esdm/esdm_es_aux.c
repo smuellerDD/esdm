@@ -713,6 +713,45 @@ static bool esdm_aux_active(void)
 	return true;
 }
 
+/*
+ * The auxiliary pool holds no noise source of its own: what it is, is the
+ * conditioning component every other source is compressed into.
+ */
+static int esdm_aux_selftest(void)
+{
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	const struct esdm_hash_cb *hash_cb = drng->hash_cb;
+	uint32_t digestsize;
+	unsigned int i;
+
+	if (!hash_cb || !hash_cb->hash_digestsize || !hash_cb->hash_name) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "Auxiliary ES: no conditioning hash\n");
+		return -EFAULT;
+	}
+
+	digestsize = esdm_get_digestsize();
+	if (digestsize < ESDM_DRNG_SECURITY_STRENGTH_BITS) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"Auxiliary ES: the conditioning hash produces %u bits, less than the security strength of %u bits\n",
+			digestsize, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		return -EFAULT;
+	}
+
+	for (i = 0; i < ESDM_NUM_AUX_POOLS; i++) {
+		if (!esdm_pools[i].initialized) {
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_ES,
+				"Auxiliary ES: pool %u not initialized - nothing to test\n",
+				i);
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_aux = {
 	.name = "Auxiliary",
 	.init = esdm_aux_init,
@@ -724,4 +763,5 @@ struct esdm_es_cb esdm_es_aux = {
 	.state = esdm_aux_es_state,
 	.reset = esdm_aux_reset,
 	.active = esdm_aux_active,
+	.selftest = esdm_aux_selftest,
 };

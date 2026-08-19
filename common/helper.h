@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,25 @@ extern "C" {
 
 #define member_to_struct(member, data_type, member_var)                        \
 	(data_type *)((char *)(member) - (char *)&((data_type *)0)->member_var)
+
+/* Whole seconds on CLOCK_MONOTONIC, 0 if the clock cannot be read */
+static inline long long esdm_monotonic_now(void)
+{
+	struct timespec now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &now) == -1)
+		return 0;
+
+	return (long long)now.tv_sec;
+}
+
+/* Seconds elapsed since timeout_sec (CLOCK_MONOTONIC), 0 if not yet reached */
+static inline time_t esdm_time_after_now(time_t timeout_sec)
+{
+	time_t curr = (time_t)esdm_monotonic_now();
+
+	return (curr > timeout_sec) ? (curr - timeout_sec) : 0;
+}
 
 static inline int aligned(const uint8_t *ptr, uint32_t alignmask)
 {

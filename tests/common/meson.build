@@ -75,6 +75,14 @@ helper_test = executable(
 		link_with: esdm_common_static_lib,
 	)
 
+selftest_kat_test = executable(
+		'selftest_kat_test',
+		[ 'selftest_kat_test.c' ],
+		include_directories: include_dirs_server,
+		dependencies: common_test_deps,
+		link_with: esdm_common_static_lib,
+	)
+
 os_random_test = executable(
 		'os_random_test',
 		[ 'os_random_test.c' ],
@@ -149,6 +157,7 @@ test('common buffer handling', buffer_test)
 test('common logger', esdm_logger_test)
 test('common helper', helper_test)
 test('common Linux support', linux_support_test)
+test('common known answer test comparison', selftest_kat_test)
 test('common operating system random numbers', os_random_test)
 test('common xoshiro256++ PRNG', xoshiro_test)
 

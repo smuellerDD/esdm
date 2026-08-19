@@ -767,6 +767,50 @@ int esdm_rpcc_set_pkcs11_config_int(const char *token_label, const char *pin,
 				    void *int_data);
 
 /**
+ * @brief State a self test is in
+ */
+enum esdm_rpcc_selftest_state {
+	/** The test has not run */
+	esdm_rpcc_selftest_undone = 0,
+	/** The test passed */
+	esdm_rpcc_selftest_passed = 1,
+	/** The test failed */
+	esdm_rpcc_selftest_failed = 2,
+};
+
+/**
+ * @brief Outcome of a self test run - see esdm_rpcc_selftest
+ */
+struct esdm_rpcc_selftest_result {
+	/** State of the self tests of the hash and the DRNG */
+	enum esdm_rpcc_selftest_state crypto_state;
+	/** State of the self tests of the entropy sources */
+	enum esdm_rpcc_selftest_state es_state;
+	/** Number of entropy sources the pass tested */
+	uint32_t es_sources;
+	/** Number of entropy sources that failed their self test */
+	uint32_t es_failures;
+};
+
+/**
+ * @brief Run the self tests of the ESDM server now and report the outcome
+ * @param [out] result Outcome of the run, or NULL if only the verdict below is
+ * 	of interest. It is filled in on error too, then with what the server
+ * 	reported or with the undone states if nothing was received.
+ * @return: 0 if every self test passed and the ESDM hands out random bits, < 0
+ * 	otherwise - the error of the failing test, -EOPNOTSUPP where an earlier self
+ * 	test failed and still holds the output back, -EINTR where the connection was
+ * 	interrupted and the caller may try again
+ */
+int esdm_rpcc_selftest(struct esdm_rpcc_selftest_result *result);
+
+/**
+ * @brief See esdm_rpcc_selftest
+ */
+int esdm_rpcc_selftest_int(struct esdm_rpcc_selftest_result *result,
+			   void *int_data);
+
+/**
  * @brief RPC-version of esdm_jent_status
  *
  * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore

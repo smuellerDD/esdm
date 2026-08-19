@@ -491,6 +491,22 @@ static bool esdm_sched_active(void)
 	return esdm_config_es_sched_retry() || fd_present;
 }
 
+/*
+ * The kernel interface of the entropy source is still open - see the IRQ ES,
+ * whose scheduler counterpart this is.
+ */
+static int esdm_sched_selftest(void)
+{
+	if (esdm_sched_entropy_fd < 0) {
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"Scheduler ES: kernel interface not available - nothing to test\n");
+		return 0;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_sched = {
 	.name = "Scheduler",
 	.init = esdm_sched_initialize,
@@ -503,4 +519,5 @@ struct esdm_es_cb esdm_es_sched = {
 	.state_json = esdm_sched_es_state_json,
 	.reset = esdm_sched_reset,
 	.active = esdm_sched_active,
+	.selftest = esdm_sched_selftest,
 };
