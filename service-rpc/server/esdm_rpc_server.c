@@ -503,30 +503,14 @@ out:
 	return ret;
 }
 
-/* Read data from the RPC connection into a local buffer. */
-static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
+/*
+ * Handle one request that was received in full into the per-worker request
+ * buffer: validate its header, then unpack and dispatch it.
+ */
+static int esdm_rpcs_process(struct esdm_rpcs_connection *rpc_conn,
+			     ssize_t received)
 {
-	ssize_t received;
 	int ret = 0;
-
-	if (rpc_conn->child_fd < 0)
-		return -EINVAL;
-
-	/*
-	 * The client uses SOCK_SEQPACKET which ensures that always the
-	 * full message is submitted in one send operation. Therefore,
-	 * short-reads cannot occur here and can be ignored.
-	 */
-	received = read(rpc_conn->child_fd, esdm_rpcs_reqbuf,
-			sizeof(esdm_rpcs_reqbuf));
-	if (received < 0) {
-		ret = -errno;
-		goto out;
-	}
-
-	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
-
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "Read %zd bytes\n", received);
 
 	/* We insist on having at least a header received. */
 	if (received < (ssize_t)sizeof(struct esdm_rpc_proto_cs_header)) {
@@ -580,6 +564,60 @@ out:
 	}
 	return ret;
 }
+
+/* Read data from the RPC connection into a local buffer. */
+static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
+{
+	ssize_t received;
+
+	if (rpc_conn->child_fd < 0)
+		return -EINVAL;
+
+	/*
+	 * The client uses SOCK_SEQPACKET which ensures that always the full
+	 * message is submitted in one send operation.
+	 */
+	received = read(rpc_conn->child_fd, esdm_rpcs_reqbuf,
+			sizeof(esdm_rpcs_reqbuf));
+	if (received < 0)
+		return -errno;
+
+	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "Read %zd bytes\n", received);
+
+	return esdm_rpcs_process(rpc_conn, received);
+}
+
+#ifdef ESDM_FUZZING
+/* Documented with its declaration in esdm_rpc_server.h */
+int esdm_rpcs_fuzz_request(ProtobufCService *service, bool privileged,
+			   const uint8_t *data, size_t len, int out_fd)
+{
+	struct esdm_rpcs proto;
+	struct esdm_rpcs_connection rpc_conn;
+
+	if (!service || (len && !data))
+		return -EINVAL;
+
+	/* A read cannot deliver more than the buffer holds */
+	if (len > sizeof(esdm_rpcs_reqbuf))
+		len = sizeof(esdm_rpcs_reqbuf);
+
+	memset(&proto, 0, sizeof(proto));
+	proto.service = service;
+	proto.server_listening_fd = -1;
+	proto.privileged = privileged;
+
+	memset(&rpc_conn, 0, sizeof(rpc_conn));
+	rpc_conn.proto = &proto;
+	rpc_conn.child_fd = out_fd;
+
+	memcpy(esdm_rpcs_reqbuf, data, len);
+
+	return esdm_rpcs_process(&rpc_conn, (ssize_t)len);
+}
+#endif /* ESDM_FUZZING */
 
 static void esdm_rpcs_release_conn(struct esdm_rpcs_connection *rpc_conn)
 {
@@ -1300,6 +1338,43 @@ out:
 
 	return ret;
 }
+
+#ifdef ESDM_FUZZING
+/* Documented with its declaration in esdm_rpc_server.h */
+int esdm_rpcs_fuzz_serve(const char *socket_path, ProtobufCService *service,
+			 bool privileged)
+{
+	struct esdm_rpcs proto;
+	int ret;
+
+	if (!socket_path || !service)
+		return -EINVAL;
+
+	memset(&proto, 0, sizeof(proto));
+	proto.server_listening_fd = -1;
+	proto.privileged = privileged;
+
+	/*
+	 * The socket rather than esdm_rpcs_start_socket(): a harness is not
+	 * socket activated, and a stray LISTEN_FDS in its environment would
+	 * otherwise take it to a descriptor that is not its own.
+	 */
+	CKINT(esdm_rpcs_start(socket_path, 0, service, &proto));
+
+	/*
+	 * What is skipped compared to the interface initialization below is the
+	 * privilege drop and the notifications around it, neither of which a
+	 * harness can do - it does not run as root, and dropping to nobody is
+	 * permanent.
+	 */
+	ret = esdm_rpcs_workerloop(&proto);
+
+out:
+	eesdm_rpcs_stop(&proto);
+
+	return ret;
+}
+#endif /* ESDM_FUZZING */
 
 /*
  * Initialize the RPC server interfaces:

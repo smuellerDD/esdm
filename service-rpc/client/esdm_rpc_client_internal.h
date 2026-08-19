@@ -20,6 +20,7 @@
 #ifndef ESDM_RPC_CLIENT_INTERNAL_H
 #define ESDM_RPC_CLIENT_INTERNAL_H
 
+#include "config.h"
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
 
@@ -33,6 +34,22 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#ifdef ESDM_FUZZING
+/**
+ * @brief Hand one buffer to the client as if the server had answered with it
+ * @param [in] message_desc Message type the client expects in the response
+ * @param [in] data Bytes as they would have arrived from the server
+ * @param [in] len Number of those bytes
+ * @param [in] closure Invoked with the decoded message, as in a real call
+ * @param [in] closure_data Opaque pointer handed to @p closure
+ * @return 0 on success, < 0 on error - a malformed response is rejected, which
+ * 	is the expected outcome
+ */
+int esdm_rpcc_fuzz_response(const ProtobufCMessageDescriptor *message_desc,
+			    const uint8_t *data, size_t len,
+			    ProtobufCClosure closure, void *closure_data);
+#endif /* ESDM_FUZZING */
 
 enum {
 	esdm_rpcc_uninitialized,

@@ -1066,3 +1066,21 @@ WARNING: DO NOT ENABLE FOR PRODUCTION MODE!''')
 
 option('memory-debug', type: 'feature', value: 'disabled',
        description: 'Check and annotate memory allocations for debugging purposes.')
+
+################################################################################
+# Fuzz testing
+################################################################################
+option('fuzzing', type: 'feature', value: 'disabled',
+       description: '''Build the fuzz harnesses in tests/fuzz.
+
+The harnesses drive the RPC interfaces with attacker-controlled bytes: the
+requests the server takes off its two sockets, the responses a client parses,
+and the wire codec underneath both. Building them adds entry points that hand
+a buffer to the request and response handling without a connection behind it,
+which is why this is off unless it is asked for.
+
+With a compiler that offers libFuzzer (clang) each harness is built as a fuzzer
+binary; with any compiler they are also built with a driver that replays their
+seeds, and that one runs as part of the test suite. Combine with
+-Db_sanitize=address,undefined - a fuzzer without sanitizers only finds the
+crashes that are already fatal.''')

@@ -924,6 +924,63 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 	return 0;
 }
 
+#ifdef ESDM_FUZZING
+/* Documented with its declaration in esdm_egd_server.h */
+int esdm_egd_fuzz_stream(bool prediction_resistance, int out_fd,
+			 const uint8_t *data, size_t len)
+{
+	struct esdm_egd_conn conn;
+	size_t pos = 0;
+	int ret = 0;
+
+	if (len && !data)
+		return -EINVAL;
+
+	memset(&conn, 0, sizeof(conn));
+	conn.fd = out_fd;
+	conn.listener = prediction_resistance ? ESDM_EGD_LISTENER_PR :
+						ESDM_EGD_LISTENER_REGULAR;
+	/*
+	 * Who the client is decides whether its entropy claim is believed, so
+	 * it is the credentials of this process - the same answer the accept
+	 * path gets from the socket, and root only where the harness runs as
+	 * root.
+	 */
+	conn.peer_uid = getuid();
+
+	/*
+	 * The input is a sequence of records, each a length byte followed by
+	 * that many bytes, and each record is one read() as the connection
+	 * would see it.
+	 */
+	while (pos < len) {
+		size_t chunk = data[pos++];
+
+		if (chunk > len - pos)
+			chunk = len - pos;
+
+		if (chunk > sizeof(conn.in) - conn.in_len)
+			chunk = sizeof(conn.in) - conn.in_len;
+
+		if (chunk) {
+			memcpy(conn.in + conn.in_len, data + pos, chunk);
+			conn.in_len += chunk;
+			pos += chunk;
+		}
+
+		ret = esdm_egd_process(&conn);
+		if (ret)
+			break;
+	}
+
+	memset_secure(conn.in, 0, sizeof(conn.in));
+	memset_secure(conn.answer, 0, sizeof(conn.answer));
+	memset_secure(conn.out, 0, sizeof(conn.out));
+
+	return ret;
+}
+#endif /* ESDM_FUZZING */
+
 /*
  * Read from the connection and process what became complete.
  *

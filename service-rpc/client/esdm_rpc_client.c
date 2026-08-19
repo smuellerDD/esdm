@@ -595,6 +595,51 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	return ret;
 }
 
+#ifdef ESDM_FUZZING
+/* Documented with its declaration in esdm_rpc_client_internal.h */
+int esdm_rpcc_fuzz_response(const ProtobufCMessageDescriptor *message_desc,
+			    const uint8_t *data, size_t len,
+			    ProtobufCClosure closure, void *closure_data)
+{
+	esdm_rpc_client_connection_t rpc_conn;
+	int sockets[2];
+	int ret;
+
+	if (!message_desc || (len && !data))
+		return -EINVAL;
+
+	/*
+	 * The type and the non-blocking mode of a real client connection - a
+	 * message is delivered whole or not at all, and the read path handles
+	 * its own waiting.
+	 */
+	if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) < 0)
+		return -errno;
+
+	if (write(sockets[1], data, len) != (ssize_t)len) {
+		ret = -EIO;
+		goto out;
+	}
+
+	if (set_fd_nonblocking(sockets[0])) {
+		ret = -EBADF;
+		goto out;
+	}
+
+	memset(&rpc_conn, 0, sizeof(rpc_conn));
+	rpc_conn.fd = sockets[0];
+
+	ret = esdm_rpc_client_read_handler(&rpc_conn, message_desc, closure,
+					   closure_data);
+
+out:
+	close(sockets[0]);
+	close(sockets[1]);
+
+	return ret;
+}
+#endif /* ESDM_FUZZING */
+
 static void esdm_client_invoke(ProtobufCService *service,
 			       unsigned int method_index,
 			       const ProtobufCMessage *input,

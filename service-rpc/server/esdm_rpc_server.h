@@ -23,6 +23,10 @@
 #include <protobuf-c/protobuf-c.h>
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,6 +93,32 @@ void esdm_rpc_server_signal_exit(void);
  * thread_wait_event(), so no condvar broadcast is needed here.
  */
 void esdm_rpc_server_signal_exit_safe(void);
+
+#ifdef ESDM_FUZZING
+/**
+ * @brief Hand one buffer to the server as if it had just been read off a client
+ * 	connection
+ * @param [in] service The RPC service the request is directed at
+ * @param [in] privileged Is this the privileged interface?
+ * @param [in] data Bytes as they would have arrived from the client
+ * @param [in] len Number of those bytes, capped at what a read can deliver
+ * @param [in] out_fd Descriptor the response is written to
+ * @return 0 on success, < 0 on error - the request was rejected, which for a
+ * 	malformed request is the expected outcome
+ */
+int esdm_rpcs_fuzz_request(ProtobufCService *service, bool privileged,
+			   const uint8_t *data, size_t len, int out_fd);
+
+/**
+ * @brief Serve one RPC interface on @p socket_path until the server is stopped
+ * @param [in] socket_path Unix domain socket to bind and listen on
+ * @param [in] service The RPC service the requests are directed at
+ * @param [in] privileged Is this the privileged interface?
+ * @return 0 when the server was asked to exit, < 0 on error
+ */
+int esdm_rpcs_fuzz_serve(const char *socket_path, ProtobufCService *service,
+			 bool privileged);
+#endif /* ESDM_FUZZING */
 
 #ifdef __cplusplus
 }
