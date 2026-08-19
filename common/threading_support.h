@@ -85,6 +85,8 @@ enum esdm_request_type {
 	rpc_handler_priv,
 	cuse_poll,
 	egd_server,
+	drng_reseed,
+	periodic_selftest,
 };
 
 /**
@@ -96,6 +98,12 @@ enum esdm_request_type {
  * @return: 0 on success, < 0 on error
  */
 int thread_init(uint32_t groups);
+
+/**
+ * @brief - Is the thread pool set up?
+ * @return: true if thread_init() completed, false otherwise
+ */
+bool thread_available(void);
 
 /**
  * @brief - Set the stack size used for threads created afterwards

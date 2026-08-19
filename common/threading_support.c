@@ -87,6 +87,9 @@ static uint32_t threads_per_threadgroup = 1;
 
 static pthread_attr_t pthread_attr;
 
+/* Has thread_init() completed? */
+static atomic_bool thread_initialized = false;
+
 /* Stack size applied to newly created threads; 0 means the platform default. */
 static size_t pthread_stacksize = 0;
 
@@ -211,9 +214,15 @@ void thread_set_default_stacksize(size_t stacksize)
 	pthread_stacksize = stacksize;
 }
 
+DSO_PUBLIC
+bool thread_available(void)
+{
+	return atomic_load(&thread_initialized);
+}
+
+DSO_PUBLIC
 int thread_init(uint32_t groups)
 {
-	static uint32_t thread_initialized = 0;
 	pthread_condattr_t cattr;
 	unsigned int i;
 	int ret = 0;
@@ -229,7 +238,7 @@ int thread_init(uint32_t groups)
 	if (groups == 0)
 		groups = 1;
 
-	if (thread_initialized)
+	if (atomic_load(&thread_initialized))
 		goto out;
 
 	CKINT(mutex_w_init(&threads_cleanup, 0, 0));
@@ -302,7 +311,7 @@ int thread_init(uint32_t groups)
 	}
 
 	/* Mark initialized only after everything above succeeded. */
-	thread_initialized = 1;
+	atomic_store(&thread_initialized, true);
 
 out:
 	return ret;
@@ -554,6 +563,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 /*
  * Wait for all threads in spawned by calling thread and fetch the return code.
  */
+DSO_PUBLIC
 int thread_wait(bool ignore_shutdown)
 {
 	unsigned int i;
@@ -635,6 +645,12 @@ int thread_set_name(enum esdm_request_type type, uint32_t id)
 		break;
 	case egd_server:
 		snprintf(name, sizeof(name), "ESDM egd_server");
+		break;
+	case drng_reseed:
+		snprintf(name, sizeof(name), "ESDM drng_rsd");
+		break;
+	case periodic_selftest:
+		snprintf(name, sizeof(name), "ESDM selftest");
 		break;
 	default:
 		snprintf(name, sizeof(name), "ESDM %u", id);
