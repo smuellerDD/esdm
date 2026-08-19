@@ -395,6 +395,16 @@ static int esdm_egd_rand_enable_locking(void *ctx)
 	if (rand == NULL)
 		return 0;
 
+	/*
+	 * Nothing to do for a context that already has its lock. libcrypto
+	 * hands the same context to several users - a DRBG enables locking on
+	 * the parent it was given, and every child does so again - and a second
+	 * lock here would replace the first one while it is still held,
+	 * leaking it and leaving the two users locking different things.
+	 */
+	if (rand->lock != NULL)
+		return 1;
+
 	rand->lock = CRYPTO_THREAD_lock_new();
 	if (rand->lock == NULL) {
 		ESDM_PROV_ERR(rand->prov->core, ESDM_EGD_R_LOCK_FAILURE,
