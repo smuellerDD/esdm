@@ -64,7 +64,14 @@ static atomic_uint jobs_run;
 static atomic_bool release_workers;
 static atomic_uint blocked_workers;
 static atomic_bool signal_target_running;
-static volatile sig_atomic_t signal_received;
+/*
+ * Set by the handler on the thread the signal is delivered to and read by the
+ * one that sent it, so the flag crosses threads: atomic rather than the
+ * volatile sig_atomic_t that would do for a handler and its own thread.
+ */
+static atomic_int signal_received;
+_Static_assert(ATOMIC_INT_LOCK_FREE == 2,
+	       "a handler must not touch a flag whose access takes a lock");
 
 static bool wait_until_uint(atomic_uint *flag, unsigned int value)
 {
@@ -96,8 +103,16 @@ static bool wait_until_bool(atomic_bool *flag)
 
 static void sighup_handler(int sig)
 {
+	/*
+	 * The handler runs on whichever thread the signal was delivered to,
+	 * interrupting it wherever it was - restore what it found, so an errno
+	 * the interrupted code was about to read survives the interruption.
+	 */
+	int saved_errno = errno;
+
 	(void)sig;
-	signal_received = 1;
+	atomic_store(&signal_received, 1);
+	errno = saved_errno;
 }
 
 /* A job that simply records that it ran */
@@ -296,7 +311,7 @@ static int job_await_signal(void *data)
 
 	for (waited = 0; waited < WAIT_TIMEOUT_MS * 1000;
 	     waited += WAIT_STEP_US) {
-		if (signal_received)
+		if (atomic_load(&signal_received))
 			return 0;
 		usleep(WAIT_STEP_US);
 	}
@@ -330,7 +345,7 @@ static void test_send_signal(void)
 	sa.sa_flags = SA_RESTART;
 	CHECK_EQ(sigaction(SIGHUP, &sa, &old), 0);
 
-	signal_received = 0;
+	atomic_store(&signal_received, 0);
 	atomic_store(&signal_target_running, false);
 
 	/*
@@ -342,13 +357,15 @@ static void test_send_signal(void)
 	CHECK(wait_until_bool(&signal_target_running),
 	      "the signal target thread did not start");
 
-	for (waited = 0; !signal_received && waited < WAIT_TIMEOUT_MS * 1000;
+	for (waited = 0;
+	     !atomic_load(&signal_received) && waited < WAIT_TIMEOUT_MS * 1000;
 	     waited += WAIT_STEP_US) {
 		thread_send_signal(1, SIGHUP);
 		usleep(WAIT_STEP_US);
 	}
 
-	CHECK(signal_received, "the signal never reached the thread group");
+	CHECK(atomic_load(&signal_received),
+	      "the signal never reached the thread group");
 
 	CHECK_EQ(thread_wait(false), 0);
 	CHECK_EQ(thread_wait_all(true), 0);
