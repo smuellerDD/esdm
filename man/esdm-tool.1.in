@@ -37,6 +37,28 @@ Print the status of the ESDM and all of its entropy sources.
 .B \-\-status\-json
 Print the same information as a JSON document.
 .TP
+.BR \-\-drng\-status " [=" \fINODE\fR | pr ]
+Print the status of the DRNG instances as an indented JSON document. Without an
+argument every instance is reported as a JSON array; with
+.I NODE
+the instance serving that node, and with
+.B pr
+the prediction resistance instance. The argument is optional and therefore has
+to be given in the
+.BI \-\-drng\-status= NODE
+form.
+.IP
+The status document of
+.B \-\-status
+reports the initial and the prediction resistance DRNG only: there is one node
+instance per CPU, so a document carrying all of them would grow with the size
+of the machine and outgrow the buffer it is transported in. The node instances
+are obtained through this option instead.
+.TP
+.BR \-\-drng\-status\-json " [=" \fINODE\fR | pr ]
+The same information on a single line, for a JSON consumer rather than a
+reader.
+.TP
 .BR \-J ", " \-\-jent\-status
 Print the internal status of the Jitter RNG entropy source.
 .TP
@@ -213,6 +235,15 @@ Show the entropy source status as JSON:
 .RS
 .nf
 esdm\-tool \-\-status\-json
+.fi
+.RE
+.PP
+Show the DRNG instance serving node 3, and every instance at once:
+.PP
+.RS
+.nf
+esdm\-tool \-\-drng\-status=3
+esdm\-tool \-\-drng\-status\-json | jq '.[] | select(.fully_seeded == false)'
 .fi
 .RE
 .SH SEE ALSO

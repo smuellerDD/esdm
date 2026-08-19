@@ -49,7 +49,14 @@ static void esdm_rpcc_status_cb(const StatusResponse *response,
 		return;
 	}
 
-	snprintf(buffer->buf, buffer->buflen, "%s", response->buffer);
+	/*
+	 * A report that does not fit into the caller's buffer is left as far as
+	 * it got - it stays readable - and reported rather than passed off as
+	 * complete.
+	 */
+	if (snprintf(buffer->buf, buffer->buflen, "%s", response->buffer) >=
+	    (int)buffer->buflen)
+		buffer->ret = -EMSGSIZE;
 }
 
 DSO_PUBLIC

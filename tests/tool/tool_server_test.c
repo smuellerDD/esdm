@@ -236,6 +236,66 @@ static void test_status(void)
 	      "--status-json did not produce a valid status document: %.300s",
 	      r.out);
 
+	/*
+	 * The DRNG instances, which the status document above does not carry.
+	 */
+	{
+		const char *const all[] = { "--drng-status", NULL };
+		const char *const all_raw[] = { "--drng-status-json", NULL };
+		const char *const one[] = { "--drng-status=0", NULL };
+		const char *const pr[] = { "--drng-status-json=pr", NULL };
+		const char *const nonode[] = { "--drng-status=99999", NULL };
+
+		announce(all);
+		rc = test_run(&r, all, NULL);
+		CHECK(rc == EXIT_SUCCESS, "--drng-status failed with status %d",
+		      rc);
+		CHECK(r.out[0] == '[',
+		      "--drng-status did not produce an array: %.300s", r.out);
+
+		announce(all_raw);
+		rc = test_run(&r, all_raw, NULL);
+		CHECK(rc == EXIT_SUCCESS,
+		      "--drng-status-json failed with status %d", rc);
+		{
+			const char *nl = strchr(r.out, '\n');
+
+			CHECK(r.out[0] == '[',
+			      "--drng-status-json did not produce an array: %.300s",
+			      r.out);
+			/* One line: a newline, if any, ends the document */
+			CHECK(!nl || !nl[1],
+			      "--drng-status-json is not a single line: %.300s",
+			      r.out);
+		}
+
+		announce(one);
+		rc = test_run(&r, one, NULL);
+		CHECK(rc == EXIT_SUCCESS,
+		      "--drng-status=0 failed with status %d", rc);
+		CHECK(!esdm_status_drng_json_check(r.out),
+		      "--drng-status=0 did not produce a DRNG status: %.300s",
+		      r.out);
+
+		announce(pr);
+		rc = test_run(&r, pr, NULL);
+		CHECK(rc == EXIT_SUCCESS,
+		      "--drng-status-json=pr failed with status %d", rc);
+		CHECK(!esdm_status_drng_json_check(r.out),
+		      "--drng-status-json=pr did not produce a DRNG status: %.300s",
+		      r.out);
+		CHECK(strstr(r.out, "prediction resistance") != NULL,
+		      "--drng-status-json=pr reported another instance: %.300s",
+		      r.out);
+
+		/* A node without an instance is an error, not empty output */
+		announce(nonode);
+		rc = test_run(&r, nonode, NULL);
+		CHECK(rc == EXIT_FAILURE,
+		      "--drng-status of a node without an instance ended with status %d",
+		      rc);
+	}
+
 	/* Present or not, the jitterentropy status must not fail the tool */
 	check_ok(jent);
 

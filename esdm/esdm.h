@@ -211,23 +211,50 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 /**
  * @brief esdm_status() - Get status information on ESDM
  *
+ * The report holds the ESDM properties, one section per entropy source and
+ * one section per DRNG instance.
+ *
+ * A report that does not fit into the buffer is not handed out as complete:
+ * what was assembled stays in the buffer - half a report is still readable -
+ * and -EMSGSIZE says that it is half.
+ *
  * @param [out] buf Buffer to be filled with status information
  * @param [in] buflen Length of buffer
+ *
+ * @return 0 on success, -EMSGSIZE if the report does not fit into the buffer,
+ *	   < 0 on other errors
  */
-void esdm_status(char *buf, size_t buflen);
+int esdm_status(char *buf, size_t buflen);
 
 /**
  * @brief esdm_status_json() - Get status information on ESDM as JSON
- *
- * The reported information is the one of esdm_status(), rendered as a JSON
- * object: the ESDM properties as members and the entropy sources as an array
- * of objects below "entropy_sources". The property names of an entropy source
- * are the labels of its status text.
- *
  * @param [out] buf Buffer to be filled with the JSON document
  * @param [in] buflen Length of buffer
+ * @return 0 on success, -EMSGSIZE if the document does not fit into the buffer,
+ * 	< 0 on other errors
  */
-void esdm_status_json(char *buf, size_t buflen);
+int esdm_status_json(char *buf, size_t buflen);
+
+/**
+ * @brief esdm_status_drng_json() - Get the status of one DRNG instance
+ * @param [in] node Node whose DRNG instance is reported
+ * @param [out] buf Buffer to be filled with the JSON document
+ * @param [in] buflen Length of buffer
+ * @return 0 on success, -ENODEV if the node has no DRNG instance, -EMSGSIZE if
+ * 	the document does not fit into the buffer, < 0 on other errors. -ENODEV is
+ * 	distinct from the errors a transport of this call can raise, so a caller
+ * 	walking the nodes can tell the end of the list from a failure.
+ */
+int esdm_status_drng_json(uint32_t node, char *buf, size_t buflen);
+
+/**
+ * @brief esdm_status_drng_pr_json() - Get the status of the PR DRNG instance
+ * @param [out] buf Buffer to be filled with the JSON document
+ * @param [in] buflen Length of buffer
+ * @return 0 on success, -EMSGSIZE if the document does not fit into the buffer,
+ * 	< 0 on other errors
+ */
+int esdm_status_drng_pr_json(char *buf, size_t buflen);
 
 /**
  * @brief esdm_status_machine() - Get status information on ESDM

@@ -23,6 +23,7 @@ typedef struct StatusResponse StatusResponse;
 typedef struct GetRandomBytesRequest GetRandomBytesRequest;
 typedef struct IsFullySeededResponse IsFullySeededResponse;
 typedef struct GetSeedRequest GetSeedRequest;
+typedef struct DrngStatusRequest DrngStatusRequest;
 typedef struct WriteDataRequest WriteDataRequest;
 
 
@@ -77,6 +78,10 @@ struct  RandValResponse
  **
  * @brief Request to obtain status text.
  * Shared by RpcStatus, RpcStatusJson and RpcJentStatus.
+ * A status text longer than maxlen is truncated. The calls rendering JSON
+ * answer with -EMSGSIZE and an empty buffer instead: a document cut in half is
+ * no JSON document, and a consumer receiving one cannot tell it from what the
+ * ESDM meant to send.
  * @param maxlen Maximum size of buffer
  */
 struct  StatusRequest
@@ -157,6 +162,33 @@ struct  GetSeedRequest
 #define GET_SEED_REQUEST__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&get_seed_request__descriptor) \
 , 0, 0 }
+
+
+/*
+ **
+ * @brief Request to obtain the status of a single DRNG instance.
+ * The status document of RpcStatusJson reports the initial and the prediction
+ * resistance DRNG only - the node instances follow the number of CPUs and
+ * would outgrow the response on a large machine. They are obtained one at a
+ * time with this request instead, addressed by the node they serve. A node
+ * that has no instance is answered with -ENODEV, and a document that does not
+ * fit into maxlen with -EMSGSIZE.
+ * @param maxlen Maximum size of buffer
+ * @param node Node whose DRNG instance is asked for, ignored when
+ *	       prediction_resistance is set
+ * @param prediction_resistance Ask for the prediction resistance instance,
+ *				which is not bound to a node
+ */
+struct  DrngStatusRequest
+{
+  ProtobufCMessage base;
+  uint32_t maxlen;
+  uint32_t node;
+  protobuf_c_boolean prediction_resistance;
+};
+#define DRNG_STATUS_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&drng_status_request__descriptor) \
+, 0, 0, 0 }
 
 
 /*
@@ -309,6 +341,25 @@ GetSeedRequest *
 void   get_seed_request__free_unpacked
                      (GetSeedRequest *message,
                       ProtobufCAllocator *allocator);
+/* DrngStatusRequest methods */
+void   drng_status_request__init
+                     (DrngStatusRequest         *message);
+size_t drng_status_request__get_packed_size
+                     (const DrngStatusRequest   *message);
+size_t drng_status_request__pack
+                     (const DrngStatusRequest   *message,
+                      uint8_t             *out);
+size_t drng_status_request__pack_to_buffer
+                     (const DrngStatusRequest   *message,
+                      ProtobufCBuffer     *buffer);
+DrngStatusRequest *
+       drng_status_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   drng_status_request__free_unpacked
+                     (DrngStatusRequest *message,
+                      ProtobufCAllocator *allocator);
 /* WriteDataRequest methods */
 void   write_data_request__init
                      (WriteDataRequest         *message);
@@ -350,6 +401,9 @@ typedef void (*IsFullySeededResponse_Closure)
                   void *closure_data);
 typedef void (*GetSeedRequest_Closure)
                  (const GetSeedRequest *message,
+                  void *closure_data);
+typedef void (*DrngStatusRequest_Closure)
+                 (const DrngStatusRequest *message,
                   void *closure_data);
 typedef void (*WriteDataRequest_Closure)
                  (const WriteDataRequest *message,
@@ -417,6 +471,10 @@ struct UnprivAccess_Service
                           const StatusRequest *input,
                           StatusResponse_Closure closure,
                           void *closure_data);
+  void (*rpc_drng_status_json)(UnprivAccess_Service *service,
+                               const DrngStatusRequest *input,
+                               StatusResponse_Closure closure,
+                               void *closure_data);
 };
 typedef void (*UnprivAccess_ServiceDestroy)(UnprivAccess_Service *);
 void unpriv_access__init (UnprivAccess_Service *service,
@@ -438,7 +496,8 @@ void unpriv_access__init (UnprivAccess_Service *service,
       function_prefix__ ## rpc_get_write_wakeup_thresh,\
       function_prefix__ ## rpc_get_min_reseed_secs,\
       function_prefix__ ## rpc_jent_status,\
-      function_prefix__ ## rpc_status_json  }
+      function_prefix__ ## rpc_status_json,\
+      function_prefix__ ## rpc_drng_status_json  }
 void unpriv_access__rpc_status(ProtobufCService *service,
                                const StatusRequest *input,
                                StatusResponse_Closure closure,
@@ -495,6 +554,10 @@ void unpriv_access__rpc_status_json(ProtobufCService *service,
                                     const StatusRequest *input,
                                     StatusResponse_Closure closure,
                                     void *closure_data);
+void unpriv_access__rpc_drng_status_json(ProtobufCService *service,
+                                         const DrngStatusRequest *input,
+                                         StatusResponse_Closure closure,
+                                         void *closure_data);
 
 /* --- descriptors --- */
 
@@ -505,6 +568,7 @@ extern const ProtobufCMessageDescriptor status_response__descriptor;
 extern const ProtobufCMessageDescriptor get_random_bytes_request__descriptor;
 extern const ProtobufCMessageDescriptor is_fully_seeded_response__descriptor;
 extern const ProtobufCMessageDescriptor get_seed_request__descriptor;
+extern const ProtobufCMessageDescriptor drng_status_request__descriptor;
 extern const ProtobufCMessageDescriptor write_data_request__descriptor;
 extern const ProtobufCServiceDescriptor unpriv_access__descriptor;
 

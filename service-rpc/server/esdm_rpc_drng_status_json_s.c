@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 - 2026, Stephan Mueller <smueller@chronox.de>
+ * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
  *
  * License: see LICENSE file in root directory
  *
@@ -26,12 +26,15 @@
 #include "math_helper.h"
 #include "unpriv_access.pb-c.h"
 
-void esdm_rpc_status_json(UnprivAccess_Service *service,
-			  const StatusRequest *request,
-			  StatusResponse_Closure closure, void *closure_data)
+void esdm_rpc_drng_status_json(UnprivAccess_Service *service,
+			       const DrngStatusRequest *request,
+			       StatusResponse_Closure closure,
+			       void *closure_data)
 {
 	StatusResponse response = STATUS_RESPONSE__INIT;
+	size_t alloc_size;
 	char *status;
+	int ret;
 	(void)service;
 
 	if (request == NULL) {
@@ -40,13 +43,13 @@ void esdm_rpc_status_json(UnprivAccess_Service *service,
 		return;
 	}
 
-	size_t alloc_size = min_uint32(request->maxlen, ESDM_RPC_MAX_DATA);
+	alloc_size = min_uint32(request->maxlen, ESDM_RPC_MAX_DATA);
 
 	/*
-	 * Guarantee at least one byte (avoid malloc(0)) and use calloc so the
-	 * buffer is always NUL-terminated before it is consumed as a string.
+	 * At least one byte, so the buffer is never allocated empty and is
+	 * NUL-terminated before it is consumed as a string.
 	 */
-	if (alloc_size == 0)
+	if (!alloc_size)
 		alloc_size = 1;
 
 	status = calloc(1, alloc_size);
@@ -56,11 +59,17 @@ void esdm_rpc_status_json(UnprivAccess_Service *service,
 		return;
 	}
 
+	if (request->prediction_resistance)
+		ret = esdm_status_drng_pr_json(status, alloc_size);
+	else
+		ret = esdm_status_drng_json(request->node, status, alloc_size);
+
+	response.ret = ret;
 	/*
-	 * A document that does not fit is reported rather than sent in half -
-	 * the buffer comes back empty and the caller sees -EMSGSIZE.
+	 * A node that has no DRNG instance is reported through the return code
+	 * with an empty document - which is how a caller walking the instances
+	 * learns where they end.
 	 */
-	response.ret = esdm_status_json(status, alloc_size);
 	response.buffer = status;
 	closure(&response, closure_data);
 

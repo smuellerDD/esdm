@@ -134,6 +134,11 @@ void esdm_rpc_status(UnprivAccess_Service *service,
 void esdm_rpc_status_json(UnprivAccess_Service *service,
 			  const StatusRequest *request,
 			  StatusResponse_Closure closure, void *closure_data);
+
+void esdm_rpc_drng_status_json(UnprivAccess_Service *service,
+			       const DrngStatusRequest *request,
+			       StatusResponse_Closure closure,
+			       void *closure_data);
 void esdm_rpc_is_fully_seeded(UnprivAccess_Service *service,
 			      const EmptyRequest *request,
 			      IsFullySeededResponse_Closure closure,

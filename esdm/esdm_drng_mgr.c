@@ -362,25 +362,214 @@ int esdm_drg4_compliant(void)
 		;
 }
 
+/* Defined below - the statistics report when the next reseed falls due */
+static long long esdm_drng_reseed_in(struct esdm_drng *drng);
+
 DSO_PUBLIC
 uint32_t esdm_get_reseed_max_time(void)
 {
-	return esdm_drng_reseed_max_time;
+	return atomic_load(&esdm_drng_reseed_max_time);
 }
 
 DSO_PUBLIC
 void esdm_set_reseed_max_time(uint32_t seconds)
 {
-	if (!seconds)
+	uint32_t val;
+
+	if (!seconds) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_DRNG,
+			"Maximum reseed interval of zero seconds ignored - it stays at %u seconds\n",
+			atomic_load(&esdm_drng_reseed_max_time));
 		return;
+	}
 
 	/* We allow at most 1h reseed time */
-	esdm_drng_reseed_max_time = min_uint32(seconds, 60 * 60);
+	val = min_uint32(seconds, 60 * 60);
+	atomic_store(&esdm_drng_reseed_max_time, val);
+
+	/*
+	 * Log what the ESDM ended up with, not what was asked for: a request
+	 * above the maximum is answered with success and silently capped, and
+	 * the reseeding behaviour that follows is the one of the capped value.
+	 */
+	if (val != seconds) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_DRNG,
+			"Maximum reseed interval of %u seconds capped to %u seconds\n",
+			seconds, val);
+	} else {
+		esdm_logger(LOGGER_STATUS, LOGGER_C_DRNG,
+			    "Maximum reseed interval set to %u seconds\n", val);
+	}
+}
+
+/******************************* Statistics ***********************************/
+
+/* Snapshot the state of one DRNG and hand it to the caller's callback */
+static void esdm_drng_stats_one(struct esdm_drng *drng, const char *type,
+				uint32_t node, bool node_valid,
+				esdm_drng_stats_cb_t cb, void *priv)
+{
+	struct esdm_drng_stats stats;
+	struct timespec now;
+	long long seeded;
+
+	if (!drng)
+		return;
+
+	stats.type = type;
+	stats.node = node;
+	stats.node_valid = node_valid;
+	/*
+	 * The callbacks are installed when the DRNG is allocated - a DRNG that
+	 * has not reached that point yet is reported without a name instead of
+	 * being dereferenced.
+	 */
+	stats.drng_name = drng->drng_cb ? drng->drng_cb->drng_name() : NULL;
+	stats.fully_seeded = atomic_load(&drng->fully_seeded);
+	stats.force_reseed = atomic_load(&drng->force_reseed);
+	stats.reseed_pending = atomic_load(&drng->reseed_pending);
+	stats.initiated = atomic_load(&drng->initiated);
+	stats.requests_until_reseed = atomic_load(&drng->requests);
+	stats.requests_since_fully_seeded =
+		atomic_read_u32(&drng->requests_since_fully_seeded);
+	stats.bits_since_fully_seeded =
+		atomic_read_u32(&drng->request_bits_since_fully_seeded);
+	stats.seed_generation = atomic_load(&drng->seed_generation);
+	stats.seconds_until_reseed = esdm_drng_reseed_in(drng);
+
+	/*
+	 * Both reported times come from the wall clock stamp: the monotonic one
+	 * is staggered across the nodes to spread their reseeds, which would
+	 * show up here as an elapsed time reaching into the future.
+	 */
+	seeded = atomic_load(&drng->last_seeded_wtime);
+	stats.seeded_wtime = seeded;
+	stats.seeded_wtime_valid = (seeded != 0);
+	stats.seeded_time_valid = stats.seeded_wtime_valid &&
+				  (clock_gettime(CLOCK_REALTIME, &now) != -1);
+	stats.seconds_since_reseed =
+		stats.seeded_time_valid ? ((long long)now.tv_sec - seeded) : 0;
+
+	cb(&stats, priv);
+}
+
+void esdm_drng_stats_foreach(esdm_drng_stats_cb_t cb, void *priv)
+{
+	struct esdm_drng **esdm_drng;
+
+	if (!cb)
+		return;
+
+	esdm_drng = esdm_drng_get_instances();
+	if (esdm_drng) {
+		/*
+		 * Bound by the published count and not by the config: the
+		 * latter is recomputed live and may have grown past the size
+		 * the array was allocated with.
+		 */
+		uint32_t nodes = esdm_drng_node_count_get(), node;
+
+		for (node = 0; node < nodes; node++) {
+			struct esdm_drng *drng = esdm_drng[node];
+			/*
+			 * The initial DRNG serves one of the nodes as well -
+			 * report it as such instead of listing it twice.
+			 */
+			const char *type =
+				(drng == &esdm_drng_init) ? "initial" : "node";
+
+			esdm_drng_stats_one(drng, type, node, true, cb, priv);
+		}
+	} else {
+		esdm_drng_stats_one(&esdm_drng_init, "initial", 0, false, cb,
+				    priv);
+	}
+	esdm_drng_put_instances();
+
+	esdm_drng_stats_one(&esdm_drng_pr, "prediction resistance", 0, false,
+			    cb, priv);
+}
+
+void esdm_drng_stats_summary(esdm_drng_stats_cb_t cb, void *priv)
+{
+	struct esdm_drng **esdm_drng;
+
+	if (!cb)
+		return;
+
+	/*
+	 * The initial DRNG serves a node like the others once the node array
+	 * exists, and is reported the way esdm_drng_stats_foreach() reports it
+	 * there, so the two agree on what they say about the same instance.
+	 */
+	esdm_drng = esdm_drng_get_instances();
+	esdm_drng_stats_one(&esdm_drng_init, "initial", 0, esdm_drng != NULL,
+			    cb, priv);
+	esdm_drng_put_instances();
+
+	esdm_drng_stats_one(&esdm_drng_pr, "prediction resistance", 0, false,
+			    cb, priv);
+}
+
+int esdm_drng_stats_node(uint32_t node, esdm_drng_stats_cb_t cb, void *priv)
+{
+	struct esdm_drng **esdm_drng;
+	struct esdm_drng *drng;
+	int ret = 0;
+
+	if (!cb)
+		return -EINVAL;
+
+	esdm_drng = esdm_drng_get_instances();
+	if (!esdm_drng) {
+		/*
+		 * Without the array there is one instance, and it serves every
+		 * node - which is what a caller asking for node 0 wants, and
+		 * all a caller asking for any other node can be told.
+		 */
+		if (node)
+			ret = -ENODEV;
+		else
+			esdm_drng_stats_one(&esdm_drng_init, "initial", 0,
+					    false, cb, priv);
+		goto out;
+	}
+
+	/* Bound by the published count - see esdm_drng_stats_foreach() */
+	if (node >= esdm_drng_node_count_get()) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	drng = esdm_drng[node];
+	if (!drng) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	esdm_drng_stats_one(drng,
+			    (drng == &esdm_drng_init) ? "initial" : "node",
+			    node, true, cb, priv);
+
+out:
+	esdm_drng_put_instances();
+	return ret;
+}
+
+void esdm_drng_stats_pr(esdm_drng_stats_cb_t cb, void *priv)
+{
+	if (!cb)
+		return;
+
+	esdm_drng_stats_one(&esdm_drng_pr, "prediction resistance", 0, false,
+			    cb, priv);
 }
 
 /************************* Random Number Generation ***************************/
 
-/* Inject a data buffer into the DRNG - caller must hold its lock */
+/* Inject a data buffer into the DRNG - caller must hold its lock. */
 static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 			     size_t inbuflen, const uint8_t *addtl,
 			     size_t addtllen, bool fully_seeded,
@@ -757,6 +946,22 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 	return (requests_check || atomic_load(&drng->force_reseed) ||
 		request_bits_since_fully_seeded_reached ||
 		esdm_time_after_now(check_time));
+}
+
+/* Seconds until the reseed of @drng falls due, zero if it is due already. */
+static long long esdm_drng_reseed_in(struct esdm_drng *drng)
+{
+	long long due, now;
+
+	/* Already due - nothing to wait for */
+	if (esdm_drng_must_reseed(drng, false))
+		return 0;
+
+	due = atomic_load(&drng->last_seeded_time) +
+	      (long long)atomic_load(&esdm_drng_reseed_max_time);
+	now = esdm_monotonic_now();
+
+	return (due > now) ? (due - now) : 0;
 }
 
 /******************** Asynchronous reseeding of node DRNGs ********************/

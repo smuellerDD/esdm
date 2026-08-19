@@ -88,6 +88,41 @@ static void test_status_json(void)
 	CHECK(buf[0] == '{', "the JSON status does not start with an object");
 }
 
+/*
+ * The DRNG instances the status document leaves out: they are fetched one at a
+ * time, and the walk ends where the ESDM reports no further node.
+ */
+static void test_drng_status_json(void)
+{
+	char buf[ESDM_RPC_MAX_DATA];
+	uint32_t node;
+	int ret;
+
+	for (node = 0;; node++) {
+		memset(buf, 0, sizeof(buf));
+		esdm_invoke(esdm_rpcc_drng_status_json(node, buf, sizeof(buf)));
+		if (ret == -ENODEV)
+			break;
+
+		CHECK_EQ(ret, 0);
+		CHECK(buf[0] == '{',
+		      "the status of node %u is no JSON object: %.60s", node,
+		      buf);
+
+		/* Every node is served by an instance up to that point */
+		if (ret || node > 1024)
+			break;
+	}
+
+	CHECK(node > 0, "no DRNG instance serves node 0");
+
+	memset(buf, 0, sizeof(buf));
+	esdm_invoke(esdm_rpcc_drng_status_pr_json(buf, sizeof(buf)));
+	CHECK_EQ(ret, 0);
+	CHECK(strstr(buf, "prediction resistance") != NULL,
+	      "the prediction resistance instance is not reported: %.60s", buf);
+}
+
 static void test_jent_status(void)
 {
 	char buf[ESDM_RPC_MAX_DATA];
@@ -360,6 +395,7 @@ int main(int argc, char *argv[])
 	/* Reporting */
 	test_status();
 	test_status_json();
+	test_drng_status_json();
 	test_jent_status();
 	test_get_ent_lvl();
 	test_get_poolsize();

@@ -55,6 +55,11 @@ message RandValResponse {
  *
  * Shared by RpcStatus, RpcStatusJson and RpcJentStatus.
  *
+ * A status text longer than maxlen is truncated. The calls rendering JSON
+ * answer with -EMSGSIZE and an empty buffer instead: a document cut in half is
+ * no JSON document, and a consumer receiving one cannot tell it from what the
+ * ESDM meant to send.
+ *
  * @param maxlen Maximum size of buffer
  */
 message StatusRequest {
@@ -122,6 +127,28 @@ message GetSeedRequest {
  ******************************************************************************/
 
 /**
+ * @brief Request to obtain the status of a single DRNG instance.
+ *
+ * The status document of RpcStatusJson reports the initial and the prediction
+ * resistance DRNG only - the node instances follow the number of CPUs and
+ * would outgrow the response on a large machine. They are obtained one at a
+ * time with this request instead, addressed by the node they serve. A node
+ * that has no instance is answered with -ENODEV, and a document that does not
+ * fit into maxlen with -EMSGSIZE.
+ *
+ * @param maxlen Maximum size of buffer
+ * @param node Node whose DRNG instance is asked for, ignored when
+ *	       prediction_resistance is set
+ * @param prediction_resistance Ask for the prediction resistance instance,
+ *				which is not bound to a node
+ */
+message DrngStatusRequest {
+	uint32 maxlen = 1;
+	uint32 node = 2;
+	bool prediction_resistance = 3;
+}
+
+/**
  * @brief Request to write data into the auxiliary entropy pool and perform an
  *	  immediate reseed.
  *
@@ -165,4 +192,5 @@ service UnprivAccess {
 	 * an already installed client invoke a different call on the server.
 	 */
 	rpc RpcStatusJson (StatusRequest) returns (StatusResponse);
+	rpc RpcDrngStatusJson (DrngStatusRequest) returns (StatusResponse);
 }

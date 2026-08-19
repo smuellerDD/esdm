@@ -441,7 +441,18 @@ int esdm_shm_status_init(void)
 		return ret;
 	}
 
-	esdm_status(esdm_shm_status->info, sizeof(esdm_shm_status->info));
+	/*
+	 * The report is published as far as it fits into the field, which is
+	 * all a reader of the shared memory segment can be given - it is noted
+	 * here rather than passed off as the whole report.
+	 */
+	if (esdm_status(esdm_shm_status->info, sizeof(esdm_shm_status->info)) ==
+	    -EMSGSIZE) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ANY,
+			"Status report truncated to the %zu bytes of the shared memory segment\n",
+			sizeof(esdm_shm_status->info));
+	}
 	esdm_shm_status->infolen = strlen(esdm_shm_status->info);
 	esdm_shm_status->unpriv_threads = esdm_config_online_nodes();
 
