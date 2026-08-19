@@ -228,12 +228,13 @@ static void test_invalid_group(void)
 
 static void test_special_groups(void)
 {
-	static const uint32_t special[] = { ESDM_THREAD_CUSE_POLL_GROUP,
-					    ESDM_THREAD_ES_MONITOR,
-					    ESDM_THREAD_RPC_UNPRIV_GROUP,
-					    ESDM_THREAD_EGD_GROUP };
-	const unsigned int num = (unsigned int)(sizeof(special) /
-						sizeof(special[0]));
+	static const uint32_t special[] = {
+		ESDM_THREAD_CUSE_POLL_GROUP,  ESDM_THREAD_ES_MONITOR,
+		ESDM_THREAD_RPC_UNPRIV_GROUP, ESDM_THREAD_EGD_GROUP,
+		ESDM_THREAD_DRNG_RESEED,      ESDM_THREAD_PERIODIC_SELFTEST
+	};
+	const unsigned int num =
+		(unsigned int)(sizeof(special) / sizeof(special[0]));
 	unsigned int i;
 
 	atomic_store(&jobs_run, 0);
@@ -429,6 +430,8 @@ static void test_thread_names(void)
 	check_thread_name(rpc_handler_priv, 7, "ESDM rpc_p007");
 	check_thread_name(cuse_poll, 0, "ESDM cuse_poll");
 	check_thread_name(egd_server, 0, "ESDM egd_server");
+	check_thread_name(drng_reseed, 0, "ESDM drng_rsd");
+	check_thread_name(periodic_selftest, 0, "ESDM selftest");
 
 	/* A buffer too small for the name is reported rather than truncated */
 	CHECK_EQ(thread_get_name(name, 4), -ERANGE);

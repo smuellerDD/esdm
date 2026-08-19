@@ -748,6 +748,7 @@ int esdm_rpcc_get_min_reseed_secs_int(unsigned int *seconds, void *int_data);
  * @brief urandom_min_reseed_secs /proc write handler
  *
  * The call sets the urandom_min_reseed_secs of the ESDM to the given bit value
+ * where zero asks for a reseed before every request
  *
  * See random(4) for documentation.
  *

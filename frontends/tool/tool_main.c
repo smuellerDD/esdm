@@ -250,6 +250,8 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--selftest\t\t\tRun the self tests of the crypto implementations and of the entropy sources now and report their outcome (needs root)\n");
 	fprintf(stderr,
+		"\t--max-reseed-secs SECS\t\tSet the maximum interval between two DRNG reseeds in seconds, zero to reseed before every request. The ESDM caps the value at its own upper bound. (needs root)\n");
+	fprintf(stderr,
 		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
 	fprintf(stderr,
 		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");
@@ -767,6 +769,104 @@ static int handle_reseed_crng(void)
 	return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
+/* Set the maximum interval between two reseeds of the DRNGs. */
+static int handle_set_max_reseed_secs(unsigned int seconds)
+{
+	unsigned int effective = 0;
+	int ret;
+
+	esdm_rpcc_init_priv_service(NULL);
+	esdm_invoke(esdm_rpcc_set_min_reseed_secs(seconds));
+	esdm_rpcc_fini_priv_service();
+
+	if (ret != 0) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Setting the maximum reseed interval failed!\n");
+		return EXIT_FAILURE;
+	}
+
+	esdm_invoke(esdm_rpcc_get_min_reseed_secs(&effective));
+	if (ret != 0) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_TOOL,
+			"Maximum reseed interval set, but reading it back failed\n");
+		return EXIT_SUCCESS;
+	}
+
+	if (effective != seconds) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_TOOL,
+			"Maximum reseed interval of %u seconds was adjusted by the ESDM to %u seconds\n",
+			seconds, effective);
+	} else if (!effective) {
+		esdm_logger(
+			LOGGER_STATUS, LOGGER_C_TOOL,
+			"Maximum reseed interval: zero seconds - every request reseeds its DRNG\n");
+	} else {
+		esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
+			    "Maximum reseed interval: %u seconds\n", effective);
+	}
+
+	return EXIT_SUCCESS;
+}
+
+/* Name of a self test state as the server reports it */
+static const char *selftest_state_name(enum esdm_rpcc_selftest_state state)
+{
+	switch (state) {
+	case esdm_rpcc_selftest_undone:
+		return "undone";
+	case esdm_rpcc_selftest_passed:
+		return "passed";
+	case esdm_rpcc_selftest_failed:
+		return "failed";
+	}
+
+	return "unknown";
+}
+
+/* Run the self tests in the server now and report what they found. */
+static int handle_selftest(void)
+{
+	struct esdm_rpcc_selftest_result result;
+	int ret;
+
+	esdm_rpcc_init_priv_service(NULL);
+	esdm_invoke(esdm_rpcc_selftest(&result));
+	esdm_rpcc_fini_priv_service();
+
+	/*
+	 * The server always runs both passes before it answers, so two undone
+	 * states mean no answer arrived rather than an outcome worth printing.
+	 */
+	if (ret && result.crypto_state == esdm_rpcc_selftest_undone &&
+	    result.es_state == esdm_rpcc_selftest_undone) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Running the self tests failed: %s\n",
+			    strerror(ret < 0 ? -ret : ret));
+		return EXIT_FAILURE;
+	}
+
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
+		    "Self test of the crypto implementations: %s\n",
+		    selftest_state_name(result.crypto_state));
+	esdm_logger(
+		LOGGER_STATUS, LOGGER_C_TOOL,
+		"Self test of the entropy sources: %s (%u tested, %u failed)\n",
+		selftest_state_name(result.es_state), result.es_sources,
+		result.es_failures);
+
+	if (ret) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL, "Self test failed: %s\n",
+			    strerror(ret < 0 ? -ret : ret));
+		return EXIT_FAILURE;
+	}
+
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL, "Self tests passed\n");
+
+	return EXIT_SUCCESS;
+}
+
 static int handle_is_running(void)
 {
 	int i;
@@ -1117,6 +1217,8 @@ int main(int argc, char **argv)
 	char *fips_target_file = NULL;
 	char *fips_check_file = NULL;
 	bool set_pkcs11_config = false;
+	bool set_max_reseed_secs = false;
+	unsigned int max_reseed_secs = 0;
 	char *pkcs11_pin = NULL;
 	char *pkcs11_token_label = NULL;
 	int i;
@@ -1424,6 +1526,65 @@ int main(int argc, char **argv)
 				/* status-json */
 				status_json = true;
 				break;
+			case 41:
+				/* max-reseed-secs */
+				{
+					long val = parse_long_arg(
+						optarg, "max reseed seconds");
+
+					/*
+					 * Zero is a value of its own - it asks
+					 * for a reseed before every request -
+					 * so only the range is checked here.
+					 */
+					if (val < 0 ||
+					    (unsigned long)val > UINT32_MAX) {
+						fprintf(stderr,
+							"esdm-tool: max reseed seconds out of range\n");
+						exit(EXIT_FAILURE);
+					}
+					set_max_reseed_secs = true;
+					max_reseed_secs = (unsigned int)val;
+				}
+				break;
+			case 42:
+				/* selftest */
+				selftest = true;
+				break;
+			case 43:
+			case 44:
+				/* drng-status / drng-status-json */
+				drng_status = true;
+				drng_status_raw = (opt_index == 44);
+
+				/*
+				 * Without an argument every instance is
+				 * reported.
+				 */
+				if (!optarg) {
+					drng_status_target = DRNG_STATUS_ALL;
+					break;
+				}
+
+				if (!strcmp(optarg, "pr")) {
+					drng_status_target = DRNG_STATUS_PR;
+					break;
+				}
+
+				{
+					long val = parse_long_arg(optarg,
+								  "DRNG node");
+
+					if (val < 0 ||
+					    (unsigned long)val > UINT32_MAX) {
+						fprintf(stderr,
+							"esdm-tool: DRNG node out of range\n");
+						exit(EXIT_FAILURE);
+					}
+					drng_status_target = DRNG_STATUS_NODE;
+					drng_status_node = (uint32_t)val;
+				}
+				break;
 			}
 			break;
 		case 's':
@@ -1515,7 +1676,8 @@ int main(int argc, char **argv)
 	/* check for privileged commands */
 	if (geteuid() &&
 	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os ||
-	     seed_via_os || endless_stress || set_pkcs11_config)) {
+	     seed_via_os || endless_stress || set_pkcs11_config ||
+	     set_max_reseed_secs || selftest)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -1606,6 +1768,10 @@ int main(int argc, char **argv)
 		return_val = handle_clear_pool();
 	} else if (reseed_crng) {
 		return_val = handle_reseed_crng();
+	} else if (set_max_reseed_secs) {
+		return_val = handle_set_max_reseed_secs(max_reseed_secs);
+	} else if (selftest) {
+		return_val = handle_selftest();
 	} else if (set_pkcs11_config) {
 		return_val = handle_set_pkcs11_config(pkcs11_token_label,
 						      pkcs11_pin);

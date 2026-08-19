@@ -196,9 +196,48 @@ void esdm_drng_mgr_finalize(void);
  * @brief Is the DRNG manager shutting down?
  */
 bool esdm_drng_mgr_terminating(void);
+
+/**
+ * @brief Put the asynchronous reseed worker on duty
+ *
+ * A reseed interval of zero seconds keeps one off duty - the requests reseed
+ * themselves then, see esdm_set_reseed_max_time().
+ *
+ * @return true if a worker is on duty afterwards
+ */
+bool esdm_drng_mgr_reseed_worker_start(void);
+
+/**
+ * @brief Is the asynchronous reseed worker on duty?
+ */
+bool esdm_drng_mgr_reseed_worker_running(void);
+
+/**
+ * @brief Number of passes the asynchronous reseed worker completed
+ */
+uint64_t esdm_drng_mgr_reseed_worker_passes(void);
+
+/**
+ * @brief Seconds until the asynchronous reseed worker looks at the DRNGs again
+ * @param [out] secs Seconds until the next pass, zero if it is due now, only
+ * 	set when a pass is scheduled
+ * @return true if a pass is scheduled, false if none is - the worker is not on
+ * 	duty or has not finished its first pass yet
+ */
+bool esdm_drng_mgr_reseed_worker_next_pass(uint64_t *secs);
+
+/**
+ * @brief Stop the asynchronous reseed worker
+ */
+void esdm_drng_mgr_reseed_worker_stop(void);
 bool esdm_get_available(void);
 void esdm_drng_reset(struct esdm_drng *drng);
-void esdm_drng_seed_work(void);
+
+/**
+ * @brief Seed the DRNGs with the entropy that arrived, unless that is running
+ * @return true if a seeding was performed
+ */
+bool esdm_drng_seed_work_try(void);
 void esdm_try_fully_seeded(void);
 void esdm_force_fully_seeded(void);
 void esdm_force_fully_seeded_all_drbgs(void);

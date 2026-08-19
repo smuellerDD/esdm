@@ -1008,12 +1008,8 @@ void esdm_es_add_entropy(void)
 	if (!esdm_es_reseed_wanted())
 		return;
 
-	/* Ensure that the seeding only occurs once at any given time. */
-	if (!esdm_pool_trylock())
-		return;
-
-	/* Seed the DRNG with any available noise. */
-	esdm_drng_seed_work();
+	/* Seed the DRNGs with any available noise. */
+	esdm_drng_seed_work_try();
 }
 
 /* Fill the seed buffer with data from the noise sources */

@@ -167,7 +167,8 @@ Set that level.
 Maximum time in seconds between two reseed operations.
 .TP
 .BI "void esdm_set_reseed_max_time(uint32_t " seconds ");"
-Set that time.
+Set that time. Zero seconds reseeds before every request, one hour is the
+maximum accepted.
 .SH CONFIGURATION
 .I esdm_config.h
 declares the settings that may be queried and changed at runtime, in
