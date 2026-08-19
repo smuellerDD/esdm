@@ -484,7 +484,13 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	if (!interrupted && received < 0 && !ret)
 		ret = -EAGAIN;
 
-	if (!interrupted && header &&
+	/*
+	 * Nothing is decoded unless the header checked out: the loop above
+	 * leaves a rejected response behind with its error in ret, and its
+	 * message length is then a number the server sent rather than one the
+	 * receive buffer holds.
+	 */
+	if (!interrupted && !ret && header &&
 	    header->status_code == PROTOBUF_C_RPC_STATUS_CODE_SUCCESS) {
 		/*
 		 * We now have a filled buffer that has a header and received
@@ -564,6 +570,14 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
 			    "Request interrupted\n");
+
+		/*
+		 * The request is at the server and it answers everything it
+		 * accepted, so the answer to the request just abandoned is
+		 * still to come.
+		 */
+		reset_conn_socket(rpc_conn);
+
 		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
 	} else {

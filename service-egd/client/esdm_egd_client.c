@@ -856,6 +856,7 @@ static int esdm_egd_client_get_pid_op(struct esdm_egd_client *client, void *arg)
 	/* The PID arrives as a string, without a terminating NUL. */
 	char response[UINT8_MAX + 1];
 	uint8_t len;
+	char *end;
 	long value;
 	int ret;
 
@@ -877,8 +878,24 @@ static int esdm_egd_client_get_pid_op(struct esdm_egd_client *client, void *arg)
 	response[len] = '\0';
 
 	errno = 0;
-	value = strtol(response, NULL, 10);
-	if (errno || value <= 0)
+	value = strtol(response, &end, 10);
+
+	/*
+	 * The length prefix covers the digits and nothing else, so a response
+	 * carrying anything besides them - or no digit at all - is not this
+	 * protocol and its number is not to be believed.
+	 */
+	if (errno || end == response || end != response + len)
+		return -EPROTO;
+
+	/*
+	 * A PID does not have to fit into a pid_t just because it arrived as
+	 * text: the peer decides how many digits it sends, and a number beyond
+	 * the type truncates on the way in - to a value naming a different
+	 * process as often as to a negative one, which is what a caller passing
+	 * it to kill(2) turns into a whole process group.
+	 */
+	if (value <= 0 || (long)(pid_t)value != value)
 		return -EPROTO;
 
 	*pid = (pid_t)value;
