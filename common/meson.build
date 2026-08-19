@@ -5,7 +5,9 @@ common_src = files([
 	'esdm_logger.c',
 	'helper.c',
 	'linux_support.c',
+	'os_random.c',
 	'threading_support.c',
+	'xoshiro_prng.c',
 ])
 
 if get_option('systemd').enabled()

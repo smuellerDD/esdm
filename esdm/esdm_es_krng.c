@@ -21,120 +21,19 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
-#include <limits.h>
 #include <sys/random.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
-#include <poll.h>
-#include <fcntl.h>
-#include <unistd.h>
 
-#include <stdatomic.h>
+#include <string.h>
 #include "config.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_krng.h"
+#include "memset_secure.h"
+#include "os_random.h"
 #include "esdm_es_sched.h"
 #include "helper.h"
 #include "esdm_logger.h"
-
-/*
- * Shall we use select() to wait for an initialization of the kernel RNG or
- * shall we use getrandom(GRND_NONBLOCK) and adjust the entropy rate
- * accordingly?
- */
-#undef ESDM_KRNG_ES_SELECT
-
-static uint32_t esdm_krng_properties_entropylevel(uint32_t entropylevel);
-
-#ifdef ESDM_KRNG_ES_SELECT
-static uint32_t krng_entropy = 0;
-static atomic_int esdm_krng_cancel = 0;
-
-static int esdm_krng_adjust_entropy(void)
-{
-	uint32_t entropylevel;
-
-	krng_entropy = esdm_config_es_krng_entropy_rate();
-
-	entropylevel = esdm_krng_properties_entropylevel(krng_entropy);
-	esdm_logger(
-		LOGGER_DEBUG, LOGGER_C_ES,
-		"Kernel RNG is fully seeded, setting entropy rate to %u bits of entropy\n",
-		entropylevel);
-
-	/* Do not trigger a reseed if the DRNG manger is not available */
-	if (!esdm_get_available())
-		return 0;
-
-	return 0;
-}
-
-/*
- * Initialize the entropy source: set entropy rate to zero and wait until
- * the kernel tells us that sufficient entropy is available on /dev/random
- */
-static int esdm_krng_init(void)
-{
-	struct timespec timeout;
-	struct pollfd pfd;
-	int ret = 0, fd = -1;
-
-	/* Re-invocation of init function is safe */
-
-#define DEVRANDOM "/dev/random"
-	fd = open(DEVRANDOM, O_RDONLY | O_CLOEXEC);
-	if (fd < 0) {
-		int errsv = errno;
-
-		esdm_logger(LOGGER_ERR, LOGGER_C_ES, "Open of %s failed: %s\n",
-			    DEVRANDOM, strerror(errno));
-		return -errsv;
-	}
-
-	/* Select shall return after 100ms to check for cancel flag. */
-	timeout.tv_sec = 0;
-	timeout.tv_nsec = 100 * 1000 * 1000;
-
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "Polling %s\n", DEVRANDOM);
-
-	/* only /dev/random implements polling */
-	do {
-		pfd.fd = fd;
-		pfd.events = POLLIN;
-		pfd.revents = 0;
-		ret = ppoll(&pfd, 1, &timeout, NULL);
-
-		if (ret == -1 && errno != EINTR) {
-			esdm_logger(LOGGER_ERR, LOGGER_C_ES,
-				    "Poll returned with error %s\n",
-				    strerror(errno));
-			break;
-		}
-
-		if (ret > 0) {
-			esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
-				    "Wakeup call for select on %s\n",
-				    DEVRANDOM);
-			esdm_krng_adjust_entropy();
-			break;
-		}
-
-		if (atomic_load(&esdm_krng_cancel))
-			break;
-
-	} while (errno == EINTR);
-
-	close(fd);
-	return 0;
-}
-
-static void esdm_krng_fini(void)
-{
-	atomic_store(&esdm_krng_cancel, 1);
-}
-
-#else /* ESDM_KRNG_ES_SELECT */
 
 static uint32_t krng_entropy = ESDM_KERNEL_RNG_ENTROPY_RATE;
 
@@ -153,8 +52,6 @@ static int esdm_krng_init(void)
 
 	return 0;
 }
-
-#endif /* ESDM_KRNG_ES_SELECT */
 
 /*
  * This function adjusts the entropy level depending on system properties
@@ -197,30 +94,6 @@ static uint32_t esdm_krng_poolsize(void)
 	return esdm_krng_entropylevel(esdm_security_strength());
 }
 
-static inline ssize_t __getrandom(uint8_t *buffer, size_t bufferlen,
-				  unsigned int flags)
-{
-	ssize_t ret, totallen = 0;
-
-	if (bufferlen > INT_MAX)
-		return -EINVAL;
-
-	do {
-#ifdef USE_GLIBC_GETRANDOM
-		ret = getrandom(buffer, bufferlen, flags);
-#else
-		ret = syscall(__NR_getrandom, buffer, bufferlen, flags);
-#endif
-		if (ret > 0) {
-			bufferlen -= (size_t)ret;
-			buffer += ret;
-			totallen += ret;
-		}
-	} while ((ret > 0 || errno == EINTR) && bufferlen);
-
-	return ((ret < 0) ? -errno : totallen);
-}
-
 /*
  * esdm_krng_get() - Get kernel RNG entropy
  *
@@ -231,7 +104,8 @@ static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			  bool __unused unused)
 {
 	uint32_t ent_bits = esdm_krng_entropylevel(requested_bits);
-	ssize_t ret = __getrandom(eb_es->e, requested_bits >> 3, GRND_NONBLOCK);
+	ssize_t ret =
+		esdm_os_getrandom(eb_es->e, requested_bits >> 3, GRND_NONBLOCK);
 
 	if (ret < 0) {
 		if (ret == -EAGAIN) {
@@ -265,6 +139,38 @@ static void esdm_krng_es_state(char *buf, size_t buflen)
 static bool esdm_krng_active(void)
 {
 	return true;
+}
+
+/*
+ * The kernel still answers getrandom(2), and with something other than a
+ * constant.
+ */
+static int esdm_krng_selftest(void)
+{
+	uint8_t first[16], second[16];
+	int ret = 0;
+
+	if (esdm_os_getrandom(first, sizeof(first), GRND_NONBLOCK) !=
+		    (ssize_t)sizeof(first) ||
+	    esdm_os_getrandom(second, sizeof(second), GRND_NONBLOCK) !=
+		    (ssize_t)sizeof(second)) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "KernelRNG ES: getrandom(2) did not deliver\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (!memcmp(first, second, sizeof(first))) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "KernelRNG ES: getrandom(2) repeated its output\n");
+		ret = -EFAULT;
+	}
+
+out:
+	memset_secure(first, 0, sizeof(first));
+	memset_secure(second, 0, sizeof(second));
+
+	return ret;
 }
 
 struct esdm_es_cb esdm_es_krng = {
