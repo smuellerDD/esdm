@@ -310,4 +310,8 @@ conf_data.set('ESDM_AUX_INPUT_HAS_FULL_ENTROPY', get_option('aux-has-full-entrop
 
 conf_data.set('ESDM_MEMORY_DEBUG', get_option('memory-debug').enabled())
 
+# Guards the entry points the fuzz harnesses drive the RPC interfaces
+# through - see tests/fuzz.
+conf_data.set('ESDM_FUZZING', get_option('fuzzing').enabled())
+
 configure_file(output: 'config.h', configuration : conf_data)

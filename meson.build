@@ -316,6 +316,11 @@ testdirs = [
 	'tests/aux-client',
 	'tests/tool',
 	]
+if get_option('fuzzing').enabled()
+testdirs += [
+	'tests/fuzz',
+]
+endif
 if get_option('openssl-rand-provider').enabled()
 testdirs += [
 	'tests/openssl-rand-provider',

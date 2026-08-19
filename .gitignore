@@ -3,7 +3,11 @@
 
 # meson / build artifacts
 /build/
+/build-fuzz/
 /builddir/
+
+# core dumps - the fuzz harnesses abort on a finding by design
+core.*
 
 # nix build results
 /result

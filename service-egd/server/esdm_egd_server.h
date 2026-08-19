@@ -21,6 +21,10 @@
 #define ESDM_EGD_SERVER_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -126,6 +130,20 @@ void esdm_egd_server_fini(void);
  * invoked from the privileged context performing the IPC cleanup.
  */
 void esdm_egd_server_cleanup(void);
+
+#ifdef ESDM_FUZZING
+/**
+ * @brief Hand one stream of client bytes to the EGD connection state machine
+ * @param [in] prediction_resistance Serve as the prediction resistance socket?
+ * @param [in] out_fd Descriptor the responses are written to
+ * @param [in] data The records, see above
+ * @param [in] len Number of bytes in @p data
+ * @return 0 when the connection remained usable, < 0 when it would have been
+ * 	closed - which for a malformed stream is the expected outcome
+ */
+int esdm_egd_fuzz_stream(bool prediction_resistance, int out_fd,
+			 const uint8_t *data, size_t len);
+#endif /* ESDM_FUZZING */
 
 #ifdef __cplusplus
 }
