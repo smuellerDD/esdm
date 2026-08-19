@@ -123,6 +123,22 @@ privilege drop, and the privileged calls are refused after their request was
 decoded unless the harness happens to run as root, which is the part being
 fuzzed either way.
 
+That the paths are fixed also means a machine already running an esdm-server
+owns them, and then these harnesses cannot bind: the sockets are there, but
+they are somebody else's. They say so and stand down with exit code 77, which
+`meson test` reports as a skipped test - the alternative is worse than a
+failure, as a harness that carried on would send every call at a socket nobody
+is accepting on, spend the client's ten connect attempts of a quarter second
+each, and produce a run that looks like it is working while testing nothing.
+Stop the esdm-server, or give the run a mount namespace with a private `/run`:
+
+    unshare -r -m -i --propagation private /bin/sh -c \
+        'mount -t tmpfs tmpfs /dev/shm; mount -t tmpfs tmpfs /run; exec "$@"' \
+        _ build-fuzz/tests/fuzz/rpc_client_fuzz corpus
+
+The same namespace answers the ESDM's status segment and its named semaphores,
+which are fixed names as well and are held by a server that has run as root.
+
 ## Building
 
     CC=clang meson setup build-fuzz -Dfuzzing=enabled \

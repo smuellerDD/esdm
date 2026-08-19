@@ -78,6 +78,17 @@ int esdm_init(void);
 /* How long the server is given to come up, in 10ms slices */
 #define FUZZ_SERVER_SLICES 500
 
+/* Long enough for a serve call that cannot bind to have said so */
+#define FUZZ_SERVER_SETTLE_MS 100
+
+/*
+ * Exit code meson reads as "this test was skipped". A machine running an
+ * esdm-server of its own owns the socket paths this harness needs, which is a
+ * reason to stand down rather than to fail: there is nothing wrong with the
+ * code under test, it simply cannot be reached from here.
+ */
+#define FUZZ_EXIT_SKIP 77
+
 static uint64_t fuzz_area[(FUZZ_BUF_MAX + FUZZ_GUARD) / sizeof(uint64_t)];
 
 struct fuzz_input {
@@ -399,13 +410,34 @@ static void fuzz_one_call(struct fuzz_input *in)
  * The server behind the calls
  ******************************************************************************/
 
+/*
+ * Set by an interface thread whose serve call returned. It only returns when it
+ * could not start, which is a reason to stop rather than to carry on: the
+ * socket paths are fixed at build time, so a machine already running an
+ * esdm-server owns them, and the paths are there whether or not this harness
+ * put them there. Going on regardless fuzzes nothing - every call reaches
+ * somebody else's socket, or none at all, and spends the client's connect
+ * retries before failing - while the run looks like it is working.
+ */
+static volatile bool fuzz_serve_stopped;
+
+static void fuzz_serve_report(const char *which, int ret)
+{
+	fprintf(stderr, "the %s RPC server did not run: %s\n", which,
+		strerror(ret < 0 ? -ret : ret));
+	fuzz_serve_stopped = true;
+}
+
 /* The two interface threads. */
 static void *fuzz_serve_unpriv(void *unused)
 {
 	(void)unused;
 
-	esdm_rpcs_fuzz_serve(ESDM_RPC_UNPRIV_SOCKET,
-			     (ProtobufCService *)&unpriv_access_service, false);
+	fuzz_serve_report("unprivileged",
+			  esdm_rpcs_fuzz_serve(
+				  ESDM_RPC_UNPRIV_SOCKET,
+				  (ProtobufCService *)&unpriv_access_service,
+				  false));
 
 	return NULL;
 }
@@ -414,8 +446,11 @@ static void *fuzz_serve_priv(void *unused)
 {
 	(void)unused;
 
-	esdm_rpcs_fuzz_serve(ESDM_RPC_PRIV_SOCKET,
-			     (ProtobufCService *)&priv_access_service, true);
+	fuzz_serve_report("privileged",
+			  esdm_rpcs_fuzz_serve(
+				  ESDM_RPC_PRIV_SOCKET,
+				  (ProtobufCService *)&priv_access_service,
+				  true));
 
 	return NULL;
 }
@@ -428,6 +463,8 @@ static bool fuzz_wait_for_socket(const char *path)
 	struct stat sb;
 
 	for (i = 0; i < FUZZ_SERVER_SLICES; i++) {
+		if (fuzz_serve_stopped)
+			return false;
 		if (!stat(path, &sb) && S_ISSOCK(sb.st_mode))
 			return true;
 		nanosleep(&ts, NULL);
@@ -438,7 +475,11 @@ static bool fuzz_wait_for_socket(const char *path)
 
 int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
+	struct timespec settle = { .tv_sec = 0,
+				   .tv_nsec = FUZZ_SERVER_SETTLE_MS * 1000 *
+					      1000 };
 	pthread_t unpriv_thread, priv_thread;
+	unsigned int ent_cnt;
 
 	(void)argc;
 	(void)argv;
@@ -469,16 +510,37 @@ int LLVMFuzzerInitialize(int *argc, char ***argv)
 		exit(1);
 	}
 
-	if (!fuzz_wait_for_socket(ESDM_RPC_UNPRIV_SOCKET) ||
+	/*
+	 * A serve call that cannot bind returns at once, so this is all the
+	 * grace the threads need to have reported it - and the socket paths
+	 * exist either way when somebody else owns them, which is why their
+	 * presence alone says nothing.
+	 */
+	nanosleep(&settle, NULL);
+
+	if (fuzz_serve_stopped ||
+	    !fuzz_wait_for_socket(ESDM_RPC_UNPRIV_SOCKET) ||
 	    !fuzz_wait_for_socket(ESDM_RPC_PRIV_SOCKET)) {
 		fprintf(stderr, "the RPC server did not come up\n");
-		exit(1);
+		exit(FUZZ_EXIT_SKIP);
 	}
 
 	if (esdm_rpcc_init_unpriv_service(NULL) ||
 	    esdm_rpcc_init_priv_service(NULL)) {
 		fprintf(stderr, "cannot reach the RPC server\n");
 		exit(1);
+	}
+
+	/*
+	 * And one round trip, because reaching the socket is not the same as
+	 * being served over it: what answers has to be the server this harness
+	 * started, not a leftover path or a daemon of the machine.
+	 */
+	if (esdm_rpcc_rnd_get_ent_cnt(&ent_cnt)) {
+		fprintf(stderr,
+			"the RPC server does not answer - is an esdm-server of this machine holding %s?\n",
+			ESDM_RPC_UNPRIV_SOCKET);
+		exit(FUZZ_EXIT_SKIP);
 	}
 
 	return 0;
