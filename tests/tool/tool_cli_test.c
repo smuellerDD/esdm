@@ -116,6 +116,7 @@ static void test_malformed_numbers(void)
 		{ "--stress-request-size", "x", "stress-request-size" },
 		{ "--timeout-msec", "", "timeout-msec" },
 		{ "--reseed-delay-ms", "1.5", "reseed-delay-ms" },
+		{ "--max-reseed-secs", "10min", "max reseed seconds" },
 	};
 	size_t i;
 
@@ -145,6 +146,8 @@ static void test_out_of_range_numbers(void)
 		{ "-B", "4294967296", "out of range" },
 		{ "--stress-request-size", "-1", "out of range" },
 		{ "--benchmark-mode", "sideways", "full, pr or both" },
+		/* Zero is a value of its own here - a negative one is not */
+		{ "--max-reseed-secs", "-1", "out of range" },
 	};
 	size_t i;
 
@@ -172,8 +175,16 @@ static void test_privileged_commands_refused(void)
 	static const char *const cases[][2] = {
 		{ "--clear-pool", NULL },
 		{ "--reseed-crng", NULL },
+		{ "--max-reseed-secs", "60" },
+		/*
+		 * Zero asks for a reseed before every request rather than
+		 * being refused up front, so it gets as far as the root check
+		 * like any other interval.
+		 */
+		{ "--max-reseed-secs", "0" },
 		{ "-W", "some entropy" },
 		{ "--endless-stress", NULL },
+		{ "--selftest", NULL },
 		{ "--pkcs11-pin", "1234" },
 		{ "--pkcs11-token-label", "a-token" },
 #ifdef ESDM_HAS_AUX_CLIENT

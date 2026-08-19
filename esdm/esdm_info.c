@@ -200,6 +200,18 @@ int esdm_status(char *buf, size_t buflen)
 	esdm_drng_stats_summary(esdm_drng_status_txt, &txt);
 
 	/*
+	 * The thread that reseeds the DRNGs before a request runs into their
+	 * reseed condition.
+	 */
+	len = esdm_used_buf_len(buf, buflen);
+	snprintf(buf + len, buflen - len,
+		 "Reseed worker properties:\n"
+		 " Running: %s\n"
+		 " Reseed interval in seconds: %u\n",
+		 esdm_drng_mgr_reseed_worker_running() ? "true" : "false",
+		 esdm_get_reseed_max_time());
+
+	/*
 	 * The self tests of the hash and the DRNG implementation and of the
 	 * entropy sources.
 	 */
@@ -536,7 +548,8 @@ DSO_PUBLIC
 int esdm_status_json(char *buf, size_t buflen)
 {
 	struct esdm_drng *drng = esdm_drng_init_instance();
-	struct json_object *root, *compliance, *sources, *drngs, *selftest;
+	struct json_object *root, *compliance, *sources, *drngs, *worker,
+		*selftest;
 	int ret = -ENOMEM;
 	uint32_t i;
 
@@ -551,8 +564,10 @@ int esdm_status_json(char *buf, size_t buflen)
 	compliance = json_object_new_array();
 	sources = json_object_new_array();
 	drngs = json_object_new_array();
+	worker = json_object_new_object();
 	selftest = json_object_new_object();
-	if (!root || !compliance || !sources || !drngs || !selftest) {
+	if (!root || !compliance || !sources || !drngs || !worker ||
+	    !selftest) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Status information cannot be created\n");
 		goto out;
@@ -622,6 +637,15 @@ int esdm_status_json(char *buf, size_t buflen)
 	drngs = NULL;
 
 	json_object_object_add(
+		worker, "running",
+		json_object_new_boolean(esdm_drng_mgr_reseed_worker_running()));
+	json_object_object_add(
+		worker, "reseed_interval_seconds",
+		json_object_new_int64(esdm_get_reseed_max_time()));
+	json_object_object_add(root, "reseed_worker", worker);
+	worker = NULL;
+
+	json_object_object_add(
 		selftest, "state",
 		json_object_new_string(esdm_selftest_crypto_state_name()));
 	json_object_object_add(
@@ -653,6 +677,7 @@ out:
 	json_object_put(compliance);
 	json_object_put(sources);
 	json_object_put(drngs);
+	json_object_put(worker);
 	json_object_put(selftest);
 
 	return ret;

@@ -454,6 +454,11 @@ uint32_t esdm_get_reseed_max_time(void);
 
 /**
  * @brief Set maximum reseed interval in seconds
+ *
+ * A value of zero seconds asks for a reseed before every request rather than
+ * for none: the reseed is then part of the request that runs into it and is
+ * neither performed ahead of it nor deferred past it. Values above one hour
+ * are capped to one hour.
  */
 void esdm_set_reseed_max_time(uint32_t seconds);
 

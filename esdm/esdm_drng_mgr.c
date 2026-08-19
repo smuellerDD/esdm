@@ -21,6 +21,7 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -48,14 +49,19 @@
 #include "ret_checkers.h"
 #include "threading_support.h"
 #include "visibility.h"
+#include "xoshiro_prng.h"
 
 /*
  * Maximum number of seconds between DRNG reseed intervals of the DRNG. Note,
  * this is enforced with the next request of random numbers from the
  * DRNG. Setting this value to zero implies a reseeding attempt before every
  * generated random number.
+ *
+ * Atomic because it has no owning lock: esdm_set_reseed_max_time() writes it
+ * from whichever thread services the request (the privileged RPC handler),
+ * while the generate paths and the reseed worker read it without any lock.
  */
-static uint32_t esdm_drng_reseed_max_time = 600;
+static _Atomic uint32_t esdm_drng_reseed_max_time = 600;
 
 /*
  * Is ESDM for general-purpose use (i.e. is at least the esdm_drng_init
@@ -127,6 +133,13 @@ static atomic_int esdm_drng_mgr_terminate = 0;
  */
 static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
 
+/*
+ * Source of the seed time offsets that keep the DRNGs from all falling due for
+ * a reseed at once - see esdm_drng_reseed_stagger().
+ */
+static struct xoshiro_state esdm_drng_stagger_prng;
+static bool esdm_drng_stagger_avail = false;
+
 /********************************** Helper ************************************/
 
 bool esdm_get_available(void)
@@ -154,10 +167,50 @@ struct esdm_drng *esdm_drng_node_instance(void)
 /* Record the seed time (whole seconds, CLOCK_MONOTONIC). */
 static void esdm_drng_set_seeded_now(struct esdm_drng *drng)
 {
+	atomic_store(&drng->last_seeded_time, esdm_monotonic_now());
+}
+
+/* The share of the reseed interval the seed times are spread over */
+#define ESDM_DRNG_RESEED_STAGGER_DIV 10
+
+/*
+ * Seconds the seed time of a node DRNG is pushed out by: a number drawn from
+ * [0, a tenth of the reseed interval), so the DRNGs do not all fall due in the
+ * same pass and collect their entropy at once.
+ */
+static long long esdm_drng_reseed_stagger(void)
+{
+	uint32_t range = atomic_load(&esdm_drng_reseed_max_time) /
+			 ESDM_DRNG_RESEED_STAGGER_DIV;
+
+	/*
+	 * Nothing to spread if that share is below a second: the interval is
+	 * then so short that the instances meet in a pass no matter how they
+	 * are placed.
+	 */
+	if (!esdm_drng_stagger_avail || !range)
+		return 0;
+
+	return (long long)xoshiro_generate_interval(&esdm_drng_stagger_prng, 0,
+						    range);
+}
+
+/* Push the recorded seed time of a node DRNG out by the offset above. */
+static void esdm_drng_stagger_seed_time(struct esdm_drng *drng)
+{
+	if (drng == &esdm_drng_init || drng == &esdm_drng_pr)
+		return;
+
+	atomic_fetch_add(&drng->last_seeded_time, esdm_drng_reseed_stagger());
+}
+
+/* Record the wall clock time of a seeding. */
+static void esdm_drng_set_seeded_wtime(struct esdm_drng *drng)
+{
 	struct timespec now;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	atomic_store(&drng->last_seeded_time, (long long)now.tv_sec);
+	if (clock_gettime(CLOCK_REALTIME, &now) != -1)
+		atomic_store(&drng->last_seeded_wtime, (long long)now.tv_sec);
 }
 
 /*
@@ -171,6 +224,11 @@ void esdm_drng_reset(struct esdm_drng *drng)
 	atomic_store(&drng->requests, 1);
 	atomic_store(&drng->requests_since_fully_seeded, 0);
 	atomic_store(&drng->request_bits_since_fully_seeded, 0);
+	/*
+	 * drng->seed_generation and drng->last_seeded_wtime are deliberately
+	 * kept: they report what happened to this DRNG, and no seeding is
+	 * undone here - only the reseed bookkeeping is restarted.
+	 */
 	esdm_drng_set_seeded_now(drng);
 	atomic_store(&drng->fully_seeded, false);
 	/* Do not set force, as this flag is used for the emergency reseeding */
@@ -244,6 +302,17 @@ int esdm_drng_mgr_initialize(void)
 
 	if (!atomic_compare_exchange_strong(&esdm_avail, &expected, 1))
 		return 0;
+
+	ret = xoshiro_init(&esdm_drng_stagger_prng);
+	if (ret) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_DRNG,
+			"no seed for the reseed stagger available (%d) - the DRNGs reseed unstaggered\n",
+			ret);
+		ret = 0;
+	} else {
+		esdm_drng_stagger_avail = true;
+	}
 
 	/* Initialize the PR DRNG inside init lock as it guards esdm_avail. */
 	ret = mutex_w_init(&esdm_drng_pr.lock, 1, 0);
@@ -362,8 +431,13 @@ int esdm_drg4_compliant(void)
 		;
 }
 
-/* Defined below - the statistics report when the next reseed falls due */
-static long long esdm_drng_reseed_in(struct esdm_drng *drng);
+/*
+ * Defined with the asynchronous reseeding below - the statistics report when
+ * the next reseed of a DRNG falls due, and the paths that raise a reseed
+ * condition out of band tell the worker about it.
+ */
+static uint64_t esdm_drng_reseed_in(struct esdm_drng *drng);
+static void esdm_drng_reseed_notify(void);
 
 DSO_PUBLIC
 uint32_t esdm_get_reseed_max_time(void)
@@ -376,14 +450,6 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 {
 	uint32_t val;
 
-	if (!seconds) {
-		esdm_logger(
-			LOGGER_WARN, LOGGER_C_DRNG,
-			"Maximum reseed interval of zero seconds ignored - it stays at %u seconds\n",
-			atomic_load(&esdm_drng_reseed_max_time));
-		return;
-	}
-
 	/* We allow at most 1h reseed time */
 	val = min_uint32(seconds, 60 * 60);
 	atomic_store(&esdm_drng_reseed_max_time, val);
@@ -393,7 +459,11 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 	 * above the maximum is answered with success and silently capped, and
 	 * the reseeding behaviour that follows is the one of the capped value.
 	 */
-	if (val != seconds) {
+	if (!val) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_DRNG,
+			"Maximum reseed interval of zero seconds - every request reseeds its DRNG before it is served\n");
+	} else if (val != seconds) {
 		esdm_logger(
 			LOGGER_WARN, LOGGER_C_DRNG,
 			"Maximum reseed interval of %u seconds capped to %u seconds\n",
@@ -402,6 +472,22 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 		esdm_logger(LOGGER_STATUS, LOGGER_C_DRNG,
 			    "Maximum reseed interval set to %u seconds\n", val);
 	}
+
+	/*
+	 * A worker has nothing to do ahead of requests that reseed themselves,
+	 * so a zero interval sends it home - it sees the new interval through
+	 * the notify below and leaves - and any other value puts one back on
+	 * duty. Before the notify: a worker started here takes the interval
+	 * from the store above, and one already on duty is woken either way.
+	 */
+	if (val)
+		esdm_drng_mgr_reseed_worker_start();
+
+	/*
+	 * The worker sleeps until the reseed it knows about falls due, which
+	 * the new interval may have moved into the past.
+	 */
+	esdm_drng_reseed_notify();
 }
 
 /******************************* Statistics ***********************************/
@@ -437,7 +523,7 @@ static void esdm_drng_stats_one(struct esdm_drng *drng, const char *type,
 	stats.bits_since_fully_seeded =
 		atomic_read_u32(&drng->request_bits_since_fully_seeded);
 	stats.seed_generation = atomic_load(&drng->seed_generation);
-	stats.seconds_until_reseed = esdm_drng_reseed_in(drng);
+	stats.seconds_until_reseed = (long long)esdm_drng_reseed_in(drng);
 
 	/*
 	 * Both reported times come from the wall clock stamp: the monotonic one
@@ -570,7 +656,7 @@ void esdm_drng_stats_pr(esdm_drng_stats_cb_t cb, void *priv)
 /************************* Random Number Generation ***************************/
 
 /* Inject a data buffer into the DRNG - caller must hold its lock. */
-static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
+static bool esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 			     size_t inbuflen, const uint8_t *addtl,
 			     size_t addtllen, bool fully_seeded,
 			     const char *drng_type)
@@ -580,13 +666,14 @@ static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 		    "seeding %s DRNG with %zu bytes\n", drng_type, inbuflen);
 
 	if (!drng->drng)
-		return;
+		return false;
 
 	if (drng->drng_cb->drng_seed(drng->drng, inbuf, inbuflen, addtl,
 				     addtllen) < 0) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
 			    "seeding of %s DRNG failed\n", drng_type);
 		atomic_store(&drng->force_reseed, true);
+		return false;
 	} else {
 		int gc = ESDM_DRNG_RESEED_THRESH - atomic_load(&drng->requests);
 
@@ -610,6 +697,8 @@ static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 			atomic_fetch_add(&drng->requests_since_fully_seeded, gc);
 
 		esdm_drng_set_seeded_now(drng);
+		esdm_drng_stagger_seed_time(drng);
+		esdm_drng_set_seeded_wtime(drng);
 		atomic_store(&drng->requests, ESDM_DRNG_RESEED_THRESH);
 		atomic_store(&drng->force_reseed, false);
 
@@ -623,6 +712,8 @@ static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 			}
 		}
 	}
+
+	return true;
 }
 
 /*
@@ -639,6 +730,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		collected_seedbuf;
 	uint32_t requested_bits, collected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
+	bool seeded = false;
 	unsigned int es_delivered_threshold = 1;
 	bool do_full_init =
 		(drng == &esdm_drng_pr && !atomic_load(&drng->initiated)) ||
@@ -713,12 +805,12 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 * process from the DRBG perspective as the DRBG is locked
 		 * during that time and cannot produce output.
 		 */
-		esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-				 (uint8_t *)&addtl, sizeof(addtl),
-				 esdm_fully_seeded(do_full_init,
-						   collected_entropy,
-						   &collected_seedbuf),
-				 "regular");
+		seeded |= esdm_drng_inject(
+			drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
+			(uint8_t *)&addtl, sizeof(addtl),
+			esdm_fully_seeded(do_full_init, collected_entropy,
+					  &collected_seedbuf),
+			"regular");
 
 		/*
 		 * Set the seeding state of the ESDM
@@ -741,6 +833,14 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	} while (forced && !atomic_load(&drng->fully_seeded) &&
 		 num_es_delivered >= es_delivered_threshold &&
 		 !atomic_load(&esdm_drng_mgr_terminate));
+
+	/*
+	 * The emergency reseeding above can inject more than once, but the
+	 * DRNG is locked throughout and produces nothing in between: that is
+	 * one seeding operation to the outside and hence one generation.
+	 */
+	if (seeded)
+		atomic_fetch_add(&drng->seed_generation, 1);
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 	memset_secure(&addtl, 0, sizeof(addtl));
@@ -774,14 +874,6 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 		    "reseed triggered by system events for DRNG on node %d\n",
 		    node);
 	esdm_drng_seed(drng);
-	if (node > 0) {
-		/* Prevent reseed storm: stagger re-seed times across nodes */
-		mutex_w_lock(&drng->lock);
-		if (atomic_load(&drng->fully_seeded))
-			atomic_fetch_add(&drng->last_seeded_time,
-					 (long long)node * 60);
-		mutex_w_unlock(&drng->lock);
-	}
 }
 
 /**
@@ -800,10 +892,14 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
  * Returns false if a DRNG that needed seeding could not be brought to the
  * fully-seeded level (insufficient entropy for the configured policy) - the
  * caller can use this to break out of a retry loop instead of spinning.
+ *
+ * The node array is the caller's, and so is the lock over it: this runs under
+ * the pool lock, and taking the node lock here would be the one place taking
+ * the two in the order opposite to every other path - see
+ * esdm_drng_seed_work_locked().
  */
-static bool __esdm_drng_seed_work(bool force)
+static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 {
-	struct esdm_drng **esdm_drng;
 	bool progress = false;
 
 	/*
@@ -813,7 +909,6 @@ static bool __esdm_drng_seed_work(bool force)
 		return false;
 	}
 
-	esdm_drng = esdm_drng_get_instances();
 	if (esdm_drng) {
 		uint32_t node;
 
@@ -854,16 +949,47 @@ static bool __esdm_drng_seed_work(bool force)
 	progress = true;
 
 out:
-	esdm_drng_put_instances();
 	return progress;
 }
 
-void esdm_drng_seed_work(void)
-{
-	__esdm_drng_seed_work(false);
+/* Defined with the asynchronous reseeding below */
 
-	/* Allow the seeding operation to be called again */
+/*
+ * The node lock before the pool lock, which is the order of every path holding
+ * both: a request generating takes the node lock in esdm_drng_get_sleep() and
+ * runs into the pool lock in esdm_drng_get(), and the reseed worker holds the
+ * node lock across its whole pass.
+ */
+static void esdm_drng_seed_work_locked(bool force)
+{
+	struct esdm_drng **drngs = esdm_drng_get_instances();
+
+	esdm_pool_lock();
+	__esdm_drng_seed_work(drngs, force);
 	esdm_pool_unlock();
+	esdm_drng_put_instances();
+}
+
+/*
+ * The same for a caller that would rather do nothing than wait: a seeding is
+ * already under way when the pool lock is taken, and that one collects the
+ * entropy this call would have collected.
+ * @return true if a seeding was performed, false if one was already running
+ */
+bool esdm_drng_seed_work_try(void)
+{
+	struct esdm_drng **drngs = esdm_drng_get_instances();
+
+	if (!esdm_pool_trylock()) {
+		esdm_drng_put_instances();
+		return false;
+	}
+
+	__esdm_drng_seed_work(drngs, false);
+	esdm_pool_unlock();
+	esdm_drng_put_instances();
+
+	return true;
 }
 
 /**
@@ -924,6 +1050,25 @@ void esdm_drng_force_reseed(void)
 
 out:
 	esdm_drng_put_instances();
+
+	/*
+	 * The flag alone is only seen by a request or by the worker's next
+	 * pass, and the worker waits for the reseed interval rather than
+	 * polling.
+	 */
+	esdm_drng_reseed_notify();
+}
+
+/*
+ * Is the reseed interval zero seconds? That is not a deadline but the request
+ * that every generate operation reseeds first - see
+ * esdm_set_reseed_max_time(). Nothing is left for the worker to do ahead of a
+ * request then, and nothing may be deferred to it either: a reseed that lands
+ * after the request it belongs to is not the reseed that was asked for.
+ */
+static bool esdm_drng_reseed_per_request(void)
+{
+	return !atomic_load(&esdm_drng_reseed_max_time);
 }
 
 static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
@@ -939,9 +1084,13 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 	 */
 	bool requests_check = atomic_load(&drng->requests) <= 0;
 
+	/* The counters are beside the point - the answer is yes every time. */
+	if (esdm_drng_reseed_per_request())
+		return true;
+
 	if (dec_requests)
 		requests_check |= (atomic_fetch_sub(&drng->requests, 1) == 1);
-	check_time += esdm_drng_reseed_max_time;
+	check_time += (time_t)atomic_load(&esdm_drng_reseed_max_time);
 
 	return (requests_check || atomic_load(&drng->force_reseed) ||
 		request_bits_since_fully_seeded_reached ||
@@ -949,17 +1098,17 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 }
 
 /* Seconds until the reseed of @drng falls due, zero if it is due already. */
-static long long esdm_drng_reseed_in(struct esdm_drng *drng)
+static uint64_t esdm_drng_reseed_in(struct esdm_drng *drng)
 {
-	long long due, now;
+	uint64_t due, now;
 
 	/* Already due - nothing to wait for */
 	if (esdm_drng_must_reseed(drng, false))
 		return 0;
 
-	due = atomic_load(&drng->last_seeded_time) +
-	      (long long)atomic_load(&esdm_drng_reseed_max_time);
-	now = esdm_monotonic_now();
+	due = (uint64_t)atomic_load(&drng->last_seeded_time) +
+	      atomic_load(&esdm_drng_reseed_max_time);
+	now = (uint64_t)esdm_monotonic_now();
 
 	return (due > now) ? (due - now) : 0;
 }
@@ -968,12 +1117,80 @@ static long long esdm_drng_reseed_in(struct esdm_drng *drng)
 
 /*
  * Is a reseed worker on duty? Only the thread that flips this to true spawns
- * one, and the worker clears it once a pass leaves nothing behind.
+ * one, and the worker clears it when it leaves.
  */
 static atomic_bool esdm_drng_reseed_worker_active = false;
 
 /*
- * May @drng leave its reseeding to the worker?
+ * Where the worker waits between its passes. A reseed request wakes it so it
+ * does not sit out the interval below, and so does the shutdown request.
+ */
+static DECLARE_WAIT_QUEUE(esdm_drng_reseed_wait);
+
+/* Passes the worker completed. */
+static _Atomic uint64_t esdm_drng_reseed_worker_passes = 0;
+
+/*
+ * When the worker comes back to look at the DRNGs, in whole seconds on
+ * CLOCK_MONOTONIC, or zero while no wait is scheduled - before the first pass
+ * and after the last one.
+ */
+static _Atomic uint64_t esdm_drng_reseed_worker_wakeup = 0;
+
+/* A wakeup for the worker that must not be lost. */
+static atomic_bool esdm_drng_reseed_wakeup_pending = false;
+
+/*
+ * Shutdown request for the worker, separate from esdm_drng_mgr_terminate: the
+ * worker has to be gone before the threads are joined, which happens while the
+ * DRNGs are still operating and must not be told to stop reseeding yet.
+ */
+static atomic_bool esdm_drng_reseed_worker_terminate = false;
+
+/* Is the worker to stop what it is doing and leave? */
+static bool esdm_drng_reseed_stop(void)
+{
+	return atomic_load(&esdm_drng_mgr_terminate) ||
+	       atomic_load(&esdm_drng_reseed_worker_terminate);
+}
+
+bool esdm_drng_mgr_reseed_worker_running(void)
+{
+	return atomic_load(&esdm_drng_reseed_worker_active);
+}
+
+uint64_t esdm_drng_mgr_reseed_worker_passes(void)
+{
+	return atomic_load(&esdm_drng_reseed_worker_passes);
+}
+
+bool esdm_drng_mgr_reseed_worker_next_pass(uint64_t *secs)
+{
+	uint64_t wakeup = atomic_load(&esdm_drng_reseed_worker_wakeup);
+	uint64_t now;
+
+	if (!wakeup || !secs)
+		return false;
+
+	now = (uint64_t)esdm_monotonic_now();
+	*secs = (wakeup > now) ? (wakeup - now) : 0;
+
+	return true;
+}
+
+void esdm_drng_mgr_reseed_worker_stop(void)
+{
+	atomic_store(&esdm_drng_reseed_worker_terminate, true);
+	atomic_store(&esdm_drng_reseed_wakeup_pending, true);
+	thread_wake_all(&esdm_drng_reseed_wait);
+}
+
+/*
+ * May @drng leave a due reseed to the worker and carry on generating?
+ *
+ * This is about deferring a reseed that a request ran into, not about the
+ * worker reseeding a DRNG early - see esdm_drng_reseed_due() for that, which
+ * covers the initial DRNG as well.
  *
  * Not the initial DRNG: it is the fall-back every other instance and every
  * caller lands on, so it has to hold a current seed at the moment it is asked
@@ -985,117 +1202,371 @@ static atomic_bool esdm_drng_reseed_worker_active = false;
  * collected for that request, which an out-of-band reseed cannot express. Its
  * generate path seeds itself under its own lock and never comes through here.
  *
- * With node support built out there is nothing left, and the whole path below
- * stays inert: every request lands on the initial DRNG. That is not a loss of
- * throughput but the absence of the thing that buys it - one DRNG cannot serve
- * data and wait for its own reseed at the same time, and deferring the reseed
- * only moves it past the maximum it may produce without one, at which point it
- * leaves the fully seeded state and takes the ESDM out of operation with it.
+ * With node support built out there is nothing left to defer: every request
+ * lands on the initial DRNG. That is not a loss of throughput but the absence
+ * of the thing that buys it - one DRNG cannot serve data and wait for its own
+ * reseed at the same time, and deferring the reseed only moves it past the
+ * maximum it may produce without one, at which point it leaves the fully
+ * seeded state and takes the ESDM out of operation with it. The worker still
+ * runs there, reseeding that one DRNG before a request runs into its interval.
  */
 static bool esdm_drng_reseed_async_capable(struct esdm_drng *drng)
 {
-	return (drng != esdm_drng_init_instance() && drng != &esdm_drng_pr);
+	return (!esdm_drng_reseed_per_request() &&
+		drng != esdm_drng_init_instance() && drng != &esdm_drng_pr);
+}
+
+/* Has the reseed of @drng fallen due without a request asking for one? */
+static bool esdm_drng_reseed_due(struct esdm_drng *drng)
+{
+	if (esdm_drng_reseed_per_request())
+		return false;
+
+	if (drng == &esdm_drng_pr)
+		return atomic_load(&drng->initiated) &&
+		       esdm_drng_must_reseed(drng, false);
+
+	return atomic_load(&drng->fully_seeded) &&
+	       esdm_drng_must_reseed(drng, false);
+}
+
+/* Collect entropy for @drng and inject it */
+static void esdm_drng_reseed_one(struct esdm_drng *drng, uint32_t node,
+				 bool requested)
+{
+	if (drng == &esdm_drng_pr) {
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_DRNG,
+			"proactive reseed of the prediction resistance DRNG\n");
+	} else {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+			    "%s reseed of DRNG on node %u\n",
+			    requested ? "asynchronous" : "proactive", node);
+	}
+
+	/*
+	 * Pool lock before DRNG lock, the order the generate path and the ES
+	 * monitor use.
+	 */
+	esdm_pool_lock();
+	mutex_w_lock(&drng->lock);
+	/* Another path may have reseeded it in the meantime */
+	if (esdm_drng_must_reseed(drng, false))
+		esdm_drng_seed_nolock(drng);
+	mutex_w_unlock(&drng->lock);
+	esdm_pool_unlock();
+}
+
+/* Fold the deadline of @drng into the earliest one seen in this pass. */
+static void esdm_drng_reseed_next(struct esdm_drng *drng, uint64_t *next)
+{
+	uint64_t in;
+
+	/* Due on every request, which is not a deadline the worker keeps */
+	if (esdm_drng_reseed_per_request())
+		return;
+
+	in = esdm_drng_reseed_in(drng);
+
+	if (in < *next)
+		*next = in;
 }
 
 /*
- * Reseed every node DRNG that asked for it. Returns with nothing pending,
- * barring requests raised while it ran.
+ * Reseed every DRNG that asked for it, plus every one whose reseed fell due on
+ * its own.
  */
-static void esdm_drng_reseed_pass(void)
+static uint64_t esdm_drng_reseed_pass(void)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	/* Bound by the published array size - see esdm_drng_get_sleep() */
 	uint32_t num_nodes = min_uint32(esdm_config_online_nodes(),
 					esdm_drng_node_count_get());
+	bool unseeded = false;
+	uint64_t next = UINT64_MAX;
 	uint32_t node;
 
-	if (!esdm_drng)
-		goto out;
+	/*
+	 * Without per-node DRNGs the initial DRNG is the only one to look at.
+	 */
+	if (!esdm_drng) {
+		if (!esdm_drng_reseed_stop() &&
+		    esdm_drng_reseed_due(&esdm_drng_init))
+			esdm_drng_reseed_one(&esdm_drng_init, 0, false);
 
-	for (node = 0; node < num_nodes; node++) {
-		struct esdm_drng *drng = esdm_drng[node];
+		if (atomic_load(&esdm_drng_init.fully_seeded))
+			esdm_drng_reseed_next(&esdm_drng_init, &next);
+	} else {
+		for (node = 0; node < num_nodes; node++) {
+			struct esdm_drng *drng = esdm_drng[node];
+			bool requested;
 
-		if (atomic_load(&esdm_drng_mgr_terminate))
-			break;
+			if (esdm_drng_reseed_stop())
+				break;
 
-		if (!drng || !esdm_drng_reseed_async_capable(drng))
-			continue;
+			if (!drng)
+				continue;
 
-		/* Take the request off the DRNG before servicing it */
-		if (!atomic_exchange(&drng->reseed_pending, false))
-			continue;
+			/*
+			 * A DRNG that never reached the fully seeded level is
+			 * not reseeded but brought up, which is a different
+			 * job - noted here and done below.
+			 */
+			if (!atomic_load(&drng->fully_seeded)) {
+				unseeded = true;
+				continue;
+			}
 
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-			    "asynchronous reseed of DRNG on node %u\n", node);
+			/*
+			 * Take a deferred request off the DRNG before
+			 * servicing it
+			 */
+			requested =
+				esdm_drng_reseed_async_capable(drng) &&
+				atomic_exchange(&drng->reseed_pending, false);
 
+			if (requested || esdm_drng_reseed_due(drng))
+				esdm_drng_reseed_one(drng, node, requested);
+
+			esdm_drng_reseed_next(drng, &next);
+		}
+	}
+
+	/* Bring up a DRNG that is not seeded yet. */
+	if (unseeded && !esdm_drng_reseed_stop()) {
 		/*
-		 * Pool lock before DRNG lock, the order the generate path and
-		 * the ES monitor use. Blocking on it is the point of doing this
-		 * here: the consumer that asked for the reseed carries on
-		 * generating meanwhile.
+		 * The node lock is held across the whole pass, so the pool lock
+		 * is taken under it here - the order of
+		 * esdm_drng_seed_work_locked().
 		 */
 		esdm_pool_lock();
-		mutex_w_lock(&drng->lock);
-		/* Another path may have reseeded it in the meantime */
-		if (esdm_drng_must_reseed(drng, false))
-			esdm_drng_seed_nolock(drng);
-		mutex_w_unlock(&drng->lock);
+		__esdm_drng_seed_work(esdm_drng, true);
 		esdm_pool_unlock();
+
+		/*
+		 * One instance per call, and one that could not be brought up
+		 * for want of entropy stays where it is - either way there is
+		 * work left, so the next pass follows as soon as the worker
+		 * allows rather than at the next reseed deadline.
+		 */
+		next = 0;
 	}
 
-out:
+	/*
+	 * The prediction resistance DRNG is none of the above - it serves its
+	 * own requests and is not part of the node array - so it is looked
+	 * after here.
+	 */
+	if (!esdm_drng_reseed_stop() && esdm_drng_reseed_due(&esdm_drng_pr))
+		esdm_drng_reseed_one(&esdm_drng_pr, 0, false);
+
+	if (atomic_load(&esdm_drng_pr.initiated))
+		esdm_drng_reseed_next(&esdm_drng_pr, &next);
+
 	esdm_drng_put_instances();
+
+	return next;
 }
 
-static bool esdm_drng_reseed_pending_any(void)
+/* Upper bound of the wait between two passes. */
+#define ESDM_DRNG_RESEED_PASS_MAX_SEC 20
+
+/* Wait after a pass that reports work of its own left */
+#define ESDM_DRNG_RESEED_PASS_BUSY_SEC 1
+
+/*
+ * Look after the DRNGs pass by pass, until the worker is to leave: a stop
+ * request, the DRNG manager terminating, or a reseed interval of zero seconds,
+ * which hands the reseeding to the requests themselves.
+ */
+static void esdm_drng_reseed_worker_run(void)
 {
-	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
-	uint32_t num_nodes = min_uint32(esdm_config_online_nodes(),
-					esdm_drng_node_count_get());
-	bool pending = false;
-	uint32_t node;
+	/*
+	 * The wait below reports a timeout through a variable of this name in
+	 * the caller's scope.
+	 */
+	int ret = 0;
 
-	if (!esdm_drng)
-		goto out;
+	while (!esdm_drng_reseed_stop() && !esdm_drng_reseed_per_request()) {
+		uint64_t next, max_wait;
+		uint32_t interval;
+		struct timespec wait = { .tv_nsec = 0 };
 
-	for (node = 0; node < num_nodes && !pending; node++) {
-		struct esdm_drng *drng = esdm_drng[node];
+		/*
+		 * Taken down before the pass, so a wakeup raised while it runs
+		 * is kept rather than cleared by the pass it arrived during.
+		 */
+		atomic_store(&esdm_drng_reseed_wakeup_pending, false);
 
-		if (drng && esdm_drng_reseed_async_capable(drng))
-			pending = atomic_load(&drng->reseed_pending);
+		next = esdm_drng_reseed_pass();
+		atomic_fetch_add(&esdm_drng_reseed_worker_passes, 1);
+
+		if (esdm_drng_reseed_stop())
+			break;
+
+		/*
+		 * The reseed interval as it stands now, not as the pass found
+		 * it: a shortened interval moves every deadline the pass
+		 * computed forward, and the worker must not sit past the whole
+		 * of the new interval waiting for a deadline of the old one.
+		 * An interval of zero seconds is no deadline at all - the
+		 * requests reseed themselves - so the worker keeps its own
+		 * bound there.
+		 */
+		interval = atomic_load(&esdm_drng_reseed_max_time);
+		max_wait = interval ? min_uint32(ESDM_DRNG_RESEED_PASS_MAX_SEC,
+						 interval) :
+				      ESDM_DRNG_RESEED_PASS_MAX_SEC;
+
+		if (next > max_wait)
+			next = max_wait;
+
+		/*
+		 * A pass that has work left - an instance that could not be
+		 * brought up for want of entropy, a reseed that did not take -
+		 * reports no wait at all. It is repeated a second later rather
+		 * than at once: nothing it waits for arrives in no time, and a
+		 * wait of zero seconds is not a wait but a spin.
+		 */
+		if (!next)
+			next = ESDM_DRNG_RESEED_PASS_BUSY_SEC;
+
+		wait.tv_sec = (time_t)next;
+
+		atomic_store(&esdm_drng_reseed_worker_wakeup,
+			     (uint64_t)esdm_monotonic_now() + next);
+
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
+			    "next reseed worker pass in %" PRIu64 " seconds\n",
+			    next);
+
+		/*
+		 * Bounded wait on a wakeup that was raised before its signal,
+		 * so one delivered while the pass above ran ends the wait here
+		 * instead of being lost.
+		 */
+		ret = 0;
+		thread_timedwait_event(
+			&esdm_drng_reseed_wait,
+			atomic_load(&esdm_drng_reseed_wakeup_pending) ||
+				esdm_drng_reseed_stop(),
+			&wait);
 	}
-
-out:
-	esdm_drng_put_instances();
-	return pending;
 }
 
 static int esdm_drng_reseed_worker(void *unused)
 {
+	bool handed_over = false;
+	const char *reason;
+
 	(void)unused;
 
-	/*
-	 * Loop rather than run a single pass: a request raised while a pass is
-	 * running finds the worker marked active and does not spawn a second
-	 * one, so this thread has to come back for it. The marker is dropped
-	 * before the final re-check, so a request slipping in after that point
-	 * still gets a worker of its own - and if it spawned one, the exchange
-	 * below hands the duty over and this thread leaves.
-	 */
-	for (;;) {
-		esdm_drng_reseed_pass();
+	thread_set_name(drng_reseed, 0);
 
+	/*
+	 * The worker stays for the lifetime of the DRNG manager rather than
+	 * leaving once nothing is pending: it is the thread that notices a
+	 * reseed falling due without anybody asking for it, and no request can
+	 * announce that moment. A reseed interval of zero seconds is the one
+	 * thing that sends it home early - the requests reseed themselves then
+	 * - and esdm_set_reseed_max_time() puts one back on duty when the
+	 * interval grows again.
+	 */
+	do {
+		esdm_drng_reseed_worker_run();
+
+		/*
+		 * The duty is handed back here, which is what lets a start
+		 * spawn a successor. One that arrived just before this store
+		 * saw this worker as active and spawned none - and if the
+		 * interval it set asks for a worker, this one takes the duty
+		 * back rather than leaving with nobody on it.
+		 */
+		atomic_store(&esdm_drng_reseed_worker_wakeup, 0);
 		atomic_store(&esdm_drng_reseed_worker_active, false);
 
-		if (atomic_load(&esdm_drng_mgr_terminate) ||
-		    !esdm_drng_reseed_pending_any())
+		if (esdm_drng_reseed_stop() || esdm_drng_reseed_per_request())
 			break;
 
-		if (atomic_exchange(&esdm_drng_reseed_worker_active, true))
-			break;
-	}
+		handed_over =
+			atomic_exchange(&esdm_drng_reseed_worker_active, true);
+	} while (!handed_over);
+
+	if (handed_over)
+		reason = "another worker took the duty over";
+	else if (atomic_load(&esdm_drng_reseed_worker_terminate))
+		reason = "stop request";
+	else if (atomic_load(&esdm_drng_mgr_terminate))
+		reason = "DRNG manager terminating";
+	else
+		reason = "reseed interval of zero seconds";
+
+	/*
+	 * The worker is the thread that reseeds the DRNGs without being asked,
+	 * so its departure is the moment that stops: from here on a DRNG is
+	 * only reseeded when a request runs into its reseed condition.
+	 */
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_DRNG,
+		    "DRNG reseed worker leaves after %" PRIu64 " passes (%s)\n",
+		    atomic_load(&esdm_drng_reseed_worker_passes), reason);
 
 	return 0;
+}
+
+/*
+ * Put the worker on duty. Called once while the ESDM is brought up - see
+ * esdm_init_monitor() - rather than from the paths that have something for the
+ * worker to do: those only tell it, which costs an atomic store and a signal
+ * and needs no answer to the question whether a worker exists yet.
+ */
+bool esdm_drng_mgr_reseed_worker_start(void)
+{
+	if (esdm_drng_reseed_stop())
+		return false;
+
+	/* Nothing to do ahead of requests that reseed themselves */
+	if (esdm_drng_reseed_per_request())
+		return false;
+
+	if (atomic_load(&esdm_drng_reseed_worker_active))
+		return true;
+
+	/*
+	 * No thread pool in this process - a library user that never called
+	 * thread_init() and never went through esdm_init_monitor(), which sets
+	 * one up. There is no worker to be had.
+	 */
+	if (!thread_available())
+		return false;
+
+	if (atomic_exchange(&esdm_drng_reseed_worker_active, true))
+		return true;
+
+	if (thread_start(esdm_drng_reseed_worker, NULL, ESDM_THREAD_DRNG_RESEED,
+			 NULL)) {
+		/*
+		 * No worker slot free. Nothing reseeds the DRNGs on their
+		 * interval then: a DRNG that reaches its maximum without a
+		 * reseed is dropped out of the fully seeded state by the
+		 * generate path and picked up by the ES monitor through
+		 * __esdm_drng_seed_work().
+		 */
+		atomic_store(&esdm_drng_reseed_worker_active, false);
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_DRNG,
+			"No worker available for the DRNG reseeding - the DRNGs are only reseeded when a request runs into their reseed condition\n");
+		return false;
+	}
+
+	return true;
+}
+
+/* Tell the worker to look at the DRNGs now instead of after its wait. */
+static void esdm_drng_reseed_notify(void)
+{
+	/* Before the signal, so a worker that misses it still sees this */
+	atomic_store(&esdm_drng_reseed_wakeup_pending, true);
+	thread_wake_all(&esdm_drng_reseed_wait);
 }
 
 /*
@@ -1114,27 +1585,16 @@ static void esdm_drng_reseed_async(struct esdm_drng *drng)
 	if (atomic_exchange(&drng->reseed_pending, true))
 		return;
 
-	if (atomic_load(&esdm_drng_mgr_terminate))
-		return;
-
-	/* A worker is on duty and re-checks before it exits */
-	if (atomic_exchange(&esdm_drng_reseed_worker_active, true))
-		return;
-
-	if (thread_start(esdm_drng_reseed_worker, NULL, ESDM_THREAD_DRNG_RESEED,
-			 NULL)) {
-		/*
-		 * No worker slot free. Leave the request pending - the next
-		 * caller retries the spawn, and should the DRNG reach its
-		 * maximum without a reseed first, the generate path drops it
-		 * out of the fully seeded state and the ES monitor picks it up
-		 * through __esdm_drng_seed_work().
-		 */
-		atomic_store(&esdm_drng_reseed_worker_active, false);
+	/*
+	 * Nobody to service the request - do not leave it queued, or the DRNG
+	 * would never ask again and never be reseeded out of band.
+	 */
+	if (!esdm_drng_mgr_reseed_worker_running()) {
 		atomic_store(&drng->reseed_pending, false);
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-			    "no worker available for asynchronous reseed\n");
+		return;
 	}
+
+	esdm_drng_reseed_notify();
 }
 
 /**
@@ -1382,7 +1842,6 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	uint32_t num_nodes = min_uint32(esdm_config_online_nodes(),
 					esdm_drng_node_count_get());
 	uint32_t node = esdm_config_curr_node();
-	uint32_t offset = arc4random();
 	bool found_drng = false;
 	ssize_t ret;
 	uint32_t i;
@@ -1399,7 +1858,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	if (!found_drng && esdm_drng) {
 		for (i = 0; i < num_nodes; ++i) {
 			/* every node starts probing at different offsets */
-			j = ((uint32_t)i + node + offset) % num_nodes;
+			j = ((uint32_t)i + node) % num_nodes;
 			/* always try node 0 (init drng) last, as it can disable the operational state */
 			if (j == 0)
 				continue;
@@ -1479,9 +1938,7 @@ void esdm_force_fully_seeded(void)
 	if (esdm_pool_all_nodes_seeded_get())
 		return;
 
-	esdm_pool_lock();
-	__esdm_drng_seed_work(true);
-	esdm_pool_unlock();
+	esdm_drng_seed_work_locked(true);
 }
 
 /* only try to reach fully seeded level, does not block timeout read indefinitely */
@@ -1490,17 +1947,19 @@ void esdm_try_fully_seeded(void)
 	if (esdm_pool_all_nodes_seeded_get())
 		return;
 
-	esdm_pool_lock();
-	__esdm_drng_seed_work(false);
-	esdm_pool_unlock();
+	esdm_drng_seed_work_locked(false);
 }
 
 /* Force all DRBG to be fully seeded */
 void esdm_force_fully_seeded_all_drbgs(void)
 {
+	struct esdm_drng **drngs;
+
 	if (esdm_pool_all_nodes_seeded_get())
 		return;
 
+	/* The node lock first - see esdm_drng_seed_work_locked() */
+	drngs = esdm_drng_get_instances();
 	esdm_pool_lock();
 	do {
 		/*
@@ -1514,11 +1973,12 @@ void esdm_force_fully_seeded_all_drbgs(void)
 		 * daemon startup. The terminate check additionally lets a
 		 * shutdown break the loop.
 		 */
-		if (!__esdm_drng_seed_work(true))
+		if (!__esdm_drng_seed_work(drngs, true))
 			break;
 	} while (esdm_es_reseed_wanted() &&
 		 !atomic_load(&esdm_drng_mgr_terminate));
 	esdm_pool_unlock();
+	esdm_drng_put_instances();
 }
 
 static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)

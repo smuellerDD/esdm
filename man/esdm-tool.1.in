@@ -135,6 +135,32 @@ Clear the entropy pool. Intended for testing. Requires root.
 .B \-\-reseed\-crng
 Force a reseed of the DRNGs. Intended for testing. Requires root.
 .TP
+.BR \-\-max\-reseed\-secs " \fISECS\fR"
+Set the maximum interval between two reseeds of the DRNGs to
+.I SECS
+seconds. A DRNG that has not been reseeded for that long is reseeded on its
+next request. Zero seconds asks for a reseed before every request instead: the
+reseed is then part of the request that runs into it and is neither performed
+ahead of it by the reseed worker nor deferred past it. The ESDM caps the value
+at its own upper bound; the value that ended up in effect is printed. Requires
+root.
+.TP
+.B \-\-selftest
+Run the self tests of the ESDM now and report their outcome: the crypto
+implementations first, then every entropy source. These are the tests the
+daemon performs when it starts and repeats on a fixed interval; this option
+starts the same pass at a moment of your choosing. The state of the crypto self
+tests and the state of the entropy source self tests are printed separately,
+together with how many sources were tested and how many failed. The exit status
+is 0 only if every test passed and the ESDM hands out random bits: a crypto
+self test that failed holds the output back for the lifetime of the daemon, and
+a later passing run does not change that. The outcome of the last pass is also
+part of the output of
+.B \-\-status
+and
+.BR \-\-status\-json ,
+which need no privileges. Requires root.
+.TP
 .BR \-\-pkcs11\-pin " \fIPIN\fR"
 Set the user PIN of the PKCS#11 entropy source. Pass
 .B \-

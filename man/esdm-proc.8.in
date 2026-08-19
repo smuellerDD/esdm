@@ -34,7 +34,8 @@ Entropy level below which writers polling the random device are woken.
 Writable.
 .TP
 .I urandom_min_reseed_secs
-Minimum number of seconds between two reseed operations. Writable.
+Minimum number of seconds between two reseed operations. Zero reseeds before
+every request. Writable.
 .TP
 .I esdm_type
 Identifies the provider as the ESDM. This file has no counterpart in the
