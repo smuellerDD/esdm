@@ -75,6 +75,22 @@ helper_test = executable(
 		link_with: esdm_common_static_lib,
 	)
 
+os_random_test = executable(
+		'os_random_test',
+		[ 'os_random_test.c' ],
+		include_directories: include_dirs_server,
+		dependencies: common_test_deps,
+		link_with: esdm_common_static_lib,
+	)
+
+xoshiro_test = executable(
+		'xoshiro_test',
+		[ 'xoshiro_test.c' ],
+		include_directories: include_dirs_server,
+		dependencies: common_test_deps,
+		link_with: esdm_common_static_lib,
+	)
+
 threading_support_test = executable(
 		'threading_support_test',
 		[ 'threading_support_test.c' ],
@@ -133,6 +149,8 @@ test('common buffer handling', buffer_test)
 test('common logger', esdm_logger_test)
 test('common helper', helper_test)
 test('common Linux support', linux_support_test)
+test('common operating system random numbers', os_random_test)
+test('common xoshiro256++ PRNG', xoshiro_test)
 
 # The threading test occupies an entire thread group at once and waits for
 # signals to be delivered, so it neither shares the machine well nor finishes
