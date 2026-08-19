@@ -13,7 +13,13 @@ of them are parsed before anything about the peer is established:
 * the **EGD compatibility interface**, an opt-in second socket serving the
   protocol of egd.pl and prngd to legacy consumers, and the **EGD client
   library** on the other end of that socket, which believes a length byte
-  about how much random data or how long a PID string follows.
+  about how much random data or how long a PID string follows,
+* the **OpenSSL RAND providers**, which are the ESDM loaded into somebody
+  else's process: everything a provider is handed comes from libcrypto on one
+  side - a number of bytes, an entropy strength, a seed of at least this and at
+  most that many bytes, `OSSL_PARAM` arrays whose types and sizes it has to
+  check rather than believe - and from the ESDM interface it talks to on the
+  other.
 
 Below all of them sits the library, which is also used directly by everything
 listed above - so it gets a harness of its own rather than only being reached
@@ -34,6 +40,11 @@ it.
 | `egd_fuzz` | a byte stream and the reads it arrives in | slow - a read command is served by a live ESDM |
 | `egd_client_fuzz` | a script of client calls, then the answers an impostor server gives them | slow - every call is a round trip over a socket |
 | `esdm_lib_fuzz` | a script of API calls with their arguments | slow - the calls do the work they are asked for |
+| `ossl_rng_prov_fuzz` | a script of provider calls with their arguments | slow - every call is a round trip to a real server |
+| `ossl_rng_prov_pr_fuzz` | the same, against the prediction resistance build | slowest - each request collects fresh entropy |
+| `ossl_seed_src_prov_fuzz` | the same, against the SEED-SRC only build | slow |
+| `ossl_egd_prov_fuzz` | a script of provider calls, then the answers an impostor server gives them | slow - every call is a round trip over a socket |
+| `ossl_egd_prov_pr_fuzz` | the same, against the prediction resistance build | slow |
 
 `egd_client_fuzz` is the same socket seen from the other side. The harness is
 the server: it answers the client's calls with the bytes of the input rather
@@ -52,6 +63,38 @@ bytes: an input is a sequence of records, each a length byte and that many
 bytes, and each record is one read the connection sees. Command by command is
 the ordinary case; half a write command followed by the rest of it two reads
 later is what the state machine has to survive.
+
+## The OpenSSL providers
+
+A provider is a library loaded into a process that is not ours, and the ESDM
+ships five of them: two speaking the RPC protocol (all four RAND algorithms,
+and the variant routing every request to the prediction resistance generator),
+one offering SEED-SRC alone, and two speaking the EGD protocol (the ordinary
+socket and the prediction resistance one). Each gets a harness, because what
+differs between them is exactly what the harness looks at: the interface they
+reach the ESDM through, whether prediction resistance is a per-request flag or
+a property of the socket, and the table of algorithms the operation query hands
+back.
+
+The provider is loaded the way libcrypto loads it - `OSSL_PROVIDER_add_builtin()`
+and `OSSL_PROVIDER_load()`, so `OSSL_provider_init()` runs with the real core
+upcalls and the error stack really works - and a wrapper around the init
+function keeps the dispatch table on the way through. The calls then go
+straight into that table, which is what lets an input choose arguments no
+application would produce: a seed request of `INT_MAX` bits, a minimum length
+above the maximum, an `OSSL_PARAM` that claims to be an integer in a buffer of
+one byte, a context of `NULL`. One call per input goes through `EVP_RAND` as
+well, since that is the path an application takes and it converts arguments on
+the way.
+
+The provider is loaded and torn down once per input, so the initialization and
+the teardown are fuzzed alongside the calls between them, and each input gets a
+peer that has not answered anything yet. For the EGD harnesses that peer is an
+impostor: it answers with the tail of the input rather than with the protocol,
+in records that are one write each, the same shape `egd_client_fuzz` uses. For
+the RPC ones it is a whole ESDM with the server's accept loop and worker
+threads, in this process - so those bind the two RPC sockets and, like
+`rpc_client_fuzz`, only one of them runs at a time.
 
 ## Reaching past the framing
 
@@ -72,8 +115,8 @@ instead of linking the prebuilt library, so the fuzzer is guided by what the
 ESDM does with an input rather than only by what the RPC layer in front of it
 does.
 
-`rpc_client_fuzz` binds the RPC sockets, whose paths are fixed at build time,
-so only one of it can run at a time - no `-jobs`, and not next to anything else
+`rpc_client_fuzz` and the three RPC provider harnesses bind the RPC sockets,
+whose paths are fixed at build time, so only one of them can run at a time - no `-jobs`, and not next to anything else
 that starts a server, the test suite included: while it runs it *is* a running
 ESDM server, and the tests that check what happens without one will fail. It needs no privileges: the server side skips only the
 privilege drop, and the privileged calls are refused after their request was
@@ -83,8 +126,12 @@ fuzzed either way.
 ## Building
 
     CC=clang meson setup build-fuzz -Dfuzzing=enabled \
+        -Dopenssl-rand-provider=enabled \
         -Db_sanitize=address,undefined -Db_lundef=false
     ninja -C build-fuzz
+
+The provider harnesses come with `openssl-rand-provider`; without it the rest
+is built just the same.
 
 `b_lundef=false` is what lets the sanitizer runtime stay undefined in the
 shared libraries at link time; without it the link of every library fails.
@@ -168,8 +215,8 @@ run against a build made with any compiler:
 
     build/tests/fuzz/rpc_response_fuzz_replay crash-<hash>
 
-One caveat for `esdm_lib_fuzz`, `rpc_request_fuzz` and `rpc_client_fuzz`: they
-bring up one ESDM per process and every input leaves its state behind, so a finding that needs
+One caveat for `esdm_lib_fuzz`, `rpc_request_fuzz`, `rpc_client_fuzz` and the
+RPC provider harnesses: they bring up one ESDM per process and every input leaves its state behind, so a finding that needs
 what an earlier input did may not reproduce from its artifact alone. That is
 why an input there is a sequence of calls rather than a single one - what a
 crash needs is more likely to be inside it - and why a finding worth keeping
@@ -209,6 +256,20 @@ promised:
   terminate it inside the buffer it was given - a caller reads that buffer as a
   string, so an unterminated one is a read past the end rather than a short
   answer.
+* The provider harnesses hold their provider to the contract of
+  `<openssl/core_dispatch.h>`, which is where a bug there would do its damage:
+  nothing written behind the buffer a call was given and no `OSSL_PARAM` filled
+  past its `data_size`; a `generate()` or `nonce()` that failed leaving no
+  partial random data behind, since a caller cannot tell that from a complete
+  answer; `get_seed()` handing back either nothing at all or a buffer of at
+  least `min_len` and at most `max_len` bytes that really is that large - the
+  returned length is what a seed consumer sizes its pool by, so the harness
+  reads the whole of it and lets the sanitizer decide; a failed `get_seed()`
+  leaving the caller's pointer `NULL` rather than a buffer it would go on to
+  free; and the EGD provider bound to the ordinary socket refusing every
+  request asking for prediction resistance, rather than serving data that does
+  not have the property that was asked for. Holding `enable_locking()` to being
+  callable twice is how the leaked lock was found.
 
 ## In the test suite
 

@@ -46,6 +46,8 @@ addon/es_ebpf_testing
 
 * Add fuzz harnesses for the RPC requests, responses and wire codec, the server as a client reaches it, both sides of the EGD interface and the library API (build option 'fuzzing', see tests/fuzz/README.md); beyond crashes they check what the code promised, and their seeds are replayed by the ordinary test suite
 
+* Add a fuzz harness per shipped OpenSSL RAND provider module (build option 'openssl-rand-provider'), each loading its provider the way libcrypto does and holding it to the contract of <openssl/core_dispatch.h>
+
 * Add a stress test of the RPC request path under concurrent load, every request carrying an ID the answer has to carry back
 
 * FIPS 140 integrity test: a missing HMAC file is now a failed integrity test rather than a pass; the reference values are written at installation time with esdm-tool (see README.usage.md)
