@@ -60,7 +60,8 @@ struct thread_ctx {
 	unsigned int thread_num; /* Current slot number */
 	int ret_ancestor; /* Return code of ancestor code */
 
-	int (*start_routine)(void *); /* Thread code to be executed */
+	/* Thread code to be executed. */
+	_Atomic(int (*)(void *)) start_routine;
 	void *data; /* Parameters used by the thread code */
 
 	atomic_bool thread_pending; /* Is thread associated with structure? */
@@ -165,7 +166,7 @@ static inline bool thread_dirty(unsigned int slot)
 static inline void thread_cleanup(struct thread_ctx *tctx)
 {
 	tctx->data = NULL;
-	tctx->start_routine = NULL;
+	atomic_store(&tctx->start_routine, NULL);
 	pthread_cond_broadcast(&thread_schedule_cv);
 	pthread_cond_broadcast(&thread_wait_cv);
 
@@ -321,6 +322,8 @@ out:
 static void *thread_worker(void *arg)
 {
 	struct thread_ctx *tctx = (struct thread_ctx *)arg;
+	/* The job of the current round - see the dispatch below */
+	int (*routine)(void *);
 
 	/*
 	 * pthread_setcanceltype() only affects the calling thread, so it must
@@ -365,9 +368,9 @@ static void *thread_worker(void *arg)
 			thread_cleanup_exit(tctx);
 			pthread_exit(NULL);
 			break;
-		} else if (tctx->start_routine) {
+		} else if ((routine = atomic_load(&tctx->start_routine))) {
 			/* Work to do, execute */
-			tctx->ret_ancestor = tctx->start_routine(tctx->data);
+			tctx->ret_ancestor = routine(tctx->data);
 			thread_cleanup(tctx);
 			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
 				    "Thread %u completed\n", tctx->thread_num);
@@ -447,7 +450,7 @@ void thread_send_signal(uint32_t thread_group, int signal)
 		 * since have been recycled). A mutex cannot be taken here as
 		 * this may run from a signal-handling context.
 		 */
-		if (thread_dirty(i) && threads[i].start_routine &&
+		if (thread_dirty(i) && atomic_load(&threads[i].start_routine) &&
 		    !pthread_equal(threads[i].parent, self))
 			pthread_kill(threads[i].thread_id, signal);
 	}
@@ -492,7 +495,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 			 * The thread is currently executing a body of code -
 			 * kick the worker.
 			 */
-			if (threads[j].start_routine ||
+			if (atomic_load(&threads[j].start_routine) ||
 			    atomic_load(&threads[j].shutdown)) {
 				mutex_w_unlock(&threads[j].inuse);
 				pthread_cond_broadcast(&threads[j].worker_cv);
@@ -546,7 +549,7 @@ static int thread_schedule(int (*start_routine)(void *), void *tdata,
 				    "Thread %u for thread group %u assigned\n",
 				    j, thread_group);
 			threads[j].data = tdata;
-			threads[j].start_routine = start_routine;
+			atomic_store(&threads[j].start_routine, start_routine);
 			threads[j].parent = pthread_self();
 			threads[j].scheduled = true;
 			pthread_cond_broadcast(&threads[j].worker_cv);
@@ -598,7 +601,7 @@ int thread_wait(bool ignore_shutdown)
 			 * If there is a start routine, a job is pending and we
 			 * wait for it to finish.
 			 */
-			if (threads[i].start_routine) {
+			if (atomic_load(&threads[i].start_routine)) {
 				wait = true;
 			} else {
 				/* Collect return code of our threads */

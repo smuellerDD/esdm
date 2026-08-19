@@ -1525,6 +1525,75 @@
           });
 
 
+          # The ESDM under the thread sanitizer, running the meson test suite
+          # as its check phase: a race produces data rather than a failing
+          # test, so the suite alone says nothing about one. A build of its
+          # own - the sanitizer needs the whole program instrumented, and it
+          # cannot be linked next to the address sanitizer of the coverage
+          # build.
+          esdm-tsan = self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-tsan";
+
+            mesonFlags =
+              (builtins.filter (
+                x:
+                (!lib.hasInfix "b_lto" x)
+                && (!lib.hasInfix "b_sanitize" x)
+                && (!lib.hasInfix "optimization" x)
+                && (!lib.hasInfix "strip" x)
+              ) prev.mesonFlags)
+              ++ [
+                "-Db_sanitize=thread"
+                # The sanitizer needs to see the calls it instruments, and with
+                # link time optimization it no longer does reliably.
+                "-Db_lto=false"
+                # Enough optimization to keep a 10x slower suite bearable,
+                # little enough to keep the frames in a report nameable.
+                "-Doptimization=1"
+                "-Dstrip=false"
+                # Compiles in the test perturbation hooks, and shortens the
+                # worker intervals so the threads meet during a test.
+                "-Dtestmode=enabled"
+              ];
+
+            mesonBuildType = "debug";
+            dontStrip = true;
+            separateDebugInfo = false;
+
+            doCheck = true;
+            checkPhase = ''
+              runHook preCheck
+
+              # Report every race of a run rather than only the first (the
+              # exit code 66 fails the test), with both sides of a lock order
+              # inversion.
+              export TSAN_OPTIONS="halt_on_error=0 second_deadlock_stack=1 history_size=7"
+
+              # The sanitizer costs an order of magnitude in run time. The
+              # reports are collected from the full log afterwards, as
+              # --print-errorlogs only shows the tail of a failing test.
+              if ! meson test --print-errorlogs --timeout-multiplier 10; then
+                echo
+                echo "=== every ThreadSanitizer report of this run ==="
+                awk '/^WARNING: ThreadSanitizer/,/^SUMMARY: ThreadSanitizer/' \
+                  meson-logs/testlog.txt
+                exit 1
+              fi
+
+              runHook postCheck
+            '';
+
+            # The suite's log next to the binaries it ran.
+            postInstall = (prev.postInstall or "") + ''
+              mkdir -p $out/share/doc/esdm
+              cp meson-logs/testlog.txt $out/share/doc/esdm/tsan-testlog.txt
+            '';
+
+            meta = prev.meta // {
+              description = "ESDM built with the thread sanitizer, running the meson test suite";
+            };
+          });
+
           esdm-coverage = coverageOf "esdm-coverage" self.packages.${system}.esdm;
 
           # The same, for the build carrying the eBPF entropy sources. A separate
