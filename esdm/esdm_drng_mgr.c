@@ -42,6 +42,7 @@
 #include "esdm_leancrypto.h"
 #include "esdm_node.h"
 #include "esdm_openssl.h"
+#include "esdm_selftest.h"
 #include "helper.h"
 #include "queue.h"
 #include "ret_checkers.h"
@@ -214,46 +215,17 @@ static void esdm_drng_dealloc_common(struct esdm_drng *drng)
 	mutex_w_unlock(&drng->lock);
 }
 
-static int esdm_drng_mgr_selftest(void)
+DSO_PUBLIC
+bool esdm_drng_mgr_terminating(void)
 {
-	struct esdm_drng *drng = esdm_drng_node_instance();
-	const struct esdm_hash_cb *hash_cb;
-	const struct esdm_drng_cb *drng_cb;
-	int ret = 0;
-
-	/* Perform selftest of current crypto implementations */
-	hash_cb = drng->hash_cb;
-	if (hash_cb->hash_selftest)
-		ret = hash_cb->hash_selftest();
-	else
-		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
-			    "Hash self test missing\n");
-	CKINT_LOG(ret, "Hash self test failed: %d\n", ret);
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		    "Hash self test passed successfully\n");
-
-	mutex_w_lock(&drng->lock);
-	drng_cb = drng->drng_cb;
-	if (drng_cb->drng_selftest)
-		ret = drng_cb->drng_selftest();
-	else
-		esdm_logger(LOGGER_WARN, LOGGER_C_DRNG,
-			    "DRNG self test missing\n");
-	mutex_w_unlock(&drng->lock);
-	CKINT_LOG(ret, "DRNG self test failed: %d\n", ret);
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
-		    "DRNG self test passed successfully\n");
-
-out:
-	esdm_drng_put_instances();
-	return ret;
+	return !!atomic_load(&esdm_drng_mgr_terminate);
 }
 
 int esdm_drng_mgr_reinitialize(void)
 {
 	int ret;
 
-	CKINT(esdm_drng_mgr_selftest());
+	CKINT(esdm_selftest_crypto());
 
 out:
 	return ret;
@@ -302,7 +274,7 @@ int esdm_drng_mgr_initialize(void)
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_DRNG,
 		    "ESDM for general use is available\n");
 
-	CKINT(esdm_drng_mgr_selftest());
+	CKINT(esdm_selftest_crypto());
 
 out:
 	if (ret) {
@@ -407,17 +379,6 @@ void esdm_set_reseed_max_time(uint32_t seconds)
 }
 
 /************************* Random Number Generation ***************************/
-
-/* Seconds elapsed since timeout_sec (CLOCK_MONOTONIC), 0 if not yet reached */
-static time_t esdm_time_after_now(time_t timeout_sec)
-{
-	struct timespec curr;
-
-	if (clock_gettime(CLOCK_MONOTONIC, &curr) == -1)
-		return 0;
-
-	return (curr.tv_sec > timeout_sec) ? (curr.tv_sec - timeout_sec) : 0;
-}
 
 /* Inject a data buffer into the DRNG - caller must hold its lock */
 static void esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
@@ -1000,6 +961,22 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	if (!esdm_get_available() || !esdm_state_operational())
 		return -EOPNOTSUPP;
 
+	/*
+	 * No bits are handed out unless the crypto implementations producing
+	 * them are known to work: neither before the self tests ran nor after
+	 * one of them failed.
+	 */
+	if (!esdm_selftest_crypto_passed())
+		return -EOPNOTSUPP;
+
+	/*
+	 * The periodic self tests are started on the way past: a process that
+	 * produces random bits is one that has to keep verifying the
+	 * implementation producing them, whether or not it ever set the ESDM up
+	 * with esdm_init_monitor().
+	 */
+	esdm_selftest_periodic_start();
+
 	outbuflen = min_size(outbuflen, SSIZE_MAX);
 
 	/*
@@ -1385,6 +1362,14 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	buf[0] = buflen;
 	if (nbytes < buflen)
 		return -EMSGSIZE;
+
+	/*
+	 * The seed material handed out here is conditioned with the very hash
+	 * the self tests cover, so it is held back for the same reason as the
+	 * DRNG output.
+	 */
+	if (!esdm_selftest_crypto_passed())
+		return -EOPNOTSUPP;
 
 	/*
 	 * We only allow ONE caller at any time to prevent a DoS on the RPC

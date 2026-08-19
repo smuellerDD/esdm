@@ -18,6 +18,9 @@
  */
 
 #define _GNU_SOURCE
+#include <dlfcn.h>
+#include <link.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -170,28 +173,18 @@ static int process_checkfile(const char *checkfile, const char *targetfile)
 
 	file = strcmp(checkfile, "-") ? fopen(checkfile, "r") : stdin;
 	if (!file) {
+		/*
+		 * The reference value is established by whoever builds and
+		 * installs the module, and the integrity test verifies against
+		 * it.
+		 */
 		fprintf(stderr,
 			FIPS_INTEGRITY_LOGGER_PREFIX
-			"Cannot open file %s, creating it\n",
+			"No reference value for %s: cannot open %s (%s) - create it at installation time with: esdm-tool --fips-targetfile %s --fips-checkfile %s\n",
+			targetfile, checkfile, strerror(errno), targetfile,
 			checkfile);
-
-		if (fips_create_checkfile(checkfile, targetfile)) {
-			fprintf(stderr,
-				FIPS_INTEGRITY_LOGGER_PREFIX
-				"Cannot create file %s\n",
-				checkfile);
-			ret = -EIO;
-			goto out;
-		}
-		file = fopen(checkfile, "r");
-		if (!file) {
-			fprintf(stderr,
-				FIPS_INTEGRITY_LOGGER_PREFIX
-				"Cannot open file %s\n",
-				checkfile);
-			ret = -EIO;
-			goto out;
-		}
+		ret = -ENOENT;
+		goto out;
 	}
 
 	ret = mmap_file(targetfile, &memblock, &size);
@@ -391,4 +384,101 @@ out:
 	if (checkfile)
 		free(checkfile);
 	return ret;
+}
+
+/* Are the two paths the same file? */
+static bool fips_same_file(const char *a, const char *b)
+{
+	struct stat sa, sb;
+
+	if (stat(a, &sa) == -1 || stat(b, &sb) == -1)
+		return false;
+
+	return (sa.st_dev == sb.st_dev && sa.st_ino == sb.st_ino);
+}
+
+int fips_post_integrity_obj(const void *addr)
+{
+	char selfname[BUFSIZE];
+	ssize_t selfnamesize;
+	Dl_info info;
+
+	if (!addr)
+		return -EINVAL;
+
+	/* Which file the code at @addr was loaded from. */
+	memset(&info, 0, sizeof(info));
+	if (!dladdr(addr, &info) || !info.dli_fname || !info.dli_fname[0]) {
+		fprintf(stderr, FIPS_INTEGRITY_LOGGER_PREFIX
+			"Cannot determine the file the module was loaded from\n");
+		return -EFAULT;
+	}
+
+	/*
+	 * A statically linked module resolves to the executable, which the
+	 * caller attests with fips_post_integrity(NULL) - do not ask for a
+	 * second reference value for the same file.
+	 */
+	memset(selfname, 0, sizeof(selfname));
+	selfnamesize = readlink("/proc/self/exe", selfname, BUFSIZE - 1);
+	if (selfnamesize > 0 && selfnamesize < BUFSIZE &&
+	    fips_same_file(selfname, info.dli_fname))
+		return 0;
+
+	return fips_post_integrity(info.dli_fname);
+}
+
+struct fips_loaded_ctx {
+	const char *soname;
+	size_t sonamelen;
+	unsigned int attested;
+	int ret;
+};
+
+static int fips_loaded_cb(struct dl_phdr_info *info, size_t size, void *data)
+{
+	struct fips_loaded_ctx *ctx = data;
+	const char *base;
+
+	(void)size;
+
+	/* The main executable, which the caller attests on its own */
+	if (!info->dlpi_name || !info->dlpi_name[0])
+		return 0;
+
+	base = strrchr(info->dlpi_name, '/');
+	base = base ? base + 1 : info->dlpi_name;
+
+	/*
+	 * A prefix match on the file name, so that the version behind the
+	 * SONAME - libjitterentropy.so.3, libcrypto.so.3 - does not have to be
+	 * spelled out by the caller.
+	 */
+	if (strncmp(base, ctx->soname, ctx->sonamelen))
+		return 0;
+
+	ctx->ret = fips_post_integrity(info->dlpi_name);
+	if (ctx->ret)
+		return 1; /* stop the walk on the first failure */
+
+	ctx->attested++;
+
+	return 0;
+}
+
+int fips_post_integrity_loaded(const char *soname)
+{
+	struct fips_loaded_ctx ctx;
+
+	if (!soname || !soname[0])
+		return -EINVAL;
+
+	ctx.soname = soname;
+	ctx.sonamelen = strlen(soname);
+	ctx.attested = 0;
+	ctx.ret = 0;
+
+	dl_iterate_phdr(fips_loaded_cb, &ctx);
+
+	return ctx.ret ? ctx.ret : (int)ctx.attested;
 }

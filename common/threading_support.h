@@ -74,7 +74,9 @@ extern "C" {
  * would only wait for the first.
  */
 #define ESDM_THREAD_DRNG_RESEED ((uint32_t)-5)
-#define ESDM_THREAD_MAX_SPECIAL_GROUPS 5
+/* The periodic self tests of the hash and the DRNG implementation. */
+#define ESDM_THREAD_PERIODIC_SELFTEST ((uint32_t)-6)
+#define ESDM_THREAD_MAX_SPECIAL_GROUPS 6
 
 enum esdm_request_type {
 	es_monitor,

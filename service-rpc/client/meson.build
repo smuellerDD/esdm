@@ -17,6 +17,7 @@ client_rpc_src = files([
 	'esdm_rpc_rnd_clear_pool_c.c',
 	'esdm_rpc_rnd_get_ent_cnt_c.c',
 	'esdm_rpc_rnd_reseed_crng_c.c',
+	'esdm_rpc_selftest_c.c',
 	'esdm_rpc_set_min_reseed_secs_c.c',
 	'esdm_rpc_set_pkcs11_config_c.c',
 	'esdm_rpc_set_write_wakeup_thresh_c.c',

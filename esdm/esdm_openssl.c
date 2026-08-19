@@ -36,6 +36,7 @@
 #include "esdm_logger.h"
 #include "memset_secure.h"
 #include "ret_checkers.h"
+#include "selftest_kat.h"
 
 #define ESDM_OPENSSL_HASH (EVP_sha3_512())
 
@@ -136,6 +137,7 @@ static int esdm_openssl_hash_selftest(void)
 		0x6E, 0xDE, 0x42, 0x91
 	};
 	uint8_t act[sizeof(exp_512)];
+	uint8_t mod[sizeof(msg_512)];
 	void *hash = NULL;
 	int ret;
 
@@ -144,8 +146,15 @@ static int esdm_openssl_hash_selftest(void)
 	CKINT(esdm_openssl_hash_update(hash, msg_512, sizeof(msg_512)));
 	CKINT(esdm_openssl_hash_final(hash, act));
 
-	if (memcmp(act, exp_512, sizeof(exp_512)))
-		ret = -EFAULT;
+	CKINT(esdm_kat_check(act, exp_512, sizeof(exp_512)));
+
+	/* A message off by its first byte must not produce that digest */
+	CKINT(esdm_kat_modify(mod, msg_512, sizeof(mod)));
+	CKINT(esdm_openssl_hash_init(hash));
+	CKINT(esdm_openssl_hash_update(hash, mod, sizeof(mod)));
+	CKINT(esdm_openssl_hash_final(hash, act));
+
+	CKINT(esdm_kat_check_differs(act, exp_512, sizeof(exp_512)));
 
 out:
 	esdm_openssl_hash_dealloc(hash);
@@ -560,6 +569,7 @@ static int esdm_openssl_drbg_selftest(void)
 	};
 #endif
 	uint8_t act[sizeof(exp)];
+	uint8_t mod[sizeof(ent_nonce)];
 	void *drng = NULL;
 	int ret;
 
@@ -580,9 +590,27 @@ static int esdm_openssl_drbg_selftest(void)
 		goto out;
 	}
 
-	if (memcmp(act, exp, sizeof(exp))) {
+	CKINT(esdm_kat_check(act, exp, sizeof(exp)));
+
+	/* Seed material off by its first byte must not produce that output. */
+	esdm_openssl_drbg_dealloc(drng);
+	drng = NULL;
+	CKINT(esdm_kat_modify(mod, ent_nonce, sizeof(mod)));
+
+	CKINT(esdm_openssl_drbg_alloc(&drng, 256));
+	CKINT(esdm_openssl_drbg_seed_internal(drng, mod, sizeof(mod), NULL, 0,
+					      true));
+	CKINT(esdm_openssl_drbg_seed_internal(drng, reseed, sizeof(reseed),
+					      NULL, 0, true));
+	if (esdm_openssl_drbg_generate_w_additional_data(
+		    drng, act, sizeof(act), NULL, 0) != sizeof(act) ||
+	    esdm_openssl_drbg_generate_w_additional_data(
+		    drng, act, sizeof(act), NULL, 0) != sizeof(act)) {
 		ret = -EFAULT;
+		goto out;
 	}
+
+	CKINT(esdm_kat_check_differs(act, exp, sizeof(exp)));
 
 out:
 	esdm_openssl_drbg_dealloc(drng);

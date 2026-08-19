@@ -220,6 +220,10 @@ void esdm_rpc_set_pkcs11_config(PrivAccess_Service *service,
 				RetResponse_Closure closure,
 				void *closure_data);
 
+/* self tests */
+void esdm_rpc_selftest(PrivAccess_Service *service, const EmptyRequest *request,
+		       SelftestResponse_Closure closure, void *closure_data);
+
 /******************************************************************************
  * Definition of Protobuf-C service
  ******************************************************************************/

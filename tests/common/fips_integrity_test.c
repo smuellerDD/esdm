@@ -30,6 +30,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <link.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -212,15 +213,18 @@ static void test_post_integrity(void)
 	CHECK_EQ(fips_post_integrity(target), 0);
 
 	/*
-	 * Without one, the self test creates it from the current target and
-	 * then verifies against it - the first start after an installation.
+	 * Without one there is nothing to verify against, which is a failed
+	 * integrity test. The reference value is established when the module is
+	 * built and installed; computing it here would attest a modified file
+	 * just as happily as an intact one.
 	 */
 	unlink(hmacfile);
-	CHECK_EQ(fips_post_integrity(target), 0);
-	CHECK(file_exists(hmacfile),
-	      "the missing HMAC file was not created by the self test");
+	CHECK_EQ(fips_post_integrity(target), -ENOENT);
+	CHECK(!file_exists(hmacfile),
+	      "the self test wrote the reference value it was missing");
 
-	/* and the file it created is accepted on the next run */
+	/* Restore it for the tests that follow */
+	CHECK_EQ(fips_create_checkfile(hmacfile, target), 0);
 	CHECK_EQ(fips_post_integrity(target), 0);
 }
 
@@ -302,14 +306,20 @@ static void test_unreadable_target(void)
 	unlink(missing_hmac);
 
 	/*
-	 * A target that cannot be opened cannot be attested. Note that the
-	 * attempt leaves the empty HMAC file it started to write behind, so it
-	 * has to go before the next call - otherwise that one would stop at the
-	 * refusal to overwrite an existing HMAC file instead.
+	 * A target that was never attested has no reference value next to it,
+	 * which is what the self test reports - it does not get as far as
+	 * finding out that the target cannot be opened either.
 	 */
-	CHECK_EQ(fips_post_integrity(missing), -EIO);
-	unlink(missing_hmac);
+	CHECK_EQ(fips_post_integrity(missing), -ENOENT);
+	CHECK(!file_exists(missing_hmac),
+	      "the self test created a reference value for a missing target");
 
+	/*
+	 * Creating one is the operation that opens the target, and it leaves
+	 * the empty HMAC file it started to write behind - so it has to go
+	 * before the next call, which would otherwise stop at the refusal to
+	 * overwrite an existing HMAC file.
+	 */
 	CHECK_EQ(fips_create_checkfile(missing_hmac, missing), -EIO);
 	unlink(missing_hmac);
 
@@ -379,22 +389,114 @@ static void test_post_integrity_self(void)
 	hmac_name_of(self, self_hmac, sizeof(self_hmac));
 	unlink(self_hmac);
 
-	ret = fips_post_integrity(NULL);
+	/* An unattested binary does not pass */
+	CHECK_EQ(fips_post_integrity(NULL), -ENOENT);
 
 	/*
-	 * The self test creates the missing HMAC file next to the binary. That
-	 * only works where the binary lives in a writable directory, which the
-	 * build tree is but an installed tree need not be - so the inability to
-	 * create it (-EIO) is accepted here, anything else is not.
+	 * Attest it the way an installation would and the self test accepts it.
 	 */
-	if (ret == 0) {
-		CHECK(file_exists(self_hmac),
-		      "the self test reported success without an HMAC file");
-		/* and the freshly created file verifies on the next call */
-		CHECK_EQ(fips_post_integrity(NULL), 0);
-		unlink(self_hmac);
-	} else {
-		CHECK_EQ(ret, -EIO);
+	ret = fips_create_checkfile(self_hmac, self);
+	if (ret) {
+		CHECK_EQ(ret, -EEXIST);
+		return;
+	}
+
+	CHECK_EQ(fips_post_integrity(NULL), 0);
+	unlink(self_hmac);
+}
+
+static void test_post_integrity_obj(void)
+{
+	char self[4096];
+	char self_hmac[4200];
+	ssize_t len;
+
+	/* There is no object to attest without an address in one */
+	CHECK_EQ(fips_post_integrity_obj(NULL), -EINVAL);
+
+	len = readlink("/proc/self/exe", self, sizeof(self) - 1);
+	if (len <= 0) {
+		CHECK(0, "cannot read /proc/self/exe: %s", strerror(errno));
+		return;
+	}
+	self[len] = '\0';
+	hmac_name_of(self, self_hmac, sizeof(self_hmac));
+	unlink(self_hmac);
+
+	/*
+	 * This test links the integrity code statically, so an address inside
+	 * it resolves to the executable - which the caller attests through
+	 * fips_post_integrity(NULL).
+	 */
+	CHECK_EQ(fips_post_integrity_obj(payload), 0);
+	CHECK(!file_exists(self_hmac),
+	      "attesting the running object created an HMAC file");
+}
+
+struct loaded_name {
+	char *buf;
+	size_t len;
+};
+
+static int first_loaded_cb(struct dl_phdr_info *info, size_t size, void *data)
+{
+	struct loaded_name *name = data;
+	const char *base;
+
+	(void)size;
+
+	/* The main executable, and the vdso, which has no file behind it */
+	if (!info->dlpi_name || !strchr(info->dlpi_name, '/'))
+		return 0;
+
+	base = strrchr(info->dlpi_name, '/') + 1;
+	snprintf(name->buf, name->len, "%s", base);
+
+	return 1;
+}
+
+/* File name of one shared object loaded into this process, empty if none is */
+static void first_loaded_object(char *out, size_t outlen)
+{
+	struct loaded_name name = { .buf = out, .len = outlen };
+
+	out[0] = '\0';
+	dl_iterate_phdr(first_loaded_cb, &name);
+}
+
+static void test_post_integrity_loaded(void)
+{
+	char base[256];
+	int ret;
+
+	/* Without a name there is nothing to look for */
+	CHECK_EQ(fips_post_integrity_loaded(NULL), -EINVAL);
+	CHECK_EQ(fips_post_integrity_loaded(""), -EINVAL);
+
+	/* An object that is not loaded is not attested, and not an error */
+	CHECK_EQ(fips_post_integrity_loaded("libnothing-esdm-test.so"), 0);
+
+	first_loaded_object(base, sizeof(base));
+	if (!base[0])
+		return; /* a fully static build has none to look at */
+
+	/*
+	 * One that is loaded is picked up and attested. The libraries of the
+	 * system have no reference value next to them, so the attempt says so -
+	 * which is what tells "found it and could not attest it" apart from
+	 * "found nothing", the answer a broken lookup would give.
+	 */
+	ret = fips_post_integrity_loaded(base);
+	CHECK(ret == -ENOENT || ret > 0,
+	      "the loaded object %s was not picked up (%d)", base, ret);
+
+	/* The same object is found through a prefix of its name */
+	base[strlen(base) / 2] = '\0';
+	if (base[0]) {
+		ret = fips_post_integrity_loaded(base);
+		CHECK(ret == -ENOENT || ret > 0,
+		      "the prefix %s did not match the object it names (%d)",
+		      base, ret);
 	}
 }
 
@@ -423,6 +525,8 @@ int main(int argc, char *argv[])
 	test_empty_target();
 	test_overlong_pathname();
 	test_post_integrity_self();
+	test_post_integrity_obj();
+	test_post_integrity_loaded();
 
 	ret = common_test_result("fips_integrity");
 	cleanup();

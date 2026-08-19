@@ -102,6 +102,11 @@ int esdm_drng_alloc_common(struct esdm_drng *drng,
 int esdm_drng_mgr_reinitialize(void);
 int esdm_drng_mgr_initialize(void);
 void esdm_drng_mgr_finalize(void);
+
+/**
+ * @brief Is the DRNG manager shutting down?
+ */
+bool esdm_drng_mgr_terminating(void);
 bool esdm_get_available(void);
 void esdm_drng_reset(struct esdm_drng *drng);
 void esdm_drng_seed_work(void);

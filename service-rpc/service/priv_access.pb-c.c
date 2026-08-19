@@ -232,6 +232,51 @@ void   set_pkcs11_config_request__free_unpacked
   assert(message->base.descriptor == &set_pkcs11_config_request__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   selftest_response__init
+                     (SelftestResponse         *message)
+{
+  static const SelftestResponse init_value = SELFTEST_RESPONSE__INIT;
+  *message = init_value;
+}
+size_t selftest_response__get_packed_size
+                     (const SelftestResponse *message)
+{
+  assert(message->base.descriptor == &selftest_response__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t selftest_response__pack
+                     (const SelftestResponse *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &selftest_response__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t selftest_response__pack_to_buffer
+                     (const SelftestResponse *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &selftest_response__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+SelftestResponse *
+       selftest_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (SelftestResponse *)
+     protobuf_c_message_unpack (&selftest_response__descriptor,
+                                allocator, len, data);
+}
+void   selftest_response__free_unpacked
+                     (SelftestResponse *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &selftest_response__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 static const ProtobufCFieldDescriptor rnd_add_to_ent_cnt_request__field_descriptors[1] =
 {
   {
@@ -474,7 +519,97 @@ const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor =
   (ProtobufCMessageInit) set_pkcs11_config_request__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor priv_access__method_descriptors[7] =
+static const ProtobufCFieldDescriptor selftest_response__field_descriptors[5] =
+{
+  {
+    "ret",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_INT32,
+    0,   /* quantifier_offset */
+    offsetof(SelftestResponse, ret),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "crypto_state",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(SelftestResponse, crypto_state),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "es_state",
+    3,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(SelftestResponse, es_state),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "es_sources",
+    4,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(SelftestResponse, es_sources),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "es_failures",
+    5,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(SelftestResponse, es_failures),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned selftest_response__field_indices_by_name[] = {
+  1,   /* field[1] = crypto_state */
+  4,   /* field[4] = es_failures */
+  3,   /* field[3] = es_sources */
+  2,   /* field[2] = es_state */
+  0,   /* field[0] = ret */
+};
+static const ProtobufCIntRange selftest_response__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 5 }
+};
+const ProtobufCMessageDescriptor selftest_response__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "SelftestResponse",
+  "SelftestResponse",
+  "SelftestResponse",
+  "",
+  sizeof(SelftestResponse),
+  5,
+  selftest_response__field_descriptors,
+  selftest_response__field_indices_by_name,
+  1,  selftest_response__number_ranges,
+  (ProtobufCMessageInit) selftest_response__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCMethodDescriptor priv_access__method_descriptors[8] =
 {
   { "RpcRndAddToEntCnt", &rnd_add_to_ent_cnt_request__descriptor, &ret_response__descriptor },
   { "RpcRndAddEntropy", &rnd_add_entropy_request__descriptor, &ret_response__descriptor },
@@ -483,12 +618,14 @@ static const ProtobufCMethodDescriptor priv_access__method_descriptors[7] =
   { "RpcSetWriteWakeupThresh", &set_write_wakeup_thresh_request__descriptor, &ret_response__descriptor },
   { "RpcSetMinReseedSecs", &set_min_reseed_secs_request__descriptor, &ret_response__descriptor },
   { "RpcSetPkcs11Config", &set_pkcs11_config_request__descriptor, &ret_response__descriptor },
+  { "RpcSelftest", &empty_request__descriptor, &selftest_response__descriptor },
 };
 const unsigned priv_access__method_indices_by_name[] = {
   1,        /* RpcRndAddEntropy */
   0,        /* RpcRndAddToEntCnt */
   2,        /* RpcRndClearPool */
   3,        /* RpcRndReseedCRNG */
+  7,        /* RpcSelftest */
   5,        /* RpcSetMinReseedSecs */
   6,        /* RpcSetPkcs11Config */
   4         /* RpcSetWriteWakeupThresh */
@@ -500,7 +637,7 @@ const ProtobufCServiceDescriptor priv_access__descriptor =
   "PrivAccess",
   "PrivAccess",
   "",
-  7,
+  8,
   priv_access__method_descriptors,
   priv_access__method_indices_by_name
 };
@@ -559,6 +696,14 @@ void priv_access__rpc_set_pkcs11_config(ProtobufCService *service,
 {
   assert(service->descriptor == &priv_access__descriptor);
   service->invoke(service, 6, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void priv_access__rpc_selftest(ProtobufCService *service,
+                               const EmptyRequest *input,
+                               SelftestResponse_Closure closure,
+                               void *closure_data)
+{
+  assert(service->descriptor == &priv_access__descriptor);
+  service->invoke(service, 7, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void priv_access__init (PrivAccess_Service *service,
                         PrivAccess_ServiceDestroy destroy)

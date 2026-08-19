@@ -241,6 +241,8 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--reseed-crng\t\t\tReseed the CRNGs for testing (needs root)\n");
 	fprintf(stderr,
+		"\t--selftest\t\t\tRun the self tests of the crypto implementations and of the entropy sources now and report their outcome (needs root)\n");
+	fprintf(stderr,
 		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
 	fprintf(stderr,
 		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");

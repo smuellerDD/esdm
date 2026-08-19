@@ -121,6 +121,20 @@ struct entropy_buf {
  * @reset: Reset entropy source (drop all entropy and reinitialize).
  *	   This callback may be NULL.
  * @active: Is ES active.
+ * @selftest: Verify that the entropy source still works, repeated on the
+ *	      interval of the periodic self tests. For a SP800-90B source this
+ *	      is the on-demand health test the standard asks for next to the
+ *	      start-up and continuous ones; for the others it is whatever the
+ *	      source can say about itself without going to its noise source.
+ *
+ *	      It must be cheap, must not block, and must not consume entropy
+ *	      the ESDM would otherwise hand out: it runs while the daemon is
+ *	      serving requests, on a source that is being read at the same time.
+ *	      A source that is not configured or not initialized reports success
+ *	      - there is nothing to test - and says so in its log message.
+ *
+ *	      Returns 0 if the source is in order, < 0 otherwise. This callback
+ *	      may be NULL, which the manager reports as an untested source.
  */
 struct esdm_es_cb {
 	const char *name;
@@ -142,6 +156,7 @@ struct esdm_es_cb {
 	void (*state_json)(char *buf, size_t buflen);
 	void (*reset)(void);
 	bool (*active)(void);
+	int (*selftest)(void);
 };
 
 /* Reseed is desired */

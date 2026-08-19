@@ -347,6 +347,25 @@ static bool esdm_hwrand_active(void)
 	return ret;
 }
 
+/* The device is still open and its last read worked. */
+static int esdm_hwrand_selftest(void)
+{
+	if (esdm_hwrand_fd < 0) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "HWRand ES: no device - nothing to test\n");
+		return 0;
+	}
+
+	if (esdm_hwrand_read_failed) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"HWRand ES: the last read from the device failed\n");
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_hwrand = {
 	.name = "LinuxHWRand",
 	.init = esdm_hwrand_init,
@@ -362,4 +381,5 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.state = esdm_hwrand_es_state,
 	.reset = NULL,
 	.active = esdm_hwrand_active,
+	.selftest = esdm_hwrand_selftest,
 };

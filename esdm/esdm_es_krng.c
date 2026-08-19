@@ -184,4 +184,5 @@ struct esdm_es_cb esdm_es_krng = {
 	.state = esdm_krng_es_state,
 	.reset = NULL,
 	.active = esdm_krng_active,
+	.selftest = esdm_krng_selftest,
 };

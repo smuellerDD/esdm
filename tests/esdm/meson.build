@@ -108,6 +108,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_selftest_test = executable(
+		'esdm_selftest_test',
+		[ esdm_ipc_ns, 'esdm_selftest_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_ntg1_seeding_test = executable(
 		'esdm_ntg1_seeding_test',
 		[ esdm_ipc_ns, 'esdm_ntg1_seeding_test.c' ],
@@ -177,4 +185,7 @@ if get_option('esdm-server').enabled()
 		timeout: 300)
 
 	test('ESDM NTG.1 seeding strategy', esdm_ntg1_seeding_test)
+
+	test('ESDM self tests', esdm_selftest_test)
+
 endif

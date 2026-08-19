@@ -15,6 +15,7 @@ server_rpc_src = files([
 	'esdm_rpc_rnd_clear_pool_s.c',
 	'esdm_rpc_rnd_get_ent_cnt_s.c',
 	'esdm_rpc_rnd_reseed_crng_s.c',
+	'esdm_rpc_selftest_s.c',
 	'esdm_rpc_server.c',
 	'esdm_rpc_service.c',
 	'esdm_rpc_set_min_reseed_secs_s.c',

@@ -47,6 +47,9 @@ static uint32_t esdm_cpu_data_multiplier = 0;
  */
 static atomic_bool esdm_cpu_read_failed = false;
 
+/* Tracks whether the CPU RNG ever delivered. */
+static atomic_bool esdm_cpu_delivered = false;
+
 static int esdm_cpu_init(void)
 {
 	esdm_cpu_data_multiplier = cpu_es_multiplier();
@@ -111,6 +114,7 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 	}
 
 	atomic_store(&esdm_cpu_read_failed, false);
+	atomic_store(&esdm_cpu_delivered, true);
 	return requested_bits;
 }
 
@@ -273,6 +277,50 @@ static bool esdm_cpu_active(void)
 #endif
 }
 
+/* Two reads of the CPU RNG that have to succeed and have to differ. */
+static int esdm_cpu_selftest(void)
+{
+#ifdef ESDM_CPU_ES_IMPLEMENTED
+	unsigned long first, second;
+
+	if (!cpu_es_get(&first) || !cpu_es_get(&second)) {
+		/*
+		 * A CPU that never delivered does not have the instruction the
+		 * build provides for - there is nothing to test, just as there
+		 * is nothing to test for a device that is not present.
+		 */
+		if (!atomic_load(&esdm_cpu_delivered)) {
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_ES,
+				"CPU ES: no CPU RNG on this system - nothing to test\n");
+			return 0;
+		}
+
+		atomic_store(&esdm_cpu_read_failed, true);
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "CPU ES: the CPU RNG did not deliver\n");
+		return -EFAULT;
+	}
+
+	atomic_store(&esdm_cpu_delivered, true);
+
+	if (first == second) {
+		atomic_store(&esdm_cpu_read_failed, true);
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "CPU ES: the CPU RNG repeated its output\n");
+		return -EFAULT;
+	}
+
+	memset_secure(&first, 0, sizeof(first));
+	memset_secure(&second, 0, sizeof(second));
+
+	return 0;
+#else
+	/* Nothing to test where the ESDM has no CPU RNG to read */
+	return 0;
+#endif
+}
+
 struct esdm_es_cb esdm_es_cpu = {
 	.name = "CPU",
 	.init = esdm_cpu_init,
@@ -284,4 +332,5 @@ struct esdm_es_cb esdm_es_cpu = {
 	.state = esdm_cpu_es_state,
 	.reset = NULL,
 	.active = esdm_cpu_active,
+	.selftest = esdm_cpu_selftest,
 };

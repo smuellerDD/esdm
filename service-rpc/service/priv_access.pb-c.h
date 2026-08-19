@@ -21,6 +21,7 @@ typedef struct RndAddEntropyRequest RndAddEntropyRequest;
 typedef struct SetWriteWakeupThreshRequest SetWriteWakeupThreshRequest;
 typedef struct SetMinReseedSecsRequest SetMinReseedSecsRequest;
 typedef struct SetPkcs11ConfigRequest SetPkcs11ConfigRequest;
+typedef struct SelftestResponse SelftestResponse;
 
 
 /* --- enums --- */
@@ -124,6 +125,36 @@ struct  SetPkcs11ConfigRequest
 , 0, (char *)protobuf_c_empty_string, 0, (char *)protobuf_c_empty_string }
 
 
+/*
+ **
+ * @brief Response reporting the outcome of the self tests.
+ * The two states carry the values the ESDM uses internally and reports in its
+ * status: 0 - the test has not run, 1 - it passed, 2 - it failed. They are
+ * separate because they mean different things: a failed crypto self test stops
+ * the ESDM from handing out random bits, while a failed entropy source is one
+ * of several and only stops being credited.
+ * @param ret 0 if every self test passed and the ESDM hands out random bits,
+ *	      < 0 otherwise - the error of the failing test, or -EOPNOTSUPP
+ *	      where an earlier self test failed and still holds the output back
+ * @param crypto_state State of the self tests of the hash and the DRNG
+ * @param es_state State of the self tests of the entropy sources
+ * @param es_sources Number of entropy sources the pass tested
+ * @param es_failures Number of entropy sources that failed their self test
+ */
+struct  SelftestResponse
+{
+  ProtobufCMessage base;
+  int32_t ret;
+  uint32_t crypto_state;
+  uint32_t es_state;
+  uint32_t es_sources;
+  uint32_t es_failures;
+};
+#define SELFTEST_RESPONSE__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&selftest_response__descriptor) \
+, 0, 0, 0, 0, 0 }
+
+
 /* RndAddToEntCntRequest methods */
 void   rnd_add_to_ent_cnt_request__init
                      (RndAddToEntCntRequest         *message);
@@ -219,6 +250,25 @@ SetPkcs11ConfigRequest *
 void   set_pkcs11_config_request__free_unpacked
                      (SetPkcs11ConfigRequest *message,
                       ProtobufCAllocator *allocator);
+/* SelftestResponse methods */
+void   selftest_response__init
+                     (SelftestResponse         *message);
+size_t selftest_response__get_packed_size
+                     (const SelftestResponse   *message);
+size_t selftest_response__pack
+                     (const SelftestResponse   *message,
+                      uint8_t             *out);
+size_t selftest_response__pack_to_buffer
+                     (const SelftestResponse   *message,
+                      ProtobufCBuffer     *buffer);
+SelftestResponse *
+       selftest_response__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   selftest_response__free_unpacked
+                     (SelftestResponse *message,
+                      ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
 typedef void (*RndAddToEntCntRequest_Closure)
@@ -235,6 +285,9 @@ typedef void (*SetMinReseedSecsRequest_Closure)
                   void *closure_data);
 typedef void (*SetPkcs11ConfigRequest_Closure)
                  (const SetPkcs11ConfigRequest *message,
+                  void *closure_data);
+typedef void (*SelftestResponse_Closure)
+                 (const SelftestResponse *message,
                   void *closure_data);
 
 /* --- services --- */
@@ -271,6 +324,10 @@ struct PrivAccess_Service
                                 const SetPkcs11ConfigRequest *input,
                                 RetResponse_Closure closure,
                                 void *closure_data);
+  void (*rpc_selftest)(PrivAccess_Service *service,
+                       const EmptyRequest *input,
+                       SelftestResponse_Closure closure,
+                       void *closure_data);
 };
 typedef void (*PrivAccess_ServiceDestroy)(PrivAccess_Service *);
 void priv_access__init (PrivAccess_Service *service,
@@ -285,7 +342,8 @@ void priv_access__init (PrivAccess_Service *service,
       function_prefix__ ## rpc_rnd_reseed_crng,\
       function_prefix__ ## rpc_set_write_wakeup_thresh,\
       function_prefix__ ## rpc_set_min_reseed_secs,\
-      function_prefix__ ## rpc_set_pkcs11_config  }
+      function_prefix__ ## rpc_set_pkcs11_config,\
+      function_prefix__ ## rpc_selftest  }
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
                                          const RndAddToEntCntRequest *input,
                                          RetResponse_Closure closure,
@@ -314,6 +372,10 @@ void priv_access__rpc_set_pkcs11_config(ProtobufCService *service,
                                         const SetPkcs11ConfigRequest *input,
                                         RetResponse_Closure closure,
                                         void *closure_data);
+void priv_access__rpc_selftest(ProtobufCService *service,
+                               const EmptyRequest *input,
+                               SelftestResponse_Closure closure,
+                               void *closure_data);
 
 /* --- descriptors --- */
 
@@ -322,6 +384,7 @@ extern const ProtobufCMessageDescriptor rnd_add_entropy_request__descriptor;
 extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_request__descriptor;
 extern const ProtobufCMessageDescriptor set_min_reseed_secs_request__descriptor;
 extern const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor;
+extern const ProtobufCMessageDescriptor selftest_response__descriptor;
 extern const ProtobufCServiceDescriptor priv_access__descriptor;
 
 PROTOBUF_C__END_DECLS

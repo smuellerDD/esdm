@@ -493,6 +493,19 @@ static bool esdm_irq_active(void)
 	return esdm_config_es_irq_retry() || fd_present;
 }
 
+/* The kernel interface of the entropy source is still open. */
+static int esdm_irq_selftest(void)
+{
+	if (esdm_irq_entropy_fd < 0) {
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"IRQ ES: kernel interface not available - nothing to test\n");
+		return 0;
+	}
+
+	return 0;
+}
+
 struct esdm_es_cb esdm_es_irq = {
 	.name = "Interrupt",
 	.init = esdm_irq_initialize,
@@ -505,4 +518,5 @@ struct esdm_es_cb esdm_es_irq = {
 	.state_json = esdm_irq_es_state_json,
 	.reset = esdm_irq_reset,
 	.active = esdm_irq_active,
+	.selftest = esdm_irq_selftest,
 };

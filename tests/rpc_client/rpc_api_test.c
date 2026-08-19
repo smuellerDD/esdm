@@ -311,6 +311,30 @@ static void test_set_pkcs11_config(void)
 	printf("set_pkcs11_config returned %d\n", ret);
 }
 
+static void test_selftest(void)
+{
+	struct esdm_rpcc_selftest_result result;
+	int ret;
+
+	/* Overwritten by the call - a leftover here would pass the checks */
+	memset(&result, 0xff, sizeof(result));
+
+	esdm_invoke(esdm_rpcc_selftest(&result));
+	CHECK_EQ(ret, 0);
+	CHECK_EQ(result.crypto_state, esdm_rpcc_selftest_passed);
+	CHECK_EQ(result.es_state, esdm_rpcc_selftest_passed);
+	CHECK(result.es_sources > 0, "no entropy source was tested");
+	CHECK_EQ(result.es_failures, 0);
+
+	printf("self test: crypto %d, entropy sources %d (%u tested, %u failed)\n",
+	       result.crypto_state, result.es_state, result.es_sources,
+	       result.es_failures);
+
+	/* The outcome is optional - a caller may only want the verdict */
+	esdm_invoke(esdm_rpcc_selftest(NULL));
+	CHECK_EQ(ret, 0);
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -356,6 +380,9 @@ int main(int argc, char *argv[])
 	/* Tunables, each read back through its getter */
 	test_write_wakeup_thresh_roundtrip();
 	test_min_reseed_secs_roundtrip();
+
+	/* The self tests, run on demand */
+	test_selftest();
 
 	/* Last, they disturb what the calls above observe */
 	test_rnd_reseed_crng();

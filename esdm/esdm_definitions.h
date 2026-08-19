@@ -70,6 +70,16 @@
 #define ESDM_DRNG_MAX_WITHOUT_RESEED (1 << 30)
 
 /*
+ * Interval in seconds between two self test passes over the hash and the DRNG
+ * implementation and over the entropy sources.
+ */
+#ifdef ESDM_TESTMODE
+#define ESDM_SELFTEST_INTERVAL_SEC 1
+#else
+#define ESDM_SELFTEST_INTERVAL_SEC 600
+#endif
+
+/*
  * Min required seed entropy is 128 bits covering the minimum entropy
  * requirement of SP800-131A and the German BSI's TR02102.
  *
