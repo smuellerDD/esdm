@@ -1065,15 +1065,18 @@ static void fuzz_one_call(struct fuzz_prov *p, struct fuzz_input *in)
 
 int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
+	int ret;
+
 	(void)argc;
 	(void)argv;
 
 	esdm_logger_set_verbosity(getenv("ESDM_FUZZ_VERBOSE") ? LOGGER_DEBUG :
 							       LOGGER_NONE);
 
-	if (fuzz_backend_init()) {
+	ret = fuzz_backend_init();
+	if (ret) {
 		fprintf(stderr, "the peer of the provider did not come up\n");
-		exit(1);
+		exit(ret);
 	}
 
 	return 0;
