@@ -1127,8 +1127,10 @@ static bool esdm_es_approved(uint32_t es)
  * outright. The caller of esdm_get_seed() hands in a buffer of its own, and
  * leaving a skipped slot untouched would hand its own bytes back to it.
  *
- * @addtl must be distinct from @seedbuf: passing one buffer twice would have
- * every source clear the estimator it just filled.
+ * @addtl may be @seedbuf itself, which collects every source into the one
+ * buffer, as esdm_get_seed() does: the estimator cleared above is the one of
+ * the slot @es is about to fill, so each source still sets its own, and a
+ * source not credited with entropy is counted with none.
  */
 static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 					    struct entropy_buf *addtl,
