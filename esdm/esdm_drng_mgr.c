@@ -2090,9 +2090,10 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 			!(flags & ESDM_GET_SEED_FULLY_SEEDED), false);
 		/*
 		 * What this hands back is seed material with an entropy count
-		 * against it, so only the sources that count are asked: the
-		 * others contribute nothing to collected_bits below and their
-		 * output would be carried out to the caller uncredited.
+		 * against it. Every source is asked, each into its own slot of
+		 * the one buffer: the ones credited with entropy make up
+		 * collected_bits below, the others are carried out to the
+		 * caller alongside them, credited with nothing.
 		 */
 		esdm_get_seed_buffers(eb, eb, requested_bits, false, true);
 		collected_bits = esdm_entropy_rate_eb(eb);

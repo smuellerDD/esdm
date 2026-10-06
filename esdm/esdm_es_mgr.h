@@ -51,7 +51,8 @@ void esdm_init_ops(struct entropy_buf *eb);
 /*
  * Collect from the entropy sources in one pass, splitting the result over the
  * two buffers a reseed needs: @seedbuf takes the sources that may be credited
- * with entropy, @addtl the rest. The two must be distinct buffers.
+ * with entropy, @addtl the rest. @addtl may also be @seedbuf itself, which
+ * collects every source into that one buffer.
  *
  * Pass NULL for @addtl to collect the creditable sources alone. The others are
  * then not fetched at all and their slots in @seedbuf are cleared.
