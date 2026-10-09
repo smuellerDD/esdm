@@ -139,6 +139,22 @@ static void fill_cb_failing(struct entropy_es *eb_es, uint32_t requested_bits,
 	eb_es->e_bits = 0;
 }
 
+/* Fill callback resetting the cache it fills, on its third call */
+struct fill_reset_record {
+	struct fill_record rec;
+	struct esdm_es_buf *buf;
+};
+
+static void fill_cb_resetting(struct entropy_es *eb_es,
+			      uint32_t requested_bits, void *ctx)
+{
+	struct fill_reset_record *rrec = ctx;
+
+	fill_cb(eb_es, requested_bits, &rrec->rec);
+	if (rrec->rec.calls == 3)
+		esdm_es_buf_reset(rrec->buf);
+}
+
 static bool block_is_zero(const struct entropy_es *block)
 {
 	static const uint8_t zero[ESDM_DRNG_INIT_SEED_SIZE_BYTES] = { 0 };
@@ -654,6 +670,34 @@ static void test_failed_fill_is_served(void)
  * Reset
  ******************************************************************************/
 
+static void test_reset_during_fill(void)
+{
+	struct esdm_es_buf buf;
+	struct fill_reset_record rrec = { { 0, 0, NULL, 1 }, &buf };
+
+	stubs_reset();
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rrec.rec), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb_resetting,
+				     &rrec),
+		 0);
+	CHECK_EQ(rrec.rec.calls, buf.num_blocks);
+
+	/*
+	 * The reset swept slots 0 and 1, and slot 2 - in the middle of its fill
+	 * at the time - must not be published either: what it holds was
+	 * collected before the reset. The slots filled after it are.
+	 */
+	CHECK_EQ(atomic_load(&buf.states[0]), esdm_es_buf_empty);
+	CHECK_EQ(atomic_load(&buf.states[1]), esdm_es_buf_empty);
+	CHECK_EQ(atomic_load(&buf.states[2]), esdm_es_buf_empty);
+	CHECK(block_is_zero(&buf.blocks[2]),
+	      "the block filled across the reset was not scrubbed");
+	CHECK_EQ(count_state(&buf, esdm_es_buf_filled), buf.num_blocks - 3);
+
+	esdm_es_buf_free(&buf);
+}
+
 static void test_reset(void)
 {
 	struct esdm_es_buf buf;
@@ -754,6 +798,7 @@ int main(int argc, char *argv[])
 	test_failed_fill_is_served();
 
 	test_reset();
+	test_reset_during_fill();
 	test_reset_leaves_owned_slots();
 
 	return common_test_result("esdm_es_buf");

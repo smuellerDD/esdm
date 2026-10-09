@@ -175,9 +175,15 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 	 * Serve small requests without initial oversampling from the async
 	 * cache; fall back to the synchronous Jitter RNG instance on miss or
 	 * when the request is too large for a single cached block.
+	 *
+	 * A block without entropy although the Jitter RNG is credited is one
+	 * the asynchronous collector failed to fill - e.g. after its known
+	 * answer tests failed - and counts as a miss as well: the synchronous
+	 * collector may well be serving. try_get() scrubbed the block already.
 	 */
 	if (esdm_config_es_jent_async_enabled() &&
-	    esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits))
+	    esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits) &&
+	    (eb_es->e_bits || !esdm_jent_entropylevel(requested_bits)))
 		return;
 
 	mutex_w_lock(&esdm_jent_lock);

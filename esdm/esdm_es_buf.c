@@ -99,7 +99,14 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf)
 	 * a consumer that already won the CAS) is left to its owner, which
 	 * completes the transition and scrubs the block itself. "empty" slots
 	 * are already clear.
+	 *
+	 * The block being filled was collected before this reset just as the
+	 * filled ones were, so it must not be published either: the new
+	 * generation, announced before the slots are swept, has the monitor
+	 * discard it once the fill returns.
 	 */
+	atomic_fetch_add(&buf->gen, 1);
+
 	for (i = 0; i < buf->num_blocks; i++) {
 		enum esdm_es_buf_state expected = esdm_es_buf_filled;
 
@@ -146,14 +153,31 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
 		    esdm_monotonic_now_ns() < deadline_ns;
 	     i++) {
 		enum esdm_es_buf_state expected = esdm_es_buf_empty;
+		unsigned int gen;
 
 		if (!atomic_compare_exchange_strong(&buf->states[i], &expected,
 						    esdm_es_buf_filling))
 			continue;
 
+		gen = atomic_load(&buf->gen);
 		fill(&buf->blocks[i], requested_bits, ctx);
 
 		atomic_thread_fence(memory_order_seq_cst);
+
+		/* A reset while the fill ran discards what it collected */
+		if (atomic_load(&buf->gen) != gen) {
+			memset_secure(&buf->blocks[i], 0,
+				      sizeof(buf->blocks[i]));
+			atomic_thread_fence(memory_order_seq_cst);
+			atomic_store(&buf->states[i], esdm_es_buf_empty);
+
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_ES,
+				"%s ES monitor: discarded slot %u filled across a reset\n",
+				buf->name, i);
+			continue;
+		}
+
 		atomic_store(&buf->states[i], esdm_es_buf_filled);
 
 		esdm_logger(

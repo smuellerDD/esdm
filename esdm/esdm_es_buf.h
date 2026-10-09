@@ -47,6 +47,11 @@ struct esdm_es_buf {
 	unsigned int mask;
 	atomic_int idx;
 	atomic_bool monitor_initialized;
+	/*
+	 * Bumped by esdm_es_buf_reset(): a fill that began under an older
+	 * generation is discarded instead of being published.
+	 */
+	atomic_uint gen;
 	const char *name;
 };
 
@@ -62,8 +67,9 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 void esdm_es_buf_free(struct esdm_es_buf *buf);
 
 /*
- * Reset all slots to empty and clear cached entropy. Allowed to be called on
- * an unallocated buf (it then is a no-op).
+ * Reset all slots to empty and clear cached entropy, including the block the
+ * monitor is filling at the time, which it discards once done. Allowed to be
+ * called on an unallocated buf (it then is a no-op).
  */
 void esdm_es_buf_reset(struct esdm_es_buf *buf);
 
