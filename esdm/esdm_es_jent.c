@@ -150,9 +150,39 @@ err:
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
 
+#if JENT_VERSION >= 3080000
+/*
+ * Counts the self test runs of esdm_jent_selftest(). The async collector is
+ * read by the monitor thread without esdm_jent_lock, and a jent_selftest()
+ * bound to it must not run in parallel with its jent_read_entropy_safe(),
+ * whose recovery frees and replaces the instance. So the self test only
+ * counts, and the monitor thread binds the test to its own collector when it
+ * sees a new run.
+ */
+static atomic_uint esdm_jent_selftest_runs = 0;
+#endif
+
 static void esdm_jent_buf_fill(struct entropy_es *eb_es,
 			       uint32_t requested_bits, void *ctx)
 {
+#if JENT_VERSION >= 3080000
+	/* Only the monitor thread fills the cache */
+	static unsigned int runs_seen = 0;
+	unsigned int runs = atomic_load(&esdm_jent_selftest_runs);
+
+	/*
+	 * A failing test leaves the collector without output until a later
+	 * run bound to it passes - the next periodic one.
+	 */
+	if (runs != runs_seen) {
+		runs_seen = runs;
+		if (jent_selftest(esdm_jent_state_thread))
+			esdm_logger(
+				LOGGER_ERR, LOGGER_C_ES,
+				"JitterRNG ES: known answer tests of the asynchronous collector failed\n");
+	}
+#endif
+
 	(void)ctx;
 	esdm_jent_get(&esdm_jent_state_thread, eb_es, requested_bits);
 }
@@ -543,7 +573,9 @@ static bool esdm_jent_active(void)
 
 /*
  * SP800-90B section 4.3 asks an entropy source for its start-up health tests,
- * and IG 10.3.A for the same tests on demand.
+ * and IG 10.3.A for the same tests on demand. From jitterentropy 3.8.0 on, the
+ * known answer tests of the conditioning component run bound to the
+ * collectors, which take a failure as reason to stop serving.
  */
 static int esdm_jent_selftest(void)
 {
@@ -563,7 +595,38 @@ static int esdm_jent_selftest(void)
 	 * be two of these at once.
 	 */
 	mutex_w_lock(&esdm_jent_lock);
+
+#if JENT_VERSION >= 3080000
+	/*
+	 * The known answer tests of the conditioning component, bound to the
+	 * synchronous collector: should they fail, it serves nothing until a
+	 * later run passes. Its every read is under esdm_jent_lock, which
+	 * keeps jent_read_entropy_safe() from replacing it meanwhile.
+	 */
+	if (esdm_jent_state && jent_selftest(esdm_jent_state)) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_ES,
+			"JitterRNG ES: known answer tests of the conditioning component failed\n");
+		ret = EHASH;
+	} else {
+		ret = jent_entropy_init_ex(ESDM_JENT_OSR, esdm_jent_flags());
+	}
+
+#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
+	atomic_fetch_add(&esdm_jent_selftest_runs, 1);
+
+	/*
+	 * What the cache holds was collected before this run - not to be
+	 * handed out after a failed one. Under the lock, which keeps
+	 * esdm_jent_finalize() from freeing the cache meanwhile.
+	 */
+	if (ret)
+		esdm_es_buf_reset(&esdm_jent_buf);
+#endif
+#else
 	ret = jent_entropy_init_ex(ESDM_JENT_OSR, esdm_jent_flags());
+#endif
+
 	mutex_w_unlock(&esdm_jent_lock);
 
 	if (ret) {
