@@ -123,16 +123,11 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf)
 	atomic_store(&buf->monitor_initialized, false);
 }
 
-int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
-			esdm_es_buf_fill_t fill, void *ctx)
-{
-	return esdm_es_buf_monitor_until(buf, requested_bits, fill, ctx,
-					 UINT64_MAX);
-}
-
-int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
-			      esdm_es_buf_fill_t fill, void *ctx,
-			      uint64_t deadline_ns)
+static int esdm_es_buf_fill_round(struct esdm_es_buf *buf,
+				  uint32_t requested_bits,
+				  esdm_es_buf_fill_t fill,
+				  esdm_es_buf_ready_t ready, void *ctx,
+				  uint64_t deadline_ns)
 {
 	unsigned int i;
 
@@ -158,6 +153,12 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
 		if (!atomic_compare_exchange_strong(&buf->states[i], &expected,
 						    esdm_es_buf_filling))
 			continue;
+
+		/* Asked for empty slots only, as it may cost a kernel call */
+		if (ready && !ready(ctx)) {
+			atomic_store(&buf->states[i], esdm_es_buf_empty);
+			break;
+		}
 
 		gen = atomic_load(&buf->gen);
 		fill(&buf->blocks[i], requested_bits, ctx);
@@ -192,6 +193,29 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
 	esdm_es_add_entropy();
 
 	return 0;
+}
+
+int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
+			esdm_es_buf_fill_t fill, void *ctx)
+{
+	return esdm_es_buf_fill_round(buf, requested_bits, fill, NULL, ctx,
+				      UINT64_MAX);
+}
+
+int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
+			      esdm_es_buf_fill_t fill, void *ctx,
+			      uint64_t deadline_ns)
+{
+	return esdm_es_buf_fill_round(buf, requested_bits, fill, NULL, ctx,
+				      deadline_ns);
+}
+
+int esdm_es_buf_monitor_ready(struct esdm_es_buf *buf, uint32_t requested_bits,
+			      esdm_es_buf_fill_t fill,
+			      esdm_es_buf_ready_t ready, void *ctx)
+{
+	return esdm_es_buf_fill_round(buf, requested_bits, fill, ready, ctx,
+				      UINT64_MAX);
 }
 
 bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
