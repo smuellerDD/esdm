@@ -471,6 +471,17 @@ static void esdm_irq_reset(void)
 		}
 	}
 	mutex_unlock(&irq_mutex);
+
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+	/*
+	 * The cached blocks were taken from the kernel before the reset and
+	 * carry the entropy it credited them with: the reset discards them
+	 * along with what the kernel still held, or they would be credited at
+	 * the next seeding as if collected since. After the kernel reset, so a
+	 * fill the cache reset lets through reads from the reset kernel.
+	 */
+	esdm_es_buf_reset(&irq_buf);
+#endif
 }
 
 static bool esdm_irq_active(void)

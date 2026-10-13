@@ -470,6 +470,17 @@ static void esdm_sched_reset(void)
 		}
 	}
 	mutex_unlock(&sched_mutex);
+
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+	/*
+	 * The cached blocks were taken from the kernel before the reset and
+	 * carry the entropy it credited them with: the reset discards them
+	 * along with what the kernel still held, or they would be credited at
+	 * the next seeding as if collected since. After the kernel reset, so a
+	 * fill the cache reset lets through reads from the reset kernel.
+	 */
+	esdm_es_buf_reset(&sched_buf);
+#endif
 }
 
 static bool esdm_sched_active(void)
