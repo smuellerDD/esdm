@@ -419,6 +419,63 @@ static void test_monitor_aborts_on_shutdown(void)
 	esdm_es_buf_free(&buf);
 }
 
+struct ready_record {
+	unsigned int calls;
+	unsigned int budget;
+	struct fill_record fill;
+};
+
+static bool ready_cb(void *ctx)
+{
+	struct ready_record *rec = ctx;
+
+	return rec->calls++ < rec->budget;
+}
+
+static void fill_cb_ready(struct entropy_es *eb_es, uint32_t requested_bits,
+			  void *ctx)
+{
+	struct ready_record *rec = ctx;
+
+	fill_cb(eb_es, requested_bits, &rec->fill);
+}
+
+/*
+ * The predicate is asked before each fill of an empty slot, and the round ends
+ * at its first no: a fill draining the kernel add-on left the following ones
+ * with the few bits collected since.
+ */
+static void test_monitor_ready_ends_round(void)
+{
+	struct esdm_es_buf buf;
+	struct ready_record rec = { 0, 3, { 0, 0, NULL, 1 } };
+
+	stubs_reset();
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_monitor_ready(&buf, BLOCK_BITS, fill_cb_ready,
+					   ready_cb, &rec),
+		 0);
+	CHECK_EQ(esdm_es_buf_monitor_ready(&buf, BLOCK_BITS, fill_cb_ready,
+					   ready_cb, &rec),
+		 0);
+
+	CHECK_EQ(rec.fill.calls, 3);
+	CHECK_EQ(rec.calls, 4);
+	CHECK_EQ(count_state(&buf, esdm_es_buf_filled), 3);
+	CHECK_EQ(count_state(&buf, esdm_es_buf_empty), buf.num_blocks - 3);
+
+	/* Filled slots are not asked about, the empty ones are filled next */
+	rec.calls = 0;
+	rec.budget = buf.num_blocks;
+	CHECK_EQ(esdm_es_buf_monitor_ready(&buf, BLOCK_BITS, fill_cb_ready,
+					   ready_cb, &rec),
+		 0);
+	CHECK_EQ(rec.calls, buf.num_blocks - 3);
+	CHECK_EQ(count_state(&buf, esdm_es_buf_filled), buf.num_blocks);
+
+	esdm_es_buf_free(&buf);
+}
+
 static void test_monitor_skips_busy_slots(void)
 {
 	struct esdm_es_buf buf;
@@ -847,6 +904,7 @@ int main(int argc, char *argv[])
 	test_monitor_refills_drained_slots();
 	test_monitor_aborts_on_shutdown();
 	test_monitor_skips_busy_slots();
+	test_monitor_ready_ends_round();
 
 	test_try_get_validation();
 	test_try_get_oversized_request();

@@ -41,6 +41,14 @@ enum esdm_es_buf_state {
 typedef void (*esdm_es_buf_fill_t)(struct entropy_es *eb_es,
 				   uint32_t requested_bits, void *ctx);
 
+/*
+ * Optional predicate the monitor asks before each slot it fills: false ends
+ * the round with the remaining slots left empty. For a source whose fill
+ * drains a pool that refills slowly, the kernel add-on ES, whose later fills
+ * would otherwise each take the few bits trickled in since.
+ */
+typedef bool (*esdm_es_buf_ready_t)(void *ctx);
+
 struct esdm_es_buf {
 	struct entropy_es *blocks;
 	_Atomic enum esdm_es_buf_state *states;
@@ -83,6 +91,11 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf);
  */
 int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 			esdm_es_buf_fill_t fill, void *ctx);
+
+/* As esdm_es_buf_monitor(), consulting @ready before each fill */
+int esdm_es_buf_monitor_ready(struct esdm_es_buf *buf, uint32_t requested_bits,
+			      esdm_es_buf_fill_t fill,
+			      esdm_es_buf_ready_t ready, void *ctx);
 
 /*
  * As esdm_es_buf_monitor(), but no slot is begun after @deadline_ns, in

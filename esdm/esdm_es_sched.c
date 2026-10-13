@@ -255,6 +255,27 @@ static int esdm_sched_initialize(void)
 	return 0;
 }
 
+/* The kernel holds what the monitor waits for before it fills the cache */
+static bool esdm_sched_full(uint32_t ent)
+{
+	return ent >= esdm_config_es_sched_entropy_rate();
+}
+
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+/*
+ * Each fill drains the kernel. Without asking again before each slot, the
+ * first fill took what the kernel held and the others the few bits collected
+ * since - hits credited with next to nothing, where a miss would have read the
+ * kernel at the seeding.
+ */
+static bool esdm_sched_buf_ready(void *ctx)
+{
+	(void)ctx;
+	return esdm_sched_full(
+		esdm_sched_entropylevel(esdm_security_strength()));
+}
+#endif
+
 static int esdm_sched_seed_monitor(void)
 {
 	uint32_t ent;
@@ -300,7 +321,7 @@ static int esdm_sched_seed_monitor(void)
 	if (!esdm_config_es_sched_entropy_rate())
 		return 0;
 
-	if (ent >= esdm_config_es_sched_entropy_rate()) {
+	if (esdm_sched_full(ent)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Full entropy of scheduler ES detected\n");
 #if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
@@ -308,8 +329,9 @@ static int esdm_sched_seed_monitor(void)
 			uint32_t requested_bits =
 				esdm_get_seed_entropy_osr(false, true);
 
-			esdm_es_buf_monitor(&sched_buf, requested_bits,
-					    esdm_sched_buf_fill, NULL);
+			esdm_es_buf_monitor_ready(&sched_buf, requested_bits,
+						  esdm_sched_buf_fill,
+						  esdm_sched_buf_ready, NULL);
 		} else {
 			esdm_es_add_entropy();
 		}
