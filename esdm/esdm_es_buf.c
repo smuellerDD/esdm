@@ -250,8 +250,9 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 	 * one that has recovered or collected since, where serving the block
 	 * would credit it with nothing for as many reseeds as the cache holds
 	 * failed fills. The slot is scrubbed and handed back to the monitor.
-	 * The blocks of an uncredited source never carry entropy and are
-	 * served as they are.
+	 * The blocks of an uncredited source are served without entropy: one
+	 * filled while the source was still credited - before a reinit that
+	 * failed, say - would be counted with what it no longer has.
 	 */
 	if (credited && !buf->blocks[slot].e_bits) {
 		memset_secure(&buf->blocks[slot], 0, sizeof(buf->blocks[slot]));
@@ -270,7 +271,7 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 		    "%s ES monitor: used slot %u\n", buf->name, slot);
 
 	memcpy(eb_es->e, buf->blocks[slot].e, ESDM_DRNG_INIT_SEED_SIZE_BYTES);
-	eb_es->e_bits = buf->blocks[slot].e_bits;
+	eb_es->e_bits = credited ? buf->blocks[slot].e_bits : 0;
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "obtained %u bits of entropy from %s ES cache\n",

@@ -467,6 +467,14 @@ static int esdm_jent_initialize(void)
 		    "Jitter RNG working on current system\n");
 
 out:
+#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
+	/*
+	 * The blocks cached before a failed reinit carry entropy the Jitter
+	 * RNG is no longer credited with.
+	 */
+	if (ret && esdm_jent_async_alloced)
+		esdm_es_buf_reset(&esdm_jent_buf);
+#endif
 	mutex_w_unlock(&esdm_jent_lock);
 
 	if (ret) {

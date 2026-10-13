@@ -109,6 +109,11 @@ static int esdm_hwrand_init(void)
 			"Disabling /dev/hwrng-based entropy source as device not present, error opening %s: %s\n",
 			ESDM_ES_HWRAND_IF, strerror(errno));
 		mutex_unlock(&hwrand_mutex);
+#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
+		/* What the device delivered before is credited no more */
+		if (hwrand_buf_alloced)
+			esdm_es_buf_reset(&hwrand_buf);
+#endif
 		return 0;
 	}
 
