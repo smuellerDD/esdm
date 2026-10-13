@@ -693,6 +693,38 @@ static void test_failed_fill_is_a_miss(void)
 	esdm_es_buf_free(&buf);
 }
 
+/*
+ * A block filled while the source was credited, served once it no longer is -
+ * after a reinit that failed, say - carries no entropy: its count once went
+ * along, and the seeding credited it.
+ */
+static void test_uncredited_hit_has_no_entropy(void)
+{
+	struct esdm_es_buf buf;
+	struct fill_record rec = { 0, 0, NULL, 1 };
+	struct entropy_es out;
+
+	stubs_reset();
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 4, "test"), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(buf.blocks[0].e_bits, BLOCK_BITS);
+
+	memset(&out, 0xff, sizeof(out));
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, false),
+	      "a filled block of an uncredited source was withheld");
+	CHECK_EQ(out.e_bits, 0);
+	CHECK_EQ(out.e[0], 1);
+
+	/* Still credited, the same kind of block keeps its entropy */
+	memset(&out, 0, sizeof(out));
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a filled block of a credited source was withheld");
+	CHECK_EQ(out.e_bits, BLOCK_BITS);
+
+	esdm_es_buf_free(&buf);
+}
+
 /******************************************************************************
  * Reset
  ******************************************************************************/
@@ -823,6 +855,7 @@ int main(int argc, char *argv[])
 	test_try_get_wakeup_heuristic();
 	test_try_get_skips_busy_slot();
 	test_failed_fill_is_a_miss();
+	test_uncredited_hit_has_no_entropy();
 
 	test_reset();
 	test_reset_during_fill();

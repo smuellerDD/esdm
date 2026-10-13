@@ -100,7 +100,8 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
  *
  * credited tells whether the source is credited with entropy at present. If
  * it is, a block without entropy is one whose fill failed and counts as a
- * miss - the synchronous path may well serve by now.
+ * miss - the synchronous path may well serve by now. If it is not, a hit
+ * carries no entropy, whatever the block was filled with.
  */
 bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 			 uint32_t requested_bits, bool credited);
