@@ -224,6 +224,7 @@ static void test_alloc_state(void)
 		CHECK_STR_EQ(buf.name, "test");
 		CHECK(buf.blocks != NULL, "no block array was allocated");
 		CHECK(buf.states != NULL, "no state array was allocated");
+		CHECK(atomic_load(&buf.ready), "the cache is not published");
 
 		/* The first index handed out has to be slot 0 */
 		CHECK_EQ(atomic_load(&buf.idx), -1);
@@ -259,6 +260,7 @@ static void test_free(void)
 	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
 	esdm_es_buf_free(&buf);
 
+	CHECK(!atomic_load(&buf.ready), "a released cache is still published");
 	CHECK(buf.blocks == NULL, "the block array was not released");
 	CHECK(buf.states == NULL, "the state array was not released");
 	CHECK_EQ(buf.num_blocks, 0);
