@@ -61,6 +61,8 @@ struct esdm_es_buf {
 	 * generation is discarded instead of being published.
 	 */
 	atomic_uint gen;
+	/* Set by esdm_es_buf_alloc() once the cache can be used */
+	atomic_bool ready;
 	const char *name;
 };
 
