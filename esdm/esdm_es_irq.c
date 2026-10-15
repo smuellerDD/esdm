@@ -250,7 +250,8 @@ static int esdm_irq_initialize(void)
 	if (irq_buf_alloced) {
 		esdm_es_buf_reset(&irq_buf);
 	} else if (esdm_es_buf_alloc(&irq_buf, ESDM_IRQ_ENTROPY_BLOCKS,
-				     "Interrupt") == 0) {
+				     "Interrupt",
+				     esdm_config_es_irq_entropy_rate) == 0) {
 		irq_buf_alloced = true;
 	}
 #endif

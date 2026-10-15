@@ -190,6 +190,14 @@ static uint32_t extsock_level(bool credited, uint32_t declared,
 		       0;
 }
 
+#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
+/* The rate of the provider as published, see esdm_es_buf_alloc() */
+static uint32_t extsock_buf_rate(void)
+{
+	return extsock_rate(atomic_load(&extsock.published_rate), NULL);
+}
+#endif
+
 static void extsock_lock(void)
 {
 	mutex_lock(&extsock.mutex);
@@ -494,7 +502,7 @@ static int extsock_init(void)
 #if (ESDM_EXT_ENTROPY_BLOCKS != 0)
 	if (!extsock.buf_alloced &&
 	    !esdm_es_buf_alloc(&extsock.buf, ESDM_EXT_ENTROPY_BLOCKS,
-			       EXTSOCK_NAME))
+			       EXTSOCK_NAME, extsock_buf_rate))
 		extsock.buf_alloced = true;
 #endif
 

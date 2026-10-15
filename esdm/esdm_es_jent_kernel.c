@@ -87,9 +87,10 @@ static int esdm_jent_kernel_init(void)
 #if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
 	if (jent_kernel_buf_alloced) {
 		esdm_es_buf_reset(&jent_kernel_buf);
-	} else if (esdm_es_buf_alloc(&jent_kernel_buf,
-				     ESDM_JENT_KERNEL_ENTROPY_BLOCKS,
-				     "KernelJitterRNG") == 0) {
+	} else if (!esdm_es_buf_alloc(
+			   &jent_kernel_buf, ESDM_JENT_KERNEL_ENTROPY_BLOCKS,
+			   "KernelJitterRNG",
+			   esdm_config_es_jent_kernel_entropy_rate)) {
 		jent_kernel_buf_alloced = true;
 	}
 #endif
