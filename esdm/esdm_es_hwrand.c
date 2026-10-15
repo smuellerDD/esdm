@@ -296,6 +296,24 @@ static void esdm_hwrand_buf_fill(struct entropy_es *eb_es,
 	esdm_hwrand_get_sync(eb_es, requested_bits);
 }
 
+/*
+ * Every failed fill costs the full read timeout under hwrand_mutex, so a
+ * stalled device would hold the monitor for all empty slots. The round stops
+ * instead; the synchronous read of the next seeding finds out whether the
+ * device recovered.
+ */
+static bool esdm_hwrand_buf_ready(void *ctx)
+{
+	bool ret;
+
+	(void)ctx;
+	mutex_reader_lock(&hwrand_mutex);
+	ret = esdm_hwrand_fd >= 0 && !esdm_hwrand_read_failed;
+	mutex_reader_unlock(&hwrand_mutex);
+
+	return ret;
+}
+
 static int esdm_hwrand_monitor(void)
 {
 	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
@@ -303,8 +321,9 @@ static int esdm_hwrand_monitor(void)
 	if (!esdm_hwrand_active())
 		return 0;
 
-	return esdm_es_buf_monitor(&hwrand_buf, requested_bits,
-				   esdm_hwrand_buf_fill, NULL);
+	return esdm_es_buf_monitor_ready(&hwrand_buf, requested_bits,
+					 esdm_hwrand_buf_fill,
+					 esdm_hwrand_buf_ready, NULL);
 }
 
 static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
