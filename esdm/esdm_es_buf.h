@@ -49,9 +49,15 @@ typedef void (*esdm_es_buf_fill_t)(struct entropy_es *eb_es,
  */
 typedef bool (*esdm_es_buf_ready_t)(void *ctx);
 
+/* The configured entropy rate of the source, see esdm_es_buf_alloc() */
+typedef uint32_t (*esdm_es_buf_rate_t)(void);
+
 struct esdm_es_buf {
 	struct entropy_es *blocks;
 	_Atomic enum esdm_es_buf_state *states;
+	/* The entropy rate each block was filled at */
+	uint32_t *fill_rates;
+	esdm_es_buf_rate_t rate;
 	unsigned int num_blocks;
 	unsigned int mask;
 	atomic_int idx;
@@ -70,9 +76,14 @@ struct esdm_es_buf {
  * Allocate the block cache. num_blocks must be a power of two and >= 4.
  * name is used for log messages and must remain valid for the lifetime of
  * the cache.
+ *
+ * rate returns the configured entropy rate of the source, which its fills
+ * credit in proportion to. A block is credited at most in proportion to the
+ * rate at the time it is served, so lowering a rate takes effect on the next
+ * reseed rather than once the cache is drained. NULL disables that.
  */
 int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
-		      const char *name);
+		      const char *name, esdm_es_buf_rate_t rate);
 
 /* Release all resources and zero-out cached entropy. */
 void esdm_es_buf_free(struct esdm_es_buf *buf);

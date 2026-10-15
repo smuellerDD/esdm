@@ -245,7 +245,8 @@ static int esdm_sched_initialize(void)
 	if (sched_buf_alloced) {
 		esdm_es_buf_reset(&sched_buf);
 	} else if (esdm_es_buf_alloc(&sched_buf, ESDM_SCHED_ENTROPY_BLOCKS,
-				     "Scheduler") == 0) {
+				     "Scheduler",
+				     esdm_config_es_sched_entropy_rate) == 0) {
 		sched_buf_alloced = true;
 	}
 #endif

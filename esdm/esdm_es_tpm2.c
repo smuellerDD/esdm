@@ -266,7 +266,8 @@ static int esdm_es_tpm2_init(void)
 	if (tpm2_buf_alloced) {
 		esdm_es_buf_reset(&tpm2_buf);
 	} else if (esdm_es_buf_alloc(&tpm2_buf, ESDM_TPM2_ENTROPY_BLOCKS,
-				     "TPM2.0") == 0) {
+				     "TPM2.0",
+				     esdm_config_es_tpm2_entropy_rate) == 0) {
 		tpm2_buf_alloced = true;
 	}
 #endif

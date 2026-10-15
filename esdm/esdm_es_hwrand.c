@@ -123,7 +123,8 @@ static int esdm_hwrand_init(void)
 	if (hwrand_buf_alloced) {
 		esdm_es_buf_reset(&hwrand_buf);
 	} else if (esdm_es_buf_alloc(&hwrand_buf, ESDM_HWRAND_ENTROPY_BLOCKS,
-				     "LinuxHWRand") == 0) {
+				     "LinuxHWRand",
+				     esdm_config_es_hwrand_entropy_rate) == 0) {
 		hwrand_buf_alloced = true;
 	}
 #endif

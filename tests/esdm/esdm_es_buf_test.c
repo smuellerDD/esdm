@@ -188,10 +188,10 @@ static void test_alloc_validation(void)
 	static const unsigned int bad[] = { 0, 1, 2, 3, 5, 6, 7, 9, 12, 100 };
 	unsigned int i;
 
-	CHECK_EQ(esdm_es_buf_alloc(NULL, 8, "test"), -EINVAL);
+	CHECK_EQ(esdm_es_buf_alloc(NULL, 8, "test", NULL), -EINVAL);
 
 	memset(&buf, 0, sizeof(buf));
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, NULL), -EINVAL);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, NULL, NULL), -EINVAL);
 
 	/*
 	 * The block count has to be a power of two of at least four: the round
@@ -200,7 +200,7 @@ static void test_alloc_validation(void)
 	 */
 	for (i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
 		memset(&buf, 0, sizeof(buf));
-		if (esdm_es_buf_alloc(&buf, bad[i], "test") != -EINVAL) {
+		if (esdm_es_buf_alloc(&buf, bad[i], "test", NULL) != -EINVAL) {
 			CHECK(0, "a block count of %u was accepted", bad[i]);
 			esdm_es_buf_free(&buf);
 		}
@@ -217,7 +217,7 @@ static void test_alloc_state(void)
 		unsigned int j;
 
 		memset(&buf, 0xff, sizeof(buf));
-		CHECK_EQ(esdm_es_buf_alloc(&buf, good[i], "test"), 0);
+		CHECK_EQ(esdm_es_buf_alloc(&buf, good[i], "test", NULL), 0);
 
 		CHECK_EQ(buf.num_blocks, good[i]);
 		CHECK_EQ(buf.mask, good[i] - 1);
@@ -257,7 +257,7 @@ static void test_free(void)
 	memset(&buf, 0, sizeof(buf));
 	esdm_es_buf_free(&buf);
 
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	esdm_es_buf_free(&buf);
 
 	CHECK(!atomic_load(&buf.ready), "a released cache is still published");
@@ -288,7 +288,7 @@ static void test_monitor_validation(void)
 
 	CHECK_EQ(esdm_es_buf_monitor(NULL, BLOCK_BITS, fill_cb, &rec), -EINVAL);
 
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, NULL, &rec), -EINVAL);
 	CHECK_EQ(rec.calls, 0);
 	esdm_es_buf_free(&buf);
@@ -300,7 +300,7 @@ static void test_monitor_first_run_skipped(void)
 	struct fill_record rec = { 0, 0, NULL, 1 };
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 
 	/*
 	 * The first monitor run after a (re-)initialization is skipped so the
@@ -329,7 +329,7 @@ static void test_monitor_fills_all_slots(void)
 	unsigned int i;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
@@ -370,7 +370,7 @@ static void test_monitor_refills_drained_slots(void)
 	unsigned int i;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
@@ -395,7 +395,7 @@ static void test_monitor_aborts_on_shutdown(void)
 	struct fill_record rec = { 0, 0, NULL, 1 };
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
 	/* An ES manager that is not running at all fills nothing */
@@ -453,7 +453,7 @@ static void test_monitor_ready_ends_round(void)
 	struct ready_record rec = { 0, 3, { 0, 0, NULL, 1 } };
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor_ready(&buf, BLOCK_BITS, fill_cb_ready,
 					   ready_cb, &rec),
 		 0);
@@ -484,7 +484,7 @@ static void test_monitor_skips_busy_slots(void)
 	struct fill_record rec = { 0, 0, NULL, 1 };
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
 	/*
@@ -523,7 +523,7 @@ static void test_try_get_validation(void)
 	CHECK(!esdm_es_buf_try_get(NULL, &out, BLOCK_BITS, true),
 	      "a missing cache handed out a block");
 
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK(!esdm_es_buf_try_get(&buf, NULL, BLOCK_BITS, true),
 	      "a missing destination was accepted");
 
@@ -544,7 +544,7 @@ static void test_try_get_oversized_request(void)
 	struct entropy_es out;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
@@ -572,7 +572,7 @@ static void test_try_get_empty_cache(void)
 	struct entropy_es out;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 
 	/* A miss reports the miss and asks the monitor for a refill */
 	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
@@ -596,7 +596,7 @@ static void test_try_get_round_robin(void)
 	unsigned int i;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
@@ -644,7 +644,7 @@ static void test_try_get_wakeup_heuristic(void)
 	unsigned int i;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
@@ -676,7 +676,7 @@ static void test_try_get_skips_busy_slot(void)
 	struct entropy_es out;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
@@ -709,7 +709,7 @@ static void test_failed_fill_is_a_miss(void)
 	unsigned int i;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb_failing, &rec),
 		 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb_failing, &rec),
@@ -764,7 +764,7 @@ static void test_uncredited_hit_has_no_entropy(void)
 	struct entropy_es out;
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 4, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 4, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(buf.blocks[0].e_bits, BLOCK_BITS);
@@ -784,6 +784,67 @@ static void test_uncredited_hit_has_no_entropy(void)
 	esdm_es_buf_free(&buf);
 }
 
+/* The entropy rate the source under test is configured with */
+static uint32_t test_rate;
+
+static uint32_t test_rate_get(void)
+{
+	return test_rate;
+}
+
+/* Fill callback raising the rate while it fills */
+static void fill_cb_raising_rate(struct entropy_es *eb_es,
+				 uint32_t requested_bits, void *ctx)
+{
+	test_rate = 256;
+	fill_cb(eb_es, requested_bits, ctx);
+}
+
+/*
+ * A block is credited at most in proportion to the rate configured when it is
+ * served: lowering the rate takes effect on the next reseed, not once the
+ * blocks filled at the old one are drained.
+ */
+static void test_lowered_rate_caps_credit(void)
+{
+	struct esdm_es_buf buf;
+	struct fill_record rec = { 0, 0, NULL, 1 };
+	struct entropy_es out;
+
+	stubs_reset();
+	test_rate = 256;
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 4, "test", test_rate_get), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+
+	test_rate = 64;
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a filled block was withheld");
+	CHECK_EQ(out.e_bits, BLOCK_BITS / 4);
+
+	/* A raised rate does not add to what a block was filled with */
+	test_rate = 256;
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a filled block was withheld");
+	CHECK_EQ(out.e_bits, BLOCK_BITS);
+
+	/* A rate raised during the fill counts as the rate filled at */
+	test_rate = 64;
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a filled block was withheld");
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a filled block was withheld");
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb_raising_rate,
+				     &rec),
+		 0);
+	test_rate = 64;
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a filled block was withheld");
+	CHECK_EQ(out.e_bits, BLOCK_BITS / 4);
+
+	esdm_es_buf_free(&buf);
+}
+
 /******************************************************************************
  * Reset
  ******************************************************************************/
@@ -794,7 +855,7 @@ static void test_reset_during_fill(void)
 	struct fill_reset_record rrec = { { 0, 0, NULL, 1 }, &buf };
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rrec.rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb_resetting,
 				     &rrec),
@@ -829,7 +890,7 @@ static void test_reset(void)
 	memset(&buf, 0, sizeof(buf));
 	esdm_es_buf_reset(&buf);
 
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(count_state(&buf, esdm_es_buf_filled), buf.num_blocks);
@@ -866,7 +927,7 @@ static void test_reset_leaves_owned_slots(void)
 	uint8_t expect[ESDM_DRNG_INIT_SEED_SIZE_BYTES];
 
 	stubs_reset();
-	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
 
@@ -916,6 +977,7 @@ int main(int argc, char *argv[])
 	test_try_get_skips_busy_slot();
 	test_failed_fill_is_a_miss();
 	test_uncredited_hit_has_no_entropy();
+	test_lowered_rate_caps_credit();
 
 	test_reset();
 	test_reset_during_fill();
