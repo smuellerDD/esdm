@@ -21,6 +21,7 @@
 #include <gnutls/gnutls.h>
 #include <gnutls/crypto.h>
 #include <nettle/aes.h>
+#include <nettle/sha3.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -163,6 +164,80 @@ const struct esdm_hash_cb esdm_gnutls_hash_cb = {
 	.hash_desc_zero = esdm_gnutls_hash_desc_zero,
 	.hash_alloc = esdm_gnutls_hash_alloc,
 	.hash_dealloc = esdm_gnutls_hash_dealloc,
+};
+
+/*
+ * SHAKE256 is nettle's, on a context in memory the ESDM owns: the XDRBG-256 of
+ * the auxiliary pool squeezes any number of bytes from it.
+ */
+struct esdm_gnutls_xof_ctx {
+	struct sha3_256_ctx sha3;
+};
+
+static int esdm_gnutls_xof_init(void *xof)
+{
+	struct esdm_gnutls_xof_ctx *ctx = (struct esdm_gnutls_xof_ctx *)xof;
+
+	memset_secure(ctx, 0, sizeof(*ctx));
+	sha3_256_init(&ctx->sha3);
+	return 0;
+}
+
+static int esdm_gnutls_xof_update(void *xof, const uint8_t *inbuf,
+				  size_t inbuflen)
+{
+	struct esdm_gnutls_xof_ctx *ctx = (struct esdm_gnutls_xof_ctx *)xof;
+
+	sha3_256_update(&ctx->sha3, inbuflen, inbuf);
+	return 0;
+}
+
+static int esdm_gnutls_xof_final(void *xof, uint8_t *out, size_t outlen)
+{
+	struct esdm_gnutls_xof_ctx *ctx = (struct esdm_gnutls_xof_ctx *)xof;
+
+	/* Like sha512_digest(), it leaves the last block in the context */
+	sha3_256_shake(&ctx->sha3, outlen, out);
+	return esdm_gnutls_xof_init(ctx);
+}
+
+static int esdm_gnutls_xof_alloc(void **ctx)
+{
+	struct esdm_gnutls_xof_ctx *xof = calloc(1, sizeof(*xof));
+
+	if (!xof) {
+		*ctx = NULL;
+		return -ENOMEM;
+	}
+
+	sha3_256_init(&xof->sha3);
+	*ctx = xof;
+	return 0;
+}
+
+static void esdm_gnutls_xof_dealloc(void *ctx)
+{
+	struct esdm_gnutls_xof_ctx *xof = (struct esdm_gnutls_xof_ctx *)ctx;
+
+	if (!xof)
+		return;
+
+	memset_secure(xof, 0, sizeof(*xof));
+	free(xof);
+}
+
+static const char *esdm_gnutls_xof_name(void)
+{
+	return "GnuTLS (nettle) SHAKE256";
+}
+
+const struct esdm_xof_cb esdm_gnutls_xof_cb = {
+	.xof_name = esdm_gnutls_xof_name,
+	.xof_init = esdm_gnutls_xof_init,
+	.xof_update = esdm_gnutls_xof_update,
+	.xof_final = esdm_gnutls_xof_final,
+	.xof_alloc = esdm_gnutls_xof_alloc,
+	.xof_dealloc = esdm_gnutls_xof_dealloc,
 };
 
 struct drbg_aes_ctx {

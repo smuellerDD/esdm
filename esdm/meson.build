@@ -103,6 +103,8 @@ if get_option('crypto_backend') == 'builtin'
 	   get_option('hash_sha3_512').enabled()
 		esdm_src += files([ 'esdm_builtin_sha512.c' ])
 	endif
+
+	esdm_src += files([ 'esdm_builtin_shake256.c' ])
 elif get_option('crypto_backend') == 'botan'
 	esdm_src += files([ 'esdm_botan.cpp' ])
 	dependencies_esdm_lib += [ botan_dep ]

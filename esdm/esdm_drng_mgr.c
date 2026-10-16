@@ -32,6 +32,7 @@
 #include "esdm_builtin_hash_drbg.h"
 #include "esdm_builtin_chacha20.h"
 #include "esdm_builtin_sha512.h"
+#include "esdm_builtin_shake256.h"
 #include "esdm_config.h"
 #include "esdm_config_internal.h"
 #include "esdm_crypto.h"
@@ -91,6 +92,23 @@ DEFINE_MUTEX_W_UNLOCKED(esdm_crypto_cb_update);
 #else
 #error "Unknown default DRNG selected"
 #endif
+
+/* The SHAKE256 of the XDRBG-256 operating the auxiliary pool */
+#if (defined(ESDM_HASH_SHA512) || defined(ESDM_HASH_SHA3_512))
+#define ESDM_DEFAULT_XOF_CB &esdm_builtin_shake256_cb
+#elif defined(ESDM_BOTAN)
+#define ESDM_DEFAULT_XOF_CB &esdm_botan_xof_cb
+#elif defined(ESDM_GNUTLS)
+#define ESDM_DEFAULT_XOF_CB &esdm_gnutls_xof_cb
+#elif defined(ESDM_LEANCRYPTO)
+#define ESDM_DEFAULT_XOF_CB &esdm_leancrypto_xof_cb
+#elif defined(ESDM_OPENSSL)
+#define ESDM_DEFAULT_XOF_CB &esdm_openssl_xof_cb
+#else
+#error "Unknown default XOF selected"
+#endif
+
+const struct esdm_xof_cb *esdm_default_xof_cb = ESDM_DEFAULT_XOF_CB;
 
 /*
  * Default DRNG callback that provides the crypto primitive.

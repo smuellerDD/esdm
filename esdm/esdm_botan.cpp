@@ -24,6 +24,7 @@
 #include <cstring>
 #include <memory>
 #include <botan/hash.h>
+#include <botan/xof.h>
 #include <botan/exceptn.h>
 
 #include "esdm_crypto.h"
@@ -267,6 +268,106 @@ const struct esdm_hash_cb esdm_botan_hash_cb = {
 	.hash_desc_zero = esdm_botan_hash_desc_zero,
 	.hash_alloc = esdm_botan_hash_alloc,
 	.hash_dealloc = esdm_botan_hash_dealloc,
+};
+
+/* Like the hash, as Botan only exposes unique_ptr for its XOFs */
+struct esdm_botan_xof_ctx {
+	std::unique_ptr<Botan::XOF> xof_fn;
+};
+
+static int esdm_botan_xof_init(void *xof)
+{
+	struct esdm_botan_xof_ctx *ctx =
+		reinterpret_cast<esdm_botan_xof_ctx *>(xof);
+
+	try {
+		/* Starts over: an XOF takes no input after its output */
+		ctx->xof_fn = Botan::XOF::create_or_throw("SHAKE-256");
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Botan::XOF::create() failed %s\n", ex.what());
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int esdm_botan_xof_update(void *xof, const uint8_t *inbuf,
+				 size_t inbuflen)
+{
+	struct esdm_botan_xof_ctx *ctx =
+		reinterpret_cast<esdm_botan_xof_ctx *>(xof);
+
+	/* See esdm_botan_hash_update: guard the null unique_ptr deref. */
+	if (!ctx || !ctx->xof_fn)
+		return -EFAULT;
+
+	try {
+		ctx->xof_fn->update(std::span<const uint8_t>(inbuf, inbuflen));
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Botan XOF update failed %s\n", ex.what());
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int esdm_botan_xof_final(void *xof, uint8_t *out, size_t outlen)
+{
+	struct esdm_botan_xof_ctx *ctx =
+		reinterpret_cast<esdm_botan_xof_ctx *>(xof);
+
+	if (!ctx || !ctx->xof_fn)
+		return -EFAULT;
+
+	try {
+		ctx->xof_fn->output(std::span<uint8_t>(out, outlen));
+	} catch (const std::exception &ex) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "Botan XOF output failed %s\n", ex.what());
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int esdm_botan_xof_alloc(void **xof)
+{
+	struct esdm_botan_xof_ctx *tmp;
+	struct esdm_botan_xof_ctx **ctx = (struct esdm_botan_xof_ctx **)xof;
+
+	tmp = new (std::nothrow) struct esdm_botan_xof_ctx;
+	if (!tmp)
+		return -ENOMEM;
+
+	*ctx = tmp;
+
+	return 0;
+}
+
+/* Botan's Keccak state is a secure_vector, zeroized as it is released */
+static void esdm_botan_xof_dealloc(void *xof)
+{
+	struct esdm_botan_xof_ctx *ctx =
+		reinterpret_cast<esdm_botan_xof_ctx *>(xof);
+
+	if (ctx)
+		delete ctx;
+}
+
+static const char *esdm_botan_xof_name(void)
+{
+	return "Botan SHAKE256";
+}
+
+const struct esdm_xof_cb esdm_botan_xof_cb = {
+	.xof_name = esdm_botan_xof_name,
+	.xof_init = esdm_botan_xof_init,
+	.xof_update = esdm_botan_xof_update,
+	.xof_final = esdm_botan_xof_final,
+	.xof_alloc = esdm_botan_xof_alloc,
+	.xof_dealloc = esdm_botan_xof_dealloc,
 };
 
 struct esdm_botan_drng_state {

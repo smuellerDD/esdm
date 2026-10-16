@@ -173,6 +173,49 @@ const struct esdm_hash_cb esdm_openssl_hash_cb = {
 	.hash_dealloc = esdm_openssl_hash_dealloc,
 };
 
+static int esdm_openssl_xof_init(void *xof)
+{
+	EVP_MD_CTX *ctx = xof;
+
+	if (EVP_DigestInit(ctx, EVP_shake256()) != 1) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "EVP_DigestInit() of SHAKE256 failed %s\n",
+			    ERR_error_string(ERR_get_error(), NULL));
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int esdm_openssl_xof_final(void *xof, uint8_t *out, size_t outlen)
+{
+	EVP_MD_CTX *ctx = xof;
+
+	if (EVP_DigestFinalXOF(ctx, out, outlen) != 1) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_MD,
+			    "EVP_DigestFinalXOF() failed %s\n",
+			    ERR_error_string(ERR_get_error(), NULL));
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static const char *esdm_openssl_xof_name(void)
+{
+	return "OpenSSL SHAKE256";
+}
+
+/* The context and the update are those of the hash: an EVP_MD_CTX */
+const struct esdm_xof_cb esdm_openssl_xof_cb = {
+	.xof_name = esdm_openssl_xof_name,
+	.xof_init = esdm_openssl_xof_init,
+	.xof_update = esdm_openssl_hash_update,
+	.xof_final = esdm_openssl_xof_final,
+	.xof_alloc = esdm_openssl_hash_alloc,
+	.xof_dealloc = esdm_openssl_hash_dealloc,
+};
+
 struct esdm_openssl_drng_state {
 	EVP_RAND_CTX *drbg, *seed_source;
 	unsigned int strength;

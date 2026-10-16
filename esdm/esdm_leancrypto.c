@@ -102,6 +102,37 @@ const struct esdm_hash_cb esdm_leancrypto_hash_cb = {
 	.hash_dealloc = esdm_leancrypto_hash_dealloc,
 };
 
+static int esdm_leancrypto_xof_final(void *xof, uint8_t *out, size_t outlen)
+{
+	struct lc_hash_ctx *hash_ctx = xof;
+
+	lc_hash_set_digestsize(hash_ctx, outlen);
+	lc_hash_final(hash_ctx, out);
+	return 0;
+}
+
+static int esdm_leancrypto_xof_alloc(void **ctx)
+{
+	struct lc_hash_ctx **hash_ctx = (struct lc_hash_ctx **)ctx;
+
+	return lc_hash_alloc(lc_shake256, hash_ctx);
+}
+
+static const char *esdm_leancrypto_xof_name(void)
+{
+	return "Leancrypto SHAKE256";
+}
+
+/* Apart from the allocation and the output, SHAKE256 is a hash to leancrypto */
+const struct esdm_xof_cb esdm_leancrypto_xof_cb = {
+	.xof_name = esdm_leancrypto_xof_name,
+	.xof_init = esdm_leancrypto_hash_init,
+	.xof_update = esdm_leancrypto_hash_update,
+	.xof_final = esdm_leancrypto_xof_final,
+	.xof_alloc = esdm_leancrypto_xof_alloc,
+	.xof_dealloc = esdm_leancrypto_hash_dealloc,
+};
+
 static int esdm_leancrypto_drbg_seed(void *drng, const uint8_t *inbuf,
 				     size_t inbuflen, const uint8_t *addtl,
 				     size_t addtllen)
