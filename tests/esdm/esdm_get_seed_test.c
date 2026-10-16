@@ -27,9 +27,80 @@
 
 #include "esdm.h"
 #include "esdm_config.h"
+#include "esdm_es_mgr.h"
 #include "esdm_node.h"
 #include "esdm_logger.h"
 #include "test_pertubation.h"
+
+/*
+ * A source that fails - or is compiled in without its device, like a TPM2 on a
+ * machine without one - reports no entropy and writes nothing into its slot.
+ * The buffer of esdm_get_seed() is the caller's, which gets it back as seed:
+ * the slot of such a source must not carry the caller's bytes back to it.
+ *
+ * The auxiliary pool, which every build has, plays that source here.
+ */
+static void esdm_get_seed_failing_get_ent(struct entropy_es *eb_es,
+					  uint32_t requested_bits,
+					  bool allow_cached)
+{
+	(void)requested_bits;
+	(void)allow_cached;
+
+	eb_es->e_bits = 0;
+}
+
+static int esdm_get_seed_failed_source_test(uint64_t *buf, size_t buflen)
+{
+	struct esdm_es_cb *es = esdm_es[esdm_ext_es_aux];
+	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits,
+			bool allow_cached) = es->get_ent;
+	struct entropy_buf *eb = (struct entropy_buf *)(buf + 2);
+	struct entropy_es pattern;
+	ssize_t rc;
+	int ret = 0;
+
+	memset(&pattern, 0xa5, sizeof(pattern));
+
+	es->get_ent = esdm_get_seed_failing_get_ent;
+	memset(buf, 0xa5, buflen);
+	rc = esdm_get_seed(buf, buflen, ESDM_GET_SEED_NONBLOCK);
+	es->get_ent = get_ent;
+
+	if (rc == -EAGAIN) {
+		printf("esdm_get_seed was unable to produce entropy\n");
+		return 77;
+	}
+	if (rc <= 0) {
+		printf("esdm_get_seed returned an error with a failing source %zd\n",
+		       rc);
+		return 1;
+	}
+
+	/*
+	 * Only a collection that went to the sources says something: with the
+	 * entropy reported too low for a seed nothing is fetched, and every
+	 * slot is cleared.
+	 */
+	if (!buf[1]) {
+		printf("esdm_get_seed collected no entropy, sources not asked\n");
+		return 77;
+	}
+
+	if (!memcmp(eb->entropy_es[esdm_ext_es_aux].e, pattern.e,
+		    sizeof(pattern.e))) {
+		printf("esdm_get_seed handed the caller's bytes back in the slot of a failing source\n");
+		ret = 1;
+	} else if (eb->entropy_es[esdm_ext_es_aux].e_bits) {
+		printf("esdm_get_seed credited a failing source with %u bits\n",
+		       eb->entropy_es[esdm_ext_es_aux].e_bits);
+		ret = 1;
+	} else {
+		printf("esdm_get_seed hands back no caller bytes for a failing source\n");
+	}
+
+	return ret;
+}
 
 int main(int argc, char *argv[])
 {
@@ -172,6 +243,8 @@ int main(int argc, char *argv[])
 		       " bytes and entropy value %" PRIu64 " bits\n",
 		       buf[0], buf[1]);
 	}
+
+	ret = esdm_get_seed_failed_source_test(buf, buflen);
 
 out:
 	free(buf);
