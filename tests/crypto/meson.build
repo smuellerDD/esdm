@@ -30,8 +30,17 @@ hmac_sha2_512_tester = executable(
 		link_with: esdm_static_lib,
 	)
 
+sha3_tester = executable(
+		'sha3_tester',
+		[ 'sha3_tester.c' ],
+		dependencies: dependencies_server,
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+	)
+
 test('SHA256', sha256_tester, suite: 'crypto')
 test('SHA512', sha512_tester, suite: 'crypto')
+test('SHA3', sha3_tester, suite: 'crypto')
 
 test('HMAC SHA256', hmac_sha2_256_tester, suite: 'crypto')
 test('HMAC SHA512', hmac_sha2_512_tester, suite: 'crypto')

@@ -4,6 +4,7 @@ crypto_src = files([
 	'hash_drbg.c',
 	'hmac.c',
 	'sha256.c',
+	'sha3.c',
 	'sha512.c',
 ])
 
@@ -18,8 +19,4 @@ if get_option('drng_chacha20').enabled()
 		'chacha20.c',
 		'chacha20_drng.c',
 	])
-endif
-
-if get_option('hash_sha3_512').enabled()
-	crypto_src += files([ 'sha3.c' ])
 endif

@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 extern const struct esdm_hash_cb esdm_openssl_hash_cb;
+extern const struct esdm_xof_cb esdm_openssl_xof_cb;
 extern const struct esdm_drng_cb esdm_openssl_drbg_cb;
 
 #ifdef __cplusplus

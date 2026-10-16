@@ -93,4 +93,7 @@ struct esdm_hash_cb {
 	void (*hash_dealloc)(void *ctx);
 };
 
+/* struct esdm_xof_cb, shared with the kernel module esdm_es */
+#include "esdm_xof.h"
+
 #endif /* _ESDM_CRYPTO_H */

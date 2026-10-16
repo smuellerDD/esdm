@@ -8,7 +8,7 @@ on:
 
 env:
   JITTERENTROPY_VERSION: "3.7.0"
-  # Ubuntu 24.04 only ships Botan 2, while ESDM requires botan-3 >= 3.0, and it
+  # Ubuntu 24.04 only ships Botan 2, while ESDM requires botan-3 >= 3.2, and it
   # does not package leancrypto at all - both are therefore built from source
   # and cached.
   BOTAN_VERSION: "3.12.0"
@@ -23,7 +23,7 @@ env:
   # changes (configure flags, meson options, module selection). The version
   # alone does not identify the artefact: without this a recipe change silently
   # keeps restoring the previously built - and now wrong - prefix from cache.
-  BOTAN_BUILD_REV: "1"
+  BOTAN_BUILD_REV: "2"
   LEANCRYPTO_BUILD_REV: "1"
   GNUTLS_BUILD_REV: "2"
   # One prefix and one cache per dependency. They must not share a cache key:
@@ -134,14 +134,16 @@ jobs:
         tar xf botan.tar.xz
         cd Botan-${BOTAN_VERSION}
         # Minimized build with just the primitives esdm_botan.cpp asks for:
-        # SHA-3(512) and SHA-512 for conditioning, plus the HMAC-DRBG and
-        # ChaCha20 DRNG cores. A full Botan build would dominate the job time.
+        # SHA-3(512) and SHA-512 for conditioning, the SHAKE-256 XOF of the
+        # auxiliary pool (shake_xof, which brings the xof module and
+        # botan/xof.h along), plus the HMAC-DRBG and ChaCha20 DRNG cores. A
+        # full Botan build would dominate the job time.
         ./configure.py \
           --prefix="${BOTAN_PREFIX}" \
           --build-targets=shared \
           --without-documentation \
           --minimized-build \
-          --enable-modules=sha2_64,sha3,hmac,hmac_drbg,chacha,chacha_rng,system_rng,auto_rng
+          --enable-modules=sha2_64,sha3,shake_xof,hmac,hmac_drbg,chacha,chacha_rng,system_rng,auto_rng
         make -j"$(nproc)"
         make install
 
