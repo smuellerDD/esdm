@@ -1131,11 +1131,23 @@ static bool esdm_es_approved(uint32_t es)
  * buffer, as esdm_get_seed() does: the estimator cleared above is the one of
  * the slot @es is about to fill, so each source still sets its own, and a
  * source not credited with entropy is counted with none.
+ *
+ * The slot returned is cleared as a whole. A source that fails, or is not
+ * there at all (a TPM2 compiled in without a device), reports zero bits and
+ * leaves its slot alone, or fills a part of it - as does one delivering fewer
+ * bits than the slot holds: what was in there before is handed on. For
+ * esdm_get_seed() that is the caller's own buffer, which it got back as seed -
+ * its own bytes, or those of its previous seed. Cleared here before the source
+ * is asked, the slot hands on the source's bytes and zeros. Nothing is lost by
+ * it: the source writes what it delivers - a block from its cache as well -
+ * after this. With ESDM_ES_PARALLEL_FETCH the slots are cleared here before the
+ * threads fetching into them are started.
  */
 static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 					    struct entropy_buf *addtl,
 					    uint32_t es)
 {
+	struct entropy_es *slot;
 	bool approved = esdm_es_approved(es);
 
 	if (!addtl) {
@@ -1145,15 +1157,20 @@ static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 			return NULL;
 		}
 
-		return &seedbuf->entropy_es[es];
+		slot = &seedbuf->entropy_es[es];
+	} else {
+		if (approved)
+			addtl->entropy_es[es].e_bits = 0;
+		else
+			seedbuf->entropy_es[es].e_bits = 0;
+
+		slot = approved ? &seedbuf->entropy_es[es] :
+				  &addtl->entropy_es[es];
 	}
 
-	if (approved)
-		addtl->entropy_es[es].e_bits = 0;
-	else
-		seedbuf->entropy_es[es].e_bits = 0;
+	memset_secure(slot, 0, sizeof(*slot));
 
-	return approved ? &seedbuf->entropy_es[es] : &addtl->entropy_es[es];
+	return slot;
 }
 
 void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
