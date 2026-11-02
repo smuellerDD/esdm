@@ -877,12 +877,57 @@
 
         packages =
           let
+            # The FIPS integrity self test (esdm/fips.c) attests every ESDM
+            # executable, libesdm and the libraries of the module that are
+            # loaded - the jitter RNG and the crypto backend - against a
+            # reference HMAC in .<name>.hmac next to each file, which whoever
+            # builds and installs the module provides. The key and format are
+            # those of common/fips_integrity.c (fipscheck).
+            #
+            # A file is checked under the name it was loaded by, so a library
+            # symlink needs a reference value of its own.
+            fipsHmac = pkgs.writeShellScript "esdm-fips-hmac" ''
+              for f in "$@"; do
+                [ -f "$f" ] || continue
+                hmac="$(${pkgs.openssl}/bin/openssl dgst -sha256 \
+                  -hmac orboDeJITITejsirpADONivirpUkvarP -r "$f")"
+                printf '%s\n' "''${hmac%% *}" \
+                  >"$(dirname "$f")/.$(basename "$f").hmac"
+              done
+            '';
+
+            # A dependency carrying reference values for its shared objects.
+            # postFixup, as stripping and patchelf change the files before.
+            withFipsHmac =
+              pkg:
+              pkg.overrideAttrs (prev: {
+                postFixup = (prev.postFixup or "") + ''
+                  # getAllOutputNames, as $outputs is no list of names
+                  # with __structuredAttrs (botan3)
+                  for o in $(getAllOutputNames); do
+                    find "''${!o}" \( -type f -o -type l \) \
+                      \( -name '*.so' -o -name '*.so.*' \) ! -name '*.hmac' \
+                      -exec ${fipsHmac} {} +
+                  done
+                '';
+              });
+
             # gcov occasionally emits a negative branch count for the Botan C++
             # backend (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080).
             # gcovr treats that as fatal and produces no report at all, so warn
             # once per affected file and keep the rest of the data.
-            gcovrIgnoreParseErrors =
-              "--gcov-ignore-parse-errors negative_hits.warn_once_per_file";
+            #
+            # The same for counts gcovr finds suspiciously high (2^32 and up):
+            # in the VMs booted with fips=1, every program runs the FIPS
+            # integrity self test, which hashes the files of the module - so
+            # the compression of crypto/sha256.c runs billions of times in one
+            # suite, and gcovr 8 aborted on it with SuspiciousHits, leaving no
+            # report. Such a line is counted as not executed, and named in the
+            # warning.
+            gcovrIgnoreParseErrors = lib.concatMapStringsSep " " (e: "--gcov-ignore-parse-errors ${e}") [
+              "negative_hits.warn_once_per_file"
+              "suspicious_hits.warn_once_per_file"
+            ];
 
             # Turn one of the esdm packages above into a coverage build of
             # itself: instrument with gcov, run "meson test" and export the HTML
@@ -1239,6 +1284,16 @@
                   # report is written either way and the failure is reported at
                   # the end.
                   test_status=0
+                  # The VM boots with fips=1, so every program of the suite
+                  # runs the FIPS integrity self test - against reference
+                  # values for the build tree, as fipsHmac provides them for
+                  # an installation.
+                  find "$work/build" ! -name '*.hmac' \( \
+                    \( -type f -perm -u+x \) -o \
+                    \( \( -type f -o -type l \) \
+                       \( -name '*.so' -o -name '*.so.*' \) \) \
+                    \) -exec ${fipsHmac} {} +
+
                   meson test -C "$work/build" --print-errorlogs \
                     --timeout-multiplier 5 "$@" || test_status=$?
 
@@ -1430,7 +1485,8 @@
               esKernel = false;
               fips140 = true;
               # remove later, for testing with NTG.1 capable jitterentropy
-              inherit (self.packages.${system}) jitterentropy;
+              jitterentropy = withFipsHmac self.packages.${system}.jitterentropy;
+              botan3 = withFipsHmac pkgs.botan3;
             }).overrideAttrs
               (prev: {
                 buildInputs = prev.buildInputs ++ [
@@ -1473,6 +1529,15 @@
                   in
                   builtins.head (builtins.head matches);
                 dontStrip = debugEsdm;
+                # Every program and library, not only esdm-server as nixpkgs
+                # signs it - see fipsHmac.
+                postFixup = ''
+                  find $out/bin \( -type f -o -type l \) ! -name '*.hmac' \
+                    -exec ${fipsHmac} {} +
+                  find $out/lib -maxdepth 1 \( -type f -o -type l \) \
+                    \( -name '*.so' -o -name '*.so.*' \) ! -name '*.hmac' \
+                    -exec ${fipsHmac} {} +
+                '';
               });
 
           # ESDM with the eBPF-based scheduler and interrupt entropy sources
