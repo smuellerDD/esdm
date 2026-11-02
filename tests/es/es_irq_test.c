@@ -79,8 +79,9 @@ static int es_irq_getstate(void)
 		return -ENOENT;
 
 	/*
-	 * The labels come from the kernel module (esdm_irq_es_state() of
-	 * kernel/esdm_es/esdm_es_irq.c), so this pins the two together.
+	 * The members come from the kernel module (esdm_irq_es_state_json()
+	 * of kernel/esdm_es/esdm_es_irq.c), their labels from
+	 * esdm_kernel_state(), so this pins the two together.
 	 */
 	if (!strstr(buf, "DRBG for operating entropy pool") ||
 	    !strstr(buf, "Available entropy") ||

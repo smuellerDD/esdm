@@ -22,6 +22,7 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
+#include <json-c/json.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -461,6 +462,69 @@ err:
  * @param [in] fd file descriptor to the entropy source
  * @param [in] ioctl_cmd IOCTL command to be used with the FD
  */
+/* The labels of the status text for the members of the module's JSON status */
+static const struct {
+	const char *member;
+	const char *label;
+} esdm_kernel_state_labels[] = {
+	{ "drbg_for_operating_entropy_pool",
+	  "DRBG for operating entropy pool" },
+	{ "available_entropy", "Available entropy" },
+	{ "per_cpu_interrupt_collection_size",
+	  "per-CPU interrupt collection size" },
+	{ "per_cpu_scheduler_event_collection_size",
+	  "per-CPU scheduler event collection size" },
+	{ "standards_compliance", "Standards compliance" },
+	{ "fips_mode_enabled", "FIPS mode enabled" },
+	{ "high_resolution_timer", "High-resolution timer" },
+};
+
+void esdm_kernel_state(char *buf, size_t buflen, int fd,
+		       unsigned int ioctl_json)
+{
+	char status[ESDM_STATUS_JSON_BUFLEN] = { 0 };
+	struct json_object *obj = NULL;
+	size_t len = 0;
+
+	if (fd < 0) {
+		snprintf(buf, buflen, " disabled - missing kernel support\n");
+		return;
+	}
+
+	if (ioctl(fd, ioctl_json, status) >= 0) {
+		status[sizeof(status) - 1] = '\0';
+		obj = json_tokener_parse(status);
+	}
+
+	if (!json_object_is_type(obj, json_type_object)) {
+		snprintf(buf, buflen, " failure in reading kernel status\n");
+		goto out;
+	}
+
+	json_object_object_foreach(obj, key, val)
+	{
+		const char *label = key;
+		size_t i;
+		int ret;
+
+		for (i = 0; i < ARRAY_SIZE(esdm_kernel_state_labels); i++) {
+			if (!strcmp(key, esdm_kernel_state_labels[i].member)) {
+				label = esdm_kernel_state_labels[i].label;
+				break;
+			}
+		}
+
+		ret = snprintf(buf + len, buflen - len, " %s: %s\n", label,
+			       json_object_get_string(val));
+		if (ret < 0 || (size_t)ret >= buflen - len)
+			break;
+		len += (size_t)ret;
+	}
+
+out:
+	json_object_put(obj);
+}
+
 void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 				    uint32_t requested_bits, int fd,
 				    unsigned int ioctl_cmd)
