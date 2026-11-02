@@ -141,31 +141,10 @@ static void esdm_sched_randomness(const struct task_struct *p, int cpu)
 	local_irq_restore(flags);
 }
 
-static void esdm_sched_es_state(unsigned char *buf, size_t buflen,
-				u32 entropy_rate)
-{
-	snprintf(buf, buflen,
-		 " DRBG for operating entropy pool: %s\n"
-		 " Available entropy: %u\n"
-		 " per-CPU scheduler event collection size: %u\n"
-		 " Standards compliance: %s\n"
-#ifdef CONFIG_CRYPTO_FIPS
-		 " FIPS mode enabled: %i\n"
-#endif /* CONFIG_CRYPTO_FIPS */
-		 " High-resolution timer: %s\n",
-		 esdm_drbg_cb->drbg_name(),
-		 esdm_sched_avail_entropy(entropy_rate), ESDM_DATA_NUM_VALUES,
-		 esdm_sp80090b_compliant(esdm_int_es_sched) ? "SP800-90B" : "",
-#ifdef CONFIG_CRYPTO_FIPS
-		 fips_enabled,
-#endif /* CONFIG_CRYPTO_FIPS */
-		 esdm_highres_timer() ? "true" : "false");
-}
-
 /*
- * Same properties as esdm_sched_es_state(), rendered as a JSON object. The
- * inserted strings are compile-time constants of this module and the DRBG
- * name, none of which contains a character JSON would require to be escaped.
+ * The state of the entropy source as a JSON object. The inserted strings are
+ * compile-time constants of this module and the DRBG name, none of which
+ * contains a character JSON would require to be escaped.
  */
 static void esdm_sched_es_state_json(unsigned char *buf, size_t buflen,
 				     u32 entropy_rate)
@@ -195,7 +174,6 @@ struct esdm_es_cb esdm_es_sched = {
 	.get_ent = esdm_sched_pool_extract,
 	.curr_entropy = esdm_sched_avail_entropy,
 	.max_entropy = esdm_sched_avail_pool_size,
-	.state = esdm_sched_es_state,
 	.state_json = esdm_sched_es_state_json,
 	.reset = esdm_sched_reset,
 };

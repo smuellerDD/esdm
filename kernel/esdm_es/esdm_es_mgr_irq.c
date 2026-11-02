@@ -31,7 +31,6 @@ int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg,
 			  struct esdm_es_conf *conf)
 {
 	struct entropy_buf eb __aligned(ESDM_KCAPI_ALIGN);
-	char status[250];
 	char status_json[ESDM_STATUS_JSON_BUFLEN];
 	u32 data, data2, bits, __user *p = (int __user *)arg;
 	int ret = 0;
@@ -101,18 +100,7 @@ int esdm_es_mgr_irq_ioctl(unsigned int cmd, unsigned long arg,
 
 		break;
 
-	case ESDM_IRQ_STATUS:
-		memset(status, 0, sizeof(status));
-		esdm_es_irq.state(status, sizeof(status), conf->entropy_rate);
-		if (copy_to_user(argp, &status, sizeof(status)))
-			ret = -EFAULT;
-
-		break;
-
 	case ESDM_IRQ_STATUS_JSON:
-		if (!esdm_es_irq.state_json)
-			return -EOPNOTSUPP;
-
 		memset(status_json, 0, sizeof(status_json));
 		esdm_es_irq.state_json(status_json, sizeof(status_json),
 				       conf->entropy_rate);

@@ -63,8 +63,7 @@
  */
 #define ESDM_IRQ_CONF _IOW(ESDMIO, 0x03, __u32[2])
 
-/* IRQ ES: read status information */
-#define ESDM_IRQ_STATUS _IOR(ESDMIO, 0x04, char[250])
+/* 0x04: the status text of the IRQ ES, gone */
 
 /* SCHED ES: return available entropy */
 #define ESDM_SCHED_AVAIL_ENTROPY _IOR(ESDMIO, 0x05, __u32)
@@ -81,16 +80,11 @@
  */
 #define ESDM_SCHED_CONF _IOW(ESDMIO, 0x08, __u32[2])
 
-/* SCHED ES: read status information */
-#define ESDM_SCHED_STATUS _IOR(ESDMIO, 0x09, char[250])
+/* 0x09: the status text of the SCHED ES, gone */
 
 /*
- * IRQ / SCHED ES: read status information as a JSON object
- *
- * The returned document carries the same properties as the plain status text
- * of ESDM_IRQ_STATUS / ESDM_SCHED_STATUS with the labels turned into JSON
- * member names, so that the ESDM server can embed it in its JSON status
- * document without parsing text.
+ * IRQ / SCHED ES: read status information as a JSON object, which the ESDM
+ * server embeds in its JSON status document
  */
 #define ESDM_IRQ_STATUS_JSON _IOR(ESDMIO, 0x0a, char[500])
 #define ESDM_SCHED_STATUS_JSON _IOR(ESDMIO, 0x0b, char[500])

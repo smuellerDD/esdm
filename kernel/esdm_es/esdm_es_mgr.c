@@ -139,7 +139,6 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	case ESDM_IRQ_ENT_BUF_SIZE:
 	case ESDM_IRQ_ENT_BUF:
 	case ESDM_IRQ_CONF:
-	case ESDM_IRQ_STATUS:
 	case ESDM_IRQ_STATUS_JSON:
 		ret = esdm_es_mgr_irq_ioctl(cmd, arg, &f->irq);
 		break;
@@ -149,7 +148,6 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	case ESDM_SCHED_ENT_BUF_SIZE:
 	case ESDM_SCHED_ENT_BUF:
 	case ESDM_SCHED_CONF:
-	case ESDM_SCHED_STATUS:
 	case ESDM_SCHED_STATUS_JSON:
 		ret = esdm_es_mgr_sched_ioctl(cmd, arg, &f->sched);
 		break;

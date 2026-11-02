@@ -410,28 +410,14 @@ static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 
 static void esdm_irq_es_state(char *buf, size_t buflen)
 {
-	char status[250], *status_p = (buflen < sizeof(status)) ? status : buf;
-
 	mutex_lock(&irq_mutex);
 
-	if (esdm_irq_entropy_fd >= 0) {
-		ssize_t ret;
-
+	/* The status of a descriptor follows the rate configured on it */
+	if (esdm_irq_entropy_fd >= 0)
 		esdm_irq_set_entropy_rate_locked(esdm_irq_requested_bits_set);
 
-		ret = ioctl(esdm_irq_entropy_fd, ESDM_IRQ_STATUS, status_p);
-		if (ret < 0) {
-			snprintf(buf, buflen,
-				 " failure in reading kernel status\n");
-		} else if (buflen < sizeof(status)) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-truncation"
-			snprintf(buf, buflen, "%s", status_p);
-#pragma GCC diagnostic pop
-		}
-	} else {
-		snprintf(buf, buflen, " disabled - missing kernel support\n");
-	}
+	esdm_kernel_state(buf, buflen, esdm_irq_entropy_fd,
+			  ESDM_IRQ_STATUS_JSON);
 
 	mutex_unlock(&irq_mutex);
 }
