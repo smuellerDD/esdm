@@ -21,10 +21,17 @@
 #ifndef SELFTEST_KAT_H
 #define SELFTEST_KAT_H
 
+/* Used by the kernel module esdm_es as well, see esdm_portable.h */
+#ifdef __KERNEL__
+#include <linux/errno.h>
+#include <linux/string.h>
+#include <linux/types.h>
+#else
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#endif
 
 /* Longest known answer any self test compares. */
 #define ESDM_KAT_MAX_LEN 512

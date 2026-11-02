@@ -3,7 +3,7 @@
 This directory contains the measurement tooling for the eBPF-based
 scheduler and interrupt entropy sources (`es_sched_ebpf`, `es_irq_ebpf`).
 It serves the same purpose as the `esdm_raw_*` debugfs interfaces of the
-`linux_esdm_es` kernel add-on: obtaining raw, unconditioned noise source
+`esdm_es` kernel add-on: obtaining raw, unconditioned noise source
 data for an SP800-90B entropy assessment.
 
 The assessment uses the NIST SP800-90B test suite throughout. The BSI

@@ -43,10 +43,10 @@ specifications:
   compliant entropy source. In addition, the Intel RDSEED instruction is
   claimed to provide an SP800-90B entropy source. Also, when using the
   scheduler-based entropy source - which is only implemented for the Linux
-  kernel using the code in `addon/linux_esdm_es`, a separate SP800-90B
+  kernel using the code in `kernel/esdm_es`, a separate SP800-90B
   entropy source is provided. In addition, when using the interrupt-based
   entropy source - which is only implemented for the Linux kernel using the
-  code in `addon/linux_esdm_es`, a separate SP800-90B entropy source is
+  code in `kernel/esdm_es`, a separate SP800-90B entropy source is
   provided. If the kernel-based jitter entropy source shall be used, please
   compile your Linux kernel with CONFIG_CRYPTO_JITTERENTROPY.
 
@@ -169,7 +169,7 @@ Botan typically provide higher DRBG performance than the builtin backend.
 
 The ESDM provides a new, currently unique entropy source: the scheduler-based
 entropy source. It requires additional kernel support which is provided
-in the directory `addon/linux_esdm_es/`. Please see the `README.md` there
+in the directory `kernel/esdm_es/`. Please see the `README.md` there
 how to enable the support in the kernel.
 
 In any case, it is harmless to enable the ESDM user space support for the

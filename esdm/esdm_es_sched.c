@@ -445,6 +445,11 @@ static void esdm_sched_es_state_json(char *buf, size_t buflen)
 
 	mutex_lock(&sched_mutex);
 
+	/* The status of a descriptor follows the rate configured on it */
+	if (esdm_sched_entropy_fd >= 0)
+		esdm_sched_set_entropy_rate_locked(
+			esdm_sched_requested_bits_set);
+
 	if (esdm_sched_entropy_fd < 0) {
 		snprintf(buf, buflen,
 			 "{ \"disabled\": \"missing kernel support\" }");

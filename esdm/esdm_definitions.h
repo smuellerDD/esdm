@@ -28,14 +28,13 @@
 #include "esdm_hash_common.h"
 #include "math_helper.h"
 
-/*************************** General ESDM parameter ***************************/
+/*
+ * Security strength and seed sizes, as the kernel module esdm_es has them -
+ * the oversampling configured by ESDM_SEED_BUFFER_INIT_ADD_BITS of config.h
+ */
+#include "esdm_seed_sizes.h"
 
-/* Security strength of ESDM -- this must match DRNG security strength */
-#define ESDM_DRNG_SECURITY_STRENGTH_BYTES 32
-#define ESDM_DRNG_SECURITY_STRENGTH_BITS (ESDM_DRNG_SECURITY_STRENGTH_BYTES * 8)
-#define ESDM_DRNG_INIT_SEED_SIZE_BITS                                          \
-	(ESDM_DRNG_SECURITY_STRENGTH_BITS + ESDM_SEED_BUFFER_INIT_ADD_BITS)
-#define ESDM_DRNG_INIT_SEED_SIZE_BYTES (ESDM_DRNG_INIT_SEED_SIZE_BITS >> 3)
+/*************************** General ESDM parameter ***************************/
 
 /*
  * SP800-90A defines a maximum request size of 1<<16 bytes. The given value is

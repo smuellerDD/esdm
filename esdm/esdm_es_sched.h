@@ -20,55 +20,22 @@
 #ifndef _ESDM_ES_SCHED_H
 #define _ESDM_ES_SCHED_H
 
-#include <linux/ioctl.h>
 #include <sys/types.h>
 
 #include "config.h"
+#include "esdm_es_ioctl.h"
 #include "esdm_es_mgr_cb.h"
 
 #ifdef ESDM_ES_SCHED
 
-#define ESDMIO 0xE0
+/* IOCTLs to interact with the kernel ESDM ES, see esdm_es_ioctl.h */
 
-/* SCHED ES: return available entropy */
-#define ESDM_SCHED_AVAIL_ENTROPY _IOR(ESDMIO, 0x05, uint32_t)
-
-/* SCHED ES: return size of entropy buffer struct and ES number */
-#define ESDM_SCHED_ENT_BUF_SIZE _IOR(ESDMIO, 0x06, uint32_t[2])
-
-/* SCHED ES: read size sizeof(eb): entropy value */
-#define ESDM_SCHED_ENT_BUF _IOR(ESDMIO, 0x07, struct entropy_es)
-#define ESDM_SCHED_ENT_BUF_LARGE _IOR(ESDMIO, 0x07, struct entropy_es_large)
-#define ESDM_SCHED_ENT_BUF_SMALL _IOR(ESDMIO, 0x07, struct entropy_es_small)
-
-/*
- * SCHED ES: configure entropy source with the following protocol
- *
- * 1. When writing 2 * sizeof(u32): the first 4 bits are interpreted as a bit
- *    field with:
- * 	ESDM_ES_MGR_RESET_BIT set -> reset entropy source
- * 	ESDM_ES_MGR_REQ_BITS_MASK: amount of requested entropy in bits
- *    The second 4 bits are interpreted as entropy rate.
- *
- * Any other value is treated as an error.
- */
-#define ESDM_SCHED_CONF _IOW(ESDMIO, 0x08, uint32_t[2])
-
-/* SCHED ES: read status information */
-#define ESDM_SCHED_STATUS _IOR(ESDMIO, 0x09, char[250])
-
-/*
- * SCHED ES: read status information as a JSON object
- *
- * The returned document carries the same properties as the status text of
- * ESDM_SCHED_STATUS with the labels turned into JSON member names.
- */
-#define ESDM_SCHED_STATUS_JSON _IOR(ESDMIO, 0x0b, char[500])
-
-#ifndef ESDM_STATUS_JSON_BUFLEN
-/* Size of the buffer the JSON status IOCTLs report into */
-#define ESDM_STATUS_JSON_BUFLEN 500
-#endif
+/* SCHED ES: read the entropy buffer of the size of the seed the module uses */
+#define ESDM_SCHED_ENT_BUF ESDM_SCHED_ENT_BUF_IOCTL(struct entropy_es)
+#define ESDM_SCHED_ENT_BUF_LARGE                                               \
+	ESDM_SCHED_ENT_BUF_IOCTL(struct entropy_es_large)
+#define ESDM_SCHED_ENT_BUF_SMALL                                               \
+	ESDM_SCHED_ENT_BUF_IOCTL(struct entropy_es_small)
 
 extern struct esdm_es_cb esdm_es_sched;
 

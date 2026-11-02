@@ -88,8 +88,6 @@ struct entropy_es_small {
 };
 
 /* Large buffer for entropy data */
-#define ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES                                   \
-	(ESDM_DRNG_SECURITY_STRENGTH_BYTES + 16)
 struct entropy_es_large {
 	uint8_t e[ESDM_DRNG_OVERSAMPLE_SEED_SIZE_BYTES];
 	uint32_t e_bits;
@@ -185,9 +183,5 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 			__requested_bits = __digestsize_bits;                                             \
 		}                                                                                         \
 	} while (0)
-
-/* Kernel entropy sources */
-#define ESDM_ES_MGR_REQ_BITS_MASK 0x1ff
-#define ESDM_ES_MGR_RESET_BIT 0x80000000
 
 #endif /* _ESDM_ES_MGR_CB_H */

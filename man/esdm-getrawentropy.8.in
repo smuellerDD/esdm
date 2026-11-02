@@ -7,7 +7,7 @@ esdm\-getrawentropy \- read raw noise source data from the ESDM kernel module
 .SH DESCRIPTION
 .B esdm\-getrawentropy
 reads raw, unconditioned noise source samples from a debugfs interface of the
-.I linux_esdm_es
+.I esdm_es
 kernel add\-on and writes them as decimal ASCII, one 64 bit sample per line \-
 the input format of
 .BR esdm\-extractlsb (8).

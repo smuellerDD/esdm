@@ -120,56 +120,63 @@
 
         addEsdmToKernel = lpself: lpsuper: {
           kernel = lpsuper.kernel.override {
+            # Keep nixpkgs' own patches (bridge-stp-helper, request-key-helper
+            # and fixes such as 6.1's c23-compat-libbpf), override replaces the
+            # list rather than appending to it.
             kernelPatches =
-              lpself.callPackage ./addon/linux_esdm_es/kernelPatches.nix { inherit (lpsuper) kernel; }
+              lpsuper.kernel.kernelPatches
+              ++ lpself.callPackage ./kernel/esdm_es/kernelPatches.nix { inherit (lpsuper) kernel; }
               ++ lib.optionals kernelFips (
-                lpself.callPackage ./addon/linux_esdm_es/fipsConfig.nix { inherit (lpsuper) kernel; }
+                lpself.callPackage ./kernel/esdm_es/fipsConfig.nix { inherit (lpsuper) kernel; }
               )
-              ++ lib.optionals kernelDebug (lpself.callPackage ./addon/linux_esdm_es/debug.nix { })
-              ++ lpself.callPackage ./addon/linux_esdm_es/drbg.nix { };
+              ++ lib.optionals kernelDebug (lpself.callPackage ./kernel/esdm_es/debug.nix { })
+              ++ lpself.callPackage ./kernel/esdm_es/drbg.nix { inherit (lpsuper) kernel; };
           };
-          esdm_es = lpself.callPackage ./addon/linux_esdm_es { };
+          esdm_es = lpself.callPackage ./kernel/esdm_es { };
         };
 
-        # 6.6 is the first kernel version supported by ESDM.
+        # 6.1 is the first kernel version supported by ESDM.
         minKernel = {
           major = 6;
-          minor = 6;
+          minor = 1;
         };
 
-        # All `linuxPackages_<major>_<minor>` sets nixpkgs currently exposes,
-        # restricted to the versions ESDM supports (>= minKernel). Discovered
-        # automatically so newly packaged kernels are picked up without editing
-        # this file. Keyed by the suffix used for the generated outputs, e.g.
-        # "6_6" -> live_6_6 / esdm_es_6_6. The rolling "latest" alias is added
-        # on top for convenience.
-        # Stock (unpatched) `linuxPackages_<major>_<minor>` sets nixpkgs
-        # currently exposes, restricted to the versions ESDM supports
-        # (>= minKernel). Keyed by the suffix used for the generated outputs.
+        # The stock (unpatched) kernel package sets of nixpkgs, enumerated like
+        # jitterentropy-library does: the numbered linuxKernel.packages sets
+        # plus linux_testing, the flavored variants (hardened, zen, ...) are of
+        # no interest. tryEval guards the sets that do not evaluate on the
+        # current system and the end-of-life aliases that throw. Restricted to
+        # the versions ESDM supports (>= minKernel), linux_testing always
+        # included. Keyed by the suffix used for the generated outputs, e.g.
+        # linux_6_18 -> "6_18" -> live_6_18-<system> / esdm_es_6_18,
+        # linux_testing -> "testing". The rolling "latest" alias is added on top.
         stockKernels =
           let
-            versioned = builtins.listToAttrs (
-              builtins.concatMap (
-                name:
-                let
-                  m = builtins.match "linuxPackages_([0-9]+)_([0-9]+)" name;
-                in
-                if m == null then
-                  [ ]
-                else
-                  let
-                    major = lib.toInt (builtins.elemAt m 0);
-                    minor = lib.toInt (builtins.elemAt m 1);
-                    supported = major > minKernel.major || (major == minKernel.major && minor >= minKernel.minor);
-                  in
-                  lib.optional supported {
-                    name = "${toString major}_${toString minor}";
-                    value = pkgs.${name};
-                  }
-              ) (builtins.attrNames pkgs)
-            );
+            usable =
+              ps:
+              let
+                r = builtins.tryEval (lib.isAttrs ps && ps ? kernel && lib.isDerivation ps.kernel);
+              in
+              r.success && r.value;
+
+            supported =
+              name:
+              let
+                m = builtins.match "linux_([0-9]+)_([0-9]+)" name;
+                major = lib.toInt (builtins.elemAt m 0);
+                minor = lib.toInt (builtins.elemAt m 1);
+              in
+              name == "linux_testing"
+              || (
+                m != null && (major > minKernel.major || (major == minKernel.major && minor >= minKernel.minor))
+              );
+
+            sets = lib.filterAttrs (name: ps: supported name && usable ps) pkgs.linuxKernel.packages;
           in
-          versioned // { latest = pkgs.linuxPackages_latest; };
+          lib.mapAttrs' (name: ps: lib.nameValuePair (lib.removePrefix "linux_" name) ps) sets
+          // {
+            latest = pkgs.linuxPackages_latest;
+          };
 
         # The same kernels with the esdm_es patches applied.
         kernels = lib.mapAttrs (name: lp: lp.extend addEsdmToKernel) stockKernels;
@@ -425,8 +432,30 @@
             '';
           };
 
+        # The esdm package credits the interrupt and scheduler ES with nothing,
+        # so it seeds fully whatever esdm_es delivers. These credit one of
+        # them each (only one may be), for mkCheck to show the module's
+        # entropy is credited.
+        esdmCreditingKernelEs =
+          source:
+          self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-credit-${source}";
+            mesonFlags =
+              (builtins.filter (
+                x: !(lib.hasInfix "es_irq_entropy_rate" x || lib.hasInfix "es_sched_entropy_rate" x)
+              ) prev.mesonFlags)
+              ++ [
+                "-Des_irq_entropy_rate=${if source == "irq" then "256" else "0"}"
+                "-Des_sched_entropy_rate=${if source == "sched" then "256" else "0"}"
+              ];
+          });
+
         mkCheck =
           kernel:
+          let
+            esdm-irq = esdmCreditingKernelEs "irq";
+            esdm-sched = esdmCreditingKernelEs "sched";
+          in
           pkgs.testers.nixosTest {
             name = "basic test with esdm-tool";
 
@@ -453,7 +482,10 @@
                       # Make the startup-hang regression harness (and a Python
                       # to run it) available inside the VM so the check can
                       # execute it instead of letting it rot.
-                      environment.systemPackages = [ pkgs.python3 ];
+                      environment.systemPackages = [
+                        pkgs.python3
+                        pkgs.jq
+                      ];
                       environment.etc."esdm-startup-loop.py".source = ./tests/startup/esdm_startup_loop.py;
 
                       boot.kernelParams = [
@@ -506,6 +538,36 @@
 
               # A clean shutdown must not deadlock or leak (kmemleak is on).
               machine.succeed("systemctl stop esdm-server.service")
+
+              # The service credits the kernel ES with nothing, so it seeds
+              # whether esdm_es delivers or not. A server crediting one of
+              # them in turn has to see that source report credited entropy.
+              # 128 bits net of the FIPS oversampling are some 800 events at
+              # the module's OSR of 3, after the 1024 of its startup health
+              # test - little even for an idle VM, so the timeout is only
+              # generous. The socket units go too, so the server binds the
+              # paths itself.
+              machine.succeed(
+                  "systemctl stop esdm-server-priv.socket esdm-server-unpriv.socket"
+              )
+              for source, esdm in [
+                  ("Interrupt", "${esdm-irq}"),
+                  ("Scheduler", "${esdm-sched}"),
+              ]:
+                  machine.succeed(
+                      f"{esdm}/bin/esdm-server -f >/tmp/esdm-{source}.log 2>&1 "
+                      f"& echo $! >/tmp/esdm-{source}.pid"
+                  )
+                  machine.wait_until_succeeds(
+                      f"{esdm}/bin/esdm-tool --status-json | jq -e "
+                      f"'.entropy_sources[] | select(.name == \"{source}\") "
+                      "| .available_entropy >= 128'",
+                      timeout=600,
+                  )
+                  machine.succeed(f"kill $(cat /tmp/esdm-{source}.pid)")
+                  machine.wait_until_fails(
+                      f"kill -0 $(cat /tmp/esdm-{source}.pid)", timeout=30
+                  )
 
               # Now exercise the dedicated startup-hang regression harness
               # against the same binary. It repeatedly starts esdm-server in the
@@ -1798,13 +1860,18 @@
 
         }
         # One out-of-tree esdm_es module build per defined kernel, e.g.
-        # esdm_es_6_6 / esdm_es_latest.
+        # esdm_es_6_6 / esdm_es_latest, with the warnings of W=1 as errors.
+        # These carry the debugfs testing interfaces, so they stay compiled
+        # on every kernel; the module the checks and live systems load comes
+        # from the kernel package set and leaves them out.
         // lib.mapAttrs' (
           name: kernel:
           lib.nameValuePair "esdm_es_${name}" (
-            pkgs.callPackage ./addon/linux_esdm_es {
+            pkgs.callPackage ./kernel/esdm_es {
               inherit (pkgs) lib;
               inherit (kernel) kernel;
+              enableTesting = true;
+              werror = true;
             }
           )
         ) kernels;

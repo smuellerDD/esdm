@@ -14,8 +14,8 @@ core.*
 /result-*
 result
 result-*
-/addon/linux_esdm_es/result
-/addon/linux_esdm_es/result-*
+/kernel/esdm_es/result
+/kernel/esdm_es/result-*
 
 # caches and local test state
 /.cache/

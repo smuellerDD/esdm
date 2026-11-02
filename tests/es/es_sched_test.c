@@ -75,7 +75,7 @@ static int es_sched_getstate(void)
 
 	/*
 	 * The labels come from the kernel module (esdm_sched_es_state() of
-	 * addon/linux_esdm_es/esdm_es_sched.c), which post-processes with a
+	 * kernel/esdm_es/esdm_es_sched.c), which post-processes with a
 	 * DRBG rather than a hash since commit 1dd63ca.
 	 */
 	if (!strstr(buf, "DRBG for operating entropy pool") ||

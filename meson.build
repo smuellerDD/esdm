@@ -147,6 +147,8 @@ pkgconfig = import('pkgconfig')
 include_user_files = [ ]
 
 include_dirs_server = include_directories([ 'esdm',
+					    'esdm/drng',
+					    'kernel/shared',
 					    'crypto',
 					    'common',
 					    'service-egd',
