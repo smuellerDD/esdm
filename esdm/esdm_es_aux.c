@@ -256,6 +256,24 @@ static void esdm_pool_set_entropy_pool(struct esdm_pool *pool,
 	atomic_store(&pool->aux_entropy_bits, (int)entropy_bits);
 }
 
+/*
+ * Add to the entropy content of @pool, capped at @cap bits - the size of its
+ * hash, compliant to SP800-90B section 3.1.5.1 table 1. The caller holds the
+ * pool lock.
+ */
+static void esdm_pool_add_entropy_pool(struct esdm_pool *pool,
+				       uint32_t entropy_bits, uint32_t cap)
+{
+	uint32_t existing = atomic_read_u32(&pool->aux_entropy_bits);
+
+	/* Guard against overflow in the addition */
+	if (entropy_bits > cap - min_uint32(existing, cap))
+		entropy_bits = cap;
+	else
+		entropy_bits += existing;
+	esdm_pool_set_entropy_pool(pool, min_uint32(entropy_bits, cap));
+}
+
 /* Set entropy content in user-space controllable aux pool */
 DSO_PUBLIC
 void esdm_pool_set_entropy(uint32_t entropy_bits)
@@ -282,6 +300,37 @@ void esdm_pool_set_entropy(uint32_t entropy_bits)
 		if (entropy_bits != 0)
 			break;
 	}
+
+	/*
+	 * As the DRNG is newly seeded, maybe the need entropy flag can be
+	 * unset?
+	 */
+	esdm_shm_status_set_need_entropy();
+
+	/* notify others about newly added entropy */
+	esdm_es_add_entropy();
+}
+
+/* Credit entropy to the data in the user-space controllable aux pool */
+DSO_PUBLIC
+void esdm_pool_add_entropy(uint32_t entropy_bits)
+{
+	/* As esdm_pool_set_entropy(), this interface credits the first pool */
+	struct esdm_pool *pool = &esdm_pools[0];
+
+	/* Nothing changes, so nobody is to be notified either */
+	if (!entropy_bits)
+		return;
+
+	/*
+	 * Read and update the count under the pool lock, so that an
+	 * extraction in between does not have its bits credited once more.
+	 * esdm_get_aux_ent() is no base for that: it reports the count less
+	 * the oversampling of the pool, which would be lost with every credit.
+	 */
+	mutex_w_lock(&pool->lock);
+	esdm_pool_add_entropy_pool(pool, entropy_bits, esdm_get_digestsize());
+	mutex_w_unlock(&pool->lock);
 
 	/*
 	 * As the DRNG is newly seeded, maybe the need entropy flag can be
@@ -353,22 +402,8 @@ static int esdm_aux_pool_insert_locked(struct esdm_pool *pool,
 	CKINT(hash_cb->hash_update(shash, inbuf, inbuflen));
 	CKINT(hash_cb->hash_update(ohash, inbuf, inbuflen));
 
-	/*
-	 * Cap the available entropy to the hash output size compliant to
-	 * SP800-90B section 3.1.5.1 table 1.
-	 *
-	 * Guard against overflow in the addition.
-	 */
-	{
-		uint32_t existing = atomic_read_u32(&pool->aux_entropy_bits);
-		uint32_t cap = hash_cb->hash_digestsize(shash) << 3;
-
-		if (entropy_bits > cap - min_uint32(existing, cap))
-			entropy_bits = cap;
-		else
-			entropy_bits += existing;
-		esdm_pool_set_entropy_pool(pool, min_uint32(entropy_bits, cap));
-	}
+	esdm_pool_add_entropy_pool(pool, entropy_bits,
+				   hash_cb->hash_digestsize(shash) << 3);
 
 out:
 	return ret;

@@ -50,6 +50,7 @@ LIBESDM_1.0 {
 		/* esdm.h - entropy pool handling */
 		esdm_pool_insert_aux;
 		esdm_pool_set_entropy;
+		esdm_pool_add_entropy;
 		esdm_avail_entropy;
 		esdm_avail_entropy_aux;
 		esdm_avail_poolsize_aux;
