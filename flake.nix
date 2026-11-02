@@ -857,8 +857,12 @@
               machine.succeed(f"echo '{pubkey}' > /root/.ssh/authorized_keys")
               machine.succeed("chmod 600 /root/.ssh/authorized_keys")
 
+              # -n: the client must not read the standard input it inherits
+              # from the test driver's shell. Reading it, it hung now and then
+              # after the session had ended, waiting on input that never
+              # comes.
               opts = (
-                  "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
+                  "-n -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
                   "-o IdentitiesOnly=yes -i /root/.ssh/id_ed25519"
               )
               kex_algorithms = ${builtins.toJSON kexAlgorithms}
