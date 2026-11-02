@@ -1051,6 +1051,14 @@ further and a high rate of short connections may saturates them.
 option('validation-helpers', type: 'feature', value: 'disabled',
        description: 'Enabled build of entropy validation helpers for esdm_es.')
 
+option('esdm-cdev-check', type: 'feature', value: 'disabled',
+       description: '''Install esdm-cdev-check, the checks of the esdm_cdev kernel module.
+
+The checks of kernel/esdm_cdev are built with the test suite either way, and
+meson test runs them where the module is loaded. This installs them as well,
+for a machine without a build tree that loads the module - the NixOS VM test
+of the flake runs them all from the installed esdm-cdev-check.''')
+
 ################################################################################
 # Enable Test configuration
 #

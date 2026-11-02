@@ -1,0 +1,232 @@
+.TH ESDM\-CDEV\-CHECK 8 "2026-10-20" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-cdev\-check \- check the esdm_cdev kernel module against the ESDM
+.SH SYNOPSIS
+.B esdm\-cdev\-check
+.I check
+.RI [ args ]
+.SH DESCRIPTION
+.B esdm\-cdev\-check
+runs the checks of the
+.I esdm_cdev
+kernel module, which serves
+.IR /dev/esdm_random ,
+.I /dev/esdm_urandom
+and
+.I /proc/esdm
+from the ESDM over its EGD socket (see
+.I kernel/esdm_cdev/README.md
+of the source tree). Each check is a subcommand: it prints what it found and
+exits with 0 when that is what the module promises, and with a line starting
+with
+.B FAIL:
+and 1 when it is not.
+.PP
+The checks talk to the loaded module and to the ESDM serving it; they need
+neither an ESDM of their own nor a build with test hooks. Most of them expect
+the ESDM to be running and reachable over its EGD socket
+.RB ( esdm\-server\-egd.socket ,
+or
+.B esdm\-server \-\-egd_socket
+.IR @EGD_SOCKET_PATH@ ).
+Some change the state of that ESDM or of the module, and are meant for a
+machine set up for them \- the NixOS VM test of the ESDM flake runs every check
+with the ESDM running, stopped and restarted, and against the fake EGD server
+of
+.BR fake\-egd .
+.PP
+The program is built with the test suite, whose
+.B esdm_cdev
+suite runs the checks that hold next to the ESDM of an ordinary machine. It is
+installed with the meson option
+.BR esdm\-cdev\-check ,
+for a machine without a build tree. It is a test program and has no place in a
+production deployment.
+.SH CHECKS
+.SS The devices
+.TP
+.BR reads " [" sync ]
+Reads of 1 byte to 1 MiB from both devices are random, no two reads are equal,
+and single bytes take more than a few values. With
+.BR sync ,
+the reads are opened with
+.B O_SYNC
+and served by the prediction resistance DRNG, up to 64 bytes each.
+.TP
+.B nonblock
+A read with
+.B O_NONBLOCK
+of an operational ESDM gets random data.
+.TP
+.B poll
+.I /dev/esdm_random
+is readable once the ESDM is operational;
+.I /dev/esdm_urandom
+has no
+.BR poll ()
+and is readable and writable as any file without one.
+.TP
+.B writes
+Writes of nothing up to 300 KiB are taken in full, each in one
+.BR write ().
+.SS The ioctls
+.TP
+.B ioctl\-priv
+Needs CAP_SYS_ADMIN. Every ioctl of
+.BR random (4)
+does to the pool of the ESDM what it does to the kernel's, and the arguments
+the kernel refuses are refused. It credits entropy nobody delivered and clears
+the pool of the ESDM.
+.TP
+.B ioctl\-unpriv
+Without CAP_SYS_ADMIN, the entropy count can be read and nothing else is done,
+and the writable files of
+.I /proc/esdm
+are refused. A caller with the capability gives it up first.
+.SS /proc/esdm
+.TP
+.B proc
+Needs CAP_SYS_ADMIN. The files of
+.I /proc/esdm
+with the ESDM reachable: their content, the two that can be written, and what
+is refused there. It sets
+.B write_wakeup_threshold
+and
+.B urandom_min_reseed_secs
+of the ESDM, and restores them.
+.SS The ESDM unreachable
+.TP
+.B unreachable
+With the ESDM not reachable, nothing is served from elsewhere:
+.I /dev/esdm_urandom
+fails with ENOTCONN,
+.I /dev/esdm_random
+waits \- with
+.BR O_NONBLOCK ,
+EAGAIN \- and is not readable for
+.BR poll ().
+Writes, the ioctls and the files of
+.I /proc/esdm
+fail with ENOTCONN.
+.SS Readers in the background, and speed
+.TP
+.BI loop " dev seconds"
+Reads of 4096 bytes from
+.I dev
+for that long, which get random data and no error across a restart of the
+ESDM. Ends with the line
+.BR "loop reads=... errors=..." .
+.TP
+.BI block " dev"
+A reader that stays in
+.BR read ()
+until it is killed, or reads on when a read returns. It prints
+.B blocking
+once the device is open; from then on, the module cannot be unloaded.
+.TP
+.BR throughput " [\fIsocket\fR]"
+Informational: the speed of reads of 32 bytes, of one EGD transfer, of a page
+and of 64 KiB through each device, and through the EGD socket of the ESDM from
+user space for comparison \- by default
+.IR @EGD_SOCKET_PATH@ .
+.TP
+.B stalled\-writers
+Writers whose data never comes \- their buffer lies in a range of a
+.BR userfaultfd (2)
+nobody serves \- more of them than the module has connections, must not keep
+anybody else from the ESDM. A userfaultfd catching the faults of the kernel
+needs CAP_SYS_PTRACE or
+.BR vm.unprivileged_userfaultfd=1 .
+.SS Against a fake EGD server
+.TP
+.BI fake\-egd " socket log " notop | mute
+An EGD server on
+.I socket
+in place of the ESDM, for what the real one cannot be made to do: answer like an
+ESDM that is not operational yet
+.RB ( notop ),
+or accept connections and never answer
+.RB ( mute ).
+It writes
+.B listening
+to
+.I log
+once it listens, and every connection and every command that changes something
+after that. The module is pointed at it with its parameter
+.BR egd_socket .
+.TP
+.BI addentropy " log"
+Needs CAP_SYS_ADMIN; against a
+.B notop
+fake EGD server.
+.B RNDADDENTROPY
+inserts all of the data, which carries no entropy claim, and credits it after
+that in one go, with no more than the data has bits.
+.TP
+.BI addtoentcnt\-signal " log"
+Needs CAP_SYS_ADMIN; against a
+.B notop
+fake EGD server, which answers the crediting a second late. A signal while the
+module waits for the answer must not have the ioctl restarted, which would
+carry out the command once more.
+.TP
+.B poll\-notop
+Against a
+.B notop
+fake EGD server:
+.BR poll ()
+of
+.I /dev/esdm_random
+reports it readable only when a read with
+.B O_NONBLOCK
+gets data \- that is, not at all.
+.TP
+.BI backoff " log seconds"
+Against a
+.B mute
+fake EGD server: the reads fail, with ETIMEDOUT once a connection is made, and
+with ENOTCONN while the module waits before it makes the next, up to 2
+seconds.
+.SH EXIT STATUS
+.TP
+.B 0
+The check passed.
+.TP
+.B 1
+The check failed, as the
+.B FAIL:
+line says.
+.TP
+.B 2
+Unknown check or wrong arguments: the usage, with every check, is printed.
+.TP
+.B 77
+The check was skipped, as the line starting with
+.B SKIP:
+says: the module is not loaded, or the check needs CAP_SYS_ADMIN, as root of the
+initial user namespace, and does not have it. 77 is what
+.B meson test
+takes for a skipped test.
+.SH EXAMPLES
+The checks of the meson suite, next to a running ESDM serving its EGD socket:
+.PP
+.RS
+.nf
+modprobe esdm_cdev
+esdm\-cdev\-check reads
+esdm\-cdev\-check reads sync
+esdm\-cdev\-check nonblock
+esdm\-cdev\-check poll
+esdm\-cdev\-check writes
+esdm\-cdev\-check ioctl\-unpriv
+esdm\-cdev\-check proc
+.fi
+.RE
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-cuse\-random (8),
+.BR esdm\-proc (8),
+.BR libesdm_egd_client (3),
+.BR random (4)
+.SH AUTHOR
+Markus Theil <theil.markus@gmail.com>

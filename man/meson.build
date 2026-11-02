@@ -58,6 +58,11 @@ if get_option('es_ebpf_testing').enabled()
 	man_pages += [ 'esdm-ebpf-collect.8' ]
 endif
 
+# The checks of the esdm_cdev kernel module, where they are installed
+if get_option('esdm-cdev-check').enabled()
+	man_pages += [ 'esdm-cdev-check.8' ]
+endif
+
 foreach page : man_pages
 	install_man(configure_file(
 		input: page + '.in',
