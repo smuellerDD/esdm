@@ -123,6 +123,19 @@ if get_option('es_irq').enabled()
 	test('ES Interrupt', es_irq_tester, timeout: 300)
 endif
 
+# The configuration of /dev/esdm_es per descriptor, spoken to through its IOCTLs
+# directly, so no source is compiled in.
+if get_option('es_irq').enabled() or get_option('es_sched').enabled()
+	es_kernel_conf_tester = executable(
+		'es_kernel_conf_tester',
+		[ 'es_kernel_conf_test.c' ],
+		include_directories: include_dirs_server,
+	)
+
+	test('ES kernel configuration per descriptor', es_kernel_conf_tester,
+	     timeout: 120)
+endif
+
 # The following hardware/service-backed sources may be absent on the test
 # machine; their tests are structural / graceful-absence checks (see the file
 # headers) and pass whether or not the device is present.
