@@ -20,10 +20,10 @@
 #ifndef _ESDM_ES_IRQ_H
 #define _ESDM_ES_IRQ_H
 
-#include <linux/ioctl.h>
 #include <sys/types.h>
 
 #include "config.h"
+#include "esdm_es_ioctl.h"
 #include "esdm_es_mgr_cb.h"
 
 /*
@@ -36,49 +36,12 @@
 
 #ifdef ESDM_ES_IRQ
 
-#define ESDMIO 0xE0
+/* IOCTLs to interact with the kernel ESDM ES, see esdm_es_ioctl.h */
 
-/* IOCTLs to interact with the kernel ESDM ES */
-
-/* IRQ ES: return available entropy */
-#define ESDM_IRQ_AVAIL_ENTROPY _IOR(ESDMIO, 0x00, uint32_t)
-
-/* IRQ ES: return size of entropy buffer struct and ES number */
-#define ESDM_IRQ_ENT_BUF_SIZE _IOR(ESDMIO, 0x01, uint32_t[2])
-
-/* IRQ ES: read size sizeof(eb): entropy value */
-#define ESDM_IRQ_ENT_BUF _IOR(ESDMIO, 0x02, struct entropy_es)
-#define ESDM_IRQ_ENT_BUF_LARGE _IOR(ESDMIO, 0x02, struct entropy_es_large)
-#define ESDM_IRQ_ENT_BUF_SMALL _IOR(ESDMIO, 0x02, struct entropy_es_small)
-
-/*
- * IRQ ES: configure entropy source with the following protocol
- *
- * 1. When writing 2 * sizeof(u32): the first 4 bits are interpreted as a bit
- *    field with:
- * 	ESDM_ES_MGR_RESET_BIT set -> reset entropy source
- * 	ESDM_ES_MGR_REQ_BITS_MASK: amount of requested entropy in bits
- *    The second 4 bits are interpreted as entropy rate.
- *
- * Any other value is treated as an error.
- */
-#define ESDM_IRQ_CONF _IOW(ESDMIO, 0x03, uint32_t[2])
-
-/* IRQ ES: read status information */
-#define ESDM_IRQ_STATUS _IOR(ESDMIO, 0x04, char[250])
-
-/*
- * IRQ ES: read status information as a JSON object
- *
- * The returned document carries the same properties as the status text of
- * ESDM_IRQ_STATUS with the labels turned into JSON member names.
- */
-#define ESDM_IRQ_STATUS_JSON _IOR(ESDMIO, 0x0a, char[500])
-
-#ifndef ESDM_STATUS_JSON_BUFLEN
-/* Size of the buffer the JSON status IOCTLs report into */
-#define ESDM_STATUS_JSON_BUFLEN 500
-#endif
+/* IRQ ES: read the entropy buffer of the size of the seed the module uses */
+#define ESDM_IRQ_ENT_BUF ESDM_IRQ_ENT_BUF_IOCTL(struct entropy_es)
+#define ESDM_IRQ_ENT_BUF_LARGE ESDM_IRQ_ENT_BUF_IOCTL(struct entropy_es_large)
+#define ESDM_IRQ_ENT_BUF_SMALL ESDM_IRQ_ENT_BUF_IOCTL(struct entropy_es_small)
 
 bool esdm_irq_enabled(void);
 extern struct esdm_es_cb esdm_es_irq;

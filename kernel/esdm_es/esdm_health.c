@@ -1,0 +1,647 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+/*
+ * Entropy Source and DRNG Manager (ESDM) Health Testing
+ *
+ * Copyright (C) 2022 - 2026, Stephan Mueller <smueller@chronox.de>
+ */
+
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
+#include <linux/fips.h>
+#include <linux/irq_work.h>
+#include <linux/module.h>
+
+#include "esdm_es_irq.h"
+#include "esdm_es_mgr.h"
+#include "esdm_es_mgr_cb.h"
+#include "esdm_es_sched.h"
+#include "esdm_health.h"
+
+/*
+ * Deferred logging from the health-test hot path.
+ *
+ * The health test is invoked from the scheduler and IRQ hooks which run with
+ * rq->lock (and, as observed via the workqueue wakeup path, the workqueue
+ * pool->lock) held. A regular printk grabs the console_owner lock while
+ * flushing, and the console flush path in turn queues work (taking pool->lock)
+ * while holding console_owner. This inverse lock order results in a circular
+ * locking dependency / potential deadlock.
+ *
+ * The kernel solves this with printk_deferred(), which only fills the ring
+ * buffer and flushes the console later from a safe context via irq_work, but
+ * its symbols are not exported to modules. We therefore perform the same
+ * deferral ourselves: the hot path only records which message is pending per
+ * entropy source and queues an irq_work; the actual printk runs from the
+ * irq_work callback, which the kernel executes without rq->lock / pool->lock
+ * held.
+ */
+enum esdm_health_log_bit {
+	esdm_health_log_startup_done,
+	esdm_health_log_permanent_failure,
+	esdm_health_log_runtime_failure,
+	esdm_health_log_startup_failure,
+};
+
+/* Stuck Test */
+struct esdm_stuck_test {
+	u64 last_time; /* Stuck test: time of previous event */
+	u64 last_delta; /* Stuck test: delta of previous event */
+	u64 last_delta2; /* Stuck test: 2. time derivation of previous event */
+};
+
+/* Repetition Count Test */
+struct esdm_rct {
+	atomic_t rct_count; /* Number of stuck values */
+	u16 cutoff;
+	u16 cutoff_permanent;
+};
+
+/* Adaptive Proportion Test */
+struct esdm_apt {
+	/* Data window size */
+#define ESDM_APT_WINDOW_SIZE 512
+	/* LSB of time stamp to process */
+#define ESDM_APT_LSB 16
+#define ESDM_APT_WORD_MASK (ESDM_APT_LSB - 1)
+	atomic_t apt_count; /* APT counter */
+	atomic_t apt_base; /* APT base reference */
+
+	atomic_t apt_trigger;
+	u16 cutoff;
+	u16 cutoff_permanent;
+	bool apt_base_set; /* Is APT base set? */
+};
+
+/* Health data collected for one entropy source */
+struct esdm_health_es_state {
+	struct esdm_rct rct;
+	struct esdm_apt apt;
+
+	/* SP800-90B startup health tests */
+#define ESDM_SP80090B_STARTUP_SAMPLES 1024
+#define ESDM_SP80090B_STARTUP_BLOCKS                                           \
+	((ESDM_SP80090B_STARTUP_SAMPLES + ESDM_APT_WINDOW_SIZE - 1) /          \
+	 ESDM_APT_WINDOW_SIZE)
+	/* APT windows still to pass, zero: startup test passed */
+	atomic_t sp80090b_startup_blocks;
+
+	/* Bitmask of esdm_health_log_bit messages pending deferred printk */
+	unsigned long pending_log;
+};
+
+#define ESDM_HEALTH_ES_INIT(x)                                                 \
+	x.rct.rct_count = ATOMIC_INIT(0), x.apt.apt_count = ATOMIC_INIT(0),    \
+	x.apt.apt_base = ATOMIC_INIT(-1),                                      \
+	x.apt.apt_trigger = ATOMIC_INIT(ESDM_APT_WINDOW_SIZE),                 \
+	x.apt.apt_base_set = false,                                            \
+	x.sp80090b_startup_blocks = ATOMIC_INIT(ESDM_SP80090B_STARTUP_BLOCKS),
+
+#define ESDM_HEALTH_OSR(curr) ((curr) / ESDM_DRNG_SECURITY_STRENGTH_BITS)
+#define ESDM_HEALTH_IRQ_RCT_CUTOFF(cutoff)                                     \
+	(ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) * cutoff)
+#define ESDM_HEALTH_SCHED_RCT_CUTOFF(cutoff)                                   \
+	(ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) * cutoff)
+
+/* The health test code must operate lock-less */
+struct esdm_health {
+	bool health_test_enabled;
+	struct esdm_health_es_state es_state[esdm_int_es_last];
+};
+
+static struct esdm_health esdm_health = {
+	.health_test_enabled = true,
+
+#ifdef ESDM_ES_IRQ
+	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_irq])
+		.es_state[esdm_int_es_irq]
+		.rct.cutoff =
+		ESDM_HEALTH_IRQ_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF),
+	.es_state[esdm_int_es_irq].rct.cutoff_permanent =
+		ESDM_HEALTH_IRQ_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF_PERMANENT),
+#if (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 1)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_1,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_1,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 2)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_2,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_2,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 3)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_3,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_3,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 4)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_4,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_4,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 5)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_5,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_5,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 6)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_6,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_6,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 7)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_7,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_7,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 8)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_8,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_8,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 9)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_9,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_9,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 10)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_10,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_10,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 11)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_11,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_11,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 12)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_12,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_12,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 13)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_13,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_13,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_IRQ_ENTROPY_RATE) == 14)
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_14,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_14,
+#else
+	.es_state[esdm_int_es_irq].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_15,
+	.es_state[esdm_int_es_irq].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_15,
+#endif
+
+#endif
+#ifdef ESDM_ES_SCHED
+	ESDM_HEALTH_ES_INIT(.es_state[esdm_int_es_sched])
+		.es_state[esdm_int_es_sched]
+		.rct.cutoff =
+		ESDM_HEALTH_SCHED_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF),
+	.es_state[esdm_int_es_sched].rct.cutoff_permanent =
+		ESDM_HEALTH_SCHED_RCT_CUTOFF(CONFIG_ESDM_RCT_CUTOFF_PERMANENT),
+#if (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 1)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_1,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_1,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 2)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_2,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_2,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 3)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_3,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_3,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 4)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_4,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_4,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 5)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_5,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_5,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 6)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_6,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_6,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 7)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_7,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_7,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 8)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_8,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_8,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 9)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_9,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_9,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 10)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_10,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_10,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 11)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_11,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_11,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 12)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_12,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_12,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 13)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_13,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_13,
+#elif (ESDM_HEALTH_OSR(CONFIG_ESDM_SCHED_ENTROPY_RATE) == 14)
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_14,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_14,
+#else
+	.es_state[esdm_int_es_sched].apt.cutoff = CONFIG_ESDM_APT_CUTOFF_15,
+	.es_state[esdm_int_es_sched].apt.cutoff_permanent =
+		CONFIG_ESDM_APT_CUTOFF_PERMANENT_15,
+#endif
+#endif
+};
+
+static DEFINE_PER_CPU(struct esdm_stuck_test[esdm_int_es_last],
+		      esdm_stuck_test_array);
+
+/*
+ * irq_work callback emitting the health-test messages recorded by the hot path.
+ * Runs in a context where neither rq->lock nor the workqueue pool->lock is
+ * held, so the regular printk is safe here.
+ */
+static void esdm_health_log_func(struct irq_work *work)
+{
+	struct esdm_health *health = &esdm_health;
+	enum esdm_internal_es es;
+
+	for (es = 0; es < esdm_int_es_last; es++) {
+		unsigned long *pending = &health->es_state[es].pending_log;
+
+		if (test_and_clear_bit(esdm_health_log_startup_done, pending))
+			pr_info("SP800-90B startup health tests for internal entropy source %u completed\n",
+				es);
+		if (test_and_clear_bit(esdm_health_log_permanent_failure,
+				       pending))
+			pr_err("SP800-90B permanent health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
+			       es);
+		if (test_and_clear_bit(esdm_health_log_runtime_failure, pending))
+			pr_err("SP800-90B runtime health test failure for internal entropy source %u - invalidating all existing entropy and initiate SP800-90B startup\n",
+			       es);
+		if (test_and_clear_bit(esdm_health_log_startup_failure, pending))
+			pr_err("SP800-90B startup test failure for internal entropy source %u - resetting\n",
+			       es);
+	}
+}
+
+static struct irq_work esdm_health_log_work =
+	IRQ_WORK_INIT(esdm_health_log_func);
+
+/* Record a pending health-test message and schedule its deferred printk. */
+static void esdm_health_log(enum esdm_internal_es es,
+			    enum esdm_health_log_bit bit)
+{
+	set_bit(bit, &esdm_health.es_state[es].pending_log);
+	irq_work_queue(&esdm_health_log_work);
+}
+
+/* Drain pending deferred health-test messages (called on module unload). */
+void esdm_health_exit(void)
+{
+	irq_work_sync(&esdm_health_log_work);
+}
+
+static bool esdm_sp80090b_health_requested(void)
+{
+	/* Health tests are only requested in FIPS mode */
+	return fips_enabled;
+}
+
+static bool esdm_sp80090b_health_enabled(void)
+{
+	struct esdm_health *health = &esdm_health;
+
+	return esdm_sp80090b_health_requested() && health->health_test_enabled;
+}
+
+/***************************************************************************
+ * SP800-90B Compliance
+ *
+ * If the esdm-es module is booted into FIPS mode, the following interfaces
+ * provide an SP800-90B compliant noise source:
+ *
+ * - Scheduler ES
+ * - IRQ ES
+ *
+ ***************************************************************************/
+
+/*
+ * Perform SP800-90B startup testing
+ */
+static void esdm_sp80090b_startup(struct esdm_health *health,
+				  enum esdm_internal_es es)
+{
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+
+	/* Only the transition to zero completes the startup test */
+	if (!atomic_dec_if_positive(&es_state->sp80090b_startup_blocks))
+		esdm_health_log(es, esdm_health_log_startup_done);
+}
+
+/*
+ * (Re-)start the SP800-90B startup test after a health test failure
+ *
+ * NOTE SP800-90B section 4.3 bullet 4 does not specify what exactly is to be
+ * done in case of failure! Thus, we do what makes sense, i.e. restarting the
+ * health test and thus gating the output function of /dev/random and
+ * getrandom(2).
+ *
+ * The startup test counts completed APT windows, but the APT window the
+ * failure fell into keeps running: restarting it would also restart counting
+ * towards the permanent cutoffs, which then could never be reached. Its
+ * completion must not count as a passed block, hence one block more than
+ * needed is armed, which that window consumes. The startup test thus passes
+ * only after the ESDM_SP80090B_STARTUP_SAMPLES samples following that window
+ * (window boundaries are fuzzy between concurrently inserting CPUs, as for
+ * the lock-less APT itself). After a permanent failure the window restarts
+ * and the extra block costs one window more than strictly needed.
+ *
+ * @return true if the startup test had passed before, i.e. this is a runtime
+ *	   failure
+ */
+static bool esdm_sp80090b_startup_restart(struct esdm_health *health,
+					  enum esdm_internal_es es)
+{
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+	/*
+	 * Gate the output before resetting the entropy state. The exchange
+	 * cannot interleave with a window completing on another CPU: either
+	 * that completion still passes the startup test - and this is a
+	 * runtime failure - or it consumes one of the new blocks.
+	 */
+	bool passed = !atomic_xchg(&es_state->sp80090b_startup_blocks,
+				   ESDM_SP80090B_STARTUP_BLOCKS + 1);
+
+	/* Reset entropy state NOTE: we are in atomic context */
+	esdm_reset_state(es);
+
+	return passed;
+}
+
+static void esdm_rct_reset(struct esdm_rct *rct);
+static void esdm_apt_reset(struct esdm_apt *apt, unsigned int time_masked);
+static void esdm_apt_restart(struct esdm_apt *apt);
+static void esdm_sp80090b_permanent_failure(struct esdm_health *health,
+					    enum esdm_internal_es es)
+{
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+	struct esdm_apt *apt = &es_state->apt;
+	struct esdm_rct *rct = &es_state->rct;
+
+	if (esdm_enforce_panic_on_permanent_health_failure()) {
+		panic("SP800-90B permanent health test failure for internal entropy source %u\n",
+		      es);
+	}
+
+	esdm_health_log(es, esdm_health_log_permanent_failure);
+	esdm_sp80090b_startup_restart(health, es);
+
+	esdm_rct_reset(rct);
+	esdm_apt_reset(apt, 0);
+	esdm_apt_restart(apt);
+}
+
+static void esdm_sp80090b_failure(struct esdm_health *health,
+				  enum esdm_internal_es es)
+{
+	if (esdm_sp80090b_startup_restart(health, es))
+		esdm_health_log(es, esdm_health_log_runtime_failure);
+	else
+		esdm_health_log(es, esdm_health_log_startup_failure);
+}
+
+bool esdm_sp80090b_startup_complete_es(enum esdm_internal_es es)
+{
+	struct esdm_health *health = &esdm_health;
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+
+	if (!esdm_sp80090b_health_enabled())
+		return true;
+
+	return !atomic_read(&es_state->sp80090b_startup_blocks);
+}
+
+bool esdm_sp80090b_compliant(enum esdm_internal_es es)
+{
+	return esdm_sp80090b_health_enabled() &&
+	       esdm_sp80090b_startup_complete_es(es);
+}
+
+/***************************************************************************
+ * Adaptive Proportion Test
+ *
+ * This test complies with SP800-90B section 4.4.2.
+ ***************************************************************************/
+
+/*
+ * Reset the APT counter
+ *
+ * @health [in] Reference to health state
+ */
+static void esdm_apt_reset(struct esdm_apt *apt, unsigned int time_masked)
+{
+	/* Reset APT */
+	atomic_set(&apt->apt_count, 0);
+	atomic_set(&apt->apt_base, time_masked);
+}
+
+static void esdm_apt_restart(struct esdm_apt *apt)
+{
+	atomic_set(&apt->apt_trigger, ESDM_APT_WINDOW_SIZE);
+}
+
+/*
+ * Insert a new entropy event into APT
+ *
+ * This function does is void as it does not decide about the fate of a time
+ * stamp. An APT failure can only happen at the same time of a stuck test
+ * failure. Thus, the stuck failure will already decide how the time stamp
+ * is handled.
+ *
+ * @health [in] Reference to health state
+ * @now_time [in] Time stamp to process
+ */
+static void esdm_apt_insert(struct esdm_health *health, u64 now_time,
+			    enum esdm_internal_es es)
+{
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+	struct esdm_apt *apt = &es_state->apt;
+
+	if (!esdm_sp80090b_health_requested())
+		return;
+
+	now_time &= ESDM_APT_WORD_MASK;
+
+	/* Initialization of APT */
+	if (!apt->apt_base_set) {
+		atomic_set(&apt->apt_base, now_time);
+		apt->apt_base_set = true;
+		return;
+	}
+
+	if (now_time == (unsigned int)atomic_read(&apt->apt_base)) {
+		u32 apt_val = (u32)atomic_inc_return_relaxed(&apt->apt_count);
+
+		if (apt_val >= apt->cutoff_permanent)
+			esdm_sp80090b_permanent_failure(health, es);
+		else if (apt_val >= apt->cutoff)
+			esdm_sp80090b_failure(health, es);
+	}
+
+	if (atomic_dec_and_test(&apt->apt_trigger)) {
+		esdm_apt_restart(apt);
+		esdm_apt_reset(apt, now_time);
+		esdm_sp80090b_startup(health, es);
+	}
+}
+
+/***************************************************************************
+ * Repetition Count Test
+ *
+ * The ESDM uses an enhanced version of the Repetition Count Test
+ * (RCT) specified in SP800-90B section 4.4.1. Instead of counting identical
+ * back-to-back values, the input to the RCT is the counting of the stuck
+ * values while filling the entropy pool.
+ *
+ * The RCT is applied with an alpha of 2^-30 compliant to FIPS 140-2 IG 9.8.
+ *
+ * During the counting operation, the ESDM always calculates the RCT
+ * cut-off value of C. If that value exceeds the allowed cut-off value,
+ * the ESDM will invalidate all entropy for the entropy pool which implies
+ * that no data can be extracted from the entropy pool unless new entropy
+ * is received.
+ ***************************************************************************/
+
+static void esdm_rct_reset(struct esdm_rct *rct)
+{
+	/* Reset RCT */
+	atomic_set(&rct->rct_count, 0);
+}
+
+/*
+ * Hot code path - Insert data for Repetition Count Test
+ *
+ * @health: Reference to health information
+ * @stuck: Decision of stuck test
+ */
+static void esdm_rct(struct esdm_health *health, enum esdm_internal_es es,
+		     int stuck)
+{
+	struct esdm_health_es_state *es_state = &health->es_state[es];
+	struct esdm_rct *rct = &es_state->rct;
+
+	if (!esdm_sp80090b_health_requested())
+		return;
+
+	if (stuck) {
+		u32 rct_count = atomic_add_return_relaxed(1, &rct->rct_count);
+
+		/*
+		 * The cutoff value is based on the following consideration:
+		 * alpha = 2^-30 as recommended in FIPS 140-2 IG 9.8.
+		 * In addition, we imply an entropy value H of 1 bit as this
+		 * is the minimum entropy required to provide full entropy.
+		 *
+		 * Note, rct_count (which equals to value B in the
+		 * pseudo code of SP800-90B section 4.4.1) starts with zero.
+		 * Hence we need to subtract one from the cutoff value as
+		 * calculated following SP800-90B.
+		 */
+		if (rct_count > rct->cutoff_permanent)
+			esdm_sp80090b_permanent_failure(health, es);
+		else if (rct_count > rct->cutoff)
+			esdm_sp80090b_failure(health, es);
+	} else {
+		esdm_rct_reset(rct);
+	}
+}
+
+/***************************************************************************
+ * Stuck Test
+ *
+ * Checking the:
+ *      1st derivative of the event occurrence (time delta)
+ *      2nd derivative of the event occurrence (delta of time deltas)
+ *      3rd derivative of the event occurrence (delta of delta of time deltas)
+ *
+ * All values must always be non-zero. The stuck test is only valid disabled if
+ * high-resolution time stamps are identified after initialization.
+ ***************************************************************************/
+
+static u32 esdm_delta(u64 prev, u64 next)
+{
+	/*
+	 * Note that this (unsigned) subtraction does yield the correct value
+	 * in the wraparound-case, i.e. when next < prev.
+	 */
+	return (next - prev);
+}
+
+/*
+ * Hot code path
+ *
+ * @health: Reference to health information
+ * @now: Event time
+ * @return: 0 event occurrence not stuck (good time stamp)
+ *	    != 0 event occurrence stuck (reject time stamp)
+ */
+static int esdm_timestamp_stuck(enum esdm_internal_es es, u64 now_time)
+{
+	struct esdm_stuck_test *stuck = this_cpu_ptr(esdm_stuck_test_array);
+	u64 delta = esdm_delta(stuck[es].last_time, now_time);
+	u64 delta2 = esdm_delta(stuck[es].last_delta, delta);
+	u64 delta3 = esdm_delta(stuck[es].last_delta2, delta2);
+
+	stuck[es].last_time = now_time;
+	stuck[es].last_delta = delta;
+	stuck[es].last_delta2 = delta2;
+
+	if (!delta || !delta2 || !delta3)
+		return 1;
+
+	return 0;
+}
+
+/***************************************************************************
+ * Health test interfaces
+ ***************************************************************************/
+
+/*
+ * Disable all health tests
+ */
+void esdm_health_disable(void)
+{
+	struct esdm_health *health = &esdm_health;
+
+	health->health_test_enabled = false;
+
+	if (esdm_sp80090b_health_requested())
+		pr_warn("SP800-90B compliance requested but the Linux RNG is NOT SP800-90B compliant\n");
+}
+
+/*
+ * Hot code path - Perform health test on time stamp received from an event
+ *
+ * @now_time Time stamp
+ */
+enum esdm_health_res esdm_health_test(u64 now_time, enum esdm_internal_es es)
+{
+	struct esdm_health *health = &esdm_health;
+	int stuck;
+
+	if (!health->health_test_enabled)
+		return esdm_health_pass;
+
+	esdm_apt_insert(health, now_time, es);
+
+	stuck = esdm_timestamp_stuck(es, now_time);
+	esdm_rct(health, es, stuck);
+	if (stuck) {
+		/* SP800-90B disallows using a failing health test time stamp */
+		return esdm_sp80090b_health_requested() ?
+			       esdm_health_fail_drop :
+			       esdm_health_fail_use;
+	}
+
+	return esdm_health_pass;
+}

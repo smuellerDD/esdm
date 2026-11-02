@@ -3,7 +3,7 @@
  * ESDM eBPF-based entropy sources: SP800-90B health tests in eBPF
  *
  * Port of the health tests of the ESDM Linux kernel add-on
- * (addon/linux_esdm_es/esdm_health.c) into eBPF program code:
+ * (kernel/esdm_es/esdm_health.c) into eBPF program code:
  *
  * - Stuck test: the first, second and third derivative of the event time
  *   stamp must be non-zero.

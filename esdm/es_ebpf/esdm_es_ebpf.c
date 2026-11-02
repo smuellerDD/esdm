@@ -47,6 +47,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_ebpf.h"
 #include "esdm_es_mgr_cb.h"
+#include "esdm_health_cutoffs.h"
 #include "esdm_logger.h"
 #include "math_helper.h"
 #include "memset_secure.h"
@@ -166,20 +167,15 @@ void esdm_ebpf_setup_logging(void)
 /****************************** Health tests **********************************/
 
 /*
- * APT cutoff tables of the ESDM Linux kernel add-on
- * (addon/linux_esdm_es/esdm_health.h), indexed by OSR - 1: binomial
- * distribution quantiles for the APT window size of 512 with alpha = 2^-30
- * (intermittent) and alpha = 2^-60 (permanent) for H = 1/OSR bits per
- * sample. OSR values of 15 and above use the window size as cutoff per FIPS
- * 140-2 IG 9.8.
+ * APT cutoff tables shared with the ESDM kernel module esdm_es
+ * (esdm_health_cutoffs.h), indexed by OSR - 1: binomial distribution
+ * quantiles for the APT window size of 512 with alpha = 2^-30 (intermittent)
+ * and alpha = 2^-60 (permanent) for H = 1/OSR bits per sample. OSR values of
+ * 15 and above use the window size as cutoff per FIPS 140-2 IG 9.8.
  */
-static const uint16_t esdm_ebpf_apt_cutoffs[15] = { 325, 422, 459, 477, 488,
-						    494, 499, 502, 505, 507,
-						    508, 509, 510, 511, 512 };
-static const uint16_t esdm_ebpf_apt_cutoffs_permanent[15] = {
-	355, 447, 479, 494, 502, 507, 510, 512,
-	512, 512, 512, 512, 512, 512, 512
-};
+static const uint16_t esdm_ebpf_apt_cutoffs[] = ESDM_APT_CUTOFFS;
+static const uint16_t esdm_ebpf_apt_cutoffs_permanent[] =
+	ESDM_APT_CUTOFFS_PERMANENT;
 
 void esdm_ebpf_health_cutoffs(uint32_t osr, struct esdm_ebpf_config *cfg)
 {

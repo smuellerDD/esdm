@@ -80,7 +80,7 @@ static int es_irq_getstate(void)
 
 	/*
 	 * The labels come from the kernel module (esdm_irq_es_state() of
-	 * addon/linux_esdm_es/esdm_es_irq.c), so this pins the two together.
+	 * kernel/esdm_es/esdm_es_irq.c), so this pins the two together.
 	 */
 	if (!strstr(buf, "DRBG for operating entropy pool") ||
 	    !strstr(buf, "Available entropy") ||

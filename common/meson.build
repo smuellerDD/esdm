@@ -43,8 +43,15 @@ conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031_ntg1'))
 conf_data.set('ESDM_AIS2031_DRG3', get_option('ais2031_drg3'))
 conf_data.set('ESDM_AIS2031_DRG4', get_option('ais2031_drg4'))
 if sp80090c or get_option('fips140')
-	conf_data.set('ESDM_SEED_BUFFER_INIT_ADD_BITS', 128)
-	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 64)
+	# The values the kernel module esdm_es applies in a FIPS kernel, from
+	# the header the two share: the seed size makes up the entropy buffer
+	# its IOCTLs hand over.
+	foreach osr : [ 'SEED_BUFFER_INIT_ADD_BITS', 'OVERSAMPLE_ES_BITS' ]
+		conf_data.set('ESDM_' + osr,
+			      cc.get_define('ESDM_SP80090C_' + osr,
+					    prefix: '#include "esdm_seed_sizes.h"',
+					    include_directories: include_directories('../esdm/drng')).to_int())
+	endforeach
 else
 	conf_data.set('ESDM_SEED_BUFFER_INIT_ADD_BITS', 0)
 	conf_data.set('ESDM_OVERSAMPLE_ES_BITS', 0)
