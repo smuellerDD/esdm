@@ -129,6 +129,12 @@ struct esdm_egd_conn {
 	 * - a non-blocking read: its length byte and the data.
 	 */
 	uint8_t out[1 + ESDM_EGD_MAX_TRANSFER];
+	/*
+	 * A status report does not fit into out: it comes in a buffer of its
+	 * own, which the connection holds instead for as long as it is on its
+	 * way out. NULL otherwise.
+	 */
+	uint8_t *out_heap;
 	size_t out_len;
 	size_t out_off;
 
@@ -144,12 +150,22 @@ struct esdm_egd_conn {
 	 */
 	uint8_t deferred;
 
+	/* The deferred request is one of the prediction resistance DRNG. */
+	bool deferred_pr;
+
 	/*
 	 * Bytes of the deferred answer collected so far, see
 	 * esdm_egd_cmd_read_block().
 	 */
 	uint8_t answer[ESDM_EGD_MAX_TRANSFER];
 	uint8_t answer_len;
+
+	/*
+	 * Bytes of a bulk insertion still to come, and the first error of
+	 * inserting the ones that came, see esdm_egd_bulk_insert_data().
+	 */
+	uint32_t insert_left;
+	int32_t insert_status;
 
 	TAILQ_ENTRY(esdm_egd_conn) tailq;
 };
@@ -460,6 +476,22 @@ static bool esdm_egd_out_pending(const struct esdm_egd_conn *conn)
 	return (conn->out_off < conn->out_len);
 }
 
+/* The buffer of the response in flight */
+static uint8_t *esdm_egd_out_buf(struct esdm_egd_conn *conn)
+{
+	return conn->out_heap ? conn->out_heap : conn->out;
+}
+
+/* Wipe the response in flight, delivered or not, and free its buffer. */
+static void esdm_egd_out_clear(struct esdm_egd_conn *conn)
+{
+	memset_secure(esdm_egd_out_buf(conn), 0, conn->out_len);
+	free(conn->out_heap);
+	conn->out_heap = NULL;
+	conn->out_len = 0;
+	conn->out_off = 0;
+}
+
 /*
  * Push out what is left of the response.
  *
@@ -483,7 +515,8 @@ static int esdm_egd_flush(struct esdm_egd_conn *conn)
 		 * deliberately does not use this, as the sendto(2) it compiles
 		 * to is killed by OpenSSH's pre-authentication sandbox.
 		 */
-		ssize_t ret = send(conn->fd, conn->out + conn->out_off,
+		ssize_t ret = send(conn->fd,
+				   esdm_egd_out_buf(conn) + conn->out_off,
 				   conn->out_len - conn->out_off,
 				   MSG_NOSIGNAL);
 
@@ -503,9 +536,7 @@ static int esdm_egd_flush(struct esdm_egd_conn *conn)
 	}
 
 	/* Delivered - and the buffer is free for the next response. */
-	memset_secure(conn->out, 0, conn->out_len);
-	conn->out_len = 0;
-	conn->out_off = 0;
+	esdm_egd_out_clear(conn);
 
 	return 0;
 }
@@ -544,7 +575,44 @@ static int esdm_egd_write(struct esdm_egd_conn *conn, const uint8_t *buf,
 }
 
 /*
- * Fill @buf with data from the generator this connection's socket selects.
+ * Hand a complete response in the allocated buffer @buf of @len bytes to the
+ * client, which the connection takes over - for the responses too large for
+ * the connection's own buffer, see out_heap.
+ *
+ * @return as esdm_egd_write()
+ */
+static int esdm_egd_write_heap(struct esdm_egd_conn *conn, uint8_t *buf,
+			       size_t len)
+{
+	if (esdm_egd_out_pending(conn)) {
+		/* As in esdm_egd_write(), a broken invariant */
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "EGD server: response of %zu bytes cannot be queued on FD %d\n",
+			    len, conn->fd);
+		memset_secure(buf, 0, len);
+		free(buf);
+		return -EOVERFLOW;
+	}
+
+	conn->out_heap = buf;
+	conn->out_len = len;
+	conn->out_off = 0;
+	conn->out_since = esdm_egd_now_ms();
+
+	return esdm_egd_flush(conn);
+}
+
+/* Consume @len bytes from the head of the connection's input buffer. */
+static void esdm_egd_consume(struct esdm_egd_conn *conn, size_t len)
+{
+	conn->in_len -= len;
+	if (conn->in_len)
+		memmove(conn->in, conn->in + len, conn->in_len);
+}
+
+/*
+ * Fill @buf with data from the fully seeded generator, or with @pr from the
+ * prediction resistance one.
  *
  * Exactly one non-blocking generation is attempted. A request it does not cover
  * goes back to the event loop as a deferred request (see
@@ -561,10 +629,9 @@ static int esdm_egd_write(struct esdm_egd_conn *conn, const uint8_t *buf,
  *	   caller decides whether to answer short or to come back for more),
  *	   < 0 on all other errors
  */
-static int esdm_egd_get_random(const struct esdm_egd_conn *conn, uint8_t *buf,
-			       size_t len, size_t *generated)
+static int esdm_egd_get_random(bool pr, uint8_t *buf, size_t len,
+			       size_t *generated)
 {
-	bool pr = conn->listener->prediction_resistance;
 	ssize_t ret;
 
 	*generated = 0;
@@ -610,7 +677,7 @@ static int esdm_egd_cmd_entropy_count(struct esdm_egd_conn *conn)
  * treat that as "no entropy available right now" and fall back to the blocking
  * request.
  */
-static int esdm_egd_cmd_read_nonblock(struct esdm_egd_conn *conn,
+static int esdm_egd_cmd_read_nonblock(struct esdm_egd_conn *conn, bool pr,
 				      uint8_t requested)
 {
 	uint8_t resp[1 + ESDM_EGD_MAX_TRANSFER];
@@ -621,8 +688,7 @@ static int esdm_egd_cmd_read_nonblock(struct esdm_egd_conn *conn,
 	if (requested) {
 		size_t generated = 0;
 
-		ret = esdm_egd_get_random(conn, resp + 1, requested,
-					  &generated);
+		ret = esdm_egd_get_random(pr, resp + 1, requested, &generated);
 		if (ret == -EAGAIN) {
 			/* A short answer is what this command is for. */
 			resp[0] = (uint8_t)generated;
@@ -648,7 +714,7 @@ static int esdm_egd_cmd_read_nonblock(struct esdm_egd_conn *conn,
  * @return 0 when the request was served, -EAGAIN when it has to be retried
  *	   later, < 0 on all other errors
  */
-static int esdm_egd_cmd_read_block(struct esdm_egd_conn *conn,
+static int esdm_egd_cmd_read_block(struct esdm_egd_conn *conn, bool pr,
 				   uint8_t requested)
 {
 	size_t generated = 0;
@@ -664,7 +730,7 @@ static int esdm_egd_cmd_read_block(struct esdm_egd_conn *conn,
 	 * socket, whose generator hands out no more than its entropy sources
 	 * just delivered - and what came out so far must survive them.
 	 */
-	ret = esdm_egd_get_random(conn, conn->answer + conn->answer_len,
+	ret = esdm_egd_get_random(pr, conn->answer + conn->answer_len,
 				  requested - conn->answer_len, &generated);
 	conn->answer_len += (uint8_t)generated;
 
@@ -746,6 +812,243 @@ static int esdm_egd_cmd_get_pid(struct esdm_egd_conn *conn)
 	return esdm_egd_write(conn, resp, 1 + (size_t)len);
 }
 
+/*
+ * Command 0xe2: deliver up to the requested number of bytes from the DRNG
+ * without waiting for all DRNGs to be fully seeded, the semantics of
+ * /dev/urandom. Answered as command 0x01. Before the ESDM is operational it
+ * hands out nothing at all - an empty answer then, which is no error - and
+ * otherwise only an error answers short.
+ */
+static int esdm_egd_cmd_read_unseeded(struct esdm_egd_conn *conn,
+				      uint8_t requested)
+{
+	uint8_t resp[1 + ESDM_EGD_MAX_TRANSFER];
+	ssize_t ret;
+	int rc;
+
+	resp[0] = 0;
+
+	if (requested) {
+		ret = esdm_get_random_bytes(resp + 1, requested);
+		if (ret < 0) {
+			/* Not operational yet is a state, not a failure */
+			esdm_logger(ret == -EOPNOTSUPP ? LOGGER_DEBUG :
+							 LOGGER_ERR,
+				    LOGGER_C_SERVER,
+				    "EGD server: generation of %u bytes failed: %zd\n",
+				    requested, ret);
+		} else if (ret > requested) {
+			/* Cannot happen, and is no reason to send more */
+			resp[0] = requested;
+		} else {
+			resp[0] = (uint8_t)ret;
+		}
+	}
+
+	rc = esdm_egd_write(conn, resp, 1 + (size_t)resp[0]);
+
+	memset_secure(resp, 0, sizeof(resp));
+
+	return rc;
+}
+
+/*
+ * Command 0xeb: the non-blocking read @read - 0x01, 0xe0 or 0xe2 - of up to
+ * ESDM_EGD_MAX_BULK bytes, answered as that read but with a 4 byte length,
+ * from a buffer of its own as the status reports are.
+ */
+static int esdm_egd_cmd_bulk_read(struct esdm_egd_conn *conn, uint8_t read,
+				  uint32_t requested)
+{
+	uint8_t *buf = malloc(4 + (size_t)requested);
+	size_t generated = 0;
+	ssize_t ret;
+
+	/* Without memory, an empty answer is all there is to say */
+	if (!buf) {
+		uint8_t empty[4] = { 0 };
+
+		return esdm_egd_write(conn, empty, sizeof(empty));
+	}
+
+	if (requested && read == ESDM_EGD_CMD_ESDM_READ_UNSEEDED) {
+		/* As command 0xe2, not being operational is no failure */
+		ret = esdm_get_random_bytes(buf + 4, requested);
+		if (ret > 0)
+			generated = ((size_t)ret < requested) ? (size_t)ret :
+								requested;
+		else if (ret == -EOPNOTSUPP)
+			ret = 0;
+	} else if (requested) {
+		/* As commands 0x01 and 0xe0, a short answer is no failure */
+		ret = esdm_egd_get_random(
+			conn->listener->prediction_resistance ||
+				read == ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK,
+			buf + 4, requested, &generated);
+		if (ret == -EAGAIN)
+			ret = 0;
+	} else {
+		ret = 0;
+	}
+
+	if (ret < 0)
+		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
+			    "EGD server: generation of %u bytes failed: %zd\n",
+			    requested, ret);
+
+	be32_to_ptr(buf, (uint32_t)generated);
+
+	return esdm_egd_write_heap(conn, buf, 4 + generated);
+}
+
+/* The answer to command 0xec once all of its data is in */
+static int esdm_egd_bulk_insert_status(struct esdm_egd_conn *conn)
+{
+	uint8_t resp[4];
+
+	be32_to_ptr(resp, (uint32_t)conn->insert_status);
+	conn->insert_status = 0;
+
+	return esdm_egd_write(conn, resp, sizeof(resp));
+}
+
+/*
+ * The data of command 0xec, as far as it arrived. It does not fit the input
+ * buffer, so it goes into the auxiliary pool piece by piece as it comes,
+ * without entropy credit, and is answered once all of it is in.
+ */
+static int esdm_egd_bulk_insert_data(struct esdm_egd_conn *conn)
+{
+	size_t len = (conn->in_len < conn->insert_left) ? conn->in_len :
+							   conn->insert_left;
+	int ret = esdm_pool_insert_aux(conn->in, len, 0);
+
+	if (ret && !conn->insert_status)
+		conn->insert_status = ret;
+
+	memset_secure(conn->in, 0, len);
+	esdm_egd_consume(conn, len);
+	conn->insert_left -= (uint32_t)len;
+
+	return conn->insert_left ? 0 : esdm_egd_bulk_insert_status(conn);
+}
+
+/* Command 0xe3: report the state, see ESDM_EGD_STATE_* */
+static int esdm_egd_cmd_get_state(struct esdm_egd_conn *conn)
+{
+	uint8_t resp[1 + 4 * ESDM_EGD_STATE_NUM_FIELDS];
+	uint32_t fields[ESDM_EGD_STATE_NUM_FIELDS];
+	unsigned int i;
+
+	BUILD_BUG_ON(sizeof(resp) > 1 + ESDM_EGD_MAX_TRANSFER);
+
+	fields[ESDM_EGD_STATE_FLAGS] =
+		(esdm_state_operational() ? ESDM_EGD_STATE_FLAG_OPERATIONAL :
+					    0) |
+		(esdm_state_fully_seeded() ? ESDM_EGD_STATE_FLAG_FULLY_SEEDED :
+					     0);
+	fields[ESDM_EGD_STATE_ENT_CNT] = esdm_avail_entropy_aux();
+	fields[ESDM_EGD_STATE_POOLSIZE] = esdm_avail_poolsize_aux();
+	fields[ESDM_EGD_STATE_WRITE_WAKEUP] = esdm_get_write_wakeup_bits();
+	fields[ESDM_EGD_STATE_MIN_RESEED_SECS] = esdm_get_reseed_max_time();
+
+	resp[0] = ESDM_EGD_STATE_NUM_FIELDS;
+	for (i = 0; i < ESDM_EGD_STATE_NUM_FIELDS; i++)
+		be32_to_ptr(resp + 1 + 4 * i, fields[i]);
+
+	return esdm_egd_write(conn, resp, sizeof(resp));
+}
+
+/*
+ * Commands 0xe4 and 0xe5 (@json): report the status as text or as JSON
+ * document, preceded by its length.
+ *
+ * A text report that does not fit is sent as far as it got, as the RPC
+ * interface does - it stays readable. A JSON document that does not fit, and
+ * any report that cannot be produced, is sent as an empty one.
+ */
+static int esdm_egd_cmd_status(struct esdm_egd_conn *conn, bool json)
+{
+	/* The length, the report and the NUL the status functions write */
+	size_t alloc = 4 + ESDM_EGD_MAX_STATUS + 1;
+	uint8_t *buf = calloc(1, alloc), *shrunk;
+	size_t len = 0;
+	int ret;
+
+	/* Without memory, an empty report is all there is to say */
+	if (!buf) {
+		uint8_t empty[4] = { 0 };
+
+		return esdm_egd_write(conn, empty, sizeof(empty));
+	}
+
+	if (json)
+		ret = esdm_status_json((char *)buf + 4, alloc - 4);
+	else
+		ret = esdm_status((char *)buf + 4, alloc - 4);
+
+	if (!ret || (!json && ret == -EMSGSIZE))
+		len = strnlen((char *)buf + 4, ESDM_EGD_MAX_STATUS);
+
+	be32_to_ptr(buf, (uint32_t)len);
+
+	/* Only what goes out is held while the client takes it */
+	shrunk = realloc(buf, 4 + len);
+	if (shrunk)
+		buf = shrunk;
+
+	return esdm_egd_write_heap(conn, buf, 4 + len);
+}
+
+/*
+ * Commands 0xe6 to 0xea, with their argument @arg - zero for those without
+ * one. Only a privileged peer has them carried out, just like the entropy
+ * claim of command 0x03; the RPC interface applies the same rule. Answered
+ * with a status.
+ */
+static int esdm_egd_cmd_priv(struct esdm_egd_conn *conn, uint8_t cmd,
+			     uint32_t arg)
+{
+	uint8_t resp[4];
+	int32_t ret = 0;
+
+	if (conn->peer_uid != 0) {
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
+			    "EGD server: refusing command 0x%02x of unprivileged UID %u\n",
+			    cmd, conn->peer_uid);
+		ret = -EPERM;
+		goto out;
+	}
+
+	switch (cmd) {
+	case ESDM_EGD_CMD_ESDM_ADD_TO_ENT_CNT:
+		/* As the RPC interface: never above the pool's digest size */
+		esdm_pool_add_entropy(arg);
+		break;
+	case ESDM_EGD_CMD_ESDM_CLEAR_POOL:
+		esdm_pool_set_entropy(0);
+		break;
+	case ESDM_EGD_CMD_ESDM_RESEED:
+		esdm_drng_force_reseed();
+		break;
+	case ESDM_EGD_CMD_ESDM_SET_WRITE_WAKEUP:
+		esdm_set_write_wakeup_bits(arg);
+		break;
+	case ESDM_EGD_CMD_ESDM_SET_MIN_RESEED_SECS:
+		esdm_set_reseed_max_time(arg);
+		break;
+	default:
+		/* Cannot happen - esdm_egd_process() only passes these */
+		ret = -EINVAL;
+		break;
+	}
+
+out:
+	be32_to_ptr(resp, (uint32_t)ret);
+
+	return esdm_egd_write(conn, resp, sizeof(resp));
+}
+
 /* Serve a deferred blocking read request, if there is one. */
 static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
 {
@@ -754,11 +1057,12 @@ static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
 	if (!conn->deferred)
 		return 0;
 
-	ret = esdm_egd_cmd_read_block(conn, conn->deferred);
+	ret = esdm_egd_cmd_read_block(conn, conn->deferred_pr, conn->deferred);
 	if (ret)
 		return ret;
 
 	conn->deferred = 0;
+	conn->deferred_pr = false;
 
 	return 0;
 }
@@ -797,14 +1101,6 @@ static void esdm_egd_conn_arm(int epfd, struct esdm_egd_conn *conn)
 	conn->armed = ev.events;
 }
 
-/* Consume @len bytes from the head of the connection's input buffer. */
-static void esdm_egd_consume(struct esdm_egd_conn *conn, size_t len)
-{
-	conn->in_len -= len;
-	if (conn->in_len)
-		memmove(conn->in, conn->in + len, conn->in_len);
-}
-
 /*
  * Get the connection as far as it can go right now: deliver what is left of the
  * response in flight, then process as many complete commands as the input
@@ -839,15 +1135,43 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 
 	while (conn->in_len) {
 		size_t cmd_len;
+		bool pr;
+
+		/* The data of a bulk insertion, not a command */
+		if (conn->insert_left) {
+			ret = esdm_egd_bulk_insert_data(conn);
+			if (ret)
+				return ret;
+			if (esdm_egd_out_pending(conn))
+				return 0;
+			continue;
+		}
 
 		switch (conn->in[0]) {
 		case ESDM_EGD_CMD_ENTROPY_COUNT:
 		case ESDM_EGD_CMD_GET_PID:
+		case ESDM_EGD_CMD_ESDM_GET_STATE:
+		case ESDM_EGD_CMD_ESDM_STATUS:
+		case ESDM_EGD_CMD_ESDM_STATUS_JSON:
+		case ESDM_EGD_CMD_ESDM_CLEAR_POOL:
+		case ESDM_EGD_CMD_ESDM_RESEED:
 			cmd_len = 1;
 			break;
 		case ESDM_EGD_CMD_READ_NONBLOCK:
 		case ESDM_EGD_CMD_READ_BLOCK:
+		case ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK:
+		case ESDM_EGD_CMD_ESDM_PR_READ_BLOCK:
+		case ESDM_EGD_CMD_ESDM_READ_UNSEEDED:
 			cmd_len = 2;
+			break;
+		case ESDM_EGD_CMD_ESDM_ADD_TO_ENT_CNT:
+		case ESDM_EGD_CMD_ESDM_SET_WRITE_WAKEUP:
+		case ESDM_EGD_CMD_ESDM_SET_MIN_RESEED_SECS:
+		case ESDM_EGD_CMD_ESDM_BULK_INSERT:
+			cmd_len = 5;
+			break;
+		case ESDM_EGD_CMD_ESDM_BULK_READ:
+			cmd_len = 6;
 			break;
 		case ESDM_EGD_CMD_WRITE_ENTROPY:
 			if (conn->in_len < 4)
@@ -870,6 +1194,25 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 		if (conn->in_len < cmd_len)
 			return 0;
 
+		/* Out of sync as an unknown command is, see above */
+		if ((conn->in[0] == ESDM_EGD_CMD_ESDM_BULK_READ &&
+		     ((conn->in[1] != ESDM_EGD_CMD_READ_NONBLOCK &&
+		       conn->in[1] != ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK &&
+		       conn->in[1] != ESDM_EGD_CMD_ESDM_READ_UNSEEDED) ||
+		      ptr_to_be32(conn->in + 2) > ESDM_EGD_MAX_BULK)) ||
+		    (conn->in[0] == ESDM_EGD_CMD_ESDM_BULK_INSERT &&
+		     ptr_to_be32(conn->in + 1) > ESDM_EGD_MAX_BULK)) {
+			esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
+				    "EGD server: malformed command 0x%02x on FD %d\n",
+				    conn->in[0], conn->fd);
+			return -EPROTO;
+		}
+
+		/* The socket selects the generator, or the ESDM's own command */
+		pr = conn->listener->prediction_resistance ||
+		     conn->in[0] == ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK ||
+		     conn->in[0] == ESDM_EGD_CMD_ESDM_PR_READ_BLOCK;
+
 		switch (conn->in[0]) {
 		case ESDM_EGD_CMD_ENTROPY_COUNT:
 			ret = esdm_egd_cmd_entropy_count(conn);
@@ -878,10 +1221,12 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 			ret = esdm_egd_cmd_get_pid(conn);
 			break;
 		case ESDM_EGD_CMD_READ_NONBLOCK:
-			ret = esdm_egd_cmd_read_nonblock(conn, conn->in[1]);
+		case ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK:
+			ret = esdm_egd_cmd_read_nonblock(conn, pr, conn->in[1]);
 			break;
 		case ESDM_EGD_CMD_READ_BLOCK:
-			ret = esdm_egd_cmd_read_block(conn, conn->in[1]);
+		case ESDM_EGD_CMD_ESDM_PR_READ_BLOCK:
+			ret = esdm_egd_cmd_read_block(conn, pr, conn->in[1]);
 			if (ret == -EAGAIN) {
 				/*
 				 * Remember the request and answer it once the
@@ -889,6 +1234,7 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 				 * consumed here so it is not processed twice.
 				 */
 				conn->deferred = conn->in[1];
+				conn->deferred_pr = pr;
 				esdm_egd_consume(conn, cmd_len);
 				return 0;
 			}
@@ -898,6 +1244,40 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 			ret = esdm_egd_cmd_write_entropy(
 				conn, ptr_to_be16(conn->in + 1), conn->in + 4,
 				conn->in[3]);
+			break;
+		case ESDM_EGD_CMD_ESDM_READ_UNSEEDED:
+			ret = esdm_egd_cmd_read_unseeded(conn, conn->in[1]);
+			break;
+		case ESDM_EGD_CMD_ESDM_GET_STATE:
+			ret = esdm_egd_cmd_get_state(conn);
+			break;
+		case ESDM_EGD_CMD_ESDM_STATUS:
+			ret = esdm_egd_cmd_status(conn, false);
+			break;
+		case ESDM_EGD_CMD_ESDM_STATUS_JSON:
+			ret = esdm_egd_cmd_status(conn, true);
+			break;
+		case ESDM_EGD_CMD_ESDM_CLEAR_POOL:
+		case ESDM_EGD_CMD_ESDM_RESEED:
+			ret = esdm_egd_cmd_priv(conn, conn->in[0], 0);
+			break;
+		case ESDM_EGD_CMD_ESDM_ADD_TO_ENT_CNT:
+		case ESDM_EGD_CMD_ESDM_SET_WRITE_WAKEUP:
+		case ESDM_EGD_CMD_ESDM_SET_MIN_RESEED_SECS:
+			/* Big endian argument, see the protocol header. */
+			ret = esdm_egd_cmd_priv(conn, conn->in[0],
+						ptr_to_be32(conn->in + 1));
+			break;
+		case ESDM_EGD_CMD_ESDM_BULK_READ:
+			ret = esdm_egd_cmd_bulk_read(conn, conn->in[1],
+						     ptr_to_be32(conn->in + 2));
+			break;
+		case ESDM_EGD_CMD_ESDM_BULK_INSERT:
+			/* The data follows, see esdm_egd_bulk_insert_data() */
+			conn->insert_left = ptr_to_be32(conn->in + 1);
+			ret = conn->insert_left ?
+				      0 :
+				      esdm_egd_bulk_insert_status(conn);
 			break;
 		default:
 			/* Cannot happen - the switch above filtered it out. */
@@ -973,6 +1353,7 @@ int esdm_egd_fuzz_stream(bool prediction_resistance, int out_fd,
 			break;
 	}
 
+	esdm_egd_out_clear(&conn);
 	memset_secure(conn.in, 0, sizeof(conn.in));
 	memset_secure(conn.answer, 0, sizeof(conn.answer));
 	memset_secure(conn.out, 0, sizeof(conn.out));
@@ -1036,6 +1417,7 @@ static void esdm_egd_release_conn(struct esdm_egd_conn *conn)
 		conn->fd = -1;
 	}
 
+	esdm_egd_out_clear(conn);
 	memset_secure(conn->in, 0, sizeof(conn->in));
 	memset_secure(conn->out, 0, sizeof(conn->out));
 	memset_secure(conn->answer, 0, sizeof(conn->answer));
