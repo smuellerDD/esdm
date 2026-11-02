@@ -133,6 +133,7 @@
               ++ lpself.callPackage ./kernel/esdm_es/drbg.nix { inherit (lpsuper) kernel; };
           };
           esdm_es = lpself.callPackage ./kernel/esdm_es { };
+          esdm_cdev = lpself.callPackage ./kernel/esdm_cdev { };
         };
 
         # 6.1 is the first kernel version supported by ESDM.
@@ -914,6 +915,285 @@
             '';
           };
 
+
+        # The esdm_cdev kernel module: /dev/esdm_random, /dev/esdm_urandom and
+        # /proc/esdm served by the ESDM over its EGD socket. On the stock
+        # kernels - the module needs no kernel patches -, one check per kernel
+        # like the live_* and ebpf_* ones: the per kernel builds below only
+        # show that it compiles there, this that it works there.
+        mkEsdmCdevCheck =
+          kernel:
+          let
+            esdm = self.packages.${system}.esdm;
+            # The checks of tests/esdm_cdev, one subcommand each, installed
+            # with the ESDM by its option esdm-cdev-check. The ones running
+            # in the background are stopped by pkill -f 'esdm-cdev-check
+            # [b]lock' and the like, which matches their command line only:
+            # the brackets keep the pattern from matching one that holds the
+            # pattern itself, such as that of a shell running pkill.
+            check = "${esdm}/bin/esdm-cdev-check";
+          in
+          pkgs.testers.nixosTest {
+            name = "esdm_cdev character devices";
+
+            nodes.machine =
+              { config, ... }:
+              {
+                boot.kernelPackages = kernel;
+                boot.extraModulePackages = [
+                  (config.boot.kernelPackages.callPackage ./kernel/esdm_cdev { })
+                ];
+
+                services.esdm = {
+                  enable = true;
+                  enableLinuxCompatServices = false;
+                  package = esdm;
+                };
+
+                # The module talks to the EGD socket, which is opt-in.
+                systemd.sockets."esdm-server-egd".wantedBy = [ "sockets.target" ];
+
+                environment.systemPackages = [ esdm ];
+
+                virtualisation = {
+                  memorySize = 2048;
+                  cores = 2;
+                };
+              };
+
+            testScript = ''
+              import time
+
+              esdm_units = (
+                  "esdm-server-egd.socket esdm-server-priv.socket "
+                  "esdm-server-unpriv.socket esdm-server.service"
+              )
+
+              def bounded(cmd, limit):
+                  start = time.monotonic()
+                  out = machine.succeed(cmd)
+                  took = time.monotonic() - start
+                  assert took < limit, f"{cmd} took {took:.1f} s"
+                  return out
+
+              machine.wait_for_unit("multi-user.target")
+              machine.wait_for_unit("esdm-server-egd.socket")
+              machine.wait_for_unit("esdm-server.service")
+              machine.wait_until_succeeds(
+                  "journalctl -b -u esdm-server.service | grep -q 'EGD server: serving'", 30
+              )
+              machine.succeed("esdm-tool --wait-until-seeded 60")
+
+              with subtest("devices and proc files with the ESDM running"):
+                  machine.succeed("modprobe esdm_cdev")
+                  for dev in ["esdm_random", "esdm_urandom"]:
+                      machine.succeed(f"test -c /dev/{dev}")
+                      mode = machine.succeed(f"stat -c %a /dev/{dev}").strip()
+                      assert mode == "666", f"/dev/{dev} has mode {mode}"
+                  # The kernel's own devices stay as they are
+                  machine.succeed("test \"$(stat -c %t:%T /dev/urandom)\" = 1:9")
+                  machine.succeed("test \"$(stat -c %t:%T /dev/random)\" = 1:8")
+                  print(machine.succeed("cat /proc/esdm/status"))
+
+              with subtest("reads, poll, O_NONBLOCK, O_SYNC and writes"):
+                  machine.succeed("${check} reads")
+                  machine.succeed("${check} reads sync")
+                  machine.succeed("${check} nonblock")
+                  machine.succeed("${check} poll")
+                  machine.succeed("${check} writes")
+
+              with subtest("throughput, informational"):
+                  # Logged, never asserted on: the VM shares its host with
+                  # whatever else runs there. Whether it runs with KVM, and
+                  # the figures with the clocksource the test framework pins,
+                  # acpi_pm - every read of it traps to QEMU, as it has no
+                  # vDSO - and with kvm-clock, which a KVM guest runs with
+                  # otherwise.
+                  print("virtualization: " + machine.succeed("systemd-detect-virt || true"))
+                  print(machine.succeed("${check} throughput"))
+                  cs = "/sys/devices/system/clocksource/clocksource0"
+                  pinned = machine.succeed(f"cat {cs}/current_clocksource").strip()
+                  if "kvm-clock" in machine.succeed(f"cat {cs}/available_clocksource"):
+                      machine.succeed(f"echo kvm-clock > {cs}/current_clocksource")
+                      print(machine.succeed("${check} throughput"))
+                      machine.succeed(f"echo {pinned} > {cs}/current_clocksource")
+
+              with subtest("/proc/esdm"):
+                  machine.succeed("${check} proc")
+
+              with subtest("ioctls as root, as nobody and without CAP_SYS_ADMIN"):
+                  machine.succeed("${check} ioctl-priv")
+                  machine.succeed(
+                      "setpriv --reuid=nobody --regid=nogroup --clear-groups "
+                      "--inh-caps=-all ${check} ioctl-unpriv"
+                  )
+                  machine.succeed(
+                      "setpriv --bounding-set=-sys_admin --inh-caps=-sys_admin "
+                      "${check} ioctl-unpriv"
+                  )
+                  # As root, as meson test runs it there: the check gives up
+                  # CAP_SYS_ADMIN itself
+                  machine.succeed("${check} ioctl-unpriv")
+
+              with subtest("writers whose data does not come keep nobody waiting"):
+                  machine.succeed("timeout 60 ${check} stalled-writers")
+
+              with subtest("reconnect after a restart of the ESDM"):
+                  machine.succeed(
+                      "nohup ${check} loop /dev/esdm_urandom 20 > /tmp/loop.log 2>&1 &"
+                  )
+                  machine.sleep(3)
+                  machine.succeed("systemctl restart esdm-server.service")
+                  machine.wait_until_succeeds("grep -q 'loop reads' /tmp/loop.log", 90)
+                  print(machine.succeed("cat /tmp/loop.log"))
+                  machine.succeed("grep -q 'errors=0' /tmp/loop.log")
+                  machine.wait_until_succeeds(
+                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                  )
+                  machine.succeed("${check} proc")
+
+              with subtest("unloading is refused while a reader blocks"):
+                  # A frozen ESDM keeps the reader waiting for its answer
+                  machine.succeed("systemctl kill -s SIGSTOP esdm-server.service")
+                  machine.succeed(
+                      "nohup ${check} block /dev/esdm_random > /tmp/block.log 2>&1 &"
+                  )
+                  machine.wait_until_succeeds("grep -q blocking /tmp/block.log", 30)
+                  machine.sleep(1)
+                  machine.fail("rmmod esdm_cdev")
+                  machine.succeed("systemctl kill -s SIGCONT esdm-server.service")
+                  machine.succeed("pkill -f 'esdm-cdev-check [b]lock'")
+                  machine.wait_until_fails("pgrep -f 'esdm-cdev-check [b]lock'", 30)
+                  machine.wait_until_succeeds(
+                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                  )
+
+              with subtest("the ESDM unreachable: nothing served from elsewhere"):
+                  # The RPC sockets as well: they activate the server, which an
+                  # RPC client such as the kernel seeder would bring back - and
+                  # the EGD socket refuses to start next to a running service.
+                  machine.succeed(f"systemctl stop {esdm_units}")
+                  bounded("${check} unreachable", 60)
+                  machine.succeed("dmesg | grep -q 'esdm_cdev: cannot connect to the ESDM'")
+
+              with subtest("loading with the ESDM stopped returns at once"):
+                  machine.succeed("rmmod esdm_cdev")
+                  bounded("modprobe esdm_cdev", 10)
+                  machine.succeed("test -c /dev/esdm_random")
+                  bounded("${check} unreachable", 60)
+
+              with subtest("the ESDM comes back"):
+                  machine.succeed(f"systemctl start {esdm_units}")
+                  machine.wait_until_succeeds(
+                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                  )
+                  machine.succeed("${check} reads")
+                  machine.succeed("${check} ioctl-priv")
+
+              with subtest("a restart of an ESDM serving its EGD socket itself"):
+                  # Without socket activation nobody listens while it is
+                  # down: /dev/esdm_urandom fails, /dev/esdm_random waits.
+                  def manual_esdm():
+                      machine.succeed(
+                          "nohup ${esdm}/bin/esdm-server -f "
+                          "--egd_socket /run/esdm-egd.socket "
+                          "> /tmp/esdm-manual.log 2>&1 & "
+                          "echo $! > /tmp/esdm-manual.pid"
+                      )
+                      machine.wait_until_succeeds("${check} nonblock", 60)
+
+                  def manual_esdm_stop():
+                      machine.succeed("kill $(cat /tmp/esdm-manual.pid)")
+                      machine.wait_until_fails("kill -0 $(cat /tmp/esdm-manual.pid)", 30)
+
+                  machine.succeed(f"systemctl stop {esdm_units}")
+                  manual_esdm()
+                  machine.succeed(
+                      "nohup ${check} loop /dev/esdm_random 30 > /tmp/loop2.log 2>&1 &"
+                  )
+                  machine.sleep(3)
+                  manual_esdm_stop()
+                  bounded("${check} unreachable", 60)
+                  manual_esdm()
+                  machine.wait_until_succeeds("grep -q 'loop reads' /tmp/loop2.log", 90)
+                  print(machine.succeed("cat /tmp/loop2.log"))
+                  machine.succeed("grep -q 'errors=0' /tmp/loop2.log")
+                  manual_esdm_stop()
+                  machine.succeed(f"systemctl start {esdm_units}")
+                  machine.wait_until_succeeds(
+                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                  )
+
+              # The module against the fake EGD server of esdm-cdev-check, for
+              # what the ESDM cannot be made to do: see its fake-egd command.
+              def fake_egd(mode, params=""):
+                  machine.succeed("rmmod esdm_cdev")
+                  machine.succeed("rm -f /tmp/fake-egd.log")
+                  machine.succeed(
+                      "nohup ${check} fake-egd /run/fake-egd.socket "
+                      f"/tmp/fake-egd.log {mode} > /dev/null 2>&1 &"
+                  )
+                  machine.wait_until_succeeds("grep -q listening /tmp/fake-egd.log", 30)
+                  machine.succeed(
+                      f"modprobe esdm_cdev egd_socket=/run/fake-egd.socket {params}"
+                  )
+
+              def real_egd():
+                  machine.succeed("rmmod esdm_cdev")
+                  machine.succeed("pkill -f 'esdm-cdev-check [f]ake-egd'")
+                  machine.succeed("modprobe esdm_cdev")
+
+              with subtest("an ESDM that accepts but does not answer is backed off from"):
+                  fake_egd("mute", "timeout_ms=200")
+                  machine.succeed("${check} backoff /tmp/fake-egd.log 8")
+                  real_egd()
+
+              with subtest("RNDADDENTROPY credits once all of the data is in, writes never"):
+                  fake_egd("notop")
+                  machine.succeed("${check} addentropy /tmp/fake-egd.log")
+                  machine.succeed("${check} write-notop /tmp/fake-egd.log")
+                  real_egd()
+
+              with subtest("RNDADDTOENTCNT is not carried out twice for a signal"):
+                  fake_egd("notop")
+                  machine.succeed("${check} addtoentcnt-signal /tmp/fake-egd.log")
+                  real_egd()
+
+              with subtest("poll() reports what a read does of an ESDM not operational"):
+                  fake_egd("notop")
+                  # The watcher, kicked at load, learned the state
+                  machine.sleep(1)
+                  machine.succeed("${check} poll-notop")
+                  real_egd()
+
+              with subtest("reads of an ESDM not operational wait, until a signal"):
+                  fake_egd("notop")
+                  machine.succeed("timeout 60 ${check} block-notop /tmp/fake-egd.log")
+                  real_egd()
+
+              with subtest("/proc/esdm of an ESDM not operational"):
+                  fake_egd("notop")
+                  machine.succeed("${check} proc-notop")
+                  real_egd()
+
+              with subtest("unloading once the reader is gone"):
+                  machine.succeed(
+                      "nohup ${check} block /dev/esdm_urandom > /tmp/block2.log 2>&1 &"
+                  )
+                  machine.wait_until_succeeds("grep -q blocking /tmp/block2.log", 30)
+                  machine.fail("rmmod esdm_cdev")
+                  machine.succeed("pkill -f 'esdm-cdev-check [b]lock'")
+                  machine.wait_until_fails("pgrep -f 'esdm-cdev-check [b]lock'", 30)
+                  machine.succeed("rmmod esdm_cdev")
+                  machine.fail("test -e /dev/esdm_random")
+                  machine.fail("test -e /proc/esdm")
+
+              with subtest("no oops, BUG or WARN"):
+                  kmsg = machine.succeed("dmesg")
+                  for bad in ["BUG:", "WARNING:", "Oops", "Call Trace", "general protection"]:
+                      assert bad not in kmsg, f"dmesg holds {bad}:\n{kmsg}"
+            '';
+          };
       in
       {
         # nix fmt
@@ -925,6 +1205,9 @@
         checks =
           lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck kernel)) kernels
           // lib.mapAttrs' (name: kernel: lib.nameValuePair "ebpf_${name}" (mkEbpfCheck kernel)) stockKernels
+          // lib.mapAttrs' (
+            name: kernel: lib.nameValuePair "cdev_${name}" (mkEsdmCdevCheck kernel)
+          ) stockKernels
           // {
             # Only for the rolling kernel - see mkEbpfRawCheck on why this is
             # not instantiated per kernel version.
@@ -1574,6 +1857,9 @@
                     "-Dbotan_drng_type=chacha20"
                     "-Dais2031_ntg1=false"
                     "-Dais2031_drg4=false"
+                    # esdm-cdev-check, the checks of the esdm_cdev kernel
+                    # module, which the VM of mkEsdmCdevCheck runs
+                    "-Desdm-cdev-check=enabled"
                   ];
                 mesonBuildType = if debugEsdm then "debug" else "release";
                 doCheck = false;
@@ -1874,7 +2160,20 @@
               werror = true;
             }
           )
-        ) kernels;
+        ) kernels
+        # One esdm_cdev module build per defined kernel, e.g. esdm_cdev_6_1 /
+        # esdm_cdev_latest, with the warnings of W=1 as errors. Against the
+        # stock kernels: the module needs no kernel patches.
+        // lib.mapAttrs' (
+          name: kernel:
+          lib.nameValuePair "esdm_cdev_${name}" (
+            pkgs.callPackage ./kernel/esdm_cdev {
+              inherit (pkgs) lib;
+              inherit (kernel) kernel;
+              werror = true;
+            }
+          )
+        ) stockKernels;
 
         # One live system per defined kernel version, e.g. live_6_18.
         nixosConfigurations = lib.mapAttrs' (
