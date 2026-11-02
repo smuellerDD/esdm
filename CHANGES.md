@@ -14,6 +14,35 @@ cannot be reached, OpenSSH's sandboxed pre-authentication child included
 libesdm-egd-provider-pr.so - the EGD protocol cannot ask for prediction
 resistance per request, so it is a property of the socket
 
+* Add the kernel module esdm_cdev (kernel/esdm_cdev): /dev/esdm_random,
+/dev/esdm_urandom and /proc/esdm served from the ESDM over its EGD socket, with
+the ioctls of the kernel's random devices - the counterpart of the CUSE
+frontend in the kernel, leaving the kernel's own devices untouched; nothing is
+served from elsewhere while the ESDM is not reachable. esdm-cdev-check holds
+its checks, installed with the build option esdm-cdev-check
+
+* EGD interface: commands of the ESDM's own, 0xe0 to 0xec of
+esdm_egd_protocol.h, for what the EGD protocol cannot express: prediction
+resistant reads, a read with the semantics of /dev/urandom, the state, the
+status, reads and insertions of up to 64 KiB, and for a privileged peer the
+pool and reseed operations
+
+* Kernel module esdm_es: moved from addon/linux_esdm_es to kernel/esdm_es and
+built from the source tree, sharing the IOCTL interface, the seed sizes and the
+health test cutoffs with the ESDM instead of carrying copies. It needs Linux
+6.1 or later, supports 7.2 and 7.3, and post-processes with the XDRBG-256 over
+the SHAKE256 of the kernel where the kernel has its SHA-3 library, which Linux
+7.2 and later require
+
+* Kernel module esdm_es: the requested entropy and the entropy rate belong to
+the descriptor of /dev/esdm_es they are set on, a requested size that is no seed
+size is refused, and the state is reported as JSON only - ESDM_IRQ_STATUS and
+ESDM_SCHED_STATUS are gone
+
+* fix: RNDADDTOENTCNT: credits add up in a build oversampling the auxiliary pool,
+where the count less the oversampling was read and set back; esdm_pool_add_entropy()
+credits under the pool lock
+
 * Split the build option ais2031 into ais2031_ntg1 (NTG.1 seeding strategy) and
 ais2031_drg4 (DRG.4.10 reseeding limits), which can now be selected independently
 
