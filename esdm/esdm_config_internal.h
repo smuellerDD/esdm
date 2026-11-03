@@ -26,7 +26,14 @@
 int esdm_config_init(void);
 int esdm_config_reinit(void);
 
+/*
+ * Generate requests after which a DRNG is reseeded - ESDM_DRNG_RESEED_THRESH
+ * unless lowered for a test.
+ */
+uint32_t esdm_config_drng_reseed_thresh(void);
+
 #ifdef ESDM_TESTMODE
+void esdm_config_drng_reseed_thresh_set(uint32_t val);
 void esdm_config_drng_max_wo_reseed_set(uint32_t val);
 void esdm_config_drng_max_wo_reseed_bits_set(uint32_t val);
 #endif

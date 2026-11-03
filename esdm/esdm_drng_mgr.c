@@ -33,6 +33,7 @@
 #include "esdm_builtin_chacha20.h"
 #include "esdm_builtin_sha512.h"
 #include "esdm_config.h"
+#include "esdm_config_internal.h"
 #include "esdm_crypto.h"
 #include "esdm_drng_mgr.h"
 #include "esdm_es_aux.h"
@@ -168,6 +169,17 @@ struct esdm_drng *esdm_drng_node_instance(void)
 static void esdm_drng_set_seeded_now(struct esdm_drng *drng)
 {
 	atomic_store(&drng->last_seeded_time, esdm_monotonic_now());
+}
+
+/*
+ * Generate requests left before a reseed is due, given the value of
+ * drng->requests. That counter runs down from ESDM_DRNG_RESEED_THRESH, so a
+ * lower configured threshold is reached that much earlier.
+ */
+static int esdm_drng_requests_left(int requests)
+{
+	return requests - (int)(ESDM_DRNG_RESEED_THRESH -
+				esdm_config_drng_reseed_thresh());
 }
 
 /* The share of the reseed interval the seed times are spread over */
@@ -517,7 +529,8 @@ static void esdm_drng_stats_one(struct esdm_drng *drng, const char *type,
 	stats.force_reseed = atomic_load(&drng->force_reseed);
 	stats.reseed_pending = atomic_load(&drng->reseed_pending);
 	stats.initiated = atomic_load(&drng->initiated);
-	stats.requests_until_reseed = atomic_load(&drng->requests);
+	stats.requests_until_reseed =
+		esdm_drng_requests_left(atomic_load(&drng->requests));
 	stats.requests_since_fully_seeded =
 		atomic_read_u32(&drng->requests_since_fully_seeded);
 	stats.bits_since_fully_seeded =
@@ -1082,14 +1095,16 @@ static bool esdm_drng_must_reseed(struct esdm_drng *drng, bool dec_requests)
 	 * The decrement-and-test will only trigger for zero, but we may also are
 	 * already negative
 	 */
-	bool requests_check = atomic_load(&drng->requests) <= 0;
+	bool requests_check =
+		esdm_drng_requests_left(atomic_load(&drng->requests)) <= 0;
 
 	/* The counters are beside the point - the answer is yes every time. */
 	if (esdm_drng_reseed_per_request())
 		return true;
 
 	if (dec_requests)
-		requests_check |= (atomic_fetch_sub(&drng->requests, 1) == 1);
+		requests_check |= (esdm_drng_requests_left(atomic_fetch_sub(
+					   &drng->requests, 1)) == 1);
 	check_time += (time_t)atomic_load(&esdm_drng_reseed_max_time);
 
 	return (requests_check || atomic_load(&drng->force_reseed) ||
