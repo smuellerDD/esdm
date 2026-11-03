@@ -57,7 +57,7 @@ in-program collection buffers and the ring buffer holding the events included -
 raw entropy measurement tooling including the SP800-90B restart test in
 addon/es_ebpf_testing
 
-* Add libesdm_es_ext (esdm_es_ext.h): the library external entropy sources are developed against, serving their callbacks on a Unix domain socket in protobuf
+* Add external entropy sources: provider processes written against libesdm_es_ext (esdm_es_ext.h) serve them over a Unix domain socket in protobuf, read by the ExternalSocket ES (esdm-server --es_ext)
 
 * Centralize asynchronous buffer management to collect entropy from slow entropy sources
 

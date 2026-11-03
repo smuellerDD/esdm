@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +37,7 @@
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_egd_server.h"
+#include "esdm_es_extsock.h"
 #include "esdm_rpc_server.h"
 #include "esdm_logger.h"
 #include "helper.h"
@@ -136,7 +138,75 @@ static void usage(void)
 	fprintf(stderr,
 		"\t\t\tresistance generator - the EGD protocol cannot select it\n");
 	fprintf(stderr, "\t\t\tper request, so it gets a socket of its own\n");
+	fprintf(stderr,
+		"\t   --es_ext <PATH>\tRead the external entropy source of the\n"
+		"\t\t\tprovider on the Unix domain socket PATH\n"
+		"\t   --es_ext_entropy_rate <BITS>\tCredit it with at most BITS\n"
+		"\t\t\tper 256 bits (0 to 256), or what it declares (auto)\n"
+		"\t   --es_ext_uid <USER>\tAccept a provider running as USER\n"
+		"\t\t\t(uid or name, none for root only) next to root\n");
 	exit(1);
+}
+
+/* Exit on what an external ES option could not set */
+static void es_ext_set(const char *opt, int ret)
+{
+	if (!ret)
+		return;
+	fprintf(stderr, "%s: %s\n", opt,
+		ret == -ENOENT ? "not part of this build (meson option es_ext)" :
+				 strerror(-ret));
+	exit(1);
+}
+
+/* "auto" for the rate the provider declares, else 0 to 256 bits */
+static void set_es_ext_rate(const char *arg)
+{
+	unsigned long val;
+	char *end;
+
+	errno = 0;
+	val = strtoul(arg, &end, 10);
+	if (strcmp(arg, "auto") &&
+	    (errno || end == arg || *end || arg[0] == '-' || val > 256)) {
+		fprintf(stderr,
+			"--es_ext_entropy_rate takes an entropy rate from 0 to 256 or auto, not \"%s\"\n",
+			arg);
+		exit(1);
+	}
+#ifdef ESDM_ES_EXT
+	esdm_config_es_ext_entropy_rate_set(
+		strcmp(arg, "auto") ? (uint32_t)val :
+				      ESDM_ES_EXT_ENTROPY_RATE_AUTO);
+#else
+	es_ext_set("--es_ext_entropy_rate", -ENOENT);
+#endif
+}
+
+/* A uid, a user name, or none for root only */
+static void set_es_ext_uid(const char *arg)
+{
+	struct passwd *pw;
+	unsigned long val;
+	int64_t uid = -1;
+	char *end;
+
+	errno = 0;
+	val = strtoul(arg, &end, 10);
+	if (!strcmp(arg, "none"))
+		uid = -1;
+	else if (arg[0] && arg[0] != '-' && !*end && !errno && val < UINT32_MAX)
+		uid = (int64_t)val;
+	else if ((pw = getpwnam(arg)))
+		uid = (int64_t)pw->pw_uid;
+	else {
+		fprintf(stderr,
+			"--es_ext_uid takes a uid, a user name or none, not \"%s\"\n",
+			arg);
+		exit(1);
+	}
+
+	es_ext_set("--es_ext_uid", esdm_es_ext_set_peer_uid(uid));
 }
 
 static void parse_opts(int argc, char *argv[])
@@ -165,6 +235,9 @@ static void parse_opts(int argc, char *argv[])
 			{ "pid_namespace", 0, 0, 0 },
 			{ "egd_socket", 1, 0, 0 },
 			{ "egd_socket_pr", 1, 0, 0 },
+			{ "es_ext", 1, 0, 0 },
+			{ "es_ext_entropy_rate", 1, 0, 0 },
+			{ "es_ext_uid", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "hvp:u:fisSPg:mMe:E:", opts,
@@ -258,6 +331,23 @@ static void parse_opts(int argc, char *argv[])
 				/* egd_socket_pr */
 				if (esdm_egd_server_enable_pr(optarg))
 					exit(1);
+				break;
+			case 18:
+				/* es_ext */
+				if (!optarg[0]) {
+					fprintf(stderr,
+						"--es_ext must not be empty\n");
+					exit(1);
+				}
+				es_ext_set("--es_ext", esdm_es_ext_set_path(optarg));
+				break;
+			case 19:
+				/* es_ext_entropy_rate */
+				set_es_ext_rate(optarg);
+				break;
+			case 20:
+				/* es_ext_uid */
+				set_es_ext_uid(optarg);
 				break;
 
 			default:

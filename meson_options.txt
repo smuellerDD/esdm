@@ -665,6 +665,41 @@ compiled which implies a synchronous generation of data from the kernel jitter
 entropy source.
 ''')
 
+option('es_ext', type: 'feature', value: 'enabled',
+       description: '''Enable the external entropy source.
+
+An external entropy source is served by a provider: a process of its own the
+ESDM reads over a Unix domain socket - built with libesdm_es_ext, or speaking
+the protocol of esdm_es_ext.h itself. It is called ExternalSocket in the ESDM
+status, and does nothing until a socket is configured (es_ext_path,
+esdm-server --es_ext).
+''')
+
+option('es_ext_path', type: 'string', value: '',
+       description: '''Socket of the external entropy source provider.
+
+esdm-server --es_ext overrides it. The ESDM connects on demand, and again
+whenever the connection is lost.
+''')
+
+option('es_ext_entropy_rate', type: 'integer', min: -1, max: 256, value: -1,
+       description: '''Entropy rate cap of the external entropy source.
+
+A block is credited with the entropy the provider claims, at most at this rate
+per 256 bits of data. -1 configures none: the rate the provider declares, else
+0. Accepting the user a provider runs as (es_ext_peer_uid) means trusting the
+rate it declares - configure one here otherwise. esdm-server
+--es_ext_entropy_rate overrides it.
+''')
+
+option('es_ext_peer_uid', type: 'integer', min: -1, max: 4294967294, value: -1,
+       description: '''User the external entropy source provider may run as.
+
+Whoever can create the socket file could otherwise feed the ESDM data credited
+as entropy: a provider running as root is accepted, and one running as this
+uid; -1 accepts root only. esdm-server --es_ext_uid overrides it.
+''')
+
 ################################################################################
 # Common Options
 ################################################################################

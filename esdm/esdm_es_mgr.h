@@ -25,6 +25,9 @@ extern struct esdm_es_cb *esdm_es[];
 
 #define for_each_esdm_es(ctr) for ((ctr) = 0; (ctr) < esdm_ext_es_last; (ctr)++)
 
+/* Is @name the name of another entropy source than @self? */
+bool esdm_es_name_taken(const char *name, const struct esdm_es_cb *self);
+
 /*
  * _Atomic: written via the RPC set_write_wakeup_thresh handler and aux-pool
  * (re)init while read concurrently on the CUSE poll and avail-entropy paths;

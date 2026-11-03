@@ -54,3 +54,37 @@ if get_option('esdm-es-ext').enabled()
 		depends: [ es_ext_test_provider ] + es_ext_examples,
 		suite: 'es_ext', timeout: 60)
 endif
+
+# The ESDM side, its source compiled into the tests
+if get_option('es_ext').enabled() and get_option('esdm-es-ext').enabled()
+	foreach t : [ [ 'es_extsock_test', 'External ES source of the ESDM' ],
+		      [ 'es_ext_init_test',
+			'External ES self test before the initial seeding' ] ]
+		test(t[1],
+			executable(t[0],
+				[ esdm_ipc_ns, t[0] + '.c', 'es_ext_test_plugin.c' ],
+				dependencies: dependencies_server,
+				include_directories: [ include_dirs_server,
+						       include_directories('../common') ],
+				link_with: [ esdm_static_lib,
+					     esdm_es_ext_lib.get_static_lib() ]),
+			suite: 'es_ext', timeout: 60)
+	endforeach
+
+	# Skipped (77) unless run as root
+	if get_option('esdm-server').enabled()
+		es_ext_server_test = executable('es_ext_server_test',
+			'es_ext_server_test.c',
+			include_directories: [ include_dirs_client,
+					       include_directories('../common') ],
+			dependencies: dependencies_client + [ json_c_dep ],
+			link_with: [ esdm_common_static_lib,
+				     esdm_rpc_client_lib ],
+		)
+		test('esdm-server with an external entropy source',
+			es_ext_server_test,
+			args: [ esdm_server, es_ext_test_provider ],
+			depends: [ esdm_server, es_ext_test_provider ],
+			suite: 'es_ext', timeout: 120)
+	endif
+endif
