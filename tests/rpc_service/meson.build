@@ -13,4 +13,4 @@ rpc_protocol_test = executable(
 		link_with: esdm_common_static_lib,
 	)
 
-test('RPC wire protocol', rpc_protocol_test)
+test('RPC wire protocol', rpc_protocol_test, suite: 'rpc_service')

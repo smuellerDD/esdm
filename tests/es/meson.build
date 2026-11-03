@@ -10,7 +10,7 @@ es_mgr_monitor_tester = executable(
 	link_with: esdm_static_lib,
 )
 
-test('ES manager monitor', es_mgr_monitor_tester, timeout: 120)
+test('ES manager monitor', es_mgr_monitor_tester, timeout: 120, suite: 'es')
 
 # Whatever entropy sources this build and this machine actually have - the test
 # walks the ES manager's table rather than naming any of them, so it needs no
@@ -28,7 +28,8 @@ es_seed_cycle_tester = executable(
 test('ES seed cycle duration', es_seed_cycle_tester,
 	timeout: 300,
 	is_parallel: false,
-	priority: -10)
+	priority: -10,
+	suite: 'es')
 
 if get_option('es_jent').enabled()
 	es_jent_tester = executable(
@@ -39,7 +40,7 @@ if get_option('es_jent').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Jitter RNG', es_jent_tester, timeout: 300)
+	test('ES Jitter RNG', es_jent_tester, timeout: 300, suite: 'es')
 endif
 
 if get_option('es_cpu').enabled()
@@ -51,7 +52,7 @@ if get_option('es_cpu').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES CPU', es_cpu_tester)
+	test('ES CPU', es_cpu_tester, suite: 'es')
 
 	# RDRAND is unreachable through the entropy source on every CPU that has
 	# RDSEED, so the two instructions are driven directly - see the file
@@ -66,7 +67,7 @@ if get_option('es_cpu').enabled()
 			link_with: esdm_common_static_lib,
 		)
 
-		test('ES CPU x86 RDSEED/RDRAND', es_cpu_x86_tester)
+		test('ES CPU x86 RDSEED/RDRAND', es_cpu_x86_tester, suite: 'es')
 	endif
 
 	# The compressing data path is selected by a multiplier that is fixed at
@@ -82,7 +83,7 @@ if get_option('es_cpu').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES CPU compressing path', es_cpu_compress_tester)
+	test('ES CPU compressing path', es_cpu_compress_tester, suite: 'es')
 endif
 
 if get_option('es_kernel').enabled()
@@ -94,7 +95,7 @@ if get_option('es_kernel').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Kernel', es_krng_tester)
+	test('ES Kernel', es_krng_tester, suite: 'es')
 endif
 
 if get_option('es_sched').enabled()
@@ -106,7 +107,7 @@ if get_option('es_sched').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Scheduler', es_sched_tester, timeout: 70)
+	test('ES Scheduler', es_sched_tester, timeout: 70, suite: 'es')
 endif
 
 if get_option('es_irq').enabled()
@@ -120,7 +121,7 @@ if get_option('es_irq').enabled()
 
 	# The interrupt generator sleeps 5000 times per round, so the wall clock
 	# is dominated by the rounds rather than by the work.
-	test('ES Interrupt', es_irq_tester, timeout: 300)
+	test('ES Interrupt', es_irq_tester, timeout: 300, suite: 'es')
 endif
 
 # The configuration of /dev/esdm_es per descriptor, spoken to through its IOCTLs
@@ -148,7 +149,7 @@ if get_option('es_hwrand').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Linux HW Random', es_hwrand_tester)
+	test('ES Linux HW Random', es_hwrand_tester, suite: 'es')
 endif
 
 if get_option('es_tpm2').enabled()
@@ -163,7 +164,7 @@ if get_option('es_tpm2').enabled()
 	# With a TPM behind it the test drives the device itself, including a
 	# full fill of the block cache - one command exchange per block, and a
 	# software TPM in an emulated machine is not quick about them.
-	test('ES TPM 2.0', es_tpm2_tester, timeout: 120)
+	test('ES TPM 2.0', es_tpm2_tester, timeout: 120, suite: 'es')
 endif
 
 
@@ -176,7 +177,8 @@ if get_option('es_sched_ebpf').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Scheduler eBPF', es_sched_ebpf_tester, timeout: 120)
+	test('ES Scheduler eBPF', es_sched_ebpf_tester, timeout: 120,
+		suite: 'es')
 endif
 
 if get_option('es_irq_ebpf').enabled()
@@ -188,7 +190,7 @@ if get_option('es_irq_ebpf').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Interrupt eBPF', es_irq_ebpf_tester, timeout: 120)
+	test('ES Interrupt eBPF', es_irq_ebpf_tester, timeout: 120, suite: 'es')
 endif
 
 if get_option('es_pkcs11').enabled()
@@ -198,7 +200,7 @@ if get_option('es_pkcs11').enabled()
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
 	)
-	test('ES PKCS11', es_pkcs11_tester)
+	test('ES PKCS11', es_pkcs11_tester, suite: 'es')
 
 	# The test above passes with the source switched off for want of a
 	# token, so it never reaches the half that matters. SoftHSM is a
@@ -214,7 +216,8 @@ if get_option('es_pkcs11').enabled()
 			link_with: esdm_static_lib,
 		)
 		test('ES PKCS11 with SoftHSM', es_pkcs11_softhsm_tester,
-			timeout: 120)
+			timeout: 120,
+			suite: 'es')
 	endif
 endif
 
@@ -227,7 +230,7 @@ if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES eBPF health cutoffs', es_ebpf_health_tester)
+	test('ES eBPF health cutoffs', es_ebpf_health_tester, suite: 'es')
 endif
 
 if get_option('es_jent_kernel').enabled()
@@ -239,5 +242,5 @@ if get_option('es_jent_kernel').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	test('ES Kernel Jitter RNG', es_jent_kernel_tester)
+	test('ES Kernel Jitter RNG', es_jent_kernel_tester, suite: 'es')
 endif

@@ -12,5 +12,6 @@ if get_option('esdm-server').enabled()
 		)
 
 	test('esdm-server command line', server_cli_test,
-		args: [ esdm_server.full_path() ])
+		args: [ esdm_server.full_path() ],
+		suite: 'server')
 endif

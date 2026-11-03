@@ -12,5 +12,6 @@ if get_option('esdm-aux-client').enabled()
 				     esdm_common_static_lib ],
 		)
 
-	test('ESDM auxiliary client', aux_client_test, timeout: 60)
+	test('ESDM auxiliary client', aux_client_test, timeout: 60,
+		suite: 'aux-client')
 endif

@@ -27,5 +27,5 @@ if get_option('linux-devfiles').enabled()
 				     esdm_rpc_client_lib ],
 		)
 
-	test('esdm-proc file handlers', proc_files_test)
+	test('esdm-proc file handlers', proc_files_test, suite: 'proc')
 endif

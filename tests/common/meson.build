@@ -121,7 +121,7 @@ if get_option('testmode').enabled()
 			link_with: esdm_common_static_lib,
 		)
 
-	test('common test perturbation', test_pertubation_test)
+	test('common test perturbation', test_pertubation_test, suite: 'common')
 endif
 
 # Both of these are only compiled into common_src when their option is set.
@@ -134,7 +134,7 @@ if get_option('systemd').enabled()
 			link_with: esdm_common_static_lib,
 		)
 
-	test('common systemd support', systemd_support_test)
+	test('common systemd support', systemd_support_test, suite: 'common')
 endif
 
 if get_option('fips140')
@@ -146,24 +146,27 @@ if get_option('fips140')
 			link_with: esdm_common_static_lib,
 		)
 
-	test('common FIPS integrity check', fips_integrity_test)
+	test('common FIPS integrity check', fips_integrity_test,
+		suite: 'common')
 endif
 
-test('common hex/bin conversion', binhexbin_test)
-test('common bit operations', bitops_test)
-test('common endianness conversion', conv_be_le_test)
-test('common endianness conversion - software byte swap', conv_be_le_sw_test)
-test('common buffer handling', buffer_test)
-test('common logger', esdm_logger_test)
-test('common helper', helper_test)
-test('common Linux support', linux_support_test)
-test('common known answer test comparison', selftest_kat_test)
-test('common operating system random numbers', os_random_test)
-test('common xoshiro256++ PRNG', xoshiro_test)
+test('common hex/bin conversion', binhexbin_test, suite: 'common')
+test('common bit operations', bitops_test, suite: 'common')
+test('common endianness conversion', conv_be_le_test, suite: 'common')
+test('common endianness conversion - software byte swap', conv_be_le_sw_test,
+	suite: 'common')
+test('common buffer handling', buffer_test, suite: 'common')
+test('common logger', esdm_logger_test, suite: 'common')
+test('common helper', helper_test, suite: 'common')
+test('common Linux support', linux_support_test, suite: 'common')
+test('common known answer test comparison', selftest_kat_test, suite: 'common')
+test('common operating system random numbers', os_random_test, suite: 'common')
+test('common xoshiro256++ PRNG', xoshiro_test, suite: 'common')
 
 # The threading test occupies an entire thread group at once and waits for
 # signals to be delivered, so it neither shares the machine well nor finishes
 # within the default timeout on a loaded builder.
 test('common threading support', threading_support_test,
 	timeout: 120,
-	is_parallel: false)
+	is_parallel: false,
+	suite: 'common')
