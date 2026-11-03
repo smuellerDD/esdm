@@ -599,6 +599,13 @@ If set, only a token whose label matches this value will be used. Otherwise the
 first slot with a present token that exposes an RNG is selected.
 ''')
 
+option('es_pcsc', type: 'feature', value: 'disabled',
+       description: '''Build esdm-es-pcsc, the PC/SC smart card entropy source.
+
+esdm-es-pcsc serves the GET CHALLENGE of a smart card (ISO/IEC 7816-4, over
+pcsc-lite) to the ESDM as an external entropy source (es_ext). It declares no
+entropy rate unless started with --entropy_rate. Needs esdm-es-ext.''')
+
 ################################################################################
 # Linux-kernel jitterentropy Entropy Source
 ################################################################################

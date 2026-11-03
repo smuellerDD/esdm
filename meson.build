@@ -292,9 +292,11 @@ if get_option('esdm-es-ext').enabled()
 	subdirs += [ 'es-ext' ]
 endif
 
-if get_option('es_pkcs11').enabled() and get_option('esdm-es-ext').disabled()
-	error('es_pkcs11 builds a provider of libesdm_es_ext - enable esdm-es-ext')
-endif
+foreach opt : [ 'es_pkcs11', 'es_pcsc' ]
+	if get_option(opt).enabled() and not get_option('esdm-es-ext').enabled()
+		error(opt + ' builds a provider of libesdm_es_ext - enable esdm-es-ext')
+	endif
+endforeach
 
 if get_option('esdm-tool').enabled()
 	subdirs += [ 'frontends/tool' ]

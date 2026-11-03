@@ -72,6 +72,21 @@ if get_option('esdm-es-ext').enabled()
 			depends: [ esdm_es_pkcs11, es_pkcs11_shim ],
 			suite: 'es_ext', timeout: 120)
 	endif
+
+	# Against a fake pcscd: only the headers of pcsc-lite are needed
+	if get_option('es_pcsc').enabled()
+		es_pcsc_test = executable('es_pcsc_test',
+			[ '../../es-ext/pcsc/esdm_es_pcsc.c', 'es_pcsc_test.c' ],
+			include_directories: [ include_dirs_es_ext_test,
+					       include_directories('../../es-ext/pcsc') ],
+			dependencies: [ json_c_dep, protobuf_c_dep,
+					dependency('libpcsclite').partial_dependency(
+						compile_args: true) ],
+			link_with: esdm_common_static_lib,
+		)
+		test('esdm-es-pcsc', es_pcsc_test, args: esdm_es_pcsc,
+			depends: esdm_es_pcsc, suite: 'es_ext')
+	endif
 endif
 
 # The ESDM side, its source compiled into the tests
