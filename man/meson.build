@@ -1,7 +1,11 @@
-# Man pages are plain roff sources; the only thing generated is the version in
-# the .TH line, so building the documentation needs no extra tool chain.
+# Man pages are plain roff sources; the only things generated are the version in
+# the .TH line and the EGD socket path, so building the documentation needs no
+# extra tool chain.
 man_conf_data = configuration_data()
 man_conf_data.set('VERSION', meson.project_version())
+# roff renders a bare '-' as a hyphen, which breaks a pasted path.
+man_conf_data.set('EGD_SOCKET_PATH',
+	get_option('esdm-server-egd-socket-path').replace('-', '\\-'))
 
 # Pages that are always installed: the ESDM library, plus the client libraries
 # that are built unconditionally.
