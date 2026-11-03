@@ -103,6 +103,9 @@ addon/es_ebpf_testing
 
 * esdm-tool: add --drng-status [=NODE|pr] and --drng-status-json [=NODE|pr] to print one DRNG instance or, without an argument, all of them as a JSON array
 
+* Logging: color the severities only on a terminal and without NO_COLOR set, so
+log files, pipes and the test logs carry no escape sequences
+
 Changes 1.2.3
 * Fix handling of non-blocking server response
 
