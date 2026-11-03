@@ -966,6 +966,7 @@
               };
 
             testScript = ''
+              import re
               import time
 
               esdm_units = (
@@ -1194,7 +1195,13 @@
 
               with subtest("no oops, BUG or WARN"):
                   kmsg = machine.succeed("dmesg")
-                  for bad in ["BUG:", "WARNING:", "Oops", "Call Trace", "general protection"]:
+                  # Anchored: WARN() and lockdep start the line with it, the
+                  # CPU vulnerability banners of some runners ("RETBleed:
+                  # WARNING: ...") carry it after their prefix.
+                  splat = re.search(r"^\[[ \d.]+\] (BUG|WARNING):", kmsg, re.M)
+                  assert not splat, f"dmesg holds {splat[1]}:\n{kmsg}"
+                  for bad in ["Oops", "Call Trace", "general protection",
+                              "[esdm_cdev] enqueued on deprecated workqueue"]:
                       assert bad not in kmsg, f"dmesg holds {bad}:\n{kmsg}"
             '';
           };
