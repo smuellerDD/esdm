@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <syslog.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "build_bug_on.h"
 #include "constructor.h"
@@ -55,6 +56,22 @@ struct esdm_logger_class_map {
  */
 static _Atomic(FILE *) esdm_logger_stream = NULL;
 static bool use_syslog = false;
+
+/*
+ * Are the severities colored? Only on a terminal and without NO_COLOR set
+ * (https://no-color.org): a pipe, a log file or the journal keeps the escape
+ * sequences as text. Decided whenever the stream is set.
+ */
+static _Atomic bool esdm_logger_colored = false;
+
+static void esdm_logger_set_stream(FILE *stream)
+{
+	const char *no_color = getenv("NO_COLOR");
+
+	esdm_logger_colored = isatty(fileno(stream)) &&
+			      !(no_color && *no_color);
+	esdm_logger_stream = stream;
+}
 
 static void log_syslog(int severity, const char *format, ...);
 
@@ -205,7 +222,7 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 		return;
 
 	if (!esdm_logger_stream)
-		esdm_logger_stream = stderr;
+		esdm_logger_set_stream(stderr);
 	stream = esdm_logger_stream;
 
 	va_start(args, fmt);
@@ -245,6 +262,9 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	default:
 		fprintf_color = &fprintf;
 	}
+
+	if (!esdm_logger_colored)
+		fprintf_color = &fprintf;
 
 	thread_get_name(thread_name, sizeof(thread_name));
 
@@ -295,6 +315,11 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 
 	if (!use_syslog) {
 		fprintf(stream, "%s", msg);
+		/*
+		 * The whole record, as the color helpers flushed their header
+		 * and so the record before it - a log file keeps up as before.
+		 */
+		fflush(stream);
 		funlockfile(stream);
 	}
 }
@@ -313,7 +338,7 @@ static void esdm_logger_destructor(void)
 ESDM_DEFINE_CONSTRUCTOR(esdm_logger_constructor);
 static void esdm_logger_constructor(void)
 {
-	esdm_logger_stream = stderr;
+	esdm_logger_set_stream(stderr);
 	atexit(esdm_logger_destructor);
 }
 
@@ -331,7 +356,7 @@ int esdm_logger_set_file(const char *pathname)
 		return -errno;
 
 	if (!esdm_logger_stream || esdm_logger_stream == stderr)
-		esdm_logger_stream = out;
+		esdm_logger_set_stream(out);
 	else {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Reject to set new log file\n");

@@ -26,12 +26,16 @@
  * so a filter that stops filtering, or swallows everything, is caught.
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "common_test.h"
@@ -216,6 +220,100 @@ static void test_get_class(void)
 	}
 }
 
+/* The escape sequence every color of the logger starts with */
+#define LOG_COLOR_ESC "\x1B["
+
+/*
+ * In a child, as the log stream can be set only once: log one record to a
+ * pseudo-terminal and tell whether it came out colored as it should be - with
+ * colors unless NO_COLOR is set. Exits with 77 without a pseudo-terminal.
+ */
+static void terminal_child(bool no_color)
+{
+	struct pollfd pfd = { .events = POLLIN };
+	char buf[4096];
+	size_t len = 0;
+	const char *slave;
+	ssize_t rd;
+
+	if (no_color)
+		setenv("NO_COLOR", "1", 1);
+	else
+		unsetenv("NO_COLOR");
+
+	pfd.fd = posix_openpt(O_RDWR | O_NOCTTY);
+	if (pfd.fd < 0 || grantpt(pfd.fd) || unlockpt(pfd.fd))
+		_exit(77);
+	slave = ptsname(pfd.fd);
+	if (!slave)
+		_exit(77);
+
+	if (esdm_logger_set_file(slave))
+		_exit(1);
+	esdm_logger_set_class(LOGGER_C_ANY);
+	esdm_logger_set_verbosity(LOGGER_STATUS);
+	esdm_logger(LOGGER_STATUS, LOGGER_C_ANY, "terminal-record\n");
+
+	/* Until the record is through, which the flush of the logger ensures */
+	while (len < sizeof(buf) - 1 && poll(&pfd, 1, 2000) > 0) {
+		rd = read(pfd.fd, buf + len, sizeof(buf) - 1 - len);
+		if (rd <= 0)
+			break;
+		len += (size_t)rd;
+		buf[len] = '\0';
+		if (strstr(buf, "terminal-record"))
+			break;
+	}
+	buf[len] = '\0';
+
+	if (!strstr(buf, "terminal-record"))
+		_exit(2);
+	_exit((strstr(buf, LOG_COLOR_ESC) != NULL) == !no_color ? 0 : 3);
+}
+
+static void check_terminal(bool no_color)
+{
+	const char *what = no_color ? "terminal with NO_COLOR" : "terminal";
+	int status;
+	pid_t pid;
+
+	/* Nothing of the parent's output is to be written twice */
+	fflush(NULL);
+	pid = fork();
+	if (pid < 0) {
+		CHECK(0, "fork() failed: %s", strerror(errno));
+		return;
+	}
+	if (!pid)
+		terminal_child(no_color);
+
+	if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status)) {
+		CHECK(0, "%s: the child did not exit", what);
+		return;
+	}
+
+	switch (WEXITSTATUS(status)) {
+	case 0:
+		break;
+	case 77:
+		printf("%s: no pseudo-terminal, not checked\n", what);
+		break;
+	case 2:
+		CHECK(0, "%s: the record did not reach the terminal", what);
+		break;
+	default:
+		CHECK(0, "%s: the record is %s", what,
+		      no_color ? "colored" : "not colored");
+	}
+}
+
+static void test_colors(void)
+{
+	/* Before test_set_file(): the children set the log stream themselves */
+	check_terminal(false);
+	check_terminal(true);
+}
+
 static void test_set_file(void)
 {
 	FILE *before = esdm_logger_log_stream();
@@ -294,6 +392,10 @@ static void test_logging(void)
 	esdm_logger(LOGGER_STATUS, LOGGER_C_ANY, "anyclass-record\n");
 	check_logged("Entropy Source", false, "unclassified record");
 
+	/* A log file is no terminal, so its records carry no colors */
+	esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "uncolored-record\n");
+	check_logged(LOG_COLOR_ESC, false, "colors in a log file");
+
 	/* Format arguments are expanded */
 	esdm_logger(LOGGER_STATUS, LOGGER_C_ANY, "formatted %d %s\n", 42,
 		    "arg");
@@ -343,6 +445,7 @@ int main(int argc, char *argv[])
 	test_verbosity();
 	test_class();
 	test_get_class();
+	test_colors();
 	test_set_file();
 	test_logging();
 	test_syslog();
