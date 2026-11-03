@@ -1,0 +1,78 @@
+.TH ESDM\-ES\-PCSC 8 "2026-11-06" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+esdm\-es\-pcsc \- serve the random number generator of a smart card to the ESDM
+.SH SYNOPSIS
+.B esdm\-es\-pcsc
+.RB [ \-\-reader
+.IR NAME ]
+.RB [ \-\-challenge_len
+.IR N ]
+.B \-\-socket
+.I PATH
+.RI [ "provider options" ]
+.SH DESCRIPTION
+.B esdm\-es\-pcsc
+asks a smart card for random bytes with GET CHALLENGE of ISO/IEC 7816\-4
+through pcscd, which nearly every card answers without an application or a
+PIN, and serves them as an external entropy source, which
+.B esdm\-server \-\-es_ext
+reads.
+.PP
+It uses the card of the first reader holding one. A card that is missing,
+pulled or reset, or a pcscd restarted, is set up anew on the next request. A
+card is tested when it is connected and on every self test of the ESDM \- two
+reads of 16 bytes that must differ \- and one repeating itself is credited with
+nothing until it passes again. No card is no reason not to serve: the ESDM
+credits nothing meanwhile.
+.SH NAME, RATE AND STATUS
+The source declares the name
+.B PC/SC
+and no entropy rate: its data is claimed at 8 bits per byte, and what the card
+is worth is for its assessment to say \- see
+.B \-\-entropy_rate
+of
+.BR libesdm_es_ext (3)
+and
+.B \-\-es_ext_entropy_rate
+of
+.BR esdm\-server (8).
+Its status names the
+.BR reader ,
+the
+.B atr
+of the card, the
+.B repetition_test
+.RB ( none ", " passed ", " failed ),
+the counts of
+.BR requests ,
+.BR bytes ,
+.B failures
+and
+.BR connects ,
+and the
+.BR last_error .
+.SH OPTIONS
+.TP
+.BR \-r ", " \-\-reader " \fINAME\fR"
+Use only the reader whose name contains
+.IR NAME .
+.TP
+.BR \-l ", " \-\-challenge_len " \fIN\fR"
+The bytes asked for with one GET CHALLENGE, 1 to 255, by default 32.
+.TP
+.I provider options
+.B \-\-socket
+and the others of
+.BR libesdm_es_ext (3).
+.SH EXAMPLE
+.nf
+esdm\-es\-pcsc \-\-socket /run/esdm\-es\-pcsc.socket \-\-entropy_rate 128
+esdm\-server \-\-es_ext /run/esdm\-es\-pcsc.socket
+.fi
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-es\-pkcs11 (8),
+.BR libesdm_es_ext (3),
+.BR pcscd (8)
+.SH AUTHOR
+Markus Theil <theil.markus@gmail.com>

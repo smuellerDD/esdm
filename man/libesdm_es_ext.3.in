@@ -1,0 +1,175 @@
+.TH LIBESDM_ES_EXT 3 "2026-11-06" "ESDM @VERSION@" "ESDM Manual"
+.SH NAME
+libesdm_es_ext \- external entropy sources for the ESDM
+.SH SYNOPSIS
+.nf
+.B #include <esdm/esdm_es_ext.h>
+.PP
+.BI "int esdm_es_ext_provider_main(const struct esdm_es_ext_plugin *" plugin ", int " argc ", char *" argv "[]);"
+.PP
+.B pkg\-config \-\-cflags \-\-libs esdm_es_ext
+.fi
+.SH DESCRIPTION
+An external entropy source is served to
+.BR esdm\-server (8)
+by a provider: a process of its own on a UNIX domain socket, which the ESDM
+reads with
+.B \-\-es_ext
+.IR PATH .
+No code of a source runs in the ESDM: a source that crashes takes its
+provider down, and the ESDM connects again once it is back.
+.PP
+A provider is the callbacks of a
+.B struct esdm_es_ext_plugin
+\- documented in
+.I esdm_es_ext.h
+\- and a
+.BR main ()
+returning
+.BR esdm_es_ext_provider_main ().
+Only
+.B get_entropy
+is required;
+.BR init ,
+.BR fini ,
+.BR selftest ,
+.B status_json
+and
+.B entropy_rate
+are optional, and
+.B name
+names the source in the ESDM status. The callbacks are never called
+concurrently.
+.SS Entropy credit
+A block is credited with the entropy the source claims for it \- a claim
+beyond the data is refused \- at most at the rate configured in the ESDM
+.RB ( \-\-es_ext_entropy_rate ),
+else at the one the source declares, else at 0. The provider must run as root
+or as the user the ESDM accepts
+.RB ( \-\-es_ext_uid ):
+accepting that user means trusting the rate it declares. A new connection is
+credited only after a self test passed.
+.SH FUNCTIONS
+.BR esdm_es_ext_provider_main ()
+takes the command line, sets the source up and serves it until SIGTERM,
+SIGINT or SIGHUP; it tells systemd once it serves
+.RB ( Type=notify ).
+.PP
+.BR esdm_es_ext_server_alloc (),
+.BR esdm_es_ext_server_allow_uid (),
+.BR esdm_es_ext_server_set_name (),
+.BR esdm_es_ext_server_set_entropy_rate (),
+.BR esdm_es_ext_server_run (),
+.BR esdm_es_ext_server_stop ()
+and
+.BR esdm_es_ext_server_free ()
+serve a source from a program of its own making, see
+.IR esdm_es_ext.h .
+The server serves up to 8 clients, a new one taking the slot of the one idle
+the longest \- of root only for another one of root.
+.SH RETURN VALUE
+.BR esdm_es_ext_provider_main ()
+returns 0 once a signal ended it, or for
+.B \-\-help
+and
+.BR \-\-version ,
+and 1 otherwise. The server functions return 0 or a negative errno, but for
+.BR esdm_es_ext_server_stop ()
+and
+.BR esdm_es_ext_server_free (),
+which return nothing.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-socket " \fIPATH\fR"
+The socket to serve on, replacing a socket there, but no other file.
+.TP
+.BR \-m ", " \-\-mode " \fIMODE\fR"
+Its access mode, octal, 0666 by default. Every user who can connect can fill
+the backlog the ESDM connects through: a group of the ESDM user is safer.
+.TP
+.BR \-u ", " \-\-client_uid " \fIUSER\fR"
+Serve clients running as
+.I USER
+next to root, up to 8 times; nobody by default, the user the ESDM runs as.
+Every process of the user can take a client slot from the ESDM: a user only the
+ESDM runs as is safer.
+.TP
+.BR \-\-name " \fINAME\fR"
+Declare
+.I NAME
+\- 1 to 32 bytes of UTF-8 without control characters \- in place of the name
+of the source.
+.TP
+.BR \-\-entropy_rate " \fIBITS\fR"
+Declare
+.I BITS
+per 256 bits of data, 0 to 256, in place of the rate of the source.
+.TP
+.BR \-v ", " \-\-verbose
+More verbose logging, repeatable.
+.TP
+.BR \-h ", " \-\-help ", " \-\-version
+Print the usage or the version.
+.SH STATUS
+The ESDM shows the status of a provider as the
+.B provider
+member of its source. That of this library is
+.PP
+.nf
+{ "server": { "version": ..., "plugin_api": 1, "name": ...,
+  "entropy_rate": ..., "clients": 1, "client_slots": 8, "requests": 42,
+  "selftest": "passed", "uptime_seconds": 3600 }, "plugin": ... }
+.fi
+.PP
+.B plugin
+being what
+.B status_json
+reports: a JSON object of up to 512 bytes, nested up to 8 levels, without
+NaN, infinities, C1 or bidirectional controls \- null otherwise.
+.SH PROTOCOL
+The socket protocol \- one protobuf message of
+.I es\-ext/pb/es_ext.proto
+per datagram \- is documented in
+.I esdm_es_ext.h
+for providers written without the library.
+.SH EXAMPLE
+.nf
+#include <errno.h>
+#include <esdm/esdm_es_ext.h>
+
+static int my_get_entropy(void *ctx, uint8_t *buf, size_t buflen,
+			  uint32_t *entropy_bits)
+{
+	if (read_my_noise_source(buf, buflen))
+		return \-EIO;
+	*entropy_bits = buflen; /* the assessment: 1 bit per byte */
+	return 0;
+}
+
+static const struct esdm_es_ext_plugin my_source = {
+	.version = ESDM_ES_EXT_PLUGIN_VERSION,
+	.name = "my\-noise\-source",
+	.get_entropy = my_get_entropy,
+};
+
+int main(int argc, char *argv[])
+{
+	return esdm_es_ext_provider_main(&my_source, argc, argv);
+}
+.fi
+.PP
+.nf
+cc \-o my\-provider my_provider.c $(pkg\-config \-\-cflags \-\-libs esdm_es_ext)
+my\-provider \-\-socket /run/my\-es.socket
+esdm\-server \-\-es_ext /run/my\-es.socket
+.fi
+.PP
+.I es\-ext/example/esdm_es_ext_example.c
+is a complete one.
+.SH SEE ALSO
+.BR esdm\-server (8),
+.BR esdm\-es\-pkcs11 (8),
+.BR esdm\-es\-pcsc (8),
+.BR libesdm (3)
+.SH AUTHOR
+Markus Theil <theil.markus@gmail.com>

@@ -218,6 +218,14 @@ appropriate rate for a deployment environment with the measurement tooling
 in `addon/es_ebpf_testing/` before crediting the sources. See
 `doc/esdm_es_ebpf.md` for the design description.
 
+### External Entropy Sources
+
+A noise source outside the ESDM is served by a provider process, which
+`esdm-server --es_ext PATH` reads over a Unix domain socket - see
+`esdm-server(8)`, and `libesdm_es_ext(3)` and `es-ext/example/` for writing one.
+`esdm-es-pkcs11(8)` (`es_pkcs11`) and `esdm-es-pcsc(8)` (`es_pcsc`) serve
+PKCS#11 tokens and PC/SC smart cards.
+
 ## Testing
 
 The ESDM code repository uses `meson` to provide an extensive test harness
