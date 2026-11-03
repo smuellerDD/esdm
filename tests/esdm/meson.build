@@ -124,6 +124,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_reseed_security_test = executable(
+		'esdm_reseed_security_test',
+		[ esdm_ipc_ns, 'esdm_reseed_security_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_jent_only_security_test = executable(
 		'esdm_jent_only_security_test',
 		[ esdm_ipc_ns, 'esdm_jent_only_security_test.c' ],
@@ -247,4 +255,15 @@ if get_option('esdm-server').enabled()
 			'interface stops at once and the ordinary interface ' +
 			'after its budget of generate operations without a ' +
 			'full reseed. Then no interface hands out data.' })
+
+	# Sits out two reseed intervals of five seconds and 2^11 requests.
+	test('ESDM security - reseed on interval and request threshold',
+		esdm_reseed_security_test,
+		timeout: 120,
+		suite: [ 'core', 'security' ],
+		env: { 'ESDM_TEST_DESCRIPTION':
+			'A DRNG is not reseeded before the reseed interval ' +
+			'elapsed, but soon after. It is also reseeded once ' +
+			'the number of generate requests reaches the reseed ' +
+			'threshold, lowered to 2^10 for this test.' })
 endif
