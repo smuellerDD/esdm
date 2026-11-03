@@ -1,0 +1,47 @@
+/*
+ * The external entropy source protocol between the ESDM and libesdm_es_ext,
+ * see esdm_es_ext.h: one message per datagram of a SOCK_SEQPACKET socket, the
+ * ESDM sends a request, the provider answers it. The C code checks the values.
+ *
+ * Generated with protoc-c: protoc-c --c_out=.. es_ext.proto
+ */
+syntax = "proto3";
+
+enum EsExtType {
+	ES_EXT_TYPE_NONE = 0;
+	ES_EXT_GET_ENTROPY = 1;
+	ES_EXT_SELFTEST = 2;
+	ES_EXT_STATUS = 4;
+	ES_EXT_INFO = 5;
+}
+
+/*
+ * @version ESDM_ES_EXT_PROTO_VERSION
+ * @length Bytes asked for: 1 to ESDM_ES_EXT_PROTO_MAX_DATA for GET_ENTROPY,
+ *	   1 to ESDM_ES_EXT_PROTO_STATUS_MAX for STATUS, else 0
+ */
+message EsExtRequest {
+	uint32 version = 1;
+	EsExtType type = 2;
+	uint32 length = 3;
+}
+
+/*
+ * @version ESDM_ES_EXT_PROTO_VERSION
+ * @type The type of the request
+ * @status 0 or a negative errno; other than 0 without anything below
+ * @entropy_bits GET_ENTROPY: the entropy of the data, at most 8 * length
+ * @data GET_ENTROPY: the length bytes asked for; STATUS: a JSON object of 1
+ *	 to length bytes
+ * @rate INFO: the entropy rate declared, ESDM_ES_EXT_PROTO_RATE_NONE for none
+ * @name INFO: the name declared, 0 to ESDM_ES_EXT_NAME_MAX bytes of UTF-8
+ */
+message EsExtResponse {
+	uint32 version = 1;
+	EsExtType type = 2;
+	sint32 status = 3;
+	uint32 entropy_bits = 4;
+	bytes data = 5;
+	uint32 rate = 6;
+	bytes name = 7;
+}

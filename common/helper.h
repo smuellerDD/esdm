@@ -38,6 +38,16 @@ extern "C" {
 	(data_type *)((char *)(member) - (char *)&((data_type *)0)->member_var)
 
 /* Whole seconds on CLOCK_MONOTONIC, 0 if the clock cannot be read */
+/* Nanoseconds on CLOCK_MONOTONIC, 0 if it cannot be read */
+static inline uint64_t esdm_monotonic_now_ns(void)
+{
+	struct timespec now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &now))
+		return 0;
+	return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
+}
+
 static inline long long esdm_monotonic_now(void)
 {
 	struct timespec now;
