@@ -108,9 +108,9 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
-	esdm_selftest_test = executable(
-		'esdm_selftest_test',
-		[ esdm_ipc_ns, 'esdm_selftest_test.c' ],
+	esdm_selftest_security_test = executable(
+		'esdm_selftest_security_test',
+		[ esdm_ipc_ns, 'esdm_selftest_security_test.c' ],
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
 		dependencies: dependencies_server,
@@ -221,11 +221,18 @@ if get_option('esdm-server').enabled()
 	test('ESDM NTG.1 seeding strategy', esdm_ntg1_seeding_test,
 		suite: 'core')
 
-	test('ESDM self tests', esdm_selftest_test, suite: 'core')
-
 	test('ESDM asynchronous reseed worker', esdm_reseed_worker_test,
 		timeout: 120,
 		suite: 'core')
+
+	test('ESDM security - self tests', esdm_selftest_security_test,
+		suite: [ 'core', 'security' ],
+		env: { 'ESDM_TEST_DESCRIPTION':
+			'The crypto and entropy source self tests pass at ' +
+			'start up, periodically and on demand. After a ' +
+			'failed self test the ESDM hands out neither random ' +
+			'nor seed data, and the periodic self test worker ' +
+			'stops.' })
 
 	# Sits out a reseed interval, so it needs more than the default timeout
 	# of 30 seconds only if the machine is loaded - keep some headroom.
