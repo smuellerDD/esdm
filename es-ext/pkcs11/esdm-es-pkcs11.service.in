@@ -1,0 +1,81 @@
+# esdm-es-pkcs11, the PKCS#11 entropy source of the ESDM - see esdm-es-pkcs11(8).
+# Configure both sides with drop-ins, e.g.
+# /etc/systemd/system/esdm-server.service.d/pkcs11.conf:
+#
+#	[Service]
+#	Environment="ESDM_SERVER_OPTIONS=--es_ext /run/esdm-es-pkcs11/esdm-es-pkcs11.socket --es_ext_uid esdm-es-pkcs11"
+#
+# /etc/systemd/system/esdm-es-pkcs11.service.d/token.conf:
+#
+#	[Service]
+#	Environment="ESDM_ES_PKCS11_OPTIONS=--module /usr/lib/softhsm/libsofthsm2.so --token_label my-token"
+#
+# The PIN is the credential pkcs11-pin, imported from /etc/credstore (or
+# /etc/credstore.encrypted, see systemd-creds); a systemd older than 254 needs
+# LoadCredential=pkcs11-pin:/etc/esdm/pkcs11-pin in the drop-in.
+#
+# The daemon runs as a system user of its own, not a DynamicUser=: the ESDM
+# accepts a provider by a user it names at start up. It needs access to the
+# token: pcscd polkit rules for a smartcard, the token directory of SoftHSM
+# (e.g. SupplementaryGroups=softhsm), or PrivateDevices=no and DeviceAllow=
+# for a module reaching its device itself.
+
+[Unit]
+Description=ESDM PKCS#11 entropy source
+Documentation=man:esdm-es-pkcs11(8)
+
+# The token ready for the initial seeding - an ordering only, the ESDM
+# connects whenever the daemon comes
+Before=esdm-server.service
+
+# A smartcard is reached through pcscd, activated by its socket
+After=pcscd.socket
+
+[Service]
+@SERVICE_TYPE@
+ExecStart=@PATH@/esdm-es-pkcs11 -vvv $ESDM_ES_PKCS11_OPTIONS
+User=esdm-es-pkcs11
+Group=esdm-es-pkcs11
+# A directory the ESDM, as nobody, traverses; the daemon serves nobody and root
+# only, so the socket is open to everybody
+RuntimeDirectory=esdm-es-pkcs11
+RuntimeDirectoryMode=0755
+ImportCredential=pkcs11-pin
+Restart=on-failure
+RestartSec=5s
+# Ready once the token was looked for: a hanging module must not hold up the ESDM
+TimeoutStartSec=20s
+
+AmbientCapabilities=
+CapabilityBoundingSet=
+DevicePolicy=closed
+IPAddressDeny=any
+LimitCORE=0
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ReadWritePaths=-/var/lib/softhsm
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -422,47 +422,6 @@ static void test_privileged_commands(void)
 }
 
 /*
- * The PKCS#11 credentials are set through the privileged RPC interface. A
- * build without that entropy source refuses the call, which is a legitimate
- * answer - what is checked is that the tool passes the request on and reports
- * the outcome either way, rather than that the source exists.
- */
-static void test_pkcs11_config(void)
-{
-	const char *const literal[] = { "--pkcs11-token-label", "esdm-test",
-					"--pkcs11-pin", "1234", NULL };
-	const char *const from_stdin[] = { "--pkcs11-pin", "-", NULL };
-	struct test_run r;
-	int rc;
-
-	/* Also a privileged command, and refused outright without root */
-	if (geteuid()) {
-		printf("not root - skipping the PKCS#11 configuration\n");
-		return;
-	}
-
-	announce(literal);
-	rc = test_run(&r, literal, NULL);
-
-	CHECK(rc == EXIT_SUCCESS || rc == EXIT_FAILURE,
-	      "setting the PKCS#11 configuration ended with status %d", rc);
-	CHECK(strstr(r.err, "PKCS#11 configuration updated") != NULL ||
-		      strstr(r.err, "failed to update PKCS#11 configuration") !=
-			      NULL,
-	      "setting the PKCS#11 configuration said nothing about the outcome (output: %.300s)",
-	      r.err);
-
-	/* "-" reads the PIN instead of putting it in the process listing */
-	announce(from_stdin);
-	rc = test_run(&r, from_stdin, "1234\n");
-	CHECK(rc == EXIT_SUCCESS || rc == EXIT_FAILURE,
-	      "a PIN read from stdin ended with status %d", rc);
-	CHECK(strstr(r.err, "PKCS#11") != NULL,
-	      "a PIN read from stdin was not passed on (output: %.300s)",
-	      r.err);
-}
-
-/*
  * The stress and benchmark modes. They are drivers rather than checks - what
  * matters here is that each one runs its loop against a real server and comes
  * back successfully, because a mode that breaks is otherwise only noticed by
@@ -675,7 +634,6 @@ int main(int argc, char *argv[])
 		test_stress_modes();
 		test_benchmark();
 		test_privileged_commands();
-		test_pkcs11_config();
 		test_es_rates();
 	}
 

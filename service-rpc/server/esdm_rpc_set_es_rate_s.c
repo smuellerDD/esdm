@@ -50,7 +50,6 @@ static const struct {
 	{ "KernelJitterRNG", esdm_config_es_jent_kernel_entropy_rate_set },
 	{ "KernelRNG", esdm_config_es_krng_entropy_rate_set },
 	{ "LinuxHWRand", esdm_config_es_hwrand_entropy_rate_set },
-	{ "PKCS#11", esdm_config_es_pkcs11_entropy_rate_set },
 	{ "Scheduler", esdm_config_es_sched_entropy_rate_set },
 	{ "SchedulerEBPF", esdm_config_es_sched_ebpf_entropy_rate_set },
 	{ "TPM2.0", esdm_config_es_tpm2_entropy_rate_set },

@@ -177,18 +177,6 @@ output stops once no source is credited. The ESDM caps the rate; the rate in
 effect is shown by
 .BR \-\-status .
 Requires root.
-.TP
-.BR \-\-pkcs11\-pin " \fIPIN\fR"
-Set the user PIN of the PKCS#11 entropy source. Pass
-.B \-
-to read the PIN from standard input with terminal echo disabled, which keeps
-it out of the process table. May be combined with
-.BR \-\-pkcs11\-token\-label .
-Requires root.
-.TP
-.BR \-\-pkcs11\-token\-label " \fILABEL\fR"
-Set the token label of the PKCS#11 entropy source and re\-open the module. Pass
-an empty string to clear the override. Requires root.
 .SS Benchmarking and stress testing
 .TP
 .BR \-b ", " \-\-benchmark

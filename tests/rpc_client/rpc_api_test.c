@@ -329,23 +329,6 @@ static void test_rnd_clear_pool(void)
 	CHECK_EQ(ret, 0);
 }
 
-static void test_set_pkcs11_config(void)
-{
-	int ret;
-
-	/*
-	 * Only a build with the PKCS#11 entropy source has anywhere to put
-	 * this, so the call is expected to be refused otherwise. What is under
-	 * test either way is that the two strings survive the trip - a refusal
-	 * still travels through the same pack and unpack.
-	 */
-	esdm_invoke(esdm_rpcc_set_pkcs11_config("esdm-test-token",
-						"esdm-test-pin"));
-	CHECK(ret == 0 || ret < 0,
-	      "set_pkcs11_config returned an unexpected value %d", ret);
-	printf("set_pkcs11_config returned %d\n", ret);
-}
-
 static void test_selftest(void)
 {
 	struct esdm_rpcc_selftest_result result;
@@ -423,7 +406,6 @@ int main(int argc, char *argv[])
 	/* Last, they disturb what the calls above observe */
 	test_rnd_reseed_crng();
 	test_rnd_clear_pool();
-	test_set_pkcs11_config();
 
 	ret = common_test_result("rpc_api");
 

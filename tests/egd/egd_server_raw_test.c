@@ -427,7 +427,6 @@ static void test_esdm_disable_es(void)
 	esdm_config_es_sched_ebpf_entropy_rate_set(0);
 	esdm_config_es_hwrand_entropy_rate_set(0);
 	esdm_config_es_tpm2_entropy_rate_set(0);
-	esdm_config_es_pkcs11_entropy_rate_set(0);
 }
 
 /****************************

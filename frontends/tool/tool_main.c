@@ -39,7 +39,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -80,106 +79,6 @@ static long parse_long_arg(const char *str, const char *name)
 		exit(EXIT_FAILURE);
 	}
 	return val;
-}
-
-/*
- * Read a single line (without the trailing newline) from `fp` into a freshly
- * allocated buffer. The caller must memset_secure + free.
- *
- * If `fp` refers to a terminal, terminal echo is disabled for the duration of
- * the read so a typed PIN is not visible. Returns NULL on EOF/error.
- */
-static char *read_secret_line(FILE *fp, const char *prompt)
-{
-	struct termios old_t, new_t;
-	bool reset_termios = false;
-	int fd = fileno(fp);
-	char *line = NULL;
-	size_t cap = 0;
-	ssize_t n;
-
-	if (fd >= 0 && isatty(fd)) {
-		if (tcgetattr(fd, &old_t) == 0) {
-			new_t = old_t;
-			new_t.c_lflag &= ~((tcflag_t)ECHO);
-			new_t.c_lflag |= ECHONL;
-			if (tcsetattr(fd, TCSAFLUSH, &new_t) == 0)
-				reset_termios = true;
-		}
-		if (prompt) {
-			fputs(prompt, stderr);
-			fflush(stderr);
-		}
-	}
-
-	n = getline(&line, &cap, fp);
-
-	if (reset_termios)
-		(void)tcsetattr(fd, TCSAFLUSH, &old_t);
-
-	if (n < 0) {
-		if (line) {
-			memset_secure(line, 0, cap);
-			free(line);
-		}
-		return NULL;
-	}
-
-	/* strip trailing newline if present */
-	if (n > 0 && line[n - 1] == '\n')
-		line[n - 1] = '\0';
-
-	return line;
-}
-
-/*
- * Resolve the PIN argument supplied via --pkcs11-pin. The literal string "-"
- * means "read securely from stdin (or /dev/tty if available)". Caller must
- * memset_secure + free the returned buffer.
- */
-static char *resolve_pkcs11_pin_arg(const char *arg)
-{
-	FILE *fp;
-	char *pin;
-
-	if (strcmp(arg, "-") != 0)
-		return strdup(arg);
-
-	fp = fopen("/dev/tty", "r+");
-	if (fp) {
-		pin = read_secret_line(fp, "Enter PKCS#11 PIN: ");
-		fclose(fp);
-	} else {
-		pin = read_secret_line(stdin, NULL);
-	}
-
-	if (!pin) {
-		fprintf(stderr,
-			"esdm-tool: failed to read PKCS#11 PIN from stdin\n");
-		return NULL;
-	}
-
-	return pin;
-}
-
-static int handle_set_pkcs11_config(const char *token_label, const char *pin)
-{
-	int ret = 0;
-
-	esdm_rpcc_init_priv_service(NULL);
-	esdm_invoke(esdm_rpcc_set_pkcs11_config(token_label, pin));
-	esdm_rpcc_fini_priv_service();
-
-	if (ret != 0) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
-			    "failed to update PKCS#11 configuration: %s\n",
-			    strerror(-ret));
-		return EXIT_FAILURE;
-	}
-
-	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
-		    "PKCS#11 configuration updated.\n");
-	return EXIT_SUCCESS;
 }
 
 /*
@@ -269,10 +168,6 @@ static void handle_usage(void)
 		"\t--endless-stress\t\tPerform another stress test. esdm-server can be stopped and started if used together with --continue-on-failure\n");
 	fprintf(stderr,
 		"\t--continue-on-failure\t\tContinue in some tests, after failures happened.\n");
-	fprintf(stderr,
-		"\t--pkcs11-pin PIN\t\tSet the PKCS#11 entropy source user PIN (needs root). Pass '-' to read the PIN securely from stdin (terminal echo is disabled). May be combined with --pkcs11-token-label.\n");
-	fprintf(stderr,
-		"\t--pkcs11-token-label LABEL\tSet the PKCS#11 entropy source token label and re-open the module (needs root). Pass an empty string to clear the override. May be combined with --pkcs11-pin.\n");
 #ifdef ESDM_HAS_AUX_CLIENT
 	fprintf(stderr,
 		"\t--seed-via-os\t\t\tDO NOT USE IN PRODUCTION: Testing helper for auxiliary pool. Single shot seeding via getentropy/getrandom. (needs root)\n");
@@ -1254,13 +1149,10 @@ int main(int argc, char **argv)
 	bool stress_init_fini = false;
 	char *fips_target_file = NULL;
 	char *fips_check_file = NULL;
-	bool set_pkcs11_config = false;
 	bool set_max_reseed_secs = false;
 	unsigned int max_reseed_secs = 0;
 	char *es_rate_name = NULL;
 	uint32_t es_rate = 0;
-	char *pkcs11_pin = NULL;
-	char *pkcs11_token_label = NULL;
 	int i;
 
 	may_enable_memory_debugging();
@@ -1307,8 +1199,6 @@ int main(int argc, char **argv)
 			{ "fips-targetfile", 1, 0, 0 },
 			{ "fips-checkfile", 1, 0, 0 },
 			{ "jent-status", 0, 0, 0 },
-			{ "pkcs11-pin", 1, 0, 0 },
-			{ "pkcs11-token-label", 1, 0, 0 },
 			{ "stress-init-fini", 0, 0, 0 },
 			{ "benchmark-mode", 1, 0, 0 },
 			{ "status-json", 0, 0, 0 },
@@ -1519,36 +1409,10 @@ int main(int argc, char **argv)
 				jent_status = true;
 				break;
 			case 36:
-				/* pkcs11-pin: literal PIN, or "-" for stdin */
-				set_pkcs11_config = true;
-				if (pkcs11_pin) {
-					memset_secure(pkcs11_pin,
-						      0, strlen(pkcs11_pin));
-					free(pkcs11_pin);
-				}
-				pkcs11_pin = resolve_pkcs11_pin_arg(optarg);
-				if (!pkcs11_pin) {
-					return_val = EXIT_FAILURE;
-					goto out;
-				}
-				break;
-			case 37:
-				/* pkcs11-token-label */
-				set_pkcs11_config = true;
-				free(pkcs11_token_label);
-				pkcs11_token_label = strdup(optarg);
-				if (!pkcs11_token_label) {
-					fprintf(stderr,
-						"esdm-tool: allocation failure\n");
-					return_val = EXIT_FAILURE;
-					goto out;
-				}
-				break;
-			case 38:
 				/* stress-init-fini */
 				stress_init_fini = true;
 				break;
-			case 39:
+			case 37:
 				/* benchmark-mode */
 				benchmark = true;
 				if (!strcmp(optarg, "full")) {
@@ -1563,11 +1427,11 @@ int main(int argc, char **argv)
 					exit(EXIT_FAILURE);
 				}
 				break;
-			case 40:
+			case 38:
 				/* status-json */
 				status_json = true;
 				break;
-			case 41:
+			case 39:
 				/* max-reseed-secs */
 				{
 					long val = parse_long_arg(
@@ -1588,15 +1452,15 @@ int main(int argc, char **argv)
 					max_reseed_secs = (unsigned int)val;
 				}
 				break;
-			case 42:
+			case 40:
 				/* selftest */
 				selftest = true;
 				break;
-			case 43:
-			case 44:
+			case 41:
+			case 42:
 				/* drng-status / drng-status-json */
 				drng_status = true;
-				drng_status_raw = (opt_index == 44);
+				drng_status_raw = (opt_index == 42);
 
 				/*
 				 * Without an argument every instance is
@@ -1626,7 +1490,7 @@ int main(int argc, char **argv)
 					drng_status_node = (uint32_t)val;
 				}
 				break;
-			case 45:
+			case 43:
 				/* set-es-rate */
 				{
 					char *eq = strchr(optarg, '=');
@@ -1748,8 +1612,8 @@ int main(int argc, char **argv)
 	/* check for privileged commands */
 	if (geteuid() &&
 	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os ||
-	     seed_via_os || endless_stress || set_pkcs11_config ||
-	     set_max_reseed_secs || selftest || es_rate_name)) {
+	     seed_via_os || endless_stress || set_max_reseed_secs || selftest ||
+	     es_rate_name)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -1846,9 +1710,6 @@ int main(int argc, char **argv)
 		return_val = handle_selftest();
 	} else if (es_rate_name) {
 		return_val = handle_set_es_rate(es_rate_name, es_rate);
-	} else if (set_pkcs11_config) {
-		return_val = handle_set_pkcs11_config(pkcs11_token_label,
-						      pkcs11_pin);
 #ifdef ESDM_HAS_AUX_CLIENT
 	} else if (reseed_via_os) {
 		return_val = handle_reseed_via_os(reseed_delay_ms);
@@ -1868,11 +1729,6 @@ int main(int argc, char **argv)
 	esdm_rpcc_fini_unpriv_service();
 
 out:
-	if (pkcs11_pin) {
-		memset_secure(pkcs11_pin, 0, strlen(pkcs11_pin));
-		free(pkcs11_pin);
-	}
-	free(pkcs11_token_label);
 	free(es_rate_name);
 	/*
 	 * The command that consumes it frees it and clears the pointer, so this

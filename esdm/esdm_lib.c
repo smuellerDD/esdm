@@ -80,7 +80,7 @@ int esdm_reinit(void)
 	 * Stop the ES monitor first: quiesce any in-flight monitor pass and
 	 * prevent new ones for the duration of the reinitialization. Otherwise
 	 * the monitor could run a per-ES collection pass (e.g. resetting/filling
-	 * the Jitter/TPM2/PKCS11 async caches) concurrently with the entropy
+	 * the Jitter/TPM2 async caches) concurrently with the entropy
 	 * sources being torn down and re-initialized here. Resumed on every exit
 	 * path via the out label.
 	 */
