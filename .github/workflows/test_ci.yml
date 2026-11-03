@@ -70,8 +70,20 @@ jobs:
             opts: -Dcrypto_backend=botan -Dbotan_drng_type=chacha20
           - name: leancrypto
             opts: -Dcrypto_backend=leancrypto
+          # Without the external entropy source, which all others build
           - name: gnutls
-            opts: -Dcrypto_backend=gnutls
+            opts: >-
+              -Dcrypto_backend=gnutls
+              -Des_ext=disabled -Desdm-es-ext=disabled
+        # esdm-es-pkcs11 and esdm-es-pcsc, on x86_64 only
+        include:
+          - runner: ubuntu-24.04
+            backend:
+              name: openssl-es-ext
+              opts: >-
+                -Dcrypto_backend=openssl
+                -Des_pkcs11=enabled
+                -Des_pcsc=enabled
 
     steps:
     - uses: actions/checkout@v4
@@ -85,6 +97,15 @@ jobs:
         sudo apt-get install -y meson ninja-build pkg-config \
                                 libprotobuf-c-dev libfuse3-dev libssl-dev \
                                 libjson-c-dev nettle-dev
+
+    # SoftHSM for the tokens the tests create - without it, they skip them
+    - name: Install the PKCS#11 dependencies
+      if: contains(matrix.backend.opts, '-Des_pkcs11=enabled')
+      run: sudo apt-get install -y libp11-dev softhsm2
+
+    - name: Install the PC/SC dependencies
+      if: contains(matrix.backend.opts, '-Des_pcsc=enabled')
+      run: sudo apt-get install -y libpcsclite-dev
 
     - name: Install Jitter RNG
       run: |
@@ -285,6 +306,15 @@ jobs:
         # not depend on the sudoers policy.
         sudo env LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
              meson test -v -C build 'EGD server interface'
+
+    # The server of the external entropy source test needs root likewise. A
+    # build without the external entropy source has no such test, and meson
+    # fails on a test name it does not know.
+    - name: Meson test (privileged, external entropy source)
+      if: ${{ !contains(matrix.backend.opts, '-Des_ext=disabled') }}
+      run: |
+        sudo env LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
+             meson test -v -C build 'esdm-server with an external entropy source'
 
   # Memory safety: the same sources built with AddressSanitizer and
   # UndefinedBehaviorSanitizer, then driven hard through the esdm-tool stress
