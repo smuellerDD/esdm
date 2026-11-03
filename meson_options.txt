@@ -680,6 +680,15 @@ as entropy: a provider running as root is accepted, and one running as this
 uid; -1 accepts root only. esdm-server --es_ext_uid overrides it.
 ''')
 
+# Option for: ESDM_EXT_ENTROPY_BLOCKS
+option('es_ext_entropy_blocks', type: 'integer', value: 16,
+       description:'''External entropy source buffer size
+
+The ES monitor fills a block cache from the provider between the requests, so
+that a reseed does not wait for a slow provider - a smart card, say. Its size
+in blocks: a power of two, at least 4; 0 disables it.
+''')
+
 ################################################################################
 # Common Options
 ################################################################################

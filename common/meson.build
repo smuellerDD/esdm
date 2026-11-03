@@ -212,6 +212,12 @@ conf_data.set('ESDM_ES_EXT', get_option('es_ext').enabled())
 conf_data.set_quoted('ESDM_EXT_PATH', get_option('es_ext_path'))
 conf_data.set('ESDM_EXT_ENTROPY_RATE', get_option('es_ext_entropy_rate'))
 conf_data.set('ESDM_EXT_PEER_UID', get_option('es_ext_peer_uid'))
+if get_option('es_ext_entropy_blocks') >= 4 and not disable_es_buf
+	conf_data.set('ESDM_EXT_ENTROPY_BLOCKS',
+		      get_option('es_ext_entropy_blocks'))
+else
+	conf_data.set('ESDM_EXT_ENTROPY_BLOCKS', 0)
+endif
 
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',

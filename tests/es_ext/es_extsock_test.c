@@ -194,9 +194,13 @@ static uint32_t test_get(uint32_t bits, uint8_t *first)
 	return eb_es.e_bits;
 }
 
+/* The monitor, leaving the block cache empty for the tests but its own */
 static void test_monitor(void)
 {
 	ES->monitor_es();
+#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
+	ES->reset();
+#endif
 }
 
 /* The provider of @path, connected to by the monitor */
@@ -606,6 +610,74 @@ static void test_status(void)
 	}
 }
 
+#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
+/*
+ * Filled by the monitor, for one request timeout per pass; a block served at
+ * the rate now, blocks of a failed request passed; the cache passed while the
+ * provider is not credited, and discarded by a failed self test and with a
+ * new path
+ */
+static void test_cache(void)
+{
+	unsigned int calls;
+
+	test_connect(test_good);
+	CHECK_EQ(test_get(BITS, NULL), BITS);
+	/* The first round after a reset fills nothing, see esdm_es_buf.c */
+	ES->monitor_es();
+	calls = ctl->get_calls;
+	ES->monitor_es();
+	CHECK_EQ(ctl->get_calls, calls + ESDM_EXT_ENTROPY_BLOCKS);
+	calls = ctl->get_calls;
+	CHECK_EQ(test_get(BITS, NULL), BITS);
+	esdm_config_es_ext_entropy_rate_set(64);
+	CHECK_EQ(test_get(BITS, NULL), 64);
+	esdm_config_es_ext_entropy_rate_set(256);
+	CHECK_EQ(ctl->get_calls, calls);
+
+	ctl->selftest_ret = -ENODEV;
+	CHECK_EQ(ES->selftest(), -EFAULT);
+	CHECK_EQ(test_get(BITS, NULL), 0);
+	ctl->selftest_ret = 0;
+	CHECK_EQ(ES->selftest(), 0);
+	CHECK_EQ(test_get(BITS, NULL), BITS);
+	CHECK_EQ(ctl->get_calls, calls + 1);
+
+	ES->monitor_es();
+	ES->monitor_es();
+	calls = ctl->get_calls;
+	test_connect(test_good);
+	CHECK_EQ(test_get(BITS, NULL), BITS);
+	CHECK_EQ(ctl->get_calls, calls + 1);
+
+	/* A slow provider: no request begun after the timeout */
+	ES->monitor_es();
+	ctl->get_delay_ms = ESDM_EXT_TIMEOUT_MS / 4;
+	calls = ctl->get_calls;
+	ES->monitor_es();
+	ctl->get_delay_ms = 0;
+	CHECK(ctl->get_calls - calls <= 5, "%u requests in one pass",
+	      ctl->get_calls - calls);
+
+	/* The first block fails: the rest is passed once the probe succeeds */
+	ES->reset();
+	ES->monitor_es();
+	ctl->get_ret = -EIO;
+	ES->monitor_es();
+	ctl->get_ret = 0;
+	CHECK_EQ(test_get(BITS, NULL), 0);
+	ES->monitor_es();
+	calls = ctl->get_calls;
+	CHECK_EQ(test_get(BITS, NULL), BITS);
+	CHECK_EQ(ctl->get_calls, calls + 1);
+	ES->reset();
+}
+#else
+static void test_cache(void)
+{
+}
+#endif
+
 int main(void)
 {
 	esdm_logger_set_verbosity(LOGGER_DEBUG);
@@ -635,6 +707,7 @@ int main(void)
 	test_names();
 	test_rates();
 	test_status();
+	test_cache();
 
 	ES->fini();
 	good_stop();

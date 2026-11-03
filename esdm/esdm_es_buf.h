@@ -78,6 +78,14 @@ int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 			esdm_es_buf_fill_t fill, void *ctx);
 
 /*
+ * As esdm_es_buf_monitor(), but no slot is begun after @deadline_ns, in
+ * esdm_monotonic_now_ns() time: a slow source holds up a pass only so long.
+ */
+int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
+			      esdm_es_buf_fill_t fill, void *ctx,
+			      uint64_t deadline_ns);
+
+/*
  * Try to obtain a pre-filled block from the cache. On hit, eb_es is populated
  * and the function returns true. On miss (or when requested_bits exceeds what
  * a single cached block carries), the caller must fall back to its

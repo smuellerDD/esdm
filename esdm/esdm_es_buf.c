@@ -25,6 +25,7 @@
 #include "esdm_es_buf.h"
 #include "esdm_es_mgr.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "memset_secure.h"
 
 int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
@@ -118,6 +119,14 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf)
 int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 			esdm_es_buf_fill_t fill, void *ctx)
 {
+	return esdm_es_buf_monitor_until(buf, requested_bits, fill, ctx,
+					 UINT64_MAX);
+}
+
+int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
+			      esdm_es_buf_fill_t fill, void *ctx,
+			      uint64_t deadline_ns)
+{
 	unsigned int i;
 
 	if (!buf || !buf->blocks || !fill)
@@ -133,7 +142,9 @@ int esdm_es_buf_monitor(struct esdm_es_buf *buf, uint32_t requested_bits,
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "%s ES block filling started\n", buf->name);
 
-	for (i = 0; i < buf->num_blocks && esdm_es_mgr_running(); i++) {
+	for (i = 0; i < buf->num_blocks && esdm_es_mgr_running() &&
+		    esdm_monotonic_now_ns() < deadline_ns;
+	     i++) {
 		enum esdm_es_buf_state expected = esdm_es_buf_empty;
 
 		if (!atomic_compare_exchange_strong(&buf->states[i], &expected,
