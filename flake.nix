@@ -1353,10 +1353,12 @@
               # es_jent_kernel reaches the kernel crypto API through libkcapi.
               # es_pkcs11 needs libp11, which is already among the inputs;
               # softhsm supplies the module it loads plus the softhsm2-util
-              # the test initializes the token with.
+              # the test initializes the token with. ea_non_iid assesses the
+              # output's min-entropy.
               buildInputs = prev.buildInputs ++ [ pkgs.libkcapi ];
               nativeCheckInputs = (prev.nativeCheckInputs or [ ]) ++ [
                 pkgs.softhsm
+                pkgs.sp800-90b-entropyassessment
               ];
 
               mesonBuildType = "debug";
@@ -1487,6 +1489,8 @@
                   # softhsm2-util, which the PKCS#11 test initializes its own
                   # token with - without it that test skips
                   pkgs.softhsm
+                  # ea_non_iid for the output min-entropy test, which skips without it
+                  pkgs.sp800-90b-entropyassessment
                 ]
                 ++ extraRuntimeInputs;
                 text = ''
