@@ -29,9 +29,9 @@ egd_robust_test = executable(
 # Several of these wait for answers that never come, so they need more than the
 # default timeout - which they must never come close to, as running into it is
 # how a wedged client would show up.
-test('EGD client library', egd_client_test, timeout: 120)
+test('EGD client library', egd_client_test, timeout: 120, suite: 'egd')
 
-test('EGD client robustness', egd_robust_test, timeout: 120)
+test('EGD client robustness', egd_robust_test, timeout: 120, suite: 'egd')
 
 if get_option('esdm-server').enabled()
 	# The server side driven in-process and spoken to in raw protocol
@@ -48,7 +48,8 @@ if get_option('esdm-server').enabled()
 			link_with: esdm_static_lib
 		)
 
-	test('EGD server raw protocol', egd_server_raw_test, timeout: 300)
+	test('EGD server raw protocol', egd_server_raw_test, timeout: 300,
+		suite: 'egd')
 
 	egd_server_test = executable(
 			'egd_server_test',
@@ -64,5 +65,6 @@ if get_option('esdm-server').enabled()
 	# own - which is what lets it run next to the rest.
 	test('EGD server interface', egd_server_test,
 		env: [ 'ESDM_SERVER=' + esdm_server.full_path() ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'egd')
 endif

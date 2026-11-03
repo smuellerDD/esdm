@@ -90,28 +90,36 @@ if get_option('esdm-server').enabled()
 		]
 
 	test('RPC call get_random_bytes_full_test', rpc_get_random_bytes_full_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	test('RPC call get_random_bytes_pr_test', rpc_get_random_bytes_pr_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	test('RPC call get_random_bytes_test', rpc_get_random_bytes_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	test('RPC call get_seed_test', rpc_get_seed_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	test('RPC call status_test', rpc_status_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	test('RPC call ent_lvl_test', rpc_ent_lvl_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	test('RPC call seed_lvl_test', rpc_seed_lvl_test,
-		env: [ tester_esdm_env ])
+		env: [ tester_esdm_env ],
+		suite: 'rpc_client')
 
 	# Sweeps every client wrapper in one server life cycle, hence the
 	# larger timeout.
 	test('RPC call whole client API', rpc_api_test,
-		env: [ tester_esdm_env ], timeout: 300)
+		env: [ tester_esdm_env ], timeout: 300,
+		suite: 'rpc_client')
 endif

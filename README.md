@@ -224,6 +224,10 @@ The ESDM code repository uses `meson` to provide an extensive test harness
 to verify the correctness of the implementation of ESDM. To execute the
 testing, use `meson test -C build` after the setup step outlined in [Build].
 
+Every test is in the suite of its directory below `tests/` - `core` for
+`tests/esdm` - and the security tests also in `security`, so a subset runs
+with e.g. `meson test -C build --suite security`.
+
 Note, some tests require to be executed as root. For example to validate the
 correctness of the device file implementations of `/dev/random` or
 `/dev/urandom`, the root privilege is required to create those devices.

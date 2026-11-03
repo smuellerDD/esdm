@@ -16,7 +16,7 @@ esdm_es_buf_test = executable(
 	link_with: esdm_common_static_lib,
 )
 
-test('ESDM per-ES block cache', esdm_es_buf_test)
+test('ESDM per-ES block cache', esdm_es_buf_test, suite: 'core')
 
 # fips.c only exists in a FIPS build. Like the block cache above it is compiled
 # into the test rather than linked from the library, so the configuration probe
@@ -32,7 +32,7 @@ if get_option('fips140')
 		link_with: esdm_common_static_lib,
 	)
 
-	test('ESDM FIPS mode detection', esdm_fips_test)
+	test('ESDM FIPS mode detection', esdm_fips_test, suite: 'core')
 endif
 
 if get_option('esdm-server').enabled()
@@ -140,76 +140,97 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
-	test('ESDM API call esdm_status', esdm_status_test)
-	test('ESDM API call esdm_version', esdm_version_test)
-	test('ESDM API call esdm_get_random_bytes_full', esdm_get_random_bytes_full_test)
-	test('ESDM API call esdm_get_random_bytes', esdm_get_random_bytes_test)
+	test('ESDM API call esdm_status', esdm_status_test, suite: 'core')
+	test('ESDM API call esdm_version', esdm_version_test, suite: 'core')
+	test('ESDM API call esdm_get_random_bytes_full', esdm_get_random_bytes_full_test,
+		suite: 'core')
+	test('ESDM API call esdm_get_random_bytes', esdm_get_random_bytes_test,
+		suite: 'core')
 	test('ESDM DRNG manager max w/o reseed - 1 DRNG', esdm_drng_mgr_max_wo_reseed_test,
-		args : [ '1' ])
+		args : [ '1' ],
+		suite: 'core')
 	test('ESDM DRNG manager max w/o reseed - 2 DRNG', esdm_drng_mgr_max_wo_reseed_test,
-		args : [ '2' ])
+		args : [ '2' ],
+		suite: 'core')
 
 	test('ESDM DRNG manager max w/o reseed bits - 1 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
-		args : [ '1' ])
+		args : [ '1' ],
+		suite: 'core')
 	test('ESDM DRNG manager max w/o reseed bits - 2 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
-		args : [ '2' ])
+		args : [ '2' ],
+		suite: 'core')
 
 	# Serial: it reports a rate, and a rate measured while the rest of the
 	# suite has the machine says more about the suite than about the ESDM.
 	test('ESDM DRNG manager sustained generation', esdm_drng_mgr_throughput_test,
 		timeout: 300,
 		is_parallel: false,
-		priority: -10)
+		priority: -10,
+		suite: 'core')
 
 	test('ESDM seed entropy - all ES, no FIPS', esdm_drng_seed_entropy_test,
 		args : [ '0', '0' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - all ES, FIPS', esdm_drng_seed_entropy_test,
 		args : [ '1', '0' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - JENT ES, no FIPS', esdm_drng_seed_entropy_test,
 		args : [ '0', '1' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - JENT ES, FIPS', esdm_drng_seed_entropy_test,
 		args : [ '1', '1' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - CPU ES, no FIPS', esdm_drng_seed_entropy_test,
 		args : [ '0', '2' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - CPU ES, FIPS', esdm_drng_seed_entropy_test,
 		args : [ '1', '2' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - KRNG ES, no FIPS', esdm_drng_seed_entropy_test,
 		args : [ '0', '3' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	# This test will never work as KRNG will provide 0 bits of entropy, skip it
 	#test('ESDM seed entropy - KRNG ES, FIPS', esdm_drng_seed_entropy_test,
 	#     args : [ '1', '3' ],
 	#     timeout: 300)
 	test('ESDM seed entropy - Sched ES, no FIPS', esdm_drng_seed_entropy_test,
 		args : [ '0', '4' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM seed entropy - Sched ES, FIPS', esdm_drng_seed_entropy_test,
 		args : [ '1', '4' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 
 	test('ESDM get seed - all ES, no FIPS', esdm_get_seed_test,
 		args : [ '0' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 	test('ESDM get seed - all ES, FIPS', esdm_get_seed_test,
 		args : [ '1' ],
-		timeout: 300)
+		timeout: 300,
+		suite: 'core')
 
-	test('ESDM NTG.1 seeding strategy', esdm_ntg1_seeding_test)
+	test('ESDM NTG.1 seeding strategy', esdm_ntg1_seeding_test,
+		suite: 'core')
 
-	test('ESDM self tests', esdm_selftest_test)
+	test('ESDM self tests', esdm_selftest_test, suite: 'core')
 
 	test('ESDM asynchronous reseed worker', esdm_reseed_worker_test,
-		timeout: 120)
+		timeout: 120,
+		suite: 'core')
 
 	# Sits out a reseed interval, so it needs more than the default timeout
 	# of 30 seconds only if the machine is loaded - keep some headroom.
 	test('ESDM security - Jitter RNG as the only credited source',
 		esdm_jent_only_security_test,
-		timeout: 120)
+		timeout: 120,
+		suite: 'core')
 endif

@@ -13,7 +13,7 @@ if get_option('esdm-tool').enabled()
 				include_directories('../common') ],
 		)
 
-	test('esdm-tool helper code', tool_common_test)
+	test('esdm-tool helper code', tool_common_test, suite: 'tool')
 
 	# The command line layer is driven through the installed binary rather
 	# than linked, because what is under test is what a user gets: the exit
@@ -29,7 +29,8 @@ if get_option('esdm-tool').enabled()
 		# Several of its checks wait out the RPC client's connection
 		# attempts, which is what taking no answer looks like.
 		timeout: 120,
-		args: [ esdm_tool.full_path() ])
+		args: [ esdm_tool.full_path() ],
+		suite: 'tool')
 
 	# The other half of the command line: what each command does once a
 	# server answers it. Skipped (77) unless run as root, which is what
@@ -51,6 +52,7 @@ if get_option('esdm-tool').enabled()
 		test('esdm-tool against a running server', tool_server_test,
 			args: [ esdm_tool.full_path() ],
 			env: [ 'ESDM_SERVER=' + esdm_server.full_path() ],
-			timeout: 600)
+			timeout: 600,
+			suite: 'tool')
 	endif
 endif

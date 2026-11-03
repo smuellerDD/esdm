@@ -16,7 +16,7 @@ if get_option('linux-devfiles').enabled()
 				     esdm_rpc_client_lib ],
 		)
 
-	test('CUSE device handlers', cuse_device_test)
+	test('CUSE device handlers', cuse_device_test, suite: 'cuse')
 
 	cuse_tester_common = files([
 		'env.c'

@@ -18,5 +18,6 @@ if get_option('esdm-server').enabled()
 	test('Kernel entropy feeder', kernel_seeder_tester,
 		env: [ tester_kernel_seeder_env ],
 		timeout: 180,
-		is_parallel: false)
+		is_parallel: false,
+		suite: 'kernel-seeder')
 endif

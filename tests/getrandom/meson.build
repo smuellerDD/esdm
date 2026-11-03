@@ -28,7 +28,8 @@ if get_option('linux-getrandom').enabled()
 	test('getrandom library API', getrandom_api_test,
 		# Each request the ESDM cannot answer waits out the RPC
 		# client's connection attempts before it reaches the kernel.
-		timeout: 120)
+		timeout: 120,
+		suite: 'getrandom')
 
 	# Available test targets:
 	#	esdm-server: esdm_server
@@ -49,9 +50,11 @@ if get_option('linux-getrandom').enabled()
 		]
 
 	test('System call getrandom', getrandom_syscall,
-		env: [ tester_getrandom_env , 'LD_PRELOAD=' + esdm_getrandom_lib.full_path()])
+		env: [ tester_getrandom_env , 'LD_PRELOAD=' + esdm_getrandom_lib.full_path()],
+		suite: 'getrandom')
 
 	test('System call getrandom get_seed', getrandom_get_seed_test,
-		env: [ tester_getrandom_env , 'LD_PRELOAD=' + esdm_getrandom_lib.full_path()])
+		env: [ tester_getrandom_env , 'LD_PRELOAD=' + esdm_getrandom_lib.full_path()],
+		suite: 'getrandom')
 
 endif

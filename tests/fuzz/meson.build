@@ -230,7 +230,8 @@ rpc_stress_test = executable(
 		c_args: fuzz_c_args,
 	)
 
-test('RPC request path under concurrent load', rpc_stress_test, timeout: 300)
+test('RPC request path under concurrent load', rpc_stress_test, timeout: 300,
+	suite: 'fuzz')
 
 foreach fuzz_target : fuzz_targets
 	target_c_args = fuzz_c_args + fuzz_target.get('c_args', [ ])
@@ -249,7 +250,8 @@ foreach fuzz_target : fuzz_targets
 	# time, so those run alone.
 	test('Fuzz seeds - ' + fuzz_target['name'], fuzz_replay,
 		timeout: fuzz_target.get('timeout', 120),
-		is_parallel: fuzz_target.get('parallel', true))
+		is_parallel: fuzz_target.get('parallel', true),
+		suite: 'fuzz')
 
 	if have_libfuzzer
 		executable(

@@ -46,7 +46,8 @@ if get_option('linux-getrandom').enabled()
 		# daemon startup.
 		timeout: 300,
 		is_parallel: false,
-		priority: -10)
+		priority: -10,
+		suite: 'misc')
 endif
 
 if get_option('linux-devfiles').enabled()
@@ -93,7 +94,7 @@ if get_option('linux-devfiles').enabled()
 		timeout: 900,
 		is_parallel: false,
 		priority: -10,
-		suite: 'cuse')
+		suite: [ 'misc', 'cuse' ])
 
 	# Serial for the same reason, and because a measurement shared with
 	# another test measures that test as well.
@@ -103,5 +104,5 @@ if get_option('linux-devfiles').enabled()
 		timeout: 300,
 		is_parallel: false,
 		priority: -10,
-		suite: 'cuse')
+		suite: [ 'misc', 'cuse' ])
 endif

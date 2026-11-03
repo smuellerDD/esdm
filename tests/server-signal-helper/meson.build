@@ -18,5 +18,6 @@ if get_option('esdm-server').enabled()
 				     esdm_rpc_client_lib ],
 		)
 
-	test('esdm-server-signal-helper', signal_helper_test)
+	test('esdm-server-signal-helper', signal_helper_test,
+		suite: 'server-signal-helper')
 endif
