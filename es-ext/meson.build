@@ -62,3 +62,15 @@ if get_option('es_pkcs11').enabled()
 		rename: 'esdm-es-pkcs11.conf',
 		install_dir: get_option('prefix') / 'lib/sysusers.d')
 endif
+
+if get_option('es_pcsc').enabled()
+	esdm_es_pcsc = executable('esdm-es-pcsc',
+		[ 'pcsc/esdm_es_pcsc.c', 'pcsc/esdm_es_pcsc_main.c' ],
+		c_args: [ '-DESDM_ES_PCSC_VERSION="' + meson.project_version() + '"' ],
+		include_directories: include_dirs_es_ext,
+		link_with: [ esdm_es_ext_lib.get_static_lib(), esdm_common_static_lib ],
+		dependencies: [ dependency('threads'), json_c_dep, protobuf_c_dep,
+				dependency('libpcsclite', required: true) ],
+		install: true
+		)
+endif
