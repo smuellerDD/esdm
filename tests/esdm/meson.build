@@ -140,6 +140,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_output_min_entropy_security_test = executable(
+		'esdm_output_min_entropy_security_test',
+		[ esdm_ipc_ns, 'esdm_output_min_entropy_security_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_ntg1_seeding_test = executable(
 		'esdm_ntg1_seeding_test',
 		[ esdm_ipc_ns, 'esdm_ntg1_seeding_test.c' ],
@@ -232,6 +240,18 @@ if get_option('esdm-server').enabled()
 	test('ESDM asynchronous reseed worker', esdm_reseed_worker_test,
 		timeout: 120,
 		suite: 'core')
+
+	# Skips without ea_non_iid in PATH; its estimators take a while on 1 MiB.
+	test('ESDM security - output min-entropy',
+		esdm_output_min_entropy_security_test,
+		timeout: 300,
+		suite: [ 'core', 'security' ],
+		env: { 'ESDM_TEST_DESCRIPTION':
+			'1 MiB of output scores more than 6 bits of ' +
+			'min-entropy per byte with the SP800-90B non-IID ' +
+			'estimators of ea_non_iid: a bound against a broken ' +
+			'DRNG, not an entropy claim. Skipped without ' +
+			'ea_non_iid.' })
 
 	test('ESDM security - self tests', esdm_selftest_security_test,
 		suite: [ 'core', 'security' ],
