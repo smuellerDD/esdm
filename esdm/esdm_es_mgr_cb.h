@@ -71,6 +71,9 @@ enum esdm_external_es {
 #ifdef ESDM_ES_JENT_KERNEL
 	esdm_ext_es_jent_kernel, /* Linux jitterentropy in kernel */
 #endif
+#ifdef ESDM_ES_EXT
+	esdm_ext_es_extsock, /* External ES provider on a Unix socket */
+#endif
 	esdm_ext_es_aux, /* MUST BE LAST ES! */
 	esdm_ext_es_last /* MUST be the last entry */
 };
@@ -148,8 +151,10 @@ struct esdm_es_cb {
 	 * State of the entropy source as a JSON object, used by
 	 * esdm_status_json(). The member names are the labels of ->state,
 	 * lower-cased with every run of non-alphanumeric characters replaced by
-	 * one underscore. This callback may be NULL, in which case the members
-	 * are derived from the ->state text.
+	 * one underscore - but for the external source: "name" is the name its
+	 * provider declares, "instance" the name above, and "provider" the
+	 * status object of the provider. This callback may be NULL, in which
+	 * case the members are derived from the ->state text.
 	 */
 	void (*state_json)(char *buf, size_t buflen);
 	void (*reset)(void);

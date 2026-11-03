@@ -43,6 +43,7 @@ static const struct {
 	void (*set)(uint32_t rate);
 } esdm_rpc_es_rates[] = {
 	{ "CPU", esdm_config_es_cpu_entropy_rate_set },
+	{ "ExternalSocket", esdm_config_es_ext_entropy_rate_set },
 	{ "Interrupt", esdm_config_es_irq_entropy_rate_set },
 	{ "InterruptEBPF", esdm_config_es_irq_ebpf_entropy_rate_set },
 	{ "JitterRNG", esdm_config_es_jent_entropy_rate_set },

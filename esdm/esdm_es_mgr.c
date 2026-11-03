@@ -43,6 +43,7 @@
 #include "esdm_es_jent.h"
 #include "esdm_es_jent_kernel.h"
 #include "esdm_es_krng.h"
+#include "esdm_es_extsock.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_pkcs11.h"
 #include "es_ebpf/esdm_es_irq_ebpf.h"
@@ -154,8 +155,23 @@ struct esdm_es_cb *esdm_es[] = {
 #ifdef ESDM_ES_JENT_KERNEL
 	&esdm_es_jent_kernel,
 #endif
+#ifdef ESDM_ES_EXT
+	&esdm_es_extsock,
+#endif
 	&esdm_es_aux
 };
+
+bool esdm_es_name_taken(const char *name, const struct esdm_es_cb *self)
+{
+	unsigned int i;
+
+	for_each_esdm_es (i) {
+		if (esdm_es[i] != self && !strcmp(esdm_es[i]->name, name))
+			return true;
+	}
+
+	return false;
+}
 
 /******************************** ES monitor **********************************/
 

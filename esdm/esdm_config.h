@@ -293,6 +293,31 @@ void esdm_config_es_jent_kernel_entropy_rate_set(uint32_t ent);
  */
 uint32_t esdm_config_es_jent_kernel_entropy_rate(void);
 
+/* No external rate configured: the one the provider declares, else 0 */
+#define ESDM_ES_EXT_ENTROPY_RATE_AUTO UINT32_MAX
+
+/**
+ * @brief External ES configuration: set the entropy rate
+ *
+ * Caps what the provider of esdm-server --es_ext is credited with for its
+ * claims, taking precedence over the rate it declares - see libesdm_es_ext(3).
+ * ESDM_ES_EXT_ENTROPY_RATE_AUTO configures none.
+ *
+ * NOTE: The ESDM ensures that the entropy rate cannot be set to a value larger
+ *	 than the security strength of the the applied DRNG.
+ *
+ * @param [in] ent Entropy rate in bits, or ESDM_ES_EXT_ENTROPY_RATE_AUTO
+ */
+void esdm_config_es_ext_entropy_rate_set(uint32_t ent);
+
+/**
+ * @brief External ES configuration: get the entropy rate
+ *
+ * @return The rate set, ESDM_ES_EXT_ENTROPY_RATE_AUTO for none - the rate the
+ *	   source is credited at is in its status
+ */
+uint32_t esdm_config_es_ext_entropy_rate(void);
+
 /**
  * @brief DRNG Manager configuration: get maximum value without successful
  *	  reseed (number of requests)

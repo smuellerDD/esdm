@@ -227,6 +227,60 @@ static void test_pid_file_option(void)
 	      "-p was not accepted (output: %.300s)", r.err);
 }
 
+/*
+ * The socket of the external entropy source provider, the cap of its credit
+ * and the user it may run as. The socket is only connected to by esdm_init(),
+ * so an unprivileged run accepts any path.
+ */
+static void test_es_ext_options(void)
+{
+	const char *const opts[] = { "--es_ext",
+				     "/nonexistent/esdm-es-ext.socket",
+				     "--es_ext_entropy_rate", "auto",
+				     "--es_ext_uid", "1234", NULL };
+	const char *const by_name[] = { "--es_ext_uid", "root", NULL };
+	const char *const empty[] = { "--es_ext", "", NULL };
+	const char *const no_user[] = { "--es_ext_uid",
+					"no-such-user-esdm-test", NULL };
+	const char *const bad_rate[] = { "--es_ext_entropy_rate", "300",
+					 NULL };
+	struct test_run r;
+
+#ifdef ESDM_ES_EXT
+	/* Accepted, as root the daemon would start */
+	if (geteuid()) {
+		CHECK_EQ(test_run(&r, opts, NULL), 1);
+		CHECK(strstr(r.err, TEST_NOT_ROOT) != NULL,
+		      "the --es_ext options were not accepted (output: %.300s)",
+		      r.err);
+
+		CHECK_EQ(test_run(&r, by_name, NULL), 1);
+		CHECK(strstr(r.err, TEST_NOT_ROOT) != NULL,
+		      "a user name for --es_ext_uid was not accepted (output: %.300s)",
+		      r.err);
+	}
+#else
+	(void)by_name;
+	CHECK_EQ(test_run(&r, opts, NULL), 1);
+	CHECK(strstr(r.err, "not part of this build") != NULL,
+	      "--es_ext was not refused without external ES (output: %.300s)",
+	      r.err);
+#endif
+
+	CHECK_EQ(test_run(&r, empty, NULL), 1);
+	CHECK(strstr(r.err, "must not be empty") != NULL,
+	      "an empty --es_ext was not refused (output: %.300s)", r.err);
+
+	CHECK_EQ(test_run(&r, no_user, NULL), 1);
+	CHECK(strstr(r.err, "a user name or none") != NULL,
+	      "an unknown user was not refused (output: %.300s)", r.err);
+
+	CHECK_EQ(test_run(&r, bad_rate, NULL), 1);
+	CHECK(strstr(r.err, "entropy rate from 0 to 256") != NULL,
+	      "--es_ext_entropy_rate 300 was not refused (output: %.300s)",
+	      r.err);
+}
+
 int main(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -243,6 +297,7 @@ int main(int argc, char *argv[])
 	test_options_accepted();
 	test_syslog();
 	test_pid_file_option();
+	test_es_ext_options();
 
 	test_run_fini();
 

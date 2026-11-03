@@ -248,6 +248,9 @@ int esdm_status(char *buf, size_t buflen)
 
 /****************************** JSON status ***********************************/
 
+/* The state of one ES, with room for the status of an external provider */
+#define ESDM_ES_STATE_BUFLEN 4096
+
 /*
  * Turn a status label into a JSON member name: the label is lower-cased and
  * every run of non-alphanumeric characters becomes one underscore, e.g.
@@ -315,7 +318,7 @@ static void esdm_json_add_value(struct json_object *obj, const char *key,
  */
 static bool esdm_json_es_state_native(struct json_object *es_obj, uint32_t es)
 {
-	char state[1024] = { 0 };
+	char state[ESDM_ES_STATE_BUFLEN] = { 0 };
 	struct json_object *obj;
 	bool consumed = false;
 
@@ -353,7 +356,7 @@ static bool esdm_json_es_state_native(struct json_object *es_obj, uint32_t es)
  */
 static void esdm_json_es_state(struct json_object *es_obj, uint32_t es)
 {
-	char state[1024] = { 0 };
+	char state[ESDM_ES_STATE_BUFLEN] = { 0 };
 	char *line, *saveptr = NULL;
 
 	if (esdm_json_es_state_native(es_obj, es))

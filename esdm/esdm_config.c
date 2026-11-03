@@ -52,6 +52,7 @@ struct esdm_config {
 	_Atomic uint32_t esdm_es_tpm2_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_pkcs11_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_jent_kernel_entropy_rate_bits;
+	_Atomic uint32_t esdm_es_ext_entropy_rate_bits;
 	_Atomic uint32_t esdm_drng_max_wo_reseed;
 	_Atomic uint32_t esdm_drng_max_wo_reseed_bits;
 	_Atomic uint32_t esdm_drng_reseed_thresh;
@@ -127,6 +128,10 @@ static struct esdm_config esdm_config = {
 	 * See documentation of ESDM_JENT_KERNEL_ENTROPY_RATE
 	*/
 	.esdm_es_jent_kernel_entropy_rate_bits = ESDM_JENT_KERNEL_ENTROPY_RATE,
+	/* See the meson option es_ext_entropy_rate, -1 for none configured */
+	.esdm_es_ext_entropy_rate_bits = ESDM_EXT_ENTROPY_RATE < 0 ?
+						 ESDM_ES_EXT_ENTROPY_RATE_AUTO :
+						 (uint32_t)ESDM_EXT_ENTROPY_RATE,
 
 	/*
 	 * See documentation of ESDM_DRNG_MAX_WITHOUT_RESEED.
@@ -395,6 +400,27 @@ void esdm_config_es_jent_kernel_entropy_rate_set(uint32_t ent)
 	uint32_t val = esdm_config_entropy_rate_max(ent);
 
 	esdm_config.esdm_es_jent_kernel_entropy_rate_bits = val;
+	esdm_es_add_entropy();
+}
+
+/* Capped as any rate, but ESDM_ES_EXT_ENTROPY_RATE_AUTO kept */
+static uint32_t esdm_config_es_ext_rate(uint32_t ent)
+{
+	return ent == ESDM_ES_EXT_ENTROPY_RATE_AUTO ?
+		       ent :
+		       esdm_config_entropy_rate_max(ent);
+}
+
+DSO_PUBLIC
+uint32_t esdm_config_es_ext_entropy_rate(void)
+{
+	return esdm_config.esdm_es_ext_entropy_rate_bits;
+}
+
+DSO_PUBLIC
+void esdm_config_es_ext_entropy_rate_set(uint32_t ent)
+{
+	esdm_config.esdm_es_ext_entropy_rate_bits = esdm_config_es_ext_rate(ent);
 	esdm_es_add_entropy();
 }
 

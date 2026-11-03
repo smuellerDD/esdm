@@ -98,6 +98,8 @@ LIBESDM_1.0 {
 		esdm_config_es_jent_entropy_rate_set;
 		esdm_config_es_jent_kernel_entropy_rate;
 		esdm_config_es_jent_kernel_entropy_rate_set;
+		esdm_config_es_ext_entropy_rate;
+		esdm_config_es_ext_entropy_rate_set;
 		esdm_config_es_krng_entropy_rate;
 		esdm_config_es_krng_entropy_rate_set;
 		esdm_config_es_pkcs11_entropy_rate;
@@ -139,6 +141,10 @@ LIBESDM_PRIVATE_1.0 {
 		 */
 		esdm_es_pkcs11_set_pin;
 		esdm_es_pkcs11_set_token_label;
+
+		/* esdm_es_extsock.h - set by the server, built with es_ext */
+		esdm_es_ext_set_path;
+		esdm_es_ext_set_peer_uid;
 
 		/* esdm_shm_status.h */
 		esdm_shm_status_cleanup_ipc;
