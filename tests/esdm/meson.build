@@ -234,10 +234,17 @@ if get_option('esdm-server').enabled()
 			'nor seed data, and the periodic self test worker ' +
 			'stops.' })
 
-	# Sits out a reseed interval, so it needs more than the default timeout
-	# of 30 seconds only if the machine is loaded - keep some headroom.
+	# Waits up to 90 seconds for the Jitter RNG to seed the ESDM before it
+	# counts that as a failure, which a slow sanitizer build may need.
 	test('ESDM security - Jitter RNG as the only credited source',
 		esdm_jent_only_security_test,
-		timeout: 120,
-		suite: 'core')
+		timeout: 180,
+		suite: [ 'core', 'security' ],
+		env: { 'ESDM_TEST_DESCRIPTION':
+			'With the Jitter RNG as the only credited entropy ' +
+			'source, the ESDM is seeded and hands out data. ' +
+			'Once that source fails, the prediction resistance ' +
+			'interface stops at once and the ordinary interface ' +
+			'after its budget of generate operations without a ' +
+			'full reseed. Then no interface hands out data.' })
 endif
