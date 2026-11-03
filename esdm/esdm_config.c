@@ -54,6 +54,7 @@ struct esdm_config {
 	_Atomic uint32_t esdm_es_jent_kernel_entropy_rate_bits;
 	_Atomic uint32_t esdm_drng_max_wo_reseed;
 	_Atomic uint32_t esdm_drng_max_wo_reseed_bits;
+	_Atomic uint32_t esdm_drng_reseed_thresh;
 	_Atomic uint32_t esdm_max_nodes;
 	_Atomic enum esdm_config_force_fips force_fips;
 
@@ -136,6 +137,11 @@ static struct esdm_config esdm_config = {
 	 * See documentation of ESDM_DRNG_MAX_RESEED_BITS.
 	 */
 	.esdm_drng_max_wo_reseed_bits = ESDM_DRNG_MAX_RESEED_BITS,
+
+	/*
+	 * See documentation of ESDM_DRNG_RESEED_THRESH.
+	 */
+	.esdm_drng_reseed_thresh = ESDM_DRNG_RESEED_THRESH,
 
 	/*
 	 * Upper limit of DRNG nodes
@@ -408,6 +414,11 @@ uint32_t esdm_config_drng_max_wo_reseed_bits(void)
 	return esdm_config.esdm_drng_max_wo_reseed_bits;
 }
 
+uint32_t esdm_config_drng_reseed_thresh(void)
+{
+	return esdm_config.esdm_drng_reseed_thresh;
+}
+
 DSO_PUBLIC
 uint32_t esdm_config_max_nodes(void)
 {
@@ -425,6 +436,17 @@ void esdm_config_max_nodes_set(uint32_t val)
 }
 
 #ifdef ESDM_TESTMODE
+void esdm_config_drng_reseed_thresh_set(uint32_t val)
+{
+	/*
+	 * The generate requests are counted down from ESDM_DRNG_RESEED_THRESH,
+	 * so the threshold can only be lowered - and a threshold of zero would
+	 * never be reached by a counter that triggers on the transition to it.
+	 */
+	esdm_config.esdm_drng_reseed_thresh =
+		min_uint32(max_uint32(val, 1), ESDM_DRNG_RESEED_THRESH);
+}
+
 void esdm_config_drng_max_wo_reseed_set(uint32_t val)
 {
 	esdm_config.esdm_drng_max_wo_reseed = val;
