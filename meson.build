@@ -170,6 +170,13 @@ include_dirs_egd_client = include_directories([ 'common',
 						'service-egd',
 						'service-egd/client' ])
 
+include_dirs_es_ext = include_directories([ 'common', 'es-ext' ])
+
+# The messages of the external ES protocol, see es-ext/pb/es_ext.proto: in the
+# ESDM and in libesdm_es_ext
+es_ext_proto_src = files('es-ext/es_ext.pb-c.c')
+protobuf_c_dep = dependency('libprotobuf-c')
+
 subdirs = [ 'common', 'crypto', 'esdm', 'service-egd',
 	    'service-rpc/server', 'service-rpc/service', 'service-rpc/client/' ]
 
@@ -280,6 +287,10 @@ else
 	include_dirs_aux_client = []
 endif
 
+if get_option('esdm-es-ext').enabled()
+	subdirs += [ 'es-ext' ]
+endif
+
 if get_option('esdm-tool').enabled()
 	subdirs += [ 'frontends/tool' ]
 endif
@@ -306,6 +317,7 @@ testdirs = [
 	'tests/cuse',
 	'tests/egd',
 	'tests/es',
+	'tests/es_ext',
 	'tests/esdm',
 	'tests/esdm_cdev',
 	'tests/getrandom',

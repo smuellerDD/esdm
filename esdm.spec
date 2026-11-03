@@ -211,6 +211,7 @@ This subpackage holds the OpenSSL 3 RAND provider
 %{_libdir}/lib%{name}_aux*.so*
 %{_libdir}/lib%{name}-getrandom*.so*
 %{_libdir}/lib%{name}_rpc_client*.so*
+%{_libdir}/lib%{name}_es_ext*.so*
 %{_libdir}/lib%{name}.so*
 %{_libdir}/pkgconfig/%{name}_*.pc
 %{_libdir}/pkgconfig/%{name}-*.pc
@@ -248,3 +249,4 @@ This subpackage holds the OpenSSL 3 RAND provider
 %{_libdir}/lib%{name}_aux_client.a
 %{_libdir}/lib%{name}-getrandom.a
 %{_libdir}/lib%{name}_rpc_client.a
+%{_libdir}/lib%{name}_es_ext.a
