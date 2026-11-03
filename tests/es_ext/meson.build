@@ -53,6 +53,25 @@ if get_option('esdm-es-ext').enabled()
 			es_ext_example_fifo ],
 		depends: [ es_ext_test_provider ] + es_ext_examples,
 		suite: 'es_ext', timeout: 60)
+
+	# Against SoftHSM behind the shim module, skipped without softhsm2-util
+	if get_option('es_pkcs11').enabled()
+		es_pkcs11_shim = shared_module('esdm_es_pkcs11_shim',
+			'es_pkcs11_shim.c',
+			dependencies: [ dependency('dl') ],
+		)
+		es_pkcs11_test = executable('es_pkcs11_test',
+			[ 'es_pkcs11_test.c', es_ext_proto_src ],
+			include_directories: include_dirs_es_ext_test,
+			dependencies: [ dependencies_client,
+					dependency('threads'), json_c_dep ],
+			link_with: esdm_common_static_lib,
+		)
+		test('esdm-es-pkcs11', es_pkcs11_test,
+			args: [ esdm_es_pkcs11, es_pkcs11_shim ],
+			depends: [ esdm_es_pkcs11, es_pkcs11_shim ],
+			suite: 'es_ext', timeout: 120)
+	endif
 endif
 
 # The ESDM side, its source compiled into the tests
@@ -86,5 +105,19 @@ if get_option('es_ext').enabled() and get_option('esdm-es-ext').enabled()
 			args: [ esdm_server, es_ext_test_provider ],
 			depends: [ esdm_server, es_ext_test_provider ],
 			suite: 'es_ext', timeout: 120)
+	endif
+
+	if get_option('es_pkcs11').enabled()
+		es_pkcs11_esdm_test = executable('es_pkcs11_esdm_test',
+			[ esdm_ipc_ns, 'es_pkcs11_esdm_test.c' ],
+			dependencies: dependencies_server,
+			include_directories: [ include_dirs_server,
+					       include_directories('../common') ],
+			link_with: esdm_static_lib,
+		)
+		test('esdm-es-pkcs11 read by the ESDM', es_pkcs11_esdm_test,
+			args: [ esdm_es_pkcs11, es_pkcs11_shim ],
+			depends: [ esdm_es_pkcs11, es_pkcs11_shim ],
+			suite: 'es_ext', timeout: 60)
 	endif
 endif

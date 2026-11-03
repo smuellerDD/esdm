@@ -211,7 +211,7 @@ static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 	 * flags therefore keeps the previously selected async collector flags;
 	 * the synchronous collector (re-created below under the lock) reflects
 	 * the new flags. This safety-over-exotic-reconfig tradeoff matches the
-	 * reset-on-reinit handling of the TPM2/PKCS11 caches.
+	 * reset-on-reinit handling of the TPM2 cache.
 	 */
 	if (esdm_jent_async_alloced) {
 		esdm_es_buf_reset(&esdm_jent_buf);

@@ -20,7 +20,6 @@ typedef struct RndAddToEntCntRequest RndAddToEntCntRequest;
 typedef struct RndAddEntropyRequest RndAddEntropyRequest;
 typedef struct SetWriteWakeupThreshRequest SetWriteWakeupThreshRequest;
 typedef struct SetMinReseedSecsRequest SetMinReseedSecsRequest;
-typedef struct SetPkcs11ConfigRequest SetPkcs11ConfigRequest;
 typedef struct SelftestResponse SelftestResponse;
 typedef struct SetEsRateRequest SetEsRateRequest;
 
@@ -91,39 +90,6 @@ struct  SetMinReseedSecsRequest
 #define SET_MIN_RESEED_SECS_REQUEST__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&set_min_reseed_secs_request__descriptor) \
 , 0 }
-
-
-/*
- **
- * @brief Request to update the runtime configuration of the PKCS#11 entropy
- *	  source.
- * Each field is only applied when its corresponding `set_*` flag is true,
- * which lets callers update only the PIN, only the label, or both atomically.
- * Update order on the server: the token label is applied first (it re-opens
- * the PKCS#11 module against the new label), then the PIN is installed and
- * a login is attempted on the freshly opened slot if the token requires it.
- * If the label update fails, the PIN is not applied.
- * Passing the empty string for `pin` or `token_label` (with the matching
- * `set_*` flag set) clears the runtime override and falls back to the
- * compile-time default.
- * The settings are in-memory only and are not persisted across server
- * restarts.
- * @param set_token_label Apply `token_label` if true.
- * @param token_label PKCS#11 token label to select.
- * @param set_pin Apply `pin` if true.
- * @param pin User PIN to authenticate with the PKCS#11 token (CKU_USER).
- */
-struct  SetPkcs11ConfigRequest
-{
-  ProtobufCMessage base;
-  protobuf_c_boolean set_token_label;
-  char *token_label;
-  protobuf_c_boolean set_pin;
-  char *pin;
-};
-#define SET_PKCS11_CONFIG_REQUEST__INIT \
- { PROTOBUF_C_MESSAGE_INIT (&set_pkcs11_config_request__descriptor) \
-, 0, (char *)protobuf_c_empty_string, 0, (char *)protobuf_c_empty_string }
 
 
 /*
@@ -253,25 +219,6 @@ SetMinReseedSecsRequest *
 void   set_min_reseed_secs_request__free_unpacked
                      (SetMinReseedSecsRequest *message,
                       ProtobufCAllocator *allocator);
-/* SetPkcs11ConfigRequest methods */
-void   set_pkcs11_config_request__init
-                     (SetPkcs11ConfigRequest         *message);
-size_t set_pkcs11_config_request__get_packed_size
-                     (const SetPkcs11ConfigRequest   *message);
-size_t set_pkcs11_config_request__pack
-                     (const SetPkcs11ConfigRequest   *message,
-                      uint8_t             *out);
-size_t set_pkcs11_config_request__pack_to_buffer
-                     (const SetPkcs11ConfigRequest   *message,
-                      ProtobufCBuffer     *buffer);
-SetPkcs11ConfigRequest *
-       set_pkcs11_config_request__unpack
-                     (ProtobufCAllocator  *allocator,
-                      size_t               len,
-                      const uint8_t       *data);
-void   set_pkcs11_config_request__free_unpacked
-                     (SetPkcs11ConfigRequest *message,
-                      ProtobufCAllocator *allocator);
 /* SelftestResponse methods */
 void   selftest_response__init
                      (SelftestResponse         *message);
@@ -324,9 +271,6 @@ typedef void (*SetWriteWakeupThreshRequest_Closure)
 typedef void (*SetMinReseedSecsRequest_Closure)
                  (const SetMinReseedSecsRequest *message,
                   void *closure_data);
-typedef void (*SetPkcs11ConfigRequest_Closure)
-                 (const SetPkcs11ConfigRequest *message,
-                  void *closure_data);
 typedef void (*SelftestResponse_Closure)
                  (const SelftestResponse *message,
                   void *closure_data);
@@ -364,10 +308,6 @@ struct PrivAccess_Service
                                   const SetMinReseedSecsRequest *input,
                                   RetResponse_Closure closure,
                                   void *closure_data);
-  void (*rpc_set_pkcs11_config)(PrivAccess_Service *service,
-                                const SetPkcs11ConfigRequest *input,
-                                RetResponse_Closure closure,
-                                void *closure_data);
   void (*rpc_selftest)(PrivAccess_Service *service,
                        const EmptyRequest *input,
                        SelftestResponse_Closure closure,
@@ -390,7 +330,6 @@ void priv_access__init (PrivAccess_Service *service,
       function_prefix__ ## rpc_rnd_reseed_crng,\
       function_prefix__ ## rpc_set_write_wakeup_thresh,\
       function_prefix__ ## rpc_set_min_reseed_secs,\
-      function_prefix__ ## rpc_set_pkcs11_config,\
       function_prefix__ ## rpc_selftest,\
       function_prefix__ ## rpc_set_es_rate  }
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
@@ -417,10 +356,6 @@ void priv_access__rpc_set_min_reseed_secs(ProtobufCService *service,
                                           const SetMinReseedSecsRequest *input,
                                           RetResponse_Closure closure,
                                           void *closure_data);
-void priv_access__rpc_set_pkcs11_config(ProtobufCService *service,
-                                        const SetPkcs11ConfigRequest *input,
-                                        RetResponse_Closure closure,
-                                        void *closure_data);
 void priv_access__rpc_selftest(ProtobufCService *service,
                                const EmptyRequest *input,
                                SelftestResponse_Closure closure,
@@ -436,7 +371,6 @@ extern const ProtobufCMessageDescriptor rnd_add_to_ent_cnt_request__descriptor;
 extern const ProtobufCMessageDescriptor rnd_add_entropy_request__descriptor;
 extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_request__descriptor;
 extern const ProtobufCMessageDescriptor set_min_reseed_secs_request__descriptor;
-extern const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor;
 extern const ProtobufCMessageDescriptor selftest_response__descriptor;
 extern const ProtobufCMessageDescriptor set_es_rate_request__descriptor;
 extern const ProtobufCServiceDescriptor priv_access__descriptor;

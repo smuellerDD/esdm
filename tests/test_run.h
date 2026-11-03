@@ -181,10 +181,8 @@ static inline int test_run_start(struct test_run *r, const char *const opts[],
 		close(fd_in);
 
 		/*
-		 * Leave the controlling terminal behind. --pkcs11-pin - prompts
-		 * on /dev/tty when there is one, and a test run from an
-		 * interactive shell would sit there waiting for someone to type
-		 * a PIN instead of reading the standard input it was given.
+		 * Leave the controlling terminal behind: a program prompting on
+		 * /dev/tty would wait for someone to type, not read its stdin.
 		 */
 		setsid();
 

@@ -1342,11 +1342,8 @@
                   "-Des_jent_kernel=enabled"
                   "-Des_pkcs11=enabled"
 
-                  # Point the PKCS#11 source at SoftHSM, which needs no
-                  # hardware. The path is compile-time only, so without it the
-                  # source disables itself at startup. Label and PIN stay unset
-                  # - the test installs both at runtime, as the server does from
-                  # its RPC handler.
+                  # SoftHSM as the module of the build, which needs no hardware:
+                  # one PKCS#11 test runs esdm-es-pkcs11 without --module.
                   "-Des_pkcs11_module_path=${pkgs.softhsm}/lib/softhsm/libsofthsm2.so"
                 ];
 
@@ -1368,18 +1365,6 @@
               doCheck = true;
               checkPhase = ''
                 runHook preCheck
-
-                # Every ESDM this suite starts loads the SoftHSM module the
-                # PKCS#11 source was built against, and SoftHSM logs three
-                # errors per start when it finds no configuration - nixpkgs
-                # ships none at the path it compiles in. Point it at one of our
-                # own so the run stays readable; the PKCS#11 test overrides this
-                # with the config of the token it creates.
-                mkdir -p "$NIX_BUILD_TOP/softhsm/tokens"
-                printf 'directories.tokendir = %s\nobjectstore.backend = file\nlog.level = ERROR\n' \
-                  "$NIX_BUILD_TOP/softhsm/tokens" \
-                  >"$NIX_BUILD_TOP/softhsm/softhsm2.conf"
-                export SOFTHSM2_CONF="$NIX_BUILD_TOP/softhsm/softhsm2.conf"
 
                 # The builder may be busy and is not necessarily fast - give the
                 # tests that wait for entropy room before they time out.
@@ -1604,20 +1589,6 @@
                     --buildtype=${cov.mesonBuildType} \
                     ${lib.escapeShellArgs cov.mesonFlags}
                   ninja -C "$work/build"
-
-                  # Every ESDM this suite starts loads the SoftHSM module the
-                  # PKCS#11 source was built against, and SoftHSM logs three
-                  # errors per start when it finds no configuration - nixpkgs
-                  # ships none at the path it compiles in. Point it at one of
-                  # our own so the run stays readable. Below $work, which the
-                  # privileged tests pin across their private /tmp, and which
-                  # the chmod below opens up for the daemons that drop
-                  # privileges. The PKCS#11 test overrides this with the config
-                  # of the token it creates.
-                  mkdir -p "$work/softhsm/tokens"
-                  printf 'directories.tokendir = %s\nobjectstore.backend = file\nlog.level = ERROR\n' \
-                    "$work/softhsm/tokens" >"$work/softhsm/softhsm2.conf"
-                  export SOFTHSM2_CONF="$work/softhsm/softhsm2.conf"
 
                   # The esdm-server and the CUSE frontends drop privileges, and
                   # libgcov writes their counters into the build tree as the

@@ -45,7 +45,6 @@
 #include "esdm_es_krng.h"
 #include "esdm_es_extsock.h"
 #include "esdm_es_mgr.h"
-#include "esdm_es_pkcs11.h"
 #include "es_ebpf/esdm_es_irq_ebpf.h"
 #include "es_ebpf/esdm_es_sched_ebpf.h"
 #include "esdm_es_sched.h"
@@ -104,8 +103,8 @@ static atomic_int esdm_es_mgr_terminate = 0;
 
 /*
  * Serializes the ES monitor's active work against esdm_reinit(). The monitor
- * holds this around the per-ES monitor_es() pass (which, for the Jitter/TPM2/
- * PKCS11 sources, resets/fills their async caches), and esdm_reinit() holds it
+ * holds this around the per-ES monitor_es() pass (which, for the Jitter/TPM2
+ * sources, resets/fills their async caches), and esdm_reinit() holds it
  * across the whole reinitialization via esdm_es_mgr_monitor_pause()/_resume().
  * This guarantees no monitor iteration runs while the entropy sources are being
  * torn down and re-initialized, so the reinit path cannot reset/reallocate ES
@@ -148,9 +147,6 @@ struct esdm_es_cb *esdm_es[] = {
 #endif
 #ifdef ESDM_ES_TPM2
 	&esdm_es_tpm2,
-#endif
-#ifdef ESDM_ES_PKCS11
-	&esdm_es_pkcs11,
 #endif
 #ifdef ESDM_ES_JENT_KERNEL
 	&esdm_es_jent_kernel,

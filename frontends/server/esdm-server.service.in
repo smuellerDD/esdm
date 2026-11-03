@@ -51,7 +51,11 @@ DevicePolicy=strict
 # they must survive a server restart; hence do not remove the status SHM
 # segment and semaphores they monitor at shutdown. (The RPC sockets are
 # systemd-managed via socket activation and never removed by the server.)
-ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock --keep_ipc -vvv
+#
+# ESDM_SERVER_OPTIONS: options of a site, set in a drop-in, e.g. those reading
+# an external entropy source provider such as esdm-es-pkcs11 - see the head of
+# esdm-es-pkcs11.service. Unset, it adds nothing.
+ExecStart=@PATH@/esdm-server -f --pid /run/esdm-server.pid --syslog --memlock --keep_ipc -vvv $ESDM_SERVER_OPTIONS
 IPAddressDeny=any
 LimitMEMLOCK=infinity
 # The EGD clients hold their connection open for their entire lifetime, so the

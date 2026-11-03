@@ -36,17 +36,13 @@ extern "C" {
  * getrandom tests LD_PRELOAD the interposition library, and a server loading it
  * too would interpose the very calls it is meant to answer.
  *
- * A few variables have to survive that isolation nonetheless: they configure
- * libraries the daemon loads, not the test. SOFTHSM2_CONF is one - the PKCS#11
- * entropy source loads its module at every startup, and SoftHSM logs three
- * errors per load when it finds no configuration.
+ * Variables configuring a library the daemon loads, not the test, would have to
+ * survive that isolation - "NAME=" each, none at present.
  */
-static const char *const test_env_pass[] = {
-	"SOFTHSM2_CONF=",
-};
+static const char *const test_env_pass[] = { NULL };
 
 /* Slots a caller has to provide, terminator excluded */
-#define TEST_ENV_MAX_VARS (sizeof(test_env_pass) / sizeof(test_env_pass[0]))
+#define TEST_ENV_MAX_VARS (sizeof(test_env_pass) / sizeof(test_env_pass[0]) - 1)
 
 /*
  * Fill @envp with the passed-through variables, NULL terminated. @nmemb counts
@@ -59,7 +55,7 @@ static inline void test_env_daemon_envp(char **envp, size_t nmemb)
 	size_t used = 0, i, j;
 
 	for (i = 0; environ && environ[i] && used + 1 < nmemb; i++) {
-		for (j = 0; j < TEST_ENV_MAX_VARS; j++) {
+		for (j = 0; test_env_pass[j]; j++) {
 			if (!strncmp(environ[i], test_env_pass[j],
 				     strlen(test_env_pass[j]))) {
 				envp[used++] = environ[i];

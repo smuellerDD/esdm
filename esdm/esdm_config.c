@@ -50,7 +50,6 @@ struct esdm_config {
 	_Atomic uint32_t esdm_es_sched_ebpf_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_hwrand_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_tpm2_entropy_rate_bits;
-	_Atomic uint32_t esdm_es_pkcs11_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_jent_kernel_entropy_rate_bits;
 	_Atomic uint32_t esdm_es_ext_entropy_rate_bits;
 	_Atomic uint32_t esdm_drng_max_wo_reseed;
@@ -118,11 +117,6 @@ static struct esdm_config esdm_config = {
 	 * See documentation of ESDM_TPM2_ENTROPY_RATE
 	 */
 	.esdm_es_tpm2_entropy_rate_bits = ESDM_TPM2_ENTROPY_RATE,
-
-	/*
-	 * See documentation of ESDM_PKCS11_ENTROPY_RATE
-	 */
-	.esdm_es_pkcs11_entropy_rate_bits = ESDM_PKCS11_ENTROPY_RATE,
 
 	/*
 	 * See documentation of ESDM_JENT_KERNEL_ENTROPY_RATE
@@ -370,21 +364,6 @@ void esdm_config_es_tpm2_entropy_rate_set(uint32_t ent)
 	uint32_t val = esdm_config_entropy_rate_max(ent);
 
 	esdm_config.esdm_es_tpm2_entropy_rate_bits = val;
-	esdm_es_add_entropy();
-}
-
-DSO_PUBLIC
-uint32_t esdm_config_es_pkcs11_entropy_rate(void)
-{
-	return esdm_config.esdm_es_pkcs11_entropy_rate_bits;
-}
-
-DSO_PUBLIC
-void esdm_config_es_pkcs11_entropy_rate_set(uint32_t ent)
-{
-	uint32_t val = esdm_config_entropy_rate_max(ent);
-
-	esdm_config.esdm_es_pkcs11_entropy_rate_bits = val;
 	esdm_es_add_entropy();
 }
 

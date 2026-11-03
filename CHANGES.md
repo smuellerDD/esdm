@@ -63,7 +63,7 @@ addon/es_ebpf_testing
 
 * Add TPM2 entropy source
 
-* Add PKCS11 entropy source
+* Add PKCS11 entropy source as esdm-es-pkcs11, an external ES provider
 
 * SP800-90C compliance: all ES with zero entropy are inserted into DRBG as "additional info" or "personalization string" (compliance to section 2.6)
 

@@ -218,6 +218,7 @@ static void fuzz_priv_call(struct fuzz_input *in)
 	uint8_t *buf;
 	size_t len;
 
+	/* 6 was the PKCS#11 configuration: the corpus keeps its picks */
 	switch (fuzz_u8(in) % 9) {
 	case 0:
 		len = fuzz_len(in, FUZZ_BUF_MAX);
@@ -240,20 +241,6 @@ static void fuzz_priv_call(struct fuzz_input *in)
 	case 5:
 		esdm_rpcc_set_min_reseed_secs(fuzz_u32(in));
 		break;
-	case 6: {
-		/*
-		 * Two strings, either of which may be absent - which the
-		 * packing has to tell apart from an empty one.
-		 */
-		static char label[64], pin[64];
-		uint8_t which = fuzz_u8(in);
-
-		esdm_rpcc_set_pkcs11_config(
-			(which & 1) ? NULL :
-				      fuzz_text(in, label, sizeof(label)),
-			(which & 2) ? NULL : fuzz_text(in, pin, sizeof(pin)));
-		break;
-	}
 	case 7: {
 		static char es[32];
 

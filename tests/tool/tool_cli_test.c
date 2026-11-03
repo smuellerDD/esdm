@@ -190,8 +190,6 @@ static void test_privileged_commands_refused(void)
 		{ "--endless-stress", NULL },
 		{ "--selftest", NULL },
 		{ "--set-es-rate", "all=0" },
-		{ "--pkcs11-pin", "1234" },
-		{ "--pkcs11-token-label", "a-token" },
 #ifdef ESDM_HAS_AUX_CLIENT
 		{ "--seed-via-os", NULL },
 		{ "--reseed-via-os", NULL },
@@ -214,34 +212,6 @@ static void test_privileged_commands_refused(void)
 		      "%s was refused without saying root is needed (output: %.200s)",
 		      cases[i][0], r.err);
 	}
-}
-
-/*
- * "--pkcs11-pin -" reads the PIN rather than taking it from the command line,
- * where it would be visible in the process listing.
- */
-static void test_pkcs11_pin_from_stdin(void)
-{
-	const char *const opts[] = { "--pkcs11-pin", "-", NULL };
-	struct test_run r;
-	int rc;
-
-	if (!geteuid()) {
-		printf("running as root - skipping the PIN reading checks\n");
-		return;
-	}
-
-	/* A PIN is there to be read: the run gets as far as the root check */
-	rc = test_run(&r, opts, "1234\n");
-	CHECK_EQ(rc, EXIT_FAILURE);
-	CHECK(strstr(r.err, "must start as root") != NULL,
-	      "the PIN was not read from stdin (output: %.200s)", r.err);
-
-	/* Nothing to read is a failure of its own, and is reported as one */
-	rc = test_run(&r, opts, NULL);
-	CHECK_EQ(rc, EXIT_FAILURE);
-	CHECK(strstr(r.err, "failed to read PKCS#11 PIN") != NULL,
-	      "an unreadable PIN was not reported (output: %.200s)", r.err);
 }
 
 /*
@@ -394,7 +364,6 @@ int main(int argc, char *argv[])
 	test_malformed_numbers();
 	test_out_of_range_numbers();
 	test_privileged_commands_refused();
-	test_pkcs11_pin_from_stdin();
 	test_without_server();
 	test_fips_checkfile();
 
