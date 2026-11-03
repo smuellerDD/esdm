@@ -120,6 +120,82 @@ Serve the EGD protocol backed by the prediction\-resistance generator on
 .IR PATH .
 The EGD protocol cannot select the generator per request, hence the separate
 socket.
+.TP
+.BR \-\-es_ext " \fIPATH\fR"
+Read the external entropy source served on the UNIX domain socket
+.I PATH
+(meson option
+.BR es_ext_path ),
+see
+.BR "EXTERNAL ENTROPY SOURCE" .
+.TP
+.BR \-\-es_ext_entropy_rate " \fIBITS\fR"
+Credit a block of the provider with at most
+.I BITS
+of entropy per 256 bits of data, 0 to 256 (meson option
+.BR es_ext_entropy_rate ),
+or with
+.B auto
+at the rate the provider declares, the default \- 0 if it declares none.
+.TP
+.BR \-\-es_ext_uid " \fIUSER\fR"
+Accept a provider running as
+.I USER
+\- a uid, a user name, or
+.B none
+\- next to root (meson option
+.BR es_ext_peer_uid ).
+Accepting the user means trusting the rate it declares, unless
+.B \-\-es_ext_entropy_rate
+configures one.
+.SH EXTERNAL ENTROPY SOURCE
+A noise source outside the ESDM is served by a provider process, written
+against
+.BR libesdm_es_ext (3),
+such as
+.BR esdm\-es\-pkcs11 (8)
+or
+.BR esdm\-es\-pcsc (8).
+The daemon reads it as the entropy source
+.B ExternalSocket
+\- shown under the name the provider declares, if valid, the ES table name
+kept as
+.B instance
+\- and loads none of its code.
+.PP
+It connects at start up and on demand, at most every 5 seconds after a
+failure; a connection the provider closed while idle is made again at once.
+Only a provider running as root or as the
+.B \-\-es_ext_uid
+user is accepted: whoever can create the socket file could otherwise feed the
+daemon data credited as entropy. Once its privileges are dropped the daemon
+connects as the
+.B \-\-username
+user, which has to be able to connect to the socket. A provider not answering
+within 2 seconds, or breaking the protocol, is disconnected.
+.PP
+A block is credited with the claim of the provider, at most at the rate shown
+as
+.B assessed_rate
+\- from
+.BR config ,
+the
+.B provider
+or the
+.B default
+0 (\fBassessed_rate_source\fR). Every connection starts with a self test,
+before which \- at start up before the DRNGs are seeded \- the provider is
+credited with nothing, as it is while it fails to deliver, probed every 5
+seconds, and after a failed self test until it passes one.
+.PP
+The status of the provider, a JSON object of up to 1024 bytes, is shown as
+.B provider
+\- the
+.B Provider status
+line of
+.BR "esdm\-tool \-\-status" .
+It is asked for at most every 5 seconds, holding the source for up to half a
+second; a provider answering later is disconnected.
 .SH SIGNALS
 .TP
 .BR SIGTERM ", " SIGINT ", " SIGQUIT ", " SIGHUP
@@ -157,7 +233,10 @@ requested interfaces.
 .BR esdm\-proc (8),
 .BR esdm\-kernel\-seeder (8),
 .BR esdm\-server\-signal\-helper (8),
+.BR esdm\-es\-pkcs11 (8),
+.BR esdm\-es\-pcsc (8),
 .BR libesdm (3),
+.BR libesdm_es_ext (3),
 .BR libesdm_rpc_client (3)
 .SH AUTHOR
 Stephan Mueller <smueller@chronox.de>
