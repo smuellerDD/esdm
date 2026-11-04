@@ -65,6 +65,8 @@ static void fill_cache(void)
 		memset(TEST_BUF.blocks[i].e, 0x5a,
 		       sizeof(TEST_BUF.blocks[i].e));
 		TEST_BUF.blocks[i].e_bits = ESDM_DRNG_SECURITY_STRENGTH_BITS;
+		/* Filled just now, so that it is not retired for its age */
+		TEST_BUF.fills[i].created = esdm_monotonic_now();
 		atomic_store(&TEST_BUF.states[i], esdm_es_buf_filled);
 	}
 }

@@ -72,6 +72,9 @@ int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void));
 void esdm_es_mgr_monitor_wakeup(void);
+
+/* The ES monitor runs a round at least this often, in nanoseconds */
+#define ESDM_ES_MONITOR_INTERVAL_NS (1U << 29)
 void esdm_es_mgr_monitor_pause(void);
 void esdm_es_mgr_monitor_resume(void);
 bool esdm_es_mgr_running(void);

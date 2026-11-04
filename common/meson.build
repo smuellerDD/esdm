@@ -124,6 +124,11 @@ conf_data.set('ESDM_JENT_ALL_CACHES',
 # count so esdm_es_buf compiles out of all ES sources. The es_buf_force option
 # overrides this and keeps the per-ES counts honored.
 disable_es_buf = sp80090c and not get_option('es_buf_force')
+# Counted in whole seconds, it has to outlive the ES monitor interval of 2^29 ns
+if get_option('es_buf_max_age') == 1
+	error('es_buf_max_age must be 0 or at least 2')
+endif
+conf_data.set('ESDM_ES_BUF_MAX_AGE', get_option('es_buf_max_age'))
 
 # In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
 # need to result in a value larger than zero

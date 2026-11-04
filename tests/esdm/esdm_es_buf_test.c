@@ -41,8 +41,10 @@
 #include <string.h>
 
 #include "common_test.h"
+#include "config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_buf.h"
+#include "helper.h"
 
 /******************************************************************************
  * Stubs for the ES manager entry points esdm_es_buf.c calls
@@ -1096,6 +1098,94 @@ static void test_reset_leaves_owned_slots(void)
 	esdm_es_buf_free(&buf);
 }
 
+/******************************************************************************
+ * Retirement of blocks kept too long
+ ******************************************************************************/
+
+/* Make the block of @slot look as if its fill began @age seconds ago */
+static void age_slot(struct esdm_es_buf *buf, unsigned int slot,
+		     long long age)
+{
+	buf->fills[slot].created = esdm_monotonic_now() - age;
+}
+
+static void test_max_age_default(void)
+{
+	struct esdm_es_buf buf;
+
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL, NULL), 0);
+	CHECK_EQ(buf.max_age, ESDM_ES_BUF_MAX_AGE);
+	esdm_es_buf_free(&buf);
+}
+
+static void test_try_get_retires_expired_block(void)
+{
+	struct esdm_es_buf buf;
+	struct fill_record rec = { 0, 0, NULL, 1 };
+	struct entropy_es out;
+
+	stubs_reset();
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL, NULL), 0);
+	buf.max_age = 30;
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+
+	/* Just within the age: served */
+	age_slot(&buf, 0, 29);
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a block within its age was not served");
+
+	/* Past it: a miss, the block wiped and the monitor woken */
+	age_slot(&buf, 1, 30);
+	stub_wakeups = 0;
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "an expired block was served");
+	CHECK_EQ(atomic_load(&buf.states[1]), esdm_es_buf_empty);
+	CHECK(block_is_zero(&buf.blocks[1]), "the expired block was not wiped");
+	CHECK_EQ(stub_wakeups, 1);
+
+	/* Without a limit, age does not matter */
+	buf.max_age = 0;
+	age_slot(&buf, 2, 1000000);
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a block was retired without a limit");
+
+	esdm_es_buf_free(&buf);
+}
+
+static void test_monitor_retires_expired_blocks(void)
+{
+	struct esdm_es_buf buf;
+	struct fill_record rec = { 0, 0, NULL, 1 };
+	long long before;
+
+	stubs_reset();
+	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test", NULL, NULL), 0);
+	buf.max_age = 30;
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+
+	/*
+	 * Two blocks kept too long, one of them claimed by a consumer: the
+	 * monitor retires and refills the other, and leaves the claimed one to
+	 * its owner
+	 */
+	age_slot(&buf, 3, 60);
+	age_slot(&buf, 5, 60);
+	atomic_store(&buf.states[5], esdm_es_buf_reading);
+	before = esdm_monotonic_now();
+	rec.calls = 0;
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(rec.calls, 1);
+	CHECK_EQ(atomic_load(&buf.states[3]), esdm_es_buf_filled);
+	CHECK(buf.fills[3].created >= before,
+	      "the refilled block kept the time of the retired one");
+	CHECK_EQ(atomic_load(&buf.states[5]), esdm_es_buf_reading);
+
+	atomic_store(&buf.states[5], esdm_es_buf_empty);
+	esdm_es_buf_free(&buf);
+}
+
 int main(int argc, char *argv[])
 {
 	(void)argc;
@@ -1129,6 +1219,10 @@ int main(int argc, char *argv[])
 	test_reset_during_fill();
 	test_reset_before_publish();
 	test_reset_leaves_owned_slots();
+
+	test_max_age_default();
+	test_try_get_retires_expired_block();
+	test_monitor_retires_expired_blocks();
 
 	return common_test_result("esdm_es_buf");
 }
