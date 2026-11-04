@@ -26,24 +26,21 @@
 #include <stdlib.h>
 
 /*
- * Test plan markers on stdout, one line each, so the plan and its assertions
- * can be read back from the JUnit output of the test run:
+ * Test plan markers on stdout, one line each, read back from the JUnit output:
  *
- *	DESCRIPTION: what the test is about, see test_plan_describe()
- *	STEP:     an action the test performs
- *	REQUIRE:  a condition that has to hold, printed before it is checked -
- *		  on a failure the last REQUIRE is the one that did not hold
- *	CHECK:    the check of a REQUIRE as written in the code in [], its
- *		  verdict, "is ok" or "has failed", and the actual value it
- *		  was made on
- *	RUNUNTIL: a repeated action and the condition that ends it
+ *	HEADLINE:    the title of the test, see test_plan_describe()
+ *	DESCRIPTION: what the test is about
+ *	FILE:        the source file of the test, relative to the repository
+ *	FUNCTION:    the function in it that runs the test
+ *	STEP:        an action the test performs
+ *	REQUIRE:     a condition that has to hold, printed before its check
+ *	CHECK:       a REQUIRE's check as written, "is ok" or "has failed",
+ *		     and the actual value
+ *	RUNUNTIL:    a repeated action and the condition that ends it
  *
- * The text of a STEP, REQUIRE and RUNUNTIL is a string literal, known at
- * compile time: the plan reads the same from the source as from the output of
- * any run. Only a CHECK reports what a run found.
- *
- * Flushed right away, so the markers stay in order with the log output and
- * survive a test that crashes.
+ * STEP, REQUIRE and RUNUNTIL take string literals, so the plan reads the same
+ * from the source as from a run. Flushed at once, to stay in order with the
+ * log and survive a crash.
  */
 static inline void test_plan(const char *prefix, const char *text)
 {
@@ -66,21 +63,29 @@ test_check(bool ok, const char *cond, const char *fmt, ...)
 	return ok;
 }
 
+/* Print the environment variable @name as the marker @prefix, then unset it */
+static inline void test_plan_env(const char *prefix, const char *name)
+{
+	const char *val = getenv(name);
+
+	if (!val || !*val)
+		return;
+
+	test_plan(prefix, val);
+	unsetenv(name);
+}
+
 /*
- * The description meson.build gives the test in ESDM_TEST_DESCRIPTION, printed
- * before the test runs: meson's JUnit output has no field for one, but carries
- * the output of the test. Unset once printed, so it is printed once even by a
- * test that executes itself again or includes this in two of its files.
+ * Print what meson.build passes in ESDM_TEST_HEADLINE, _DESCRIPTION, _FILE and
+ * _FUNCTION: meson's JUnit output has no field for them. Unset once printed,
+ * so a test that re-executes itself or includes this twice prints them once.
  */
 __attribute__((constructor)) static void test_plan_describe(void)
 {
-	const char *desc = getenv("ESDM_TEST_DESCRIPTION");
-
-	if (!desc || !*desc)
-		return;
-
-	test_plan("DESCRIPTION", desc);
-	unsetenv("ESDM_TEST_DESCRIPTION");
+	test_plan_env("HEADLINE", "ESDM_TEST_HEADLINE");
+	test_plan_env("DESCRIPTION", "ESDM_TEST_DESCRIPTION");
+	test_plan_env("FILE", "ESDM_TEST_FILE");
+	test_plan_env("FUNCTION", "ESDM_TEST_FUNCTION");
 }
 
 /* The empty literals around @text let nothing but a string literal compile */
@@ -89,10 +94,8 @@ __attribute__((constructor)) static void test_plan_describe(void)
 #define TEST_RUNUNTIL(text) test_plan("RUNUNTIL", "" text "")
 
 /*
- * Check @cond, print it as written together with the actual value - the
- * remaining arguments, a format and what it formats - and return whether it
- * holds. The condition and the actual value are evaluated separately, so
- * neither may have side effects.
+ * Check @cond and print it as written with the actual value, a format and its
+ * arguments. Both are evaluated separately, so neither may have side effects.
  */
 #define TEST_CHECK(cond, ...) test_check(!!(cond), #cond, __VA_ARGS__)
 
