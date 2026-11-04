@@ -92,6 +92,17 @@ When set to zero, the Jitter RNG entropy buffer is not compiled which implies
 a synchronous generation of data from the Jitter RNG.
 ''')
 
+# Option for: ESDM_JENT_INSTANCES
+option('es_jent_instances', type: 'integer', min: 1, max: 64, value: 1,
+       description:'''Jitter RNG instances refilling the entropy buffer
+
+Each instance has a Jitter RNG collector of its own and refills the buffer of
+the Jitter RNG (es_jent_entropy_blocks) in a thread of its own, side by side
+with the others: the buffer refills about as many times faster as there are
+CPUs for them, at the cost of a collector's memory per instance. The default
+for esdm_config_es_jent_instances_set() and esdm-server --es_jent_instances.
+''')
+
 # Option for: ESDM_ES_BUF_FORCE
 option('es_buf_force', type: 'boolean', value: false,
        description:'''Force-enable async entropy source buffering under SP800-90C

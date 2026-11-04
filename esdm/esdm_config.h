@@ -64,6 +64,24 @@ uint32_t esdm_config_es_jent_async_enabled(void);
 void esdm_config_es_jent_async_enabled_set(int setting);
 
 /**
+ * @brief Obtain the number of Jitter RNG instances refilling its buffer
+ *
+ * @return The number of instances, each with a collector and a thread of its
+ *	   own
+ */
+uint32_t esdm_config_es_jent_instances(void);
+
+/**
+ * @brief Set the number of Jitter RNG instances refilling its buffer
+ *
+ * Takes effect at the first initialization of the Jitter RNG entropy source,
+ * i.e. is to be called before esdm_init().
+ *
+ * @param [in] instances Number of instances, 1 to 64
+ */
+void esdm_config_es_jent_instances_set(uint32_t instances);
+
+/**
  * @brief Shall the server IPC resources (RPC sockets, status SHM segment and
  *	  its semaphores) be removed at shutdown?
  *
