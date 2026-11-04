@@ -38,19 +38,16 @@
  *		  was made on
  *	RUNUNTIL: a repeated action and the condition that ends it
  *
+ * The text of a STEP, REQUIRE and RUNUNTIL is a string literal, known at
+ * compile time: the plan reads the same from the source as from the output of
+ * any run. Only a CHECK reports what a run found.
+ *
  * Flushed right away, so the markers stay in order with the log output and
  * survive a test that crashes.
  */
-static inline void __attribute__((format(printf, 2, 3)))
-test_plan(const char *prefix, const char *fmt, ...)
+static inline void test_plan(const char *prefix, const char *text)
 {
-	va_list args;
-
-	printf("%s: ", prefix);
-	va_start(args, fmt);
-	vprintf(fmt, args);
-	va_end(args);
-	printf("\n");
+	printf("%s: %s\n", prefix, text);
 	fflush(stdout);
 }
 
@@ -82,13 +79,14 @@ __attribute__((constructor)) static void test_plan_describe(void)
 	if (!desc || !*desc)
 		return;
 
-	test_plan("DESCRIPTION", "%s", desc);
+	test_plan("DESCRIPTION", desc);
 	unsetenv("ESDM_TEST_DESCRIPTION");
 }
 
-#define TEST_STEP(...) test_plan("STEP", __VA_ARGS__)
-#define TEST_REQUIRE(...) test_plan("REQUIRE", __VA_ARGS__)
-#define TEST_RUNUNTIL(...) test_plan("RUNUNTIL", __VA_ARGS__)
+/* The empty literals around @text let nothing but a string literal compile */
+#define TEST_STEP(text) test_plan("STEP", "" text "")
+#define TEST_REQUIRE(text) test_plan("REQUIRE", "" text "")
+#define TEST_RUNUNTIL(text) test_plan("RUNUNTIL", "" text "")
 
 /*
  * Check @cond, print it as written together with the actual value - the

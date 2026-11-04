@@ -42,7 +42,11 @@
 #include "../test_plan.h"
 
 #define ESDM_SEC_BYTES (1024 * 1024)
-#define ESDM_SEC_MIN_BITS 6.0
+#define ESDM_SEC_MIN_BITS 6
+
+/* The test plan states these values in its strings */
+_Static_assert(ESDM_SEC_BYTES == 1048576 && ESDM_SEC_MIN_BITS == 6,
+	       "stated by the test plan");
 
 static char esdm_sec_workdir[400];
 
@@ -142,47 +146,6 @@ static int esdm_sec_run_ea_non_iid(void)
 	return WEXITSTATUS(status);
 }
 
-static int esdm_sec_write_samples(void)
-{
-	char path[sizeof(esdm_sec_workdir) + 16];
-	uint8_t *buf;
-	size_t written = 0;
-	ssize_t rc;
-	FILE *f;
-	int ret = 1;
-
-	buf = malloc(ESDM_SEC_BYTES);
-	if (!buf)
-		return 1;
-
-	TEST_STEP("request %d bytes from esdm_get_random_bytes_full",
-		  ESDM_SEC_BYTES);
-	rc = esdm_get_random_bytes_full(buf, ESDM_SEC_BYTES);
-	TEST_REQUIRE("%d bytes are returned", ESDM_SEC_BYTES);
-	if (!TEST_CHECK(rc == ESDM_SEC_BYTES, "%zd", rc))
-		goto out;
-
-	snprintf(path, sizeof(path), "%s/random.bin", esdm_sec_workdir);
-	TEST_STEP("write the bytes to random.bin in a temporary directory");
-	f = fopen(path, "wb");
-	if (f) {
-		written = fwrite(buf, 1, ESDM_SEC_BYTES, f);
-		/* A failed flush loses what was written */
-		if (fclose(f))
-			written = 0;
-	}
-
-	TEST_REQUIRE("all %d bytes are written to the file", ESDM_SEC_BYTES);
-	if (!TEST_CHECK(written == ESDM_SEC_BYTES, "%zu", written))
-		goto out;
-
-	ret = 0;
-
-out:
-	free(buf);
-	return ret;
-}
-
 /*
  * Returns the assessed min-entropy per sample - "hAssessed" of the "Overall"
  * test case - or a negative value if the report does not carry it.
@@ -243,21 +206,16 @@ static void esdm_sec_cleanup(void)
 	rmdir(esdm_sec_workdir);
 }
 
-int main(int argc, char *argv[])
+static int esdm_output_min_entropy_security_test(void)
 {
 	const char *tmpdir = getenv("TMPDIR");
+	char path[sizeof(esdm_sec_workdir) + 16];
+	uint8_t *buf = NULL;
+	size_t written = 0;
+	ssize_t rc;
 	double h;
+	FILE *f;
 	int ret;
-
-	(void)argc;
-	(void)argv;
-
-#ifndef ESDM_TESTMODE
-	if (getuid()) {
-		printf("Program must be started as root\n");
-		return 77;
-	}
-#endif
 
 	snprintf(esdm_sec_workdir, sizeof(esdm_sec_workdir),
 		 "%s/esdm-output-min-entropy-XXXXXX",
@@ -267,6 +225,12 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	buf = malloc(ESDM_SEC_BYTES);
+	if (!buf) {
+		ret = 1;
+		goto out;
+	}
+
 	esdm_logger_set_verbosity(LOGGER_DEBUG);
 	TEST_STEP("initialize the ESDM");
 	TEST_REQUIRE("the ESDM initializes");
@@ -274,7 +238,27 @@ int main(int argc, char *argv[])
 	if (!TEST_CHECK(ret == 0, "%d", ret))
 		goto fini;
 
-	ret = esdm_sec_write_samples();
+	TEST_STEP("request 1 MiB from esdm_get_random_bytes_full");
+	rc = esdm_get_random_bytes_full(buf, ESDM_SEC_BYTES);
+	TEST_REQUIRE("1 MiB is returned");
+	if (!TEST_CHECK(rc == ESDM_SEC_BYTES, "%zd", rc)) {
+		ret = 1;
+		goto fini;
+	}
+
+	snprintf(path, sizeof(path), "%s/random.bin", esdm_sec_workdir);
+	TEST_STEP("write the bytes to random.bin in a temporary directory");
+	f = fopen(path, "wb");
+	if (f) {
+		written = fwrite(buf, 1, ESDM_SEC_BYTES, f);
+		/* A failed flush loses what was written */
+		if (fclose(f))
+			written = 0;
+	}
+
+	TEST_REQUIRE("all of the 1 MiB is written to the file");
+	if (!TEST_CHECK(written == ESDM_SEC_BYTES, "%zu", written))
+		ret = 1;
 
 fini:
 	TEST_STEP("shut the ESDM down");
@@ -312,12 +296,27 @@ fini:
 	}
 
 	printf("assessed min-entropy: %f bits per byte\n", h);
-	TEST_REQUIRE("the assessed min-entropy is above %.1f bits per byte",
-		     ESDM_SEC_MIN_BITS);
+	TEST_REQUIRE("the assessed min-entropy is above 6 bits per byte");
 	if (!TEST_CHECK(h > ESDM_SEC_MIN_BITS, "%f", h))
 		ret = 1;
 
 out:
+	free(buf);
 	esdm_sec_cleanup();
 	return ret;
+}
+
+int main(int argc, char *argv[])
+{
+	(void)argc;
+	(void)argv;
+
+#ifndef ESDM_TESTMODE
+	if (getuid()) {
+		printf("Program must be started as root\n");
+		return 77;
+	}
+#endif
+
+	return esdm_output_min_entropy_security_test();
 }

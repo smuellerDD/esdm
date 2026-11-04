@@ -38,6 +38,7 @@
 
 /* Wait for @cond for at most this many 100ms slices */
 #define ESDM_SEC_WAIT_SLICES 200
+_Static_assert(ESDM_SEC_WAIT_SLICES == 200, "stated by the test plan");
 
 static void esdm_sec_sleep(void)
 {
@@ -77,12 +78,13 @@ static ssize_t esdm_sec_get_seed(void)
 	return ret;
 }
 
-static int esdm_selftest_test(void)
+static int esdm_selftest_security_test(void)
 {
 	uint8_t buf[64];
 	long long passes, now;
 	ssize_t rc;
 	int ret = 0;
+	_Static_assert(sizeof(buf) == 64, "stated by the test plan");
 
 	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
@@ -121,10 +123,9 @@ static int esdm_selftest_test(void)
 	if (!TEST_CHECK(passes >= 1, "%lld", passes))
 		goto err;
 
-	TEST_STEP("request %zu bytes from esdm_get_random_bytes_full",
-		  sizeof(buf));
+	TEST_STEP("request 64 bytes from esdm_get_random_bytes_full");
 	rc = esdm_get_random_bytes_full(buf, sizeof(buf));
-	TEST_REQUIRE("%zu bytes are returned", sizeof(buf));
+	TEST_REQUIRE("64 bytes are returned");
 	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
 		goto err;
 
@@ -168,8 +169,7 @@ static int esdm_selftest_test(void)
 
 	/* The interval is one second in a test mode build */
 	TEST_RUNUNTIL(
-		"wait 100 ms until two more self test passes ran, at most %u times",
-		ESDM_SEC_WAIT_SLICES);
+		"wait 100 ms until two more self test passes ran, at most 200 times");
 	ESDM_SEC_WAIT_FOR(esdm_selftest_passes() >= passes + 2);
 	TEST_STEP("read the number of self test passes");
 	now = esdm_selftest_passes();
@@ -194,8 +194,7 @@ static int esdm_selftest_test(void)
 			"%s", esdm_selftest_crypto_state_name()))
 		goto err;
 
-	TEST_STEP("request %zu bytes from esdm_get_random_bytes_full",
-		  sizeof(buf));
+	TEST_STEP("request 64 bytes from esdm_get_random_bytes_full");
 	rc = esdm_get_random_bytes_full(buf, sizeof(buf));
 	TEST_REQUIRE("the request is refused with -EOPNOTSUPP");
 	if (!TEST_CHECK(rc == -EOPNOTSUPP, "%zd", rc))
@@ -221,8 +220,7 @@ static int esdm_selftest_test(void)
 
 	/* A failure is not recovered from, so the worker leaves */
 	TEST_RUNUNTIL(
-		"wait 100 ms until the periodic self test worker left, at most %u times",
-		ESDM_SEC_WAIT_SLICES);
+		"wait 100 ms until the periodic self test worker left, at most 200 times");
 	ESDM_SEC_WAIT_FOR(!esdm_selftest_periodic_running());
 	TEST_REQUIRE("the periodic self test worker left");
 	if (!TEST_CHECK(!esdm_selftest_periodic_running(), "%d",
@@ -244,7 +242,7 @@ int main(int argc, char *argv[])
 	(void)argv;
 
 #ifdef ESDM_TESTMODE
-	return esdm_selftest_test();
+	return esdm_selftest_security_test();
 #else
 	printf("test mode not compiled in\n");
 	return 77;
