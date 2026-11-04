@@ -117,6 +117,13 @@ static DEFINE_MUTEX_W_UNLOCKED(esdm_es_mgr_monitor_lock);
 static DECLARE_WAIT_QUEUE(esdm_monitor_wait);
 
 /*
+ * A wakeup for the monitor that must not be lost: one that arrives during a
+ * round - a cache drained while it refills another - has it start the next
+ * round at once instead of after its interval.
+ */
+static atomic_bool esdm_es_mgr_monitor_pending = false;
+
+/*
  * The entries must be in the same order as defined by enum esdm_internal_es and
  * enum esdm_external_es
  */
@@ -176,10 +183,20 @@ bool esdm_es_mgr_running(void)
 	return atomic_load(&esdm_es_mgr_terminate) == 0;
 }
 
-/* Restart the ES monitor if it is sleeping */
+/* Restart the ES monitor if it is sleeping, or right after its round */
 void esdm_es_mgr_monitor_wakeup(void)
 {
-	thread_wake_all(&esdm_monitor_wait);
+	/* Before the signal, sent under the lock of the queue - see below */
+	atomic_store(&esdm_es_mgr_monitor_pending, true);
+	thread_wake_all_locked(&esdm_monitor_wait);
+}
+
+static bool esdm_es_mgr_monitor_due(void *unused)
+{
+	(void)unused;
+
+	return atomic_load(&esdm_es_mgr_monitor_pending) ||
+	       atomic_load(&esdm_es_mgr_terminate);
 }
 
 /*
@@ -236,8 +253,6 @@ static void *esdm_es_get_ent_thread(void *data)
 /* ES monitor worker loop */
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
-	struct timespec ts = { .tv_sec = 0,
-			       .tv_nsec = ESDM_ES_MONITOR_INTERVAL_NS };
 	struct esdm_es_monitor_thread_arg args[esdm_ext_es_last];
 	unsigned int i, avail = 0;
 	bool priv_init_completed = false;
@@ -261,10 +276,14 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 		    "Full entropy monitor started\n");
 
 	while (!atomic_load(&esdm_es_mgr_terminate)) {
+		struct timespec deadline;
 		unsigned int j;
 		int ret = 0;
 		bool priv_init_complete = true;
 		bool spawned = false;
+
+		/* Taken down before the round, so one raised during it is kept */
+		atomic_store(&esdm_es_mgr_monitor_pending, false);
 
 		/*
 		 * Hold the monitor lock across the active pass (spawning the
@@ -340,20 +359,24 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 		mutex_w_unlock(&esdm_es_mgr_monitor_lock);
 
 		/*
-		 * Bounded, interruptible wait regardless of the current seeding
-		 * state: a wakeup (entropy need via esdm_es_mgr_monitor_wakeup,
-		 * or termination) delivered between the checks above and this
-		 * wait would otherwise be lost, hanging the monitor. The wait is
-		 * a plain condvar wait with no persistent flag, so it only
-		 * returns early on a genuine broadcast and does not busy-loop; on
-		 * timeout the enclosing loop re-checks esdm_es_mgr_terminate and
-		 * the seeded state, so a missed wakeup costs at most one interval.
-		 * Previously the not-fully-seeded branch used an uninterruptible
-		 * nanosleep(), which delayed clean shutdown and ignored entropy
-		 * wakeups for up to a full interval precisely when entropy was
-		 * most needed.
+		 * Bounded wait on a wakeup that was raised before its signal: one
+		 * delivered during the round above ends it at once, and one
+		 * raised on the way into the wait is seen by the check under
+		 * the lock of the queue - see thread_wait_queue_wait_pred().
+		 * The loop covers a spurious wakeup.
 		 */
-		thread_timedwait_no_event(&esdm_monitor_wait, &ts);
+		clock_gettime(CLOCK_MONOTONIC, &deadline);
+		deadline.tv_nsec += ESDM_ES_MONITOR_INTERVAL_NS;
+		if (deadline.tv_nsec >= 1000000000L) {
+			deadline.tv_sec++;
+			deadline.tv_nsec -= 1000000000L;
+		}
+		do {
+			ret = thread_wait_queue_wait_pred(&esdm_monitor_wait,
+							  &deadline,
+							  esdm_es_mgr_monitor_due,
+							  NULL);
+		} while (!ret && !esdm_es_mgr_monitor_due(NULL));
 	}
 
 	if (!priv_init_completed && priv_init_completion)
