@@ -2022,6 +2022,117 @@
             };
           });
 
+          # The security tests, run as the check phase of a test mode build.
+          # The output is what the report needs of that run: the JUnit log the
+          # check phase writes, and the test list of "meson introspect --tests"
+          # naming the file, function and description of each test - see
+          # esdm-security-report. A test that does not pass does not fail the
+          # build: nix would discard the log together with the output, and the
+          # report is where a failure shows.
+          esdm-security-tests = self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-security-tests";
+
+            # The report tooling is not what is tested, so a change to it does
+            # not run the tests again.
+            src = lib.cleanSourceWith {
+              src = prev.src;
+              filter = path: _type: !(lib.hasSuffix "/tests/security/report" path);
+            };
+
+            # The security tests drive the ESDM through its test perturbation
+            # hooks and skip without them.
+            mesonFlags = prev.mesonFlags ++ [ "-Dtestmode=enabled" ];
+
+            # ea_non_iid for the output min-entropy test, which skips without it
+            nativeCheckInputs = (prev.nativeCheckInputs or [ ]) ++ [
+              pkgs.sp800-90b-entropyassessment
+            ];
+
+            doCheck = true;
+            checkPhase = ''
+              runHook preCheck
+
+              date -u +%Y-%m-%dT%H:%M:%SZ >meson-logs/run-date
+
+              # The builder may be busy - give the tests that wait for entropy
+              # room before they time out.
+              meson test --suite security --print-errorlogs --timeout-multiplier 5 ||
+                echo "not every security test passed - see esdm-security-report"
+
+              runHook postCheck
+            '';
+
+            installPhase = ''
+              runHook preInstall
+
+              doc=$out/share/doc/esdm/security-tests
+              mkdir -p $doc
+              meson introspect --tests >$doc/tests.json
+              cp meson-logs/testlog.junit.xml meson-logs/testlog.txt \
+                meson-logs/run-date $doc/
+
+              runHook postInstall
+            '';
+
+            # The output holds the log of a run, not the programs - so there is
+            # no esdm-server for the inherited FIPS integrity fixup to sign.
+            postFixup = "";
+
+            meta = prev.meta // {
+              description = "JUnit log and test list of a run of the ESDM security tests";
+            };
+          });
+
+          # The report of the security tests, typeset with typst:
+          #
+          #   nix build .#esdm-security-report
+          #   xdg-open result/share/doc/esdm/security-report/security-report.pdf
+          #
+          # tests/security/report/security_report.py collects it from
+          # esdm-security-tests: the tests from "meson introspect --tests", the
+          # test plan of each from the source of its test function, parsed with
+          # tree-sitter, and what the run made of the plan from the JUnit log.
+          esdm-security-report =
+            let
+              tests = self.packages.${system}.esdm-security-tests;
+              # The C grammar is loaded from its library: the python binding
+              # nixpkgs has for it depends on packages that fail to build.
+              python = pkgs.python3.withPackages (ps: [ ps.tree-sitter ]);
+              tooling = ./tests/security/report;
+            in
+            pkgs.runCommand "esdm-security-report-${tests.version}"
+              {
+                nativeBuildInputs = [
+                  python
+                  pkgs.typst
+                ];
+                meta.description = "PDF report of a run of the ESDM security tests";
+              }
+              ''
+                run=${tests}/share/doc/esdm/security-tests
+                doc=$out/share/doc/esdm/security-report
+                mkdir -p $doc
+
+                python3 ${tooling}/security_report.py \
+                  --tests $run/tests.json \
+                  --junit $run/testlog.junit.xml \
+                  --source-root ${tests.src} \
+                  --grammar ${pkgs.tree-sitter-grammars.tree-sitter-c}/parser \
+                  --version ${tests.version} \
+                  --revision ${self.shortRev or self.dirtyShortRev or "unknown"} \
+                  --run-date "$(cat $run/run-date)" \
+                  --output $doc/security-report.json
+                cp ${tooling}/security_report.typ $doc/security-report.typ
+
+                # Only the fonts typst carries, so the sandbox makes no
+                # difference; it would keep its package cache below
+                # XDG_CACHE_HOME.
+                XDG_CACHE_HOME=$TMPDIR typst compile --ignore-system-fonts \
+                  $doc/security-report.typ $doc/security-report.pdf
+
+                cp $run/testlog.junit.xml $doc/
+              '';
+
           esdm-coverage = coverageOf "esdm-coverage" self.packages.${system}.esdm;
 
           # The same, for the build carrying the eBPF entropy sources. A separate
