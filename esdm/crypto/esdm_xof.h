@@ -41,7 +41,8 @@ extern "C" {
 
 /**
  * struct esdm_xof_cb - cryptographic callback functions defining SHAKE256,
- *			the extendable-output function the XDRBG-256 is built on
+ *			the extendable-output function the XDRBG-256 operating
+ *			the auxiliary pool is built on
  * @xof_name		Name of the XOF
  * @xof_init:		Start a new message, discarding the previous one
  *			xof: is pointer to data structure allocated with

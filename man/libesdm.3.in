@@ -149,7 +149,8 @@ Size of the auxiliary pool, in bits.
 Entropy accounted for in the auxiliary pool, in bits.
 .TP
 .BI "uint32_t esdm_get_digestsize(void);"
-Digest size of the conditioning hash, in bits.
+Size of the state of the XDRBG-256 operating an auxiliary pool, in bits:
+the most entropy a pool holds.
 .TP
 .BI "void esdm_pool_set_entropy(uint32_t " entropy_bits ");"
 Set the entropy accounted for in the auxiliary pool.

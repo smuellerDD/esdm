@@ -325,10 +325,10 @@ uint32_t esdm_avail_poolsize_aux(void);
 uint32_t esdm_get_aux_ent(void);
 
 /**
- * @brief Obtain the size of the message digest of the conditioner used by the
- *	  ESDM
+ * @brief Obtain the size of the state of the XDRBG-256 operating an auxiliary
+ *	  pool, which is the most entropy a pool holds
  *
- * @return message digest size in bits
+ * @return state size in bits
  */
 uint32_t esdm_get_digestsize(void);
 

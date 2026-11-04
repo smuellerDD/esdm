@@ -55,7 +55,8 @@ extern "C" {
  * returns to the unseeded state.
  *
  * On top of it, the seed can be inserted as it comes, which is how the
- * entropy pools absorb their data: the SHAKE256 of the next instantiation
+ * entropy pools - the auxiliary pool and the conditioning pool of the eBPF
+ * entropy sources - absorb their data: the SHAKE256 of the next instantiation
  * or reseed absorbs V and every insert right away (esdm_xdrbg_insert()), and
  * the seed esdm_xdrbg_seed() is given follows what was inserted. A pool
  * extracts (esdm_xdrbg_extract()): it reseeds with what it absorbed and
