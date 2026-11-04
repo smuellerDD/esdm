@@ -225,8 +225,9 @@ to verify the correctness of the implementation of ESDM. To execute the
 testing, use `meson test -C build` after the setup step outlined in [Build].
 
 Every test is in the suite of its directory below `tests/` - `core` for
-`tests/esdm` - and the security tests also in `security`, so a subset runs
-with e.g. `meson test -C build --suite security`.
+`tests/esdm` - so a subset runs with e.g. `meson test -C build --suite
+security`. The security tests in `tests/security` each check one security
+property of the ESDM and print it at their start.
 
 Note, some tests require to be executed as root. For example to validate the
 correctness of the device file implementations of `/dev/random` or

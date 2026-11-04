@@ -314,6 +314,7 @@ testdirs = [
 	'tests/proc',
 	'tests/rpc_client',
 	'tests/rpc_service',
+	'tests/security',
 	'tests/server',
 	'tests/server-signal-helper',
 	'tests/aux-client',

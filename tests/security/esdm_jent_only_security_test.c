@@ -49,7 +49,7 @@
 #include "esdm_drng_mgr.h"
 #include "esdm_es_jent.h"
 #include "esdm_logger.h"
-#include "es_rates.h"
+#include "../esdm/es_rates.h"
 #include "ret_checkers.h"
 #include "../test_plan.h"
 
