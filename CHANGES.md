@@ -61,6 +61,10 @@ addon/es_ebpf_testing
 
 * Centralize asynchronous buffer management to collect entropy from slow entropy sources
 
+* Entropy source caches: a block is retired after es_buf_max_age seconds (default 30) and credited at most at the rate the source has when it is served; a block filled across a reset is discarded, a failed fill counts as a miss while the source is credited, and the blocks of an uncredited source carry no entropy; a consumer takes any filled slot, the ES monitor refills until no slot is empty, a wakeup of the monitor during its round is no longer lost, and the Jitter RNG waits for a block in the making while its synchronous collector is busy
+
+* Seeding: a reseed takes what the sources with a cache have ready and asks a source whose cache is empty only when the others fall short of the entropy of the reseed, so a slow source such as a TPM no longer holds up every reseed once its cache is drained; only the sources to fetch get a thread of the parallel fetch, and the prediction resistance DRNG is seeded with entropy collected for its request rather than from the caches
+
 * Add TPM2 entropy source
 
 * Add PKCS11 entropy source as esdm-es-pkcs11, and esdm-es-pcsc reading PC/SC smart cards - both external ES providers
