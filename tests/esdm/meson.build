@@ -219,4 +219,25 @@ if get_option('esdm-server').enabled()
 
 	test('ESDM reseed leaves out an empty cache', esdm_reseed_cached_test,
 		suite: 'core')
+
+	esdm_aux_xdrbg_test = executable(
+		'esdm_aux_xdrbg_test',
+		[ esdm_ipc_ns, 'esdm_aux_xdrbg_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
+	test('ESDM aux pool XDRBG-256', esdm_aux_xdrbg_test, suite: 'core')
+
+	esdm_aux_xof_failure_test = executable(
+		'esdm_aux_xof_failure_test',
+		[ esdm_ipc_ns, 'esdm_aux_xof_failure_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
+	test('ESDM aux pool XOF failure', esdm_aux_xof_failure_test,
+		suite: 'core')
 endif
