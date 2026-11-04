@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "config.h"
 #include "esdm_es_aux.h"
@@ -61,6 +62,14 @@ static void esdm_es_buf_scrub(struct esdm_es_buf *buf, unsigned int slot)
 	memset_secure(&buf->blocks[slot], 0, sizeof(buf->blocks[slot]));
 	atomic_thread_fence(memory_order_seq_cst);
 	atomic_store(&buf->states[slot], esdm_es_buf_empty);
+}
+
+static uint64_t esdm_es_buf_now_ns(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
 static uint32_t esdm_es_buf_rate(struct esdm_es_buf *buf)
@@ -112,6 +121,7 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 	/* The generation the zeroed fill records of a new cache belong to */
 	atomic_store(&buf->gen, 0);
 	atomic_store(&buf->monitor_initialized, false);
+	atomic_store(&buf->fill_ns, 0);
 	atomic_store_explicit(&buf->ready, true, memory_order_release);
 
 	return 0;
@@ -248,6 +258,7 @@ again:
 	     i++) {
 		enum esdm_es_buf_state expected = esdm_es_buf_empty;
 		unsigned int gen;
+		uint64_t start;
 
 		if (!atomic_compare_exchange_strong(&buf->states[i], &expected,
 						    esdm_es_buf_filling))
@@ -263,7 +274,9 @@ again:
 		gen = atomic_load(&buf->gen);
 		rate = esdm_es_buf_rate(buf);
 		buf->fills[i].created = esdm_monotonic_now();
+		start = esdm_es_buf_now_ns();
 		fill(&buf->blocks[i], requested_bits, ctx);
+		atomic_store(&buf->fill_ns, esdm_es_buf_now_ns() - start);
 
 		atomic_thread_fence(memory_order_seq_cst);
 
@@ -520,4 +533,51 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 		esdm_es_mgr_monitor_wakeup();
 
 	return true;
+}
+
+/* Is any slot of @buf in @state? */
+static bool esdm_es_buf_any(struct esdm_es_buf *buf,
+			    enum esdm_es_buf_state state)
+{
+	unsigned int i;
+
+	for (i = 0; i < buf->num_blocks; i++) {
+		if (atomic_load(&buf->states[i]) == state)
+			return true;
+	}
+
+	return false;
+}
+
+/* Poll interval while waiting for a fill */
+#define ESDM_ES_BUF_WAIT_POLL_NS 50000
+
+bool esdm_es_buf_try_get_wait(struct esdm_es_buf *buf,
+			      struct entropy_es *eb_es,
+			      uint32_t requested_bits, bool credited)
+{
+	struct timespec poll = { .tv_sec = 0,
+				 .tv_nsec = ESDM_ES_BUF_WAIT_POLL_NS };
+	uint64_t deadline;
+
+	if (esdm_es_buf_try_get(buf, eb_es, requested_bits, credited))
+		return true;
+
+	/* No block serves it, see esdm_es_buf_try_get() */
+	if (!buf || !esdm_es_buf_published(buf) || !eb_es ||
+	    requested_bits > esdm_get_seed_entropy_osr(false, true))
+		return false;
+
+	deadline = esdm_es_buf_now_ns() + 2 * atomic_load(&buf->fill_ns);
+
+	while (esdm_es_mgr_running() &&
+	       esdm_es_buf_any(buf, esdm_es_buf_filling) &&
+	       esdm_es_buf_now_ns() < deadline) {
+		nanosleep(&poll, NULL);
+		if (esdm_es_buf_any(buf, esdm_es_buf_filled) &&
+		    esdm_es_buf_try_get(buf, eb_es, requested_bits, credited))
+			return true;
+	}
+
+	return false;
 }
