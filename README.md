@@ -33,8 +33,9 @@ It is extensible as follows:
   DRNG, or the `hash_sha3_512` configuration option replacing the SHA2-512
   conditioning hash with SHA3-512.
 
-* The auxiliary pool, which data written into the ESDM goes to, is an
-  XDRBG-256: the XDRBG over SHAKE256 (Kelsey, Lucks, Mueller, IACR ToSC
+* The entropy pools - the auxiliary pool, which data written into the ESDM
+  goes to, and the conditioning pool of the eBPF entropy sources - are each
+  an XDRBG-256: the XDRBG over SHAKE256 (Kelsey, Lucks, Mueller, IACR ToSC
   2024(1)) with a state of 512 bits, provided by the crypto backend. Each
   insert is part of the seed of its next reseed, and an extraction reseeds
   and generates, so that the output never reveals the state of the pool.

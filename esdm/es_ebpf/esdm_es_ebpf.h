@@ -27,6 +27,7 @@
 #include <stdbool.h>
 
 #include "esdm_es_ebpf_shared.h"
+#include "esdm_xdrbg.h"
 
 struct bpf_map;
 struct bpf_object;
@@ -93,10 +94,8 @@ struct esdm_ebpf_es {
 	uint32_t reset_gen;
 	uint64_t health_failures;
 
-	/* Conditioning pool: digest states (internal and output) */
-	void *pool_state;
-	void *pool_out;
-	bool pool_initialized;
+	/* Conditioning pool: an XDRBG-256 */
+	struct esdm_xdrbg pool;
 
 	/* Events whose entropy is present in the conditioning pool */
 	uint64_t credited_events;

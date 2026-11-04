@@ -5,12 +5,12 @@
  * ring buffer consumption, conditioning pool, entropy accounting and libbpf
  * integration.
  *
- * The conditioning pool follows the construction of the auxiliary pool
- * (esdm_es_aux.c): the collected event data is inserted into two hash states
- * (an internal state and an output state, domain separated) using the hash of
- * the configured crypto backend. On extraction, the internal state is fed
- * back into both re-initialized hash states which provides backtracking
- * resistance.
+ * The conditioning pool is an XDRBG-256 like the auxiliary pool (see
+ * esdm_xdrbg.h): the collected event data is the seed of its next reseed, and
+ * an extraction reseeds and generates, which provides backtracking
+ * resistance. The pools of the eBPF entropy sources are told apart by the
+ * additional input alpha of their XDRBG, which carries the name of the
+ * source.
  *
  * Copyright (C) 2026, Jakub Zelenka <bukka@php.net>
  *
@@ -108,9 +108,8 @@
  */
 #define ESDM_EBPF_HIGHRES_MAX_NS 1000
 
-/* Domain separation strings for the two hash states, padded to same length */
-#define ESDM_EBPF_POOL_DS_STATE "STATE0"
-#define ESDM_EBPF_POOL_DS_OUTPUT "OUTPUT"
+/* The additional input alpha of the XDRBG of a source, before its name */
+#define ESDM_EBPF_POOL_ALPHA "ESDM eBPF pool "
 
 bool esdm_ebpf_btf_available(void)
 {
@@ -526,112 +525,29 @@ static void esdm_ebpf_write_status(struct esdm_ebpf_es *es)
 /***************************** Conditioning pool ******************************/
 
 /*
- * Initialize the two hash states with domain separation between the states
- * and between the entropy sources.
+ * The conditioning pool is the XDRBG es->pool. An XOF failure discards what it
+ * absorbed, and the entropy credited for it with it - the extraction that
+ * failed clears the credited events. The extraction, a reset and the monitor
+ * initialize the pool for the seed of a new instantiation again, and so does
+ * the next insert: a pool that cannot be initialized now is tried again by the
+ * next caller, so a passing XOF failure does not take the source out until a
+ * reset or a reinitialization.
  */
-static int esdm_ebpf_pool_init_states(struct esdm_ebpf_es *es,
-				      const struct esdm_hash_cb *hash_cb)
+
+/* The additional input alpha of the XDRBG of @es: returns its length */
+static size_t esdm_ebpf_pool_alpha(struct esdm_ebpf_es *es,
+				   uint8_t alpha[ESDM_XDRBG_MAX_ALPHA])
 {
-	struct hash_ctx *shash = (struct hash_ctx *)es->pool_state;
-	struct hash_ctx *ohash = (struct hash_ctx *)es->pool_out;
-	int ret;
+	size_t prefix = sizeof(ESDM_EBPF_POOL_ALPHA) - 1;
+	size_t name = strlen(es->name);
 
-	CKINT(hash_cb->hash_init(shash));
-	CKINT(hash_cb->hash_init(ohash));
+	/* The names are short, and a longer one would only be cut */
+	if (name > ESDM_XDRBG_MAX_ALPHA - prefix)
+		name = ESDM_XDRBG_MAX_ALPHA - prefix;
 
-	CKINT(hash_cb->hash_update(shash,
-				   (const uint8_t *)ESDM_EBPF_POOL_DS_STATE,
-				   sizeof(ESDM_EBPF_POOL_DS_STATE) - 1));
-	CKINT(hash_cb->hash_update(ohash,
-				   (const uint8_t *)ESDM_EBPF_POOL_DS_OUTPUT,
-				   sizeof(ESDM_EBPF_POOL_DS_OUTPUT) - 1));
-
-	/* Domain separation between the eBPF entropy sources */
-	CKINT(hash_cb->hash_update(shash, (const uint8_t *)es->name,
-				   strlen(es->name)));
-	CKINT(hash_cb->hash_update(ohash, (const uint8_t *)es->name,
-				   strlen(es->name)));
-
-	es->pool_initialized = true;
-
-out:
-	return ret;
-}
-
-static int esdm_ebpf_pool_alloc(struct esdm_ebpf_es *es)
-{
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_hash_cb *hash_cb = drng->hash_cb;
-	int ret = 0;
-
-	if (hash_cb->hash_alloc) {
-		CKINT(hash_cb->hash_alloc(&es->pool_state));
-		CKINT(hash_cb->hash_alloc(&es->pool_out));
-	}
-
-	CKINT(esdm_ebpf_pool_init_states(es, hash_cb));
-
-	return 0;
-
-out:
-	if (es->pool_state && hash_cb->hash_dealloc) {
-		hash_cb->hash_dealloc(es->pool_state);
-		es->pool_state = NULL;
-	}
-	if (es->pool_out && hash_cb->hash_dealloc) {
-		hash_cb->hash_dealloc(es->pool_out);
-		es->pool_out = NULL;
-	}
-	es->pool_initialized = false;
-	return ret;
-}
-
-static void esdm_ebpf_pool_dealloc(struct esdm_ebpf_es *es)
-{
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_hash_cb *hash_cb = drng->hash_cb;
-
-	/*
-	 * The hash states have absorbed the collected event data, so they are
-	 * erased before they are handed back rather than left to the backend to
-	 * dispose of as it sees fit.
-	 */
-	if (hash_cb->hash_desc_zero) {
-		if (es->pool_state)
-			hash_cb->hash_desc_zero(es->pool_state);
-		if (es->pool_out)
-			hash_cb->hash_desc_zero(es->pool_out);
-	}
-
-	if (hash_cb->hash_dealloc) {
-		if (es->pool_state)
-			hash_cb->hash_dealloc(es->pool_state);
-		if (es->pool_out)
-			hash_cb->hash_dealloc(es->pool_out);
-	}
-	es->pool_state = NULL;
-	es->pool_out = NULL;
-	es->pool_initialized = false;
-}
-
-/* Insert collected event data into the conditioning pool. */
-static int esdm_ebpf_pool_insert(struct esdm_ebpf_es *es, const uint8_t *data,
-				 size_t len)
-{
-	struct hash_ctx *shash = (struct hash_ctx *)es->pool_state;
-	struct hash_ctx *ohash = (struct hash_ctx *)es->pool_out;
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_hash_cb *hash_cb = drng->hash_cb;
-	int ret;
-
-	if (!es->pool_initialized)
-		return -EOPNOTSUPP;
-
-	CKINT(hash_cb->hash_update(shash, data, len));
-	CKINT(hash_cb->hash_update(ohash, data, len));
-
-out:
-	return ret;
+	memcpy(alpha, ESDM_EBPF_POOL_ALPHA, prefix);
+	memcpy(alpha + prefix, es->name, name);
+	return prefix + name;
 }
 
 /*
@@ -661,15 +577,15 @@ static uint64_t esdm_ebpf_events_for_bits(struct esdm_ebpf_es *es,
 }
 
 /*
- * Events one output block costs: the conditioning hash must absorb a digest
+ * Events one output block costs: the conditioning pool must absorb a digest
  * worth of entropy plus the oversampling surcharge esdm_compress_osr() demands
  * in FIPS / SP800-90C / NTG.1 mode to emit one full digest of output, and an
  * event carries 1 / OSR bits of it.
  *
  * This is what an extraction fetches and at the same time the ceiling for the
  * ingest: everything absorbed is compressed into that one block, so events
- * beyond it add data but no entropy - a hash pool never carries more than its
- * output size (SP800-90B 3.1.5.1 table 1), like the auxiliary pool's counter.
+ * beyond it add data but no entropy - the pool never carries more than the
+ * state of its XDRBG (SP800-90B 3.1.5.1 table 1), like the auxiliary pool.
  */
 static uint64_t esdm_ebpf_events_per_block(struct esdm_ebpf_es *es)
 {
@@ -726,7 +642,8 @@ static uint32_t esdm_ebpf_collected_entropy(struct esdm_ebpf_es *es)
  */
 uint32_t esdm_ebpf_avail_entropy(struct esdm_ebpf_es *es)
 {
-	if (!es->loaded || !es->pool_initialized || es->perm_failure)
+	if (!es->loaded || !esdm_xdrbg_seed_initialized(&es->pool) ||
+	    es->perm_failure)
 		return 0;
 
 	return esdm_reduce_by_osr(min_uint32(
@@ -737,7 +654,7 @@ uint32_t esdm_ebpf_avail_entropy(struct esdm_ebpf_es *es)
 
 uint32_t esdm_ebpf_max_entropy(struct esdm_ebpf_es *es)
 {
-	if (!es->loaded || !es->pool_initialized)
+	if (!es->loaded || !esdm_xdrbg_seed_initialized(&es->pool))
 		return 0;
 
 	/*
@@ -750,28 +667,20 @@ uint32_t esdm_ebpf_max_entropy(struct esdm_ebpf_es *es)
 void esdm_ebpf_get_ent(struct esdm_ebpf_es *es, struct entropy_es *eb_es,
 		       uint32_t requested_bits)
 {
-	struct hash_ctx *shash = (struct hash_ctx *)es->pool_state;
-	struct hash_ctx *ohash = (struct hash_ctx *)es->pool_out;
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_hash_cb *hash_cb = drng->hash_cb;
-	uint32_t collected_ent_bits, requested_bits_osr, digestsize,
-		digestsize_bits;
-	uint8_t pool_state_digest[ESDM_MAX_DIGESTSIZE];
-	uint8_t pool_out_digest[ESDM_MAX_DIGESTSIZE];
+	uint8_t alpha[ESDM_XDRBG_MAX_ALPHA];
+	uint32_t collected_ent_bits, requested_bits_osr,
+		digestsize_bits = esdm_get_digestsize();
+	size_t alphalen;
 
 	eb_es->e_bits = 0;
 
-	if (!es->pool_initialized)
+	if (esdm_xdrbg_seed_init(&es->pool))
 		return;
 
-	digestsize = hash_cb->hash_digestsize(shash);
-	digestsize_bits = digestsize << 3;
-
-	/* Cap to maximum entropy that can ever be generated with given hash */
+	/* Cap to maximum entropy that can ever be generated with the XDRBG */
 	esdm_cap_requested(digestsize_bits, requested_bits);
 
-	/* Ensure the memcpy() below cannot overflow the seed buffer. */
-	requested_bits = min_uint32(requested_bits, ESDM_MAX_DIGESTSIZE << 3);
+	/* Never more than fits into the seed buffer */
 	requested_bits =
 		min_uint32(requested_bits, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	requested_bits_osr = requested_bits + esdm_compress_osr();
@@ -791,8 +700,8 @@ void esdm_ebpf_get_ent(struct esdm_ebpf_es *es, struct entropy_es *eb_es,
 	 * surcharge esdm_reduce_by_osr() takes off below. Without this the
 	 * source would claim a whole digest for the partial one it handed out.
 	 * It is also the only ceiling needed - the request is capped at the
-	 * digest size above and the ingest at what one block costs, which is
-	 * that same digest plus the same surcharge.
+	 * state size above and the ingest at what one block costs, which is
+	 * that same size plus the same surcharge.
 	 */
 	collected_ent_bits = min_uint32(requested_bits_osr,
 					esdm_ebpf_collected_entropy(es));
@@ -803,35 +712,33 @@ void esdm_ebpf_get_ent(struct esdm_ebpf_es *es, struct entropy_es *eb_es,
 		    es->name, esdm_reduce_by_osr(collected_ent_bits),
 		    requested_bits);
 
-	/*
-	 * 1) Hash into new state and output digests
-	 * 2) re-initialize both hash states
-	 * 3) feed the internal state digest back into both hash states for
-	 *    backtracking resistance (the internal state is never output)
-	 */
-	if (hash_cb->hash_final(shash, pool_state_digest) ||
-	    hash_cb->hash_final(ohash, pool_out_digest) ||
-	    esdm_ebpf_pool_init_states(es, hash_cb) ||
-	    esdm_ebpf_pool_insert(es, pool_state_digest, digestsize)) {
-		es->pool_initialized = false;
+	alphalen = esdm_ebpf_pool_alpha(es, alpha);
+	if (esdm_xdrbg_extract(&es->pool, alpha, alphalen, eb_es->e,
+			       requested_bits >> 3)) {
+		/*
+		 * The XDRBG discarded its state and what it absorbed, the
+		 * credited events cleared above with it: fail closed for those,
+		 * but initialize the pool for the seed of a new instantiation
+		 * right away, so the source goes on collecting and crediting
+		 * the events still to come.
+		 */
+		memset_secure(eb_es->e, 0, requested_bits >> 3);
+		if (esdm_xdrbg_seed_init(&es->pool))
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"%s ES: conditioning pool cannot be initialized for a new instantiation after an XOF failure\n",
+				es->name);
 	} else {
 		/*
-		 * Deliver the output digest even if no entropy is credited:
-		 * the data still stirs the DRNG state.
+		 * Deliver the output even if no entropy is credited: the data
+		 * still stirs the DRNG state.
 		 */
-		memcpy(eb_es->e, pool_out_digest, requested_bits >> 3);
 		eb_es->e_bits = esdm_reduce_by_osr(collected_ent_bits);
 	}
-
-	memset_secure(pool_state_digest, 0, digestsize);
-	memset_secure(pool_out_digest, 0, digestsize);
 }
 
 void esdm_ebpf_pool_reset(struct esdm_ebpf_es *es)
 {
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	const struct esdm_hash_cb *hash_cb = drng->hash_cb;
-
 	es->credited_events = 0;
 
 	/*
@@ -867,9 +774,10 @@ void esdm_ebpf_pool_reset(struct esdm_ebpf_es *es)
 		esdm_ebpf_write_status(es);
 	}
 
-	if (es->pool_state && es->pool_out &&
-	    esdm_ebpf_pool_init_states(es, hash_cb))
-		es->pool_initialized = false;
+	/* A new instantiation, unless the pool is released already */
+	esdm_xdrbg_zero(&es->pool);
+	if (es->pool.xof)
+		(void)esdm_xdrbg_seed_init(&es->pool);
 }
 
 /**************************** Ring buffer ingest ******************************/
@@ -894,8 +802,8 @@ static void esdm_ebpf_handle_events(struct esdm_ebpf_es *es,
 	es->ingested += (uint32_t)events;
 
 	/* The deltas are inserted in full, not folded into bytes */
-	if (esdm_ebpf_pool_insert(es, (const uint8_t *)rec->delta,
-				  events * sizeof(rec->delta[0])))
+	if (esdm_xdrbg_insert(&es->pool, (const uint8_t *)rec->delta,
+			      events * sizeof(rec->delta[0])))
 		return;
 
 	/*
@@ -1086,7 +994,8 @@ int esdm_ebpf_init_es(struct esdm_ebpf_es *es, struct bpf_object *obj)
 	struct bpf_map *rb_map;
 	int ret = 0;
 
-	CKINT(esdm_ebpf_pool_alloc(es));
+	CKINT(esdm_xdrbg_alloc(&es->pool));
+	CKINT(esdm_xdrbg_seed_init(&es->pool));
 
 	rb_map = bpf_object__find_map_by_name(obj, ESDM_EBPF_RB_MAP_NAME);
 	CKNULL_LOG(rb_map, -EINVAL, "%s ES: ring buffer map not found\n",
@@ -1138,7 +1047,7 @@ out:
 	es->state_map = NULL;
 	free(es->cpu_state);
 	es->cpu_state = NULL;
-	esdm_ebpf_pool_dealloc(es);
+	esdm_xdrbg_zero_free(&es->pool);
 	return ret;
 }
 
@@ -1150,7 +1059,8 @@ out:
  */
 int esdm_ebpf_refill(struct esdm_ebpf_es *es)
 {
-	if (!es->loaded || !es->pool_initialized)
+	/* The monitor also retries a pool an XOF failure left discarded */
+	if (!es->loaded || esdm_xdrbg_seed_init(&es->pool))
 		return 0;
 
 	/*
@@ -1241,7 +1151,7 @@ void esdm_ebpf_fini_es(struct esdm_ebpf_es *es)
 		es->rb = NULL;
 	}
 
-	esdm_ebpf_pool_dealloc(es);
+	esdm_xdrbg_zero_free(&es->pool);
 
 	if (es->cpu_state)
 		memset_secure(es->cpu_state, 0, es->cpu_state_sz);
