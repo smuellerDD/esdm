@@ -21,6 +21,7 @@
 
 #include <jitterentropy.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <stdatomic.h>
 #include "config.h"
@@ -33,6 +34,7 @@
 #include "helper.h"
 #include "esdm_logger.h"
 #include "ret_checkers.h"
+#include "threading_support.h"
 
 /*
  * This lock shall prevent a deallocation of the ESDM while a Jitter RNG
@@ -49,7 +51,23 @@ static struct rand_data *esdm_jent_state = NULL;
 
 #if (ESDM_JENT_ENTROPY_BLOCKS != 0)
 static struct esdm_es_buf esdm_jent_buf;
-static struct rand_data *esdm_jent_state_thread = NULL;
+
+/*
+ * The instances refilling the cache, each with a collector of its own and,
+ * once there are several, a thread of its own per monitor round - see
+ * esdm_jent_async_monitor(). Their number is that of
+ * esdm_config_es_jent_instances() at the first initialization.
+ */
+struct esdm_jent_instance {
+	struct rand_data *ec;
+#if JENT_VERSION >= 3080000
+	/* The self test runs bound to ec so far, see esdm_jent_buf_fill() */
+	unsigned int runs_seen;
+#endif
+	int rc;
+};
+static struct esdm_jent_instance *esdm_jent_instances = NULL;
+static unsigned int esdm_jent_num_instances = 0;
 /*
  * Whether the async cache/collector are allocated. The async cache and the
  * async collector are read lock-free by the monitor thread (producer) and by
@@ -152,50 +170,80 @@ err:
 
 #if JENT_VERSION >= 3080000
 /*
- * Counts the self test runs of esdm_jent_selftest(). The async collector is
- * read by the monitor thread without esdm_jent_lock, and a jent_selftest()
- * bound to it must not run in parallel with its jent_read_entropy_safe(),
- * whose recovery frees and replaces the instance. So the self test only
- * counts, and the monitor thread binds the test to its own collector when it
- * sees a new run.
+ * Counts the self test runs of esdm_jent_selftest(). The async collectors are
+ * read by the threads of their instances without esdm_jent_lock, and a
+ * jent_selftest() bound to one must not run in parallel with its
+ * jent_read_entropy_safe(), whose recovery frees and replaces the collector.
+ * So the self test only counts, and each instance binds the test to its own
+ * collector when it sees a new run.
  */
 static atomic_uint esdm_jent_selftest_runs = 0;
 #endif
 
+/* Fill a block with the collector of the instance @ctx */
 static void esdm_jent_buf_fill(struct entropy_es *eb_es,
 			       uint32_t requested_bits, void *ctx)
 {
+	struct esdm_jent_instance *inst = ctx;
 #if JENT_VERSION >= 3080000
-	/* Only the monitor thread fills the cache */
-	static unsigned int runs_seen = 0;
+	/* Only the thread of the instance reads its collector */
 	unsigned int runs = atomic_load(&esdm_jent_selftest_runs);
 
 	/*
 	 * A failing test leaves the collector without output until a later
 	 * run bound to it passes - the next periodic one.
 	 */
-	if (runs != runs_seen) {
-		runs_seen = runs;
-		if (jent_selftest(esdm_jent_state_thread))
+	if (runs != inst->runs_seen) {
+		inst->runs_seen = runs;
+		if (jent_selftest(inst->ec))
 			esdm_logger(
 				LOGGER_ERR, LOGGER_C_ES,
-				"JitterRNG ES: known answer tests of the asynchronous collector failed\n");
+				"JitterRNG ES: known answer tests of an asynchronous collector failed\n");
 	}
 #endif
 
-	(void)ctx;
-	esdm_jent_get(&esdm_jent_state_thread, eb_es, requested_bits);
+	esdm_jent_get(&inst->ec, eb_es, requested_bits);
 }
 
+/* One instance refilling the cache: the empty slots it claims first */
+static void *esdm_jent_instance_monitor(void *arg)
+{
+	struct esdm_jent_instance *inst = arg;
+
+	inst->rc = esdm_es_buf_monitor(&esdm_jent_buf,
+				       esdm_get_seed_entropy_osr(false, true),
+				       esdm_jent_buf_fill, inst);
+	return NULL;
+}
+
+/*
+ * The instances refill the cache side by side, each in a thread of its own
+ * for the round: a slot is claimed by the one that takes it out of the empty
+ * state (esdm_es_buf_monitor_ready()), so they share the empty slots among
+ * them, and the cache refills about as many times faster as there are CPUs
+ * for them - collecting is the bulk of the time the Jitter RNG takes.
+ */
 static int esdm_jent_async_monitor(void)
 {
-	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
+	unsigned int i;
+	int ret = 0;
 
-	if (!esdm_config_es_jent_async_enabled())
+	if (!esdm_config_es_jent_async_enabled() || !esdm_jent_num_instances)
 		return 0;
 
-	return esdm_es_buf_monitor(&esdm_jent_buf, requested_bits,
-				   esdm_jent_buf_fill, NULL);
+	if (esdm_jent_num_instances == 1) {
+		esdm_jent_instance_monitor(&esdm_jent_instances[0]);
+	} else {
+		thread_fork_join(esdm_jent_instance_monitor,
+				 esdm_jent_instances,
+				 sizeof(*esdm_jent_instances),
+				 esdm_jent_num_instances);
+	}
+
+	for (i = 0; i < esdm_jent_num_instances; i++)
+		ret |= esdm_jent_instances[i].rc;
+
+	return ret;
 }
 
 /*
@@ -252,8 +300,23 @@ sync:
 	mutex_w_unlock(&esdm_jent_lock);
 }
 
+/* Release the instances and the cache */
+static void esdm_jent_async_free(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < esdm_jent_num_instances; i++)
+		jent_entropy_collector_free(esdm_jent_instances[i].ec);
+	free(esdm_jent_instances);
+	esdm_jent_instances = NULL;
+	esdm_jent_num_instances = 0;
+
+	esdm_es_buf_free(&esdm_jent_buf);
+}
+
 static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 {
+	unsigned int i, n;
 	int ret = 0;
 
 	/*
@@ -289,12 +352,26 @@ static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 				"JitterRNG", esdm_config_es_jent_entropy_rate,
 				esdm_jent_entropylevel));
 
-	esdm_jent_state_thread = jent_entropy_collector_alloc(osr, flags);
-	if (!esdm_jent_state_thread) {
-		/* Undo the cache allocation just made so it is not leaked. */
+	n = esdm_config_es_jent_instances();
+	esdm_jent_instances = calloc(n, sizeof(*esdm_jent_instances));
+	if (!esdm_jent_instances) {
 		esdm_es_buf_free(&esdm_jent_buf);
-		return -EFAULT;
+		return -ENOMEM;
 	}
+	for (i = 0; i < n; i++) {
+		esdm_jent_instances[i].ec =
+			jent_entropy_collector_alloc(osr, flags);
+		if (!esdm_jent_instances[i].ec) {
+			/* Undo what was allocated so it is not leaked. */
+			esdm_jent_num_instances = i;
+			esdm_jent_async_free();
+			return -EFAULT;
+		}
+	}
+	esdm_jent_num_instances = n;
+	if (n > 1)
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "JitterRNG ES: %u instances refill the cache\n", n);
 
 	esdm_jent_async_alloced = true;
 
@@ -304,10 +381,7 @@ out:
 
 static void esdm_jent_async_fini(void)
 {
-	jent_entropy_collector_free(esdm_jent_state_thread);
-	esdm_jent_state_thread = NULL;
-
-	esdm_es_buf_free(&esdm_jent_buf);
+	esdm_jent_async_free();
 	esdm_jent_async_alloced = false;
 }
 
