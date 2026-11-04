@@ -637,6 +637,16 @@ option('es_jent_kernel', type: 'feature', value: 'disabled',
        (in-kernel).
 ''')
 
+option('es_jent_kernel_name', type: 'string', value: 'jitterentropy_rng',
+       description: '''Kernel crypto API RNG of the kernel jitterentropy source.
+
+The name, or the driver name, of the RNG of /proc/crypto the source reads
+through AF_ALG: jitterentropy_rng is the one of the kernel. A jitterentropy
+kernel module registering its RNG under another name - such as the module of
+jitterentropy 3.8.0 - is selected by its name here, or with esdm-server
+--es_jent_kernel_name NAME.
+''')
+
 # Option for: ESDM_JENT_KERNEL_ENTROPY_RATE
 option('es_jent_kernel_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
        description:'''kernel-based jitter entropy source entropy rate.

@@ -137,6 +137,12 @@ LIBESDM_PRIVATE_1.0 {
 		esdm_es_ext_set_path;
 		esdm_es_ext_set_peer_uid;
 
+		/*
+		 * esdm_es_jent_kernel.h - the kernel RNG the server sets from
+		 * its command line. Only built when es_jent_kernel is enabled.
+		 */
+		esdm_es_jent_kernel_set_name;
+
 		/* esdm_shm_status.h */
 		esdm_shm_status_cleanup_ipc;
 

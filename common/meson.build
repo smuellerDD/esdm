@@ -226,6 +226,10 @@ else
 endif
 
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
+if get_option('es_jent_kernel_name') == '' or get_option('es_jent_kernel_name').contains('"')
+	error('es_jent_kernel_name must name a kernel crypto API RNG')
+endif
+conf_data.set_quoted('ESDM_JENT_KERNEL_NAME', get_option('es_jent_kernel_name'))
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))
 if get_option('es_jent_kernel_entropy_blocks') >= 4 and not disable_es_buf
