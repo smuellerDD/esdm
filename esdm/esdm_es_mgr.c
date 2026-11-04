@@ -236,7 +236,8 @@ static void *esdm_es_get_ent_thread(void *data)
 /* ES monitor worker loop */
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1U << 29 };
+	struct timespec ts = { .tv_sec = 0,
+			       .tv_nsec = ESDM_ES_MONITOR_INTERVAL_NS };
 	struct esdm_es_monitor_thread_arg args[esdm_ext_es_last];
 	unsigned int i, avail = 0;
 	bool priv_init_completed = false;

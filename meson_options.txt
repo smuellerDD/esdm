@@ -106,6 +106,17 @@ when sp80090c is set. The per-ES es_*_entropy_blocks values are honored
 as usual.
 ''')
 
+# Option for: ESDM_ES_BUF_MAX_AGE
+option('es_buf_max_age', type: 'integer', min: 0, max: 86400, value: 30,
+       description:'''Seconds a block of the async entropy source buffer is kept
+
+A block the ES monitor filled ahead of a reseed and that has not been used
+within this time is retired instead of being served: wiped, and filled anew.
+The time is counted from the start of its fill. 0 keeps the blocks until they
+are used. Other than 0, it is 2 at the least: it is counted in whole seconds
+and has to outlive the ES monitor interval of about half a second.
+''')
+
 ################################################################################
 # CPU-based Entropy Source configuration options
 ################################################################################

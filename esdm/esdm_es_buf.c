@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_buf.h"
 #include "esdm_es_mgr.h"
@@ -33,6 +34,33 @@
 static bool esdm_es_buf_published(struct esdm_es_buf *buf)
 {
 	return atomic_load_explicit(&buf->ready, memory_order_acquire);
+}
+
+/*
+ * The age is counted in whole seconds, so a block may retire up to a second
+ * early. It has to outlive the monitor interval even then, or a block would be
+ * retired before the round that could serve it and the cache refilled for
+ * nothing.
+ */
+_Static_assert(ESDM_ES_BUF_MAX_AGE == 0 ||
+		       (ESDM_ES_BUF_MAX_AGE - 1) * 1000000000ULL >
+			       ESDM_ES_MONITOR_INTERVAL_NS,
+	       "es_buf_max_age must exceed the ES monitor interval");
+
+/* Has the block of @slot been kept longer than the cache allows? */
+static bool esdm_es_buf_expired(struct esdm_es_buf *buf, unsigned int slot,
+				long long now)
+{
+	return buf->max_age && now - buf->fills[slot].created >=
+					       (long long)buf->max_age;
+}
+
+/* Wipe the block of a slot the caller claimed, and hand the slot back */
+static void esdm_es_buf_scrub(struct esdm_es_buf *buf, unsigned int slot)
+{
+	memset_secure(&buf->blocks[slot], 0, sizeof(buf->blocks[slot]));
+	atomic_thread_fence(memory_order_seq_cst);
+	atomic_store(&buf->states[slot], esdm_es_buf_empty);
 }
 
 static uint32_t esdm_es_buf_rate(struct esdm_es_buf *buf)
@@ -79,6 +107,7 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 	buf->num_blocks = num_blocks;
 	buf->mask = num_blocks - 1;
 	buf->name = name;
+	buf->max_age = ESDM_ES_BUF_MAX_AGE;
 	atomic_store(&buf->idx, -1);
 	/* The generation the zeroed fill records of a new cache belong to */
 	atomic_store(&buf->gen, 0);
@@ -182,6 +211,30 @@ static int esdm_es_buf_fill_round(struct esdm_es_buf *buf,
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "%s ES block filling started\n", buf->name);
 
+	/*
+	 * Retire what was kept too long, so that the round below fills it
+	 * anew. A slot a consumer claimed meanwhile is the consumer's, which
+	 * checks the age itself.
+	 */
+	if (buf->max_age) {
+		long long now = esdm_monotonic_now();
+
+		for (i = 0; i < buf->num_blocks; i++) {
+			enum esdm_es_buf_state filled = esdm_es_buf_filled;
+
+			if (!esdm_es_buf_expired(buf, i, now) ||
+			    !atomic_compare_exchange_strong(
+				    &buf->states[i], &filled,
+				    esdm_es_buf_reading))
+				continue;
+
+			esdm_es_buf_scrub(buf, i);
+			esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+				    "%s ES monitor: retired slot %u after %u s\n",
+				    buf->name, i, buf->max_age);
+		}
+	}
+
 	for (i = 0; i < buf->num_blocks && esdm_es_mgr_running() &&
 		    esdm_monotonic_now_ns() < deadline_ns;
 	     i++) {
@@ -200,6 +253,7 @@ static int esdm_es_buf_fill_round(struct esdm_es_buf *buf,
 
 		gen = atomic_load(&buf->gen);
 		rate = esdm_es_buf_rate(buf);
+		buf->fills[i].created = esdm_monotonic_now();
 		fill(&buf->blocks[i], requested_bits, ctx);
 
 		atomic_thread_fence(memory_order_seq_cst);
@@ -382,6 +436,17 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "%s ES monitor: buffer slot %u predates a reset\n",
 			    buf->name, slot);
+		esdm_es_mgr_monitor_wakeup();
+		return false;
+	}
+
+	/* Kept longer than the cache allows: retired, see esdm_es_buf.h */
+	if (esdm_es_buf_expired(buf, slot, esdm_monotonic_now())) {
+		esdm_es_buf_scrub(buf, slot);
+
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "%s ES monitor: buffer slot %u retired after %u s\n",
+			    buf->name, slot, buf->max_age);
 		esdm_es_mgr_monitor_wakeup();
 		return false;
 	}

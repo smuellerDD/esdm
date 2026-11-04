@@ -66,6 +66,8 @@ struct esdm_es_buf_fill_info {
 	uint32_t bits;
 	/* The reset generation (struct esdm_es_buf.gen) the fill began in */
 	unsigned int gen;
+	/* When the fill began, esdm_monotonic_now() seconds */
+	long long created;
 };
 
 struct esdm_es_buf {
@@ -86,6 +88,11 @@ struct esdm_es_buf {
 	atomic_uint gen;
 	/* Set by esdm_es_buf_alloc() once the cache can be used */
 	atomic_bool ready;
+	/*
+	 * Seconds a filled block is kept, 0 for as long as it is not used -
+	 * ESDM_ES_BUF_MAX_AGE as esdm_es_buf_alloc() sets it
+	 */
+	unsigned int max_age;
 	const char *name;
 };
 
@@ -114,6 +121,13 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 void esdm_es_buf_free(struct esdm_es_buf *buf);
 
 /*
+ * A block is retired - wiped and its slot given back to the monitor - once it
+ * is older than buf->max_age seconds, counted from the start of its fill:
+ * entropy collected long before the reseed it is used for would otherwise be
+ * kept in memory, and credited, for as long as nobody asks for it. The monitor
+ * retires the expired blocks before each round of fills, esdm_es_buf_try_get()
+ * one it is about to serve.
+ *
  * Reset all slots to empty and clear cached entropy, including the block the
  * monitor is filling at the time, which it discards once done. Allowed to be
  * called on an unallocated buf (it then is a no-op).
