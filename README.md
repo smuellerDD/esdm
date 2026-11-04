@@ -230,6 +230,10 @@ security`. The security tests in `tests/security` each check one security
 property of the ESDM and print it at their start, with the file and the
 function that run the test. The steps of a test are static strings in that
 function, so its plan reads the same from the source as from a run.
+`nix build .#esdm-security-report` runs them and typesets a report of the run in
+`result/share/doc/esdm/security-report/security-report.pdf`: for every test,
+under its headline, its description, its plan as read from the source, what it
+printed in the run, and the code of its test function.
 
 Note, some tests require to be executed as root. For example to validate the
 correctness of the device file implementations of `/dev/random` or

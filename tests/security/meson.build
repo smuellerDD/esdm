@@ -1,12 +1,11 @@
-# Security tests: each checks one security property of the ESDM and states it in
-# ESDM_TEST_DESCRIPTION, under the headline in ESDM_TEST_HEADLINE. Like those of
-# tests/esdm they drive the ESDM in process and therefore touch the
-# machine-global System V names - see tests/test_ipc_ns.c.
+# Security tests: each checks one security property of the ESDM, stated in
+# ESDM_TEST_DESCRIPTION under ESDM_TEST_HEADLINE in the report - see
+# tests/security/report. Like tests/esdm they run the ESDM in process and
+# touch the machine-global System V names - see tests/test_ipc_ns.c.
 #
-# A test is the function of the same name in the C file of the same name, which
-# main() calls. Its file and function are passed in ESDM_TEST_FILE and
-# ESDM_TEST_FUNCTION, so the static test plan in it can be found from the
-# output of a run - see tests/test_plan.h.
+# A test is the function of the same name in the C file of the same name. Its
+# file and function go in ESDM_TEST_FILE and ESDM_TEST_FUNCTION, so the report
+# finds its static test plan - see tests/test_plan.h.
 esdm_ipc_ns = files('../test_ipc_ns.c')
 
 if get_option('esdm-server').enabled()
