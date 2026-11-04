@@ -157,6 +157,19 @@ Accept a provider running as
 Accepting the user means trusting the rate it declares, unless
 .B \-\-es_ext_entropy_rate
 configures one.
+.TP
+.BR \-\-es_jent_kernel_name " \fINAME\fR"
+Read the kernel crypto API RNG
+.I NAME
+\- its name or driver name in
+.I /proc/crypto
+\- for the kernel Jitter RNG entropy source, instead of the one the build was
+configured with (meson option
+.BR es_jent_kernel_name ,
+.B jitterentropy_rng
+by default): e.g. that of a jitterentropy kernel module registering its RNG
+under another name. Refused by a build without the source (meson option
+.BR es_jent_kernel ).
 .SH EXTERNAL ENTROPY SOURCE
 A noise source outside the ESDM is served by a provider process, written
 against

@@ -22,6 +22,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <kcapi.h>
 
@@ -34,6 +36,15 @@
 
 static struct kcapi_handle *jent_rng = NULL;
 static DEFINE_MUTEX_UNLOCKED(jent_rng_mutex);
+/*
+ * Override of the name of the kernel crypto API RNG, as given on the command
+ * line of the server. NULL means "use the compile-time default
+ * ESDM_JENT_KERNEL_NAME". Configuration like the entropy rates: it outlives
+ * esdm_fini().
+ */
+static char *jent_kernel_runtime_name = NULL;
+/* Between init and fini - a new name is opened at once then */
+static bool jent_kernel_initialized = false;
 
 #if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
 static struct esdm_es_buf jent_kernel_buf;
@@ -54,6 +65,13 @@ static uint32_t esdm_jent_kernel_buf_credit(uint32_t requested_bits)
 
 static bool esdm_jent_kernel_active(void);
 
+/* Caller must hold jent_rng_mutex. */
+static const char *esdm_jent_kernel_name_locked(void)
+{
+	return jent_kernel_runtime_name ? jent_kernel_runtime_name :
+					  ESDM_JENT_KERNEL_NAME;
+}
+
 static void esdm_jent_kernel_finalize_locked(void)
 {
 	if (jent_rng == NULL)
@@ -67,6 +85,7 @@ static void esdm_jent_kernel_finalize(void)
 {
 	mutex_lock(&jent_rng_mutex);
 	esdm_jent_kernel_finalize_locked();
+	jent_kernel_initialized = false;
 	mutex_unlock(&jent_rng_mutex);
 
 #if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
@@ -77,22 +96,39 @@ static void esdm_jent_kernel_finalize(void)
 #endif
 }
 
-static int esdm_jent_kernel_init(void)
+/*
+ * Open the kernel crypto API RNG of the configured name, replacing the handle
+ * in use. Caller must hold jent_rng_mutex (write lock).
+ *
+ * @return 0 on success, a negative errno otherwise
+ */
+static int esdm_jent_kernel_open_locked(void)
 {
+	const char *name = esdm_jent_kernel_name_locked();
 	int ret;
 
-	mutex_lock(&jent_rng_mutex);
-
-	/* Allow the init function to be called multiple times */
 	esdm_jent_kernel_finalize_locked();
 
-	ret = kcapi_rng_init(&jent_rng, "jitterentropy_rng", 0);
+	ret = kcapi_rng_init(&jent_rng, name, 0);
 	if (ret != 0) {
 		esdm_logger(
 			LOGGER_WARN, LOGGER_C_ES,
-			"Disabling kernel-based jitter entropy source as it is not present, error: %s\n",
-			strerror(errno));
+			"Disabling kernel-based jitter entropy source as the kernel RNG %s is not present, error: %s\n",
+			name, strerror(errno));
+		jent_rng = NULL;
+		return ret < 0 ? ret : -ENOENT;
 	}
+
+	return 0;
+}
+
+static int esdm_jent_kernel_init(void)
+{
+	mutex_lock(&jent_rng_mutex);
+
+	/* Allow the init function to be called multiple times */
+	(void)esdm_jent_kernel_open_locked();
+	jent_kernel_initialized = true;
 
 	mutex_unlock(&jent_rng_mutex);
 
@@ -235,17 +271,21 @@ static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 {
 	uint32_t poolsize, entropy_rate;
+	/* Copied, as a new name frees the old one */
+	char name[CRYPTO_MAX_ALG_NAME_ESDM];
 
 	mutex_reader_lock(&jent_rng_mutex);
 	poolsize =
 		esdm_jent_kernel_entropylevel_locked(esdm_security_strength());
 	entropy_rate = esdm_jent_kernel_entropylevel_locked(256);
+	snprintf(name, sizeof(name), "%s", esdm_jent_kernel_name_locked());
 	mutex_reader_unlock(&jent_rng_mutex);
 
 	snprintf(buf, buflen,
 		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n",
-		 poolsize, entropy_rate);
+		 " Entropy Rate per 256 data bits: %u\n"
+		 " Kernel RNG: %s\n",
+		 poolsize, entropy_rate, name);
 }
 
 static bool esdm_jent_kernel_active(void)
@@ -298,6 +338,49 @@ out:
 	mutex_unlock(&jent_rng_mutex);
 	memset_secure(first, 0, sizeof(first));
 	memset_secure(second, 0, sizeof(second));
+
+	return ret;
+}
+
+DSO_PUBLIC
+int esdm_es_jent_kernel_set_name(const char *name)
+{
+	char *new_copy = NULL;
+	char *old;
+	bool reopened;
+	int ret = 0;
+
+	if (!name || strlen(name) >= CRYPTO_MAX_ALG_NAME_ESDM)
+		return -EINVAL;
+
+	if (name[0] != '\0') {
+		new_copy = strdup(name);
+		if (!new_copy)
+			return -ENOMEM;
+	}
+
+	mutex_lock(&jent_rng_mutex);
+
+	old = jent_kernel_runtime_name;
+	jent_kernel_runtime_name = new_copy;
+
+	/*
+	 * Set before esdm_init(), as the server does, the RNG is opened by the
+	 * init of the source. Once the source runs, it is replaced right away.
+	 */
+	reopened = jent_kernel_initialized;
+	if (reopened)
+		ret = esdm_jent_kernel_open_locked();
+
+	mutex_unlock(&jent_rng_mutex);
+
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+	/* What the old RNG delivered is not credited for the new one */
+	if (reopened && jent_kernel_buf_alloced)
+		esdm_es_buf_reset(&jent_kernel_buf);
+#endif
+
+	free(old);
 
 	return ret;
 }

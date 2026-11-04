@@ -282,6 +282,35 @@ static void test_es_ext_options(void)
 	      r.err);
 }
 
+/* The kernel crypto API RNG of the kernel Jitter RNG source */
+static void test_es_jent_kernel_name_option(void)
+{
+	const char *const opts[] = { "--es_jent_kernel_name",
+				     "jitterentropy_rng_test", NULL };
+	const char *const empty[] = { "--es_jent_kernel_name", "", NULL };
+	struct test_run r;
+
+#ifdef ESDM_ES_JENT_KERNEL
+	/* Accepted, as root the daemon would start */
+	if (geteuid()) {
+		CHECK_EQ(test_run(&r, opts, NULL), 1);
+		CHECK(strstr(r.err, TEST_NOT_ROOT) != NULL,
+		      "--es_jent_kernel_name was not accepted (output: %.300s)",
+		      r.err);
+	}
+#else
+	CHECK_EQ(test_run(&r, opts, NULL), 1);
+	CHECK(strstr(r.err, "not part of this build") != NULL,
+	      "--es_jent_kernel_name was not refused without the source (output: %.300s)",
+	      r.err);
+#endif
+
+	CHECK_EQ(test_run(&r, empty, NULL), 1);
+	CHECK(strstr(r.err, "must not be empty") != NULL,
+	      "an empty --es_jent_kernel_name was not refused (output: %.300s)",
+	      r.err);
+}
+
 int main(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -299,6 +328,7 @@ int main(int argc, char *argv[])
 	test_syslog();
 	test_pid_file_option();
 	test_es_ext_options();
+	test_es_jent_kernel_name_option();
 
 	test_run_fini();
 
