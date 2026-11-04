@@ -77,6 +77,13 @@
 /* Wait for the initial seeding at most this many 100ms slices */
 #define ESDM_SEC_SEED_SLICES 100
 
+/* The test plan states these values in its strings */
+_Static_assert(ESDM_SEC_THRESH == 1024 && ESDM_SEC_REQUESTS == 2048 &&
+		       ESDM_SEC_REQSIZE == 1 && ESDM_SEC_INTERVAL == 5 &&
+		       ESDM_SEC_INTERVAL + ESDM_SEC_SLACK == 30 &&
+		       ESDM_SEC_POLL_MS == 50 && ESDM_SEC_SEED_SLICES == 100,
+	       "stated by the test plan");
+
 /* The statistics of the DRNG instances serving ordinary requests */
 struct esdm_sec_stats {
 	unsigned int instances;
@@ -104,28 +111,6 @@ static struct esdm_sec_stats esdm_sec_stats_get(void)
 	return stats;
 }
 
-/* Check that the one DRNG serving ordinary requests is at @expected */
-static int esdm_sec_generation_check(long long expected)
-{
-	struct esdm_sec_stats stats;
-
-	TEST_STEP("read the seed generation of the DRNG from its statistics");
-	stats = esdm_sec_stats_get();
-
-	TEST_REQUIRE("exactly one DRNG instance serves ordinary requests");
-	if (!TEST_CHECK(stats.instances == 1, "%u", stats.instances))
-		return 1;
-
-	TEST_REQUIRE("the seed generation of the DRNG is %lld", expected);
-	if (!TEST_CHECK(stats.seed_generation == expected, "%lld",
-			stats.seed_generation))
-		return 1;
-
-	printf("the DRNG is at seed generation %lld\n", stats.seed_generation);
-
-	return 0;
-}
-
 static void esdm_sec_sleep(time_t sec, long nsec)
 {
 	struct timespec ts = { .tv_sec = sec, .tv_nsec = nsec };
@@ -144,36 +129,10 @@ static long long esdm_sec_now_ms(void)
 	return (long long)ts.tv_sec * 1000 + ts.tv_nsec / (1000 * 1000);
 }
 
-/*
- * Request every poll slice until the seed generation moves past @from or a
- * request returns less, for at most @max_ms. Returns the generation, in
- * @seen_ms when it was seen and in @rc what the last request returned.
- */
-static long long esdm_sec_request_until_next(long long from, long long max_ms,
-					     long long *seen_ms, ssize_t *rc)
-{
-	long long start = esdm_sec_now_ms();
-	uint8_t buf[ESDM_SEC_REQSIZE];
-	long long gen;
-
-	TEST_RUNUNTIL(
-		"request %zu bytes every %d ms until the seed generation moves past %lld or a request returns less, for at most %lld ms",
-		sizeof(buf), ESDM_SEC_POLL_MS, from, max_ms);
-	for (;;) {
-		*rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
-		if (*rc != (ssize_t)sizeof(buf))
-			return from;
-		gen = esdm_sec_stats_get().seed_generation;
-		*seen_ms = esdm_sec_now_ms();
-		if (gen != from || *seen_ms - start > max_ms)
-			return gen;
-		esdm_sec_sleep(0, ESDM_SEC_POLL_MS * 1000 * 1000);
-	}
-}
-
 static int esdm_reseed_security_test(void)
 {
 	uint8_t buf[ESDM_SEC_REQSIZE];
+	struct esdm_sec_stats stats;
 	long long seeded_ms, reseeded_ms = 0, gen;
 	unsigned int i;
 	ssize_t rc = 0;
@@ -185,8 +144,7 @@ static int esdm_reseed_security_test(void)
 	TEST_STEP("use a single DRNG instance");
 	esdm_config_max_nodes_set(1);
 
-	TEST_STEP("set the reseed threshold to %u generate requests",
-		  ESDM_SEC_THRESH);
+	TEST_STEP("set the reseed threshold to 1024 generate requests");
 	esdm_config_drng_reseed_thresh_set(ESDM_SEC_THRESH);
 
 	TEST_STEP("initialize the ESDM");
@@ -196,8 +154,7 @@ static int esdm_reseed_security_test(void)
 		goto out;
 
 	TEST_RUNUNTIL(
-		"wait 100 ms until the ESDM is fully seeded, at most %u times",
-		ESDM_SEC_SEED_SLICES);
+		"wait 100 ms until the ESDM is fully seeded, at most 100 times");
 	for (i = 0; i < ESDM_SEC_SEED_SLICES && !esdm_state_fully_seeded(); i++)
 		esdm_sec_sleep(0, 100 * 1000 * 1000);
 
@@ -206,37 +163,59 @@ static int esdm_reseed_security_test(void)
 			esdm_state_fully_seeded()))
 		goto err;
 
+	TEST_STEP("read the seed generation of the DRNG from its statistics");
+	stats = esdm_sec_stats_get();
+	TEST_REQUIRE("exactly one DRNG instance serves ordinary requests");
+	if (!TEST_CHECK(stats.instances == 1, "%u", stats.instances))
+		goto err;
+
 	/* Seeded once, by the initialization */
-	if (esdm_sec_generation_check(1))
+	TEST_REQUIRE("the DRNG is at seed generation 1");
+	if (!TEST_CHECK(stats.seed_generation == 1, "%lld",
+			stats.seed_generation))
 		goto err;
 
 	/* The interval is measured from a seeding this test sees happen */
-	TEST_STEP("set the reseed interval to %d seconds", ESDM_SEC_INTERVAL);
+	TEST_STEP("set the reseed interval to 5 seconds");
 	esdm_set_reseed_max_time(ESDM_SEC_INTERVAL);
 	TEST_STEP(
-		"force a reseed of the DRNGs and request %zu bytes from esdm_get_random_bytes_full_noblock",
-		sizeof(buf));
+		"force a reseed of the DRNGs and request 1 byte from esdm_get_random_bytes_full_noblock");
 	esdm_drng_force_reseed();
 	rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
 	seeded_ms = esdm_sec_now_ms();
-	TEST_REQUIRE("the request returns %zu bytes", sizeof(buf));
-	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
-		goto err;
-	if (esdm_sec_generation_check(2))
-		goto err;
-
-	gen = esdm_sec_request_until_next(
-		2, (ESDM_SEC_INTERVAL + ESDM_SEC_SLACK) * 1000, &reseeded_ms,
-		&rc);
-	TEST_REQUIRE("every request returns %zu bytes", sizeof(buf));
+	TEST_REQUIRE("the request returns 1 byte");
 	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
 		goto err;
 
-	TEST_REQUIRE("a request reseeds the DRNG within %d seconds",
-		     ESDM_SEC_INTERVAL + ESDM_SEC_SLACK);
-	if (!TEST_CHECK(gen != 2, "%lld", gen))
+	TEST_STEP("read the seed generation of the DRNG from its statistics");
+	stats = esdm_sec_stats_get();
+	TEST_REQUIRE("the DRNG is at seed generation 2");
+	if (!TEST_CHECK(stats.seed_generation == 2, "%lld",
+			stats.seed_generation))
 		goto err;
-	if (esdm_sec_generation_check(3))
+
+	TEST_RUNUNTIL(
+		"request 1 byte from esdm_get_random_bytes_full_noblock every 50 ms until the seed generation of the DRNG moves past 2 or a request returns less, for at most 30 seconds");
+	gen = 2;
+	for (;;) {
+		rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
+		if (rc != (ssize_t)sizeof(buf))
+			break;
+		gen = esdm_sec_stats_get().seed_generation;
+		reseeded_ms = esdm_sec_now_ms();
+		if (gen != 2 ||
+		    reseeded_ms - seeded_ms >
+			    (ESDM_SEC_INTERVAL + ESDM_SEC_SLACK) * 1000)
+			break;
+		esdm_sec_sleep(0, ESDM_SEC_POLL_MS * 1000 * 1000);
+	}
+
+	TEST_REQUIRE("every request returns 1 byte");
+	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
+		goto err;
+
+	TEST_REQUIRE("the DRNG is at seed generation 3");
+	if (!TEST_CHECK(gen == 3, "%lld", gen))
 		goto err;
 
 	/*
@@ -244,8 +223,7 @@ static int esdm_reseed_security_test(void)
 	 * the interval, so the reseeds are more than the interval apart.
 	 */
 	TEST_REQUIRE(
-		"the DRNG is not reseeded before the interval of %d seconds elapsed",
-		ESDM_SEC_INTERVAL);
+		"the DRNG is not reseeded before the interval of 5 seconds elapsed");
 	if (!TEST_CHECK(reseeded_ms - seeded_ms >=
 				ESDM_SEC_INTERVAL * 1000 -
 					ESDM_SEC_TOLERANCE_MS,
@@ -257,15 +235,14 @@ static int esdm_reseed_security_test(void)
 	esdm_set_reseed_max_time(3600);
 
 	TEST_STEP(
-		"request %zu bytes from esdm_get_random_bytes_full_noblock, %u times",
-		sizeof(buf), ESDM_SEC_REQUESTS);
+		"request 1 byte from esdm_get_random_bytes_full_noblock, 2048 times");
 	for (i = 0; i < ESDM_SEC_REQUESTS; i++) {
 		rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
 		if (rc != (ssize_t)sizeof(buf))
 			break;
 	}
 
-	TEST_REQUIRE("every request returns %zu bytes", sizeof(buf));
+	TEST_REQUIRE("every request returns 1 byte");
 	if (!TEST_CHECK(i == ESDM_SEC_REQUESTS,
 			"%u requests served, the last returned %zd", i, rc))
 		goto err;
@@ -275,7 +252,11 @@ static int esdm_reseed_security_test(void)
 	 * made for: seed 3 served one, the requests take seed 4 and, with the
 	 * last, seed 5.
 	 */
-	if (esdm_sec_generation_check(5))
+	TEST_STEP("read the seed generation of the DRNG from its statistics");
+	stats = esdm_sec_stats_get();
+	TEST_REQUIRE("the DRNG is at seed generation 5");
+	if (!TEST_CHECK(stats.seed_generation == 5, "%lld",
+			stats.seed_generation))
 		goto err;
 
 	ret = 0;

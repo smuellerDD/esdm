@@ -71,6 +71,13 @@
 /* Rounds of requests on every interface showing that the output stays off */
 #define ESDM_SEC_STOPPED_ROUNDS 8
 
+/* The test plan states these values in its strings */
+_Static_assert(ESDM_DRNG_SECURITY_STRENGTH_BITS == 256 &&
+		       ESDM_SEC_SEED_SLICES == 900 &&
+		       ESDM_SEC_MAX_REQUESTS == 2 &&
+		       ESDM_SEC_STOPPED_ROUNDS == 8,
+	       "stated by the test plan");
+
 /* NTG.1 seeding wants a second source - see esdm_fully_seeded() */
 static bool esdm_sec_needs_second_source(void)
 {
@@ -156,6 +163,7 @@ static int esdm_jent_only_security_test(void)
 	size_t max_rc_if = 0;
 	bool written = false, jent_active;
 	int ret;
+	_Static_assert(sizeof(buf) == 32, "stated by the test plan");
 
 	esdm_logger_set_verbosity(LOGGER_DEBUG);
 
@@ -165,8 +173,7 @@ static int esdm_jent_only_security_test(void)
 
 	/* So that the ESDM is seeded by, and loses, this one source alone */
 	TEST_STEP(
-		"credit the Jitter RNG with %u bits, every other entropy source with 0 bits",
-		ESDM_DRNG_SECURITY_STRENGTH_BITS);
+		"credit the Jitter RNG with 256 bits, every other entropy source with 0 bits");
 	esdm_test_es_rates_zero();
 	esdm_config_es_jent_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
@@ -191,13 +198,10 @@ static int esdm_jent_only_security_test(void)
 
 	if (esdm_sec_needs_second_source()) {
 		TEST_RUNUNTIL(
-			"credit the auxiliary pool with %u bits whenever it is empty and wait 100 ms until the ESDM is fully seeded, at most %u times",
-			ESDM_DRNG_SECURITY_STRENGTH_BITS + esdm_compress_osr(),
-			ESDM_SEC_SEED_SLICES);
+			"credit the auxiliary pool with 256 bits plus the oversampling of the conditioning whenever it is empty and wait 100 ms until the ESDM is fully seeded, at most 900 times");
 	} else {
 		TEST_RUNUNTIL(
-			"wait 100 ms until the ESDM is fully seeded, at most %u times",
-			ESDM_SEC_SEED_SLICES);
+			"wait 100 ms until the ESDM is fully seeded, at most 900 times");
 	}
 	for (i = 0; i < ESDM_SEC_SEED_SLICES && !esdm_state_fully_seeded();
 	     i++) {
@@ -217,11 +221,10 @@ static int esdm_jent_only_security_test(void)
 			esdm_avail_entropy_aux()))
 		goto err;
 
-	TEST_STEP("request %zu bytes from esdm_get_random_bytes_full_noblock",
-		  sizeof(buf));
+	TEST_STEP("request 32 bytes from esdm_get_random_bytes_full_noblock");
 	memset(buf, 0, sizeof(buf));
 	rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
-	TEST_REQUIRE("%zu bytes are returned", sizeof(buf));
+	TEST_REQUIRE("32 bytes are returned");
 	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
 		goto err;
 
@@ -241,8 +244,7 @@ static int esdm_jent_only_security_test(void)
 	 * seed collected before the loss.
 	 */
 	TEST_RUNUNTIL(
-		"request %zu bytes from esdm_get_random_bytes_pr_noblock until it returns no bytes, at most %u times",
-		sizeof(buf), ESDM_SEC_MAX_REQUESTS);
+		"request 32 bytes from esdm_get_random_bytes_pr_noblock until it returns no bytes, at most 2 times");
 	for (i = 0; i < ESDM_SEC_MAX_REQUESTS; i++) {
 		memset(buf, 0, sizeof(buf));
 		rc = esdm_get_random_bytes_pr_noblock(buf, sizeof(buf));
@@ -251,8 +253,7 @@ static int esdm_jent_only_security_test(void)
 	}
 
 	TEST_REQUIRE(
-		"esdm_get_random_bytes_pr_noblock returns no bytes within %u requests",
-		ESDM_SEC_MAX_REQUESTS);
+		"esdm_get_random_bytes_pr_noblock returns no bytes within 2 requests");
 	if (!TEST_CHECK(rc <= 0, "%zd", rc))
 		goto err;
 
@@ -266,12 +267,11 @@ static int esdm_jent_only_security_test(void)
 
 	/* A reseed that collects nothing does not stop it within its budget */
 	TEST_STEP(
-		"force a reseed of the DRNGs and request %zu bytes from esdm_get_random_bytes_full_noblock",
-		sizeof(buf));
+		"force a reseed of the DRNGs and request 32 bytes from esdm_get_random_bytes_full_noblock");
 	esdm_drng_force_reseed();
 	memset(buf, 0, sizeof(buf));
 	rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
-	TEST_REQUIRE("%zu bytes are returned", sizeof(buf));
+	TEST_REQUIRE("32 bytes are returned");
 	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
 		goto err;
 
@@ -293,19 +293,17 @@ static int esdm_jent_only_security_test(void)
 		goto err;
 	budget = counters.requests_since_fully_seeded + 1;
 	TEST_STEP(
-		"limit the generate operations without a full reseed to %u (spent + 1)",
-		budget);
+		"limit the generate operations without a full reseed to those spent plus one");
 	esdm_config_drng_max_wo_reseed_set(budget);
 
 	/*
 	 * Spent operations are only added up by a reseed without full entropy,
 	 * so the lowered budget holds nothing back until the next one.
 	 */
-	TEST_STEP("request %zu bytes from esdm_get_random_bytes_full_noblock",
-		  sizeof(buf));
+	TEST_STEP("request 32 bytes from esdm_get_random_bytes_full_noblock");
 	memset(buf, 0, sizeof(buf));
 	rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
-	TEST_REQUIRE("%zu bytes are returned", sizeof(buf));
+	TEST_REQUIRE("32 bytes are returned");
 	if (!TEST_CHECK(rc == (ssize_t)sizeof(buf), "%zd", rc))
 		goto err;
 
@@ -319,8 +317,7 @@ static int esdm_jent_only_security_test(void)
 	 * interval cause - one per request, so every request is added up.
 	 */
 	TEST_RUNUNTIL(
-		"force a reseed of the DRNGs and request %zu bytes from esdm_get_random_bytes_full_noblock until it returns no bytes, at most %u times",
-		sizeof(buf), ESDM_SEC_MAX_REQUESTS);
+		"force a reseed of the DRNGs and request 32 bytes from esdm_get_random_bytes_full_noblock until it returns no bytes, at most 2 times");
 	for (i = 0; i < ESDM_SEC_MAX_REQUESTS; i++) {
 		esdm_drng_force_reseed();
 		memset(buf, 0, sizeof(buf));
@@ -330,8 +327,7 @@ static int esdm_jent_only_security_test(void)
 	}
 
 	TEST_REQUIRE(
-		"esdm_get_random_bytes_full_noblock returns no bytes within %u requests",
-		ESDM_SEC_MAX_REQUESTS);
+		"esdm_get_random_bytes_full_noblock returns no bytes within 2 requests");
 	if (!TEST_CHECK(rc <= 0, "%zd", rc))
 		goto err;
 
@@ -349,8 +345,7 @@ static int esdm_jent_only_security_test(void)
 		"read the generate operations since the last full reseed from the DRNG statistics");
 	counters = esdm_sec_counters_get();
 	TEST_REQUIRE(
-		"exactly one DRNG instance has spent at least %u generate operations",
-		budget);
+		"exactly one DRNG instance serves ordinary requests and has spent all generate operations of its limit");
 	if (!TEST_CHECK(counters.instances == 1, "%u", counters.instances) ||
 	    !TEST_CHECK(counters.requests_since_fully_seeded >= budget,
 			"%u of %u", counters.requests_since_fully_seeded,
@@ -362,8 +357,7 @@ static int esdm_jent_only_security_test(void)
 
 	/* And it stays that way, on every interface */
 	TEST_STEP(
-		"request %zu bytes from esdm_get_random_bytes_full_noblock, esdm_get_random_bytes_pr_noblock and esdm_get_random_bytes, %u times",
-		sizeof(buf), ESDM_SEC_STOPPED_ROUNDS);
+		"request 32 bytes from esdm_get_random_bytes_full_noblock, esdm_get_random_bytes_pr_noblock and esdm_get_random_bytes, 8 times");
 	for (i = 0; i < ESDM_SEC_STOPPED_ROUNDS; i++) {
 		ssize_t rcs[3];
 		size_t j;
