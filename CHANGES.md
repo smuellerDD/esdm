@@ -65,6 +65,10 @@ addon/es_ebpf_testing
 
 * Seeding: a reseed takes what the sources with a cache have ready and asks a source whose cache is empty only when the others fall short of the entropy of the reseed, so a slow source such as a TPM no longer holds up every reseed once its cache is drained; only the sources to fetch get a thread of the parallel fetch, and the prediction resistance DRNG is seeded with entropy collected for its request rather than from the caches
 
+* Jitter RNG ES: es_jent_instances collectors (meson option, esdm-server --es_jent_instances, default 1) refill the block cache side by side, each in a thread of its own; with jitterentropy >= 3.8.0 the known answer tests of its conditioning component run through jent_selftest() bound to the synchronous collector and to the collector of every instance, a collector that failed them serves nothing, and a failed periodic self test empties the block cache
+
+* Kernel Jitter RNG ES: the kernel crypto API RNG it reads is configurable (meson option es_jent_kernel_name, esdm-server --es_jent_kernel_name, jitterentropy_rng by default), e.g. for a jitterentropy kernel module registering its RNG under another name; the status names the RNG in use
+
 * Add TPM2 entropy source
 
 * Add PKCS11 entropy source as esdm-es-pkcs11, and esdm-es-pcsc reading PC/SC smart cards - both external ES providers
