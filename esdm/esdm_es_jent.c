@@ -182,12 +182,29 @@ static void esdm_jent_get_check(struct entropy_es *eb_es,
 	 * answer tests failed - and counts as a miss as well: the synchronous
 	 * collector may well be serving.
 	 */
-	if (allow_cached && esdm_config_es_jent_async_enabled() &&
-	    esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits,
-				!!esdm_jent_entropylevel(requested_bits)))
-		return;
+	if (allow_cached && esdm_config_es_jent_async_enabled()) {
+		bool credited = !!esdm_jent_entropylevel(requested_bits);
+
+		if (esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits,
+					credited))
+			return;
+
+		/*
+		 * A miss: the synchronous collector, if it is free, collects
+		 * the block itself. Only while it serves another reseed is a
+		 * block in the making waited for, which arrives sooner than
+		 * that collector would be free and done.
+		 */
+		if (!mutex_w_trylock(&esdm_jent_lock))
+			goto sync;
+
+		if (esdm_es_buf_try_get_wait(&esdm_jent_buf, eb_es,
+					     requested_bits, credited))
+			return;
+	}
 
 	mutex_w_lock(&esdm_jent_lock);
+sync:
 	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits);
 	mutex_w_unlock(&esdm_jent_lock);
 }

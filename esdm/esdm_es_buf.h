@@ -88,6 +88,8 @@ struct esdm_es_buf {
 	atomic_uint gen;
 	/* Set by esdm_es_buf_alloc() once the cache can be used */
 	atomic_bool ready;
+	/* Nanoseconds the last fill took, see esdm_es_buf_try_get_wait() */
+	_Atomic uint64_t fill_ns;
 	/*
 	 * Seconds a filled block is kept, 0 for as long as it is not used -
 	 * ESDM_ES_BUF_MAX_AGE as esdm_es_buf_alloc() sets it
@@ -170,5 +172,16 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
  */
 bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 			 uint32_t requested_bits, bool credited);
+
+/*
+ * As esdm_es_buf_try_get(), but on a miss while the monitor fills slots, wait
+ * for one of them - up to twice as long as a fill takes. For a source whose
+ * synchronous path costs as much as a fill: a block in the making arrives
+ * sooner than one collected anew, and the caller holds the lock of the DRNG
+ * it reseeds.
+ */
+bool esdm_es_buf_try_get_wait(struct esdm_es_buf *buf,
+			      struct entropy_es *eb_es,
+			      uint32_t requested_bits, bool credited);
 
 #endif /* _ESDM_ES_BUF_H */
