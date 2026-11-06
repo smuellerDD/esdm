@@ -1339,10 +1339,10 @@ out:
 	return ret;
 }
 
-#ifdef ESDM_FUZZING
+#if defined(ESDM_FUZZING) || defined(ESDM_TESTMODE)
 /* Documented with its declaration in esdm_rpc_server.h */
-int esdm_rpcs_fuzz_serve(const char *socket_path, ProtobufCService *service,
-			 bool privileged)
+int esdm_rpcs_serve_in_process(const char *socket_path,
+			       ProtobufCService *service, bool privileged)
 {
 	struct esdm_rpcs proto;
 	int ret;
@@ -1355,8 +1355,8 @@ int esdm_rpcs_fuzz_serve(const char *socket_path, ProtobufCService *service,
 	proto.privileged = privileged;
 
 	/*
-	 * The socket rather than esdm_rpcs_start_socket(): a harness is not
-	 * socket activated, and a stray LISTEN_FDS in its environment would
+	 * The socket rather than esdm_rpcs_start_socket(): a harness or test is
+	 * not socket activated, and a stray LISTEN_FDS in its environment would
 	 * otherwise take it to a descriptor that is not its own.
 	 */
 	CKINT(esdm_rpcs_start(socket_path, 0, service, &proto));
@@ -1364,8 +1364,8 @@ int esdm_rpcs_fuzz_serve(const char *socket_path, ProtobufCService *service,
 	/*
 	 * What is skipped compared to the interface initialization below is the
 	 * privilege drop and the notifications around it, neither of which a
-	 * harness can do - it does not run as root, and dropping to nobody is
-	 * permanent.
+	 * harness or test can do - it does not run as root, and dropping to
+	 * nobody is permanent.
 	 */
 	ret = esdm_rpcs_workerloop(&proto);
 
@@ -1374,7 +1374,7 @@ out:
 
 	return ret;
 }
-#endif /* ESDM_FUZZING */
+#endif /* ESDM_FUZZING || ESDM_TESTMODE */
 
 /*
  * Initialize the RPC server interfaces:

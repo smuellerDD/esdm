@@ -63,9 +63,10 @@ int esdm_test_fallback_fd(int fd)
 
 /******************************************************************************/
 
+/* Added to by every RPC thread of servers and clients, read by tests */
 struct esdm_test_shm_status {
-	size_t rpc_data_client_written;
-	size_t rpc_data_server_written;
+	atomic_size_t rpc_data_client_written;
+	atomic_size_t rpc_data_server_written;
 };
 
 static struct esdm_test_shm_status *esdm_test_shm_status = NULL;

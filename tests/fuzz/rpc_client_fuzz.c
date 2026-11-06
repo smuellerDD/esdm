@@ -439,7 +439,7 @@ static void *fuzz_serve_unpriv(void *unused)
 	(void)unused;
 
 	fuzz_serve_report("unprivileged",
-			  esdm_rpcs_fuzz_serve(
+			  esdm_rpcs_serve_in_process(
 				  ESDM_RPC_UNPRIV_SOCKET,
 				  (ProtobufCService *)&unpriv_access_service,
 				  false));
@@ -452,7 +452,7 @@ static void *fuzz_serve_priv(void *unused)
 	(void)unused;
 
 	fuzz_serve_report("privileged",
-			  esdm_rpcs_fuzz_serve(
+			  esdm_rpcs_serve_in_process(
 				  ESDM_RPC_PRIV_SOCKET,
 				  (ProtobufCService *)&priv_access_service,
 				  true));
