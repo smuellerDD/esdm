@@ -218,7 +218,7 @@ static void fuzz_priv_call(struct fuzz_input *in)
 	uint8_t *buf;
 	size_t len;
 
-	switch (fuzz_u8(in) % 8) {
+	switch (fuzz_u8(in) % 9) {
 	case 0:
 		len = fuzz_len(in, FUZZ_BUF_MAX);
 		buf = fuzz_buf(len);
@@ -242,10 +242,8 @@ static void fuzz_priv_call(struct fuzz_input *in)
 		break;
 	case 6: {
 		/*
-		 * The one call carrying text rather than numbers, and the only
-		 * place a client packs a string into a request: two of them,
-		 * either of which may be absent - which the packing has to
-		 * tell apart from an empty one.
+		 * Two strings, either of which may be absent - which the
+		 * packing has to tell apart from an empty one.
 		 */
 		static char label[64], pin[64];
 		uint8_t which = fuzz_u8(in);
@@ -254,6 +252,13 @@ static void fuzz_priv_call(struct fuzz_input *in)
 			(which & 1) ? NULL :
 				      fuzz_text(in, label, sizeof(label)),
 			(which & 2) ? NULL : fuzz_text(in, pin, sizeof(pin)));
+		break;
+	}
+	case 7: {
+		static char es[32];
+
+		esdm_rpcc_set_es_rate(fuzz_text(in, es, sizeof(es)),
+				      fuzz_u32(in));
 		break;
 	}
 	default:

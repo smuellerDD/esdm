@@ -252,6 +252,8 @@ static void handle_usage(void)
 	fprintf(stderr,
 		"\t--max-reseed-secs SECS\t\tSet the maximum interval between two DRNG reseeds in seconds, zero to reseed before every request. The ESDM caps the value at its own upper bound. (needs root)\n");
 	fprintf(stderr,
+		"\t--set-es-rate ES=BITS\t\tSet the entropy rate of the entropy source ES as --status names it, or of all of them with ES=all, in bits per 256 data bits - for tests, honored by an ESDM server built in test mode or with buildtype=debug only (needs root)\n");
+	fprintf(stderr,
 		"\t--use-pr\t\t\tFetch random bytes in predication resistance mode.\n");
 	fprintf(stderr,
 		"\t--raw-bytes\t\t\tWrite random bytes without hex formatting.\n");
@@ -769,6 +771,42 @@ static int handle_reseed_crng(void)
 	return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
+/* Set the entropy rate of one entropy source, or of all of them. */
+static int handle_set_es_rate(const char *es, uint32_t rate)
+{
+	int ret;
+
+	esdm_rpcc_init_priv_service(NULL);
+	esdm_invoke(esdm_rpcc_set_es_rate(es, rate));
+	esdm_rpcc_fini_priv_service();
+
+	if (ret == -EOPNOTSUPP) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_TOOL,
+			"Setting entropy rates needs an ESDM server built in test mode or with buildtype=debug\n");
+		return EXIT_FAILURE;
+	}
+	if (ret == -EINVAL) {
+		esdm_logger(
+			LOGGER_ERR, LOGGER_C_TOOL,
+			"Unknown entropy source %s - see --status for their names\n",
+			es);
+		return EXIT_FAILURE;
+	}
+	if (ret) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
+			    "Setting the entropy rate failed: %s\n",
+			    strerror(-ret));
+		return EXIT_FAILURE;
+	}
+
+	/* The ESDM may cap it - the status shows the rate in effect */
+	esdm_logger(LOGGER_STATUS, LOGGER_C_TOOL,
+		    "Entropy rate of %s set to %u bits\n", es, rate);
+
+	return EXIT_SUCCESS;
+}
+
 /* Set the maximum interval between two reseeds of the DRNGs. */
 static int handle_set_max_reseed_secs(unsigned int seconds)
 {
@@ -1219,6 +1257,8 @@ int main(int argc, char **argv)
 	bool set_pkcs11_config = false;
 	bool set_max_reseed_secs = false;
 	unsigned int max_reseed_secs = 0;
+	char *es_rate_name = NULL;
+	uint32_t es_rate = 0;
 	char *pkcs11_pin = NULL;
 	char *pkcs11_token_label = NULL;
 	int i;
@@ -1276,6 +1316,7 @@ int main(int argc, char **argv)
 			{ "selftest", 0, 0, 0 },
 			{ "drng-status", 2, 0, 0 },
 			{ "drng-status-json", 2, 0, 0 },
+			{ "set-es-rate", 1, 0, 0 },
 			{ 0, 0, 0, 0 }
 		};
 		c = getopt_long(argc, argv, "sSr:eEhw:W:B:bvVF:C:J", opts,
@@ -1585,6 +1626,37 @@ int main(int argc, char **argv)
 					drng_status_node = (uint32_t)val;
 				}
 				break;
+			case 45:
+				/* set-es-rate */
+				{
+					char *eq = strchr(optarg, '=');
+					long val;
+
+					if (!eq || eq == optarg) {
+						fprintf(stderr,
+							"esdm-tool: --set-es-rate takes ES=BITS\n");
+						exit(EXIT_FAILURE);
+					}
+					val = parse_long_arg(eq + 1,
+							     "entropy rate");
+					if (val < 0 ||
+					    (unsigned long)val > UINT32_MAX) {
+						fprintf(stderr,
+							"esdm-tool: entropy rate out of range\n");
+						exit(EXIT_FAILURE);
+					}
+
+					free(es_rate_name);
+					es_rate_name = strndup(
+						optarg, (size_t)(eq - optarg));
+					if (!es_rate_name) {
+						fprintf(stderr,
+							"esdm-tool: out of memory\n");
+						exit(EXIT_FAILURE);
+					}
+					es_rate = (uint32_t)val;
+				}
+				break;
 			}
 			break;
 		case 's':
@@ -1677,7 +1749,7 @@ int main(int argc, char **argv)
 	if (geteuid() &&
 	    (write_to_aux_pool || clear_pool || reseed_crng || reseed_via_os ||
 	     seed_via_os || endless_stress || set_pkcs11_config ||
-	     set_max_reseed_secs || selftest)) {
+	     set_max_reseed_secs || selftest || es_rate_name)) {
 		esdm_logger_inc_verbosity();
 		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL,
 			    "Program must start as root for this command!\n");
@@ -1772,6 +1844,8 @@ int main(int argc, char **argv)
 		return_val = handle_set_max_reseed_secs(max_reseed_secs);
 	} else if (selftest) {
 		return_val = handle_selftest();
+	} else if (es_rate_name) {
+		return_val = handle_set_es_rate(es_rate_name, es_rate);
 	} else if (set_pkcs11_config) {
 		return_val = handle_set_pkcs11_config(pkcs11_token_label,
 						      pkcs11_pin);
@@ -1799,6 +1873,7 @@ out:
 		free(pkcs11_pin);
 	}
 	free(pkcs11_token_label);
+	free(es_rate_name);
 	/*
 	 * The command that consumes it frees it and clears the pointer, so this
 	 * is what is left when one of the paths above jumped here instead -

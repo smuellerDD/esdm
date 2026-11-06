@@ -161,6 +161,23 @@ and
 .BR \-\-status\-json ,
 which need no privileges. Requires root.
 .TP
+.BI \-\-set\-es\-rate " ES" = BITS
+Set the entropy rate of the entropy source
+.I ES
+to
+.I BITS
+per 256 data bits, or of every entropy source but the auxiliary pool with
+.IR ES =all.
+The names are those
+.B \-\-status
+reports, case insensitive. Only an ESDM server built in test mode or with
+buildtype=debug honors it:
+it is meant for tests that take the entropy away, e.g. to check that the
+output stops once no source is credited. The ESDM caps the rate; the rate in
+effect is shown by
+.BR \-\-status .
+Requires root.
+.TP
 .BR \-\-pkcs11\-pin " \fIPIN\fR"
 Set the user PIN of the PKCS#11 entropy source. Pass
 .B \-

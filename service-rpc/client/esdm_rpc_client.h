@@ -850,6 +850,28 @@ struct esdm_rpcc_selftest_result {
 int esdm_rpcc_selftest(struct esdm_rpcc_selftest_result *result);
 
 /**
+ * @brief Set the entropy rate of an entropy source - servers built in test
+ *	mode or with buildtype=debug only
+ *
+ * It takes entropy away from the ESDM, e.g. to check that the output stops
+ * once no source is credited any more.
+ *
+ * @param [in] es Name of the entropy source as the status reports it, case
+ *	insensitive, or "all" for every source but the auxiliary pool
+ * @param [in] rate Entropy rate in bits per 256 data bits, capped by the ESDM
+ * @return: 0 on success, -EINVAL for an unknown entropy source, -EOPNOTSUPP
+ *	from a server built neither in test mode nor with buildtype=debug,
+ *	-EPERM without root, -EINTR where the connection was interrupted and
+ *	the caller may try again
+ */
+int esdm_rpcc_set_es_rate(const char *es, uint32_t rate);
+
+/**
+ * @brief See esdm_rpcc_set_es_rate
+ */
+int esdm_rpcc_set_es_rate_int(const char *es, uint32_t rate, void *int_data);
+
+/**
  * @brief See esdm_rpcc_selftest
  */
 int esdm_rpcc_selftest_int(struct esdm_rpcc_selftest_result *result,

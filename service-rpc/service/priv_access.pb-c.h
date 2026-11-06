@@ -22,6 +22,7 @@ typedef struct SetWriteWakeupThreshRequest SetWriteWakeupThreshRequest;
 typedef struct SetMinReseedSecsRequest SetMinReseedSecsRequest;
 typedef struct SetPkcs11ConfigRequest SetPkcs11ConfigRequest;
 typedef struct SelftestResponse SelftestResponse;
+typedef struct SetEsRateRequest SetEsRateRequest;
 
 
 /* --- enums --- */
@@ -155,6 +156,27 @@ struct  SelftestResponse
 , 0, 0, 0, 0, 0 }
 
 
+/*
+ **
+ * @brief Request to set the entropy rate of an entropy source.
+ * Only a server built in test mode or with buildtype=debug applies it, any
+ * other answers -EOPNOTSUPP: it takes entropy away from the ESDM, which only
+ * tests and debugging have reason for.
+ * @param es Name of the entropy source as the status reports it, case
+ *	     insensitive, or "all" for every source but the auxiliary pool
+ * @param rate Entropy rate in bits per 256 data bits
+ */
+struct  SetEsRateRequest
+{
+  ProtobufCMessage base;
+  char *es;
+  uint32_t rate;
+};
+#define SET_ES_RATE_REQUEST__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&set_es_rate_request__descriptor) \
+, (char *)protobuf_c_empty_string, 0 }
+
+
 /* RndAddToEntCntRequest methods */
 void   rnd_add_to_ent_cnt_request__init
                      (RndAddToEntCntRequest         *message);
@@ -269,6 +291,25 @@ SelftestResponse *
 void   selftest_response__free_unpacked
                      (SelftestResponse *message,
                       ProtobufCAllocator *allocator);
+/* SetEsRateRequest methods */
+void   set_es_rate_request__init
+                     (SetEsRateRequest         *message);
+size_t set_es_rate_request__get_packed_size
+                     (const SetEsRateRequest   *message);
+size_t set_es_rate_request__pack
+                     (const SetEsRateRequest   *message,
+                      uint8_t             *out);
+size_t set_es_rate_request__pack_to_buffer
+                     (const SetEsRateRequest   *message,
+                      ProtobufCBuffer     *buffer);
+SetEsRateRequest *
+       set_es_rate_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   set_es_rate_request__free_unpacked
+                     (SetEsRateRequest *message,
+                      ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
 typedef void (*RndAddToEntCntRequest_Closure)
@@ -288,6 +329,9 @@ typedef void (*SetPkcs11ConfigRequest_Closure)
                   void *closure_data);
 typedef void (*SelftestResponse_Closure)
                  (const SelftestResponse *message,
+                  void *closure_data);
+typedef void (*SetEsRateRequest_Closure)
+                 (const SetEsRateRequest *message,
                   void *closure_data);
 
 /* --- services --- */
@@ -328,6 +372,10 @@ struct PrivAccess_Service
                        const EmptyRequest *input,
                        SelftestResponse_Closure closure,
                        void *closure_data);
+  void (*rpc_set_es_rate)(PrivAccess_Service *service,
+                          const SetEsRateRequest *input,
+                          RetResponse_Closure closure,
+                          void *closure_data);
 };
 typedef void (*PrivAccess_ServiceDestroy)(PrivAccess_Service *);
 void priv_access__init (PrivAccess_Service *service,
@@ -343,7 +391,8 @@ void priv_access__init (PrivAccess_Service *service,
       function_prefix__ ## rpc_set_write_wakeup_thresh,\
       function_prefix__ ## rpc_set_min_reseed_secs,\
       function_prefix__ ## rpc_set_pkcs11_config,\
-      function_prefix__ ## rpc_selftest  }
+      function_prefix__ ## rpc_selftest,\
+      function_prefix__ ## rpc_set_es_rate  }
 void priv_access__rpc_rnd_add_to_ent_cnt(ProtobufCService *service,
                                          const RndAddToEntCntRequest *input,
                                          RetResponse_Closure closure,
@@ -376,6 +425,10 @@ void priv_access__rpc_selftest(ProtobufCService *service,
                                const EmptyRequest *input,
                                SelftestResponse_Closure closure,
                                void *closure_data);
+void priv_access__rpc_set_es_rate(ProtobufCService *service,
+                                  const SetEsRateRequest *input,
+                                  RetResponse_Closure closure,
+                                  void *closure_data);
 
 /* --- descriptors --- */
 
@@ -385,6 +438,7 @@ extern const ProtobufCMessageDescriptor set_write_wakeup_thresh_request__descrip
 extern const ProtobufCMessageDescriptor set_min_reseed_secs_request__descriptor;
 extern const ProtobufCMessageDescriptor set_pkcs11_config_request__descriptor;
 extern const ProtobufCMessageDescriptor selftest_response__descriptor;
+extern const ProtobufCMessageDescriptor set_es_rate_request__descriptor;
 extern const ProtobufCServiceDescriptor priv_access__descriptor;
 
 PROTOBUF_C__END_DECLS

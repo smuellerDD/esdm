@@ -106,6 +106,11 @@ addon/es_ebpf_testing
 * Logging: color the severities only on a terminal and without NO_COLOR set, so
 log files, pipes and the test logs carry no escape sequences
 
+* esdm-tool: add --set-es-rate ES=BITS (esdm_rpcc_set_es_rate) to set the
+entropy rate of one or all entropy sources - honored by a server built in test
+mode or with buildtype=debug only, for tests that take the entropy away from
+the ESDM
+
 Changes 1.2.3
 * Fix handling of non-blocking server response
 

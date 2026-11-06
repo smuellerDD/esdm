@@ -128,6 +128,11 @@ Set the minimum reseed interval.
 .TP
 .BI "int esdm_rpcc_set_pkcs11_config(const char *" token_label ", const char *" pin ");"
 Set the token label and user PIN of the PKCS#11 entropy source.
+.TP
+.BI "int esdm_rpcc_set_es_rate(const char *" es ", uint32_t " rate ");"
+Set the entropy rate of the entropy source named as in the status, or of
+all of them with "all". Only a server built in test mode or with
+buildtype=debug applies it.
 .SS Linux random device IOCTLs
 These mirror the
 .BR ioctl (2)
