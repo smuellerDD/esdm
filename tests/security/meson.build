@@ -74,14 +74,51 @@ if get_option('esdm-server').enabled()
 		},
 	]
 
+	# Serves the RPC interface itself, to the OpenSSL RNG provider in the
+	# directory it is given. Holds back two OpenSSL calls for three
+	# seconds each, after waiting for the Jitter RNG like the Jitter RNG
+	# only test.
+	if get_option('openssl-rand-provider').enabled()
+		security_tests += [
+			{
+				'name': 'OpenSSL with the Jitter RNG as the only credited source',
+				'test': 'esdm_openssl_jent_only_security_test',
+				'link_with': esdm_static_lib,
+				'sources': [ service_rpc_src, server_rpc_src,
+					     egd_server_src ],
+				'dependencies': [ openssl_dep,
+						  dependency('threads') ],
+				'args': [ meson.project_build_root() +
+					  '/frontends/openssl-provider' ],
+				'depends': esdm_openssl_rng_provider_lib,
+				'timeout': 180,
+				'headline':
+					'OpenSSL with the Jitter RNG as the only ' +
+					'credited entropy source',
+				'description':
+					'With the Jitter RNG as the only credited ' +
+					'entropy source, OpenSSL takes random bits ' +
+					'and an ECDSA key from the ESDM RNG ' +
+					'provider. Once that source fails and the ' +
+					'ESDM has spent its budget of generate ' +
+					'operations without a full reseed, OpenSSL ' +
+					'hands out neither random bits nor a key.',
+			},
+		]
+	endif
+
 	foreach t : security_tests
 		test('ESDM security - ' + t['name'],
 			executable(t['test'],
-				[ esdm_ipc_ns, t['test'] + '.c' ],
+				[ esdm_ipc_ns, t['test'] + '.c',
+				  t.get('sources', []) ],
 				include_directories: include_dirs_server,
 				link_with: t['link_with'],
-				dependencies: dependencies_server,
+				dependencies: [ dependencies_server,
+						t.get('dependencies', []) ],
 			),
+			args: t.get('args', []),
+			depends: t.get('depends', []),
 			timeout: t['timeout'],
 			suite: 'security',
 			env: {

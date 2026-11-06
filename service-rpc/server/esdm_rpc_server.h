@@ -108,17 +108,21 @@ void esdm_rpc_server_signal_exit_safe(void);
  */
 int esdm_rpcs_fuzz_request(ProtobufCService *service, bool privileged,
 			   const uint8_t *data, size_t len, int out_fd);
+#endif /* ESDM_FUZZING */
 
+#if defined(ESDM_FUZZING) || defined(ESDM_TESTMODE)
 /**
- * @brief Serve one RPC interface on @p socket_path until the server is stopped
+ * @brief Serve one RPC interface on @p socket_path until the server is stopped,
+ *	in a process that runs the ESDM itself - a fuzzing harness or a test,
+ *	which neither runs as root nor may drop its privileges
  * @param [in] socket_path Unix domain socket to bind and listen on
  * @param [in] service The RPC service the requests are directed at
  * @param [in] privileged Is this the privileged interface?
  * @return 0 when the server was asked to exit, < 0 on error
  */
-int esdm_rpcs_fuzz_serve(const char *socket_path, ProtobufCService *service,
-			 bool privileged);
-#endif /* ESDM_FUZZING */
+int esdm_rpcs_serve_in_process(const char *socket_path,
+			       ProtobufCService *service, bool privileged);
+#endif /* ESDM_FUZZING || ESDM_TESTMODE */
 
 #ifdef __cplusplus
 }

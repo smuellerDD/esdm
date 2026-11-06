@@ -50,6 +50,7 @@
 #include "esdm_es_jent.h"
 #include "esdm_logger.h"
 #include "../esdm/es_rates.h"
+#include "esdm_sec_jent_only.h"
 #include "ret_checkers.h"
 #include "../test_plan.h"
 
@@ -77,81 +78,6 @@ _Static_assert(ESDM_DRNG_SECURITY_STRENGTH_BITS == 256 &&
 		       ESDM_SEC_MAX_REQUESTS == 2 &&
 		       ESDM_SEC_STOPPED_ROUNDS == 8,
 	       "stated by the test plan");
-
-/* NTG.1 seeding wants a second source - see esdm_fully_seeded() */
-static bool esdm_sec_needs_second_source(void)
-{
-	return esdm_ntg1_2024_compliant() && !esdm_jent_ntg1();
-}
-
-/*
- * One seed's worth plus the oversampling of the conditioning, so the auxiliary
- * pool counts as a source. Only into an empty pool, so that nothing is left
- * once the initial seeding collected it.
- */
-static void esdm_sec_feed_aux(void)
-{
-	uint8_t seed[2 * ESDM_DRNG_SECURITY_STRENGTH_BYTES];
-	size_t i;
-
-	if (esdm_avail_entropy_aux())
-		return;
-
-	for (i = 0; i < sizeof(seed); i++)
-		seed[i] = (uint8_t)i;
-	esdm_pool_insert_aux(seed, sizeof(seed),
-			     ESDM_DRNG_SECURITY_STRENGTH_BITS +
-				     esdm_compress_osr());
-}
-
-/* The counters of the DRNG serving ordinary requests */
-struct esdm_sec_counters {
-	unsigned int instances;
-	uint32_t requests_since_fully_seeded;
-};
-
-static void esdm_sec_counters_cb(const struct esdm_drng_stats *stats,
-				 void *priv)
-{
-	struct esdm_sec_counters *counters = (struct esdm_sec_counters *)priv;
-
-	if (!strcmp(stats->type, "prediction resistance"))
-		return;
-
-	counters->instances++;
-	counters->requests_since_fully_seeded =
-		stats->requests_since_fully_seeded;
-}
-
-static struct esdm_sec_counters esdm_sec_counters_get(void)
-{
-	struct esdm_sec_counters counters = { .instances = 0,
-					      .requests_since_fully_seeded =
-						      0 };
-
-	esdm_drng_stats_foreach(esdm_sec_counters_cb, &counters);
-
-	return counters;
-}
-
-static void esdm_sec_sleep(time_t sec, long nsec)
-{
-	struct timespec ts = { .tv_sec = sec, .tv_nsec = nsec };
-
-	nanosleep(&ts, NULL);
-}
-
-static bool esdm_sec_buf_is_zero(const uint8_t *buf, size_t len)
-{
-	size_t i;
-
-	for (i = 0; i < len; i++) {
-		if (buf[i])
-			return false;
-	}
-
-	return true;
-}
 
 static int esdm_jent_only_security_test(void)
 {
