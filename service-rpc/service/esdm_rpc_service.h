@@ -229,6 +229,11 @@ void esdm_rpc_set_pkcs11_config(PrivAccess_Service *service,
 void esdm_rpc_selftest(PrivAccess_Service *service, const EmptyRequest *request,
 		       SelftestResponse_Closure closure, void *closure_data);
 
+/* entropy rates - test mode only */
+void esdm_rpc_set_es_rate(PrivAccess_Service *service,
+			  const SetEsRateRequest *request,
+			  RetResponse_Closure closure, void *closure_data);
+
 /******************************************************************************
  * Definition of Protobuf-C service
  ******************************************************************************/

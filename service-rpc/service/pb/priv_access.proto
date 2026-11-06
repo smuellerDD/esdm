@@ -125,6 +125,26 @@ message SelftestResponse {
 }
 
 /******************************************************************************
+ * Entropy rate of an entropy source - test mode and debug builds only
+ ******************************************************************************/
+
+/**
+ * @brief Request to set the entropy rate of an entropy source.
+ *
+ * Only a server built in test mode or with buildtype=debug applies it, any
+ * other answers -EOPNOTSUPP: it takes entropy away from the ESDM, which only
+ * tests and debugging have reason for.
+ *
+ * @param es Name of the entropy source as the status reports it, case
+ *	     insensitive, or "all" for every source but the auxiliary pool
+ * @param rate Entropy rate in bits per 256 data bits
+ */
+message SetEsRateRequest {
+	string es = 1;
+	uint32 rate = 2;
+}
+
+/******************************************************************************
  * Protocol handler
  ******************************************************************************/
 service PrivAccess {
@@ -147,4 +167,5 @@ service PrivAccess {
 	 * an already installed client invoke a different call on the server.
 	 */
 	rpc RpcSelftest (EmptyRequest) returns (SelftestResponse);
+	rpc RpcSetEsRate (SetEsRateRequest) returns (RetResponse);
 }

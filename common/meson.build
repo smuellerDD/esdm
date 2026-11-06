@@ -253,6 +253,10 @@ conf_data.set('ESDM_RPC_MAX_PR_REQUEST_SIZE', 32)
 
 conf_data.set('ESDM_TESTMODE', get_option('testmode').enabled())
 
+# buildtype=debug allows what weakens the ESDM for debugging, like test mode,
+# e.g. setting the entropy rates over the privileged RPC interface
+conf_data.set('ESDM_BUILDTYPE_DEBUG', get_option('buildtype') == 'debug')
+
 conf_data.set('ESDM_GETRANDOM_NUM_NODES', get_option('linux-getrandom-num-nodes'))
 
 conf_data.set('ESDM_LINUX_RESEED_INTERVAL_SEC', get_option('linux-reseed-interval'))

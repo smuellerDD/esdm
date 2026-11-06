@@ -31,6 +31,7 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <json-c/json.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -538,6 +539,94 @@ static void test_endless_stress_without_server(void)
 	      r.err);
 }
 
+/*
+ * Does every entropy source in the status document of @doc report an entropy
+ * rate of zero? At least one has to report a rate at all.
+ */
+static bool es_rates_all_zero(const char *doc)
+{
+	struct json_object *root = json_tokener_parse(doc), *sources;
+	bool zero = false;
+	size_t i, n;
+
+	if (!root ||
+	    !json_object_object_get_ex(root, "entropy_sources", &sources) ||
+	    !json_object_is_type(sources, json_type_array))
+		goto out;
+
+	n = json_object_array_length(sources);
+	for (i = 0; i < n; i++) {
+		struct json_object *rate;
+
+		if (!json_object_object_get_ex(
+			    json_object_array_get_idx(sources, i),
+			    "entropy_rate_per_256_data_bits", &rate))
+			continue;
+		if (json_object_get_int64(rate)) {
+			zero = false;
+			goto out;
+		}
+		zero = true;
+	}
+
+out:
+	json_object_put(root);
+	return zero;
+}
+
+/*
+ * The entropy rates, which only a server built in test mode or with
+ * buildtype=debug lets a client set.
+ * Last, as the server is left without a credited entropy source.
+ */
+static void test_es_rates(void)
+{
+	const char *const all_zero[] = { "--set-es-rate", "all=0", NULL };
+	struct test_run r;
+	int rc;
+
+	/* A privileged command as well */
+	if (geteuid()) {
+		printf("not root - skipping the entropy rates\n");
+		return;
+	}
+
+#if defined(ESDM_TESTMODE) || defined(ESDM_BUILDTYPE_DEBUG)
+	{
+		const char *const unknown[] = { "--set-es-rate", "no-such-es=0",
+						NULL };
+		const char *const json[] = { "--status-json", NULL };
+
+		announce(unknown);
+		rc = test_run(&r, unknown, NULL);
+		CHECK(rc == EXIT_FAILURE,
+		      "an unknown entropy source was accepted (status %d)", rc);
+		CHECK(strstr(r.err, "Unknown entropy source") != NULL,
+		      "an unknown entropy source was not reported (output: %.300s)",
+		      r.err);
+
+		check_says(all_zero, "set to 0 bits");
+
+		announce(json);
+		rc = test_run(&r, json, NULL);
+		CHECK(rc == EXIT_SUCCESS, "--status-json failed with status %d",
+		      rc);
+		CHECK(es_rates_all_zero(r.out),
+		      "not every entropy source reports a rate of zero: %.300s",
+		      r.out);
+	}
+#else
+	announce(all_zero);
+	rc = test_run(&r, all_zero, NULL);
+	CHECK(rc == EXIT_FAILURE,
+	      "a server built neither in test mode nor with buildtype=debug set an entropy rate (status %d)",
+	      rc);
+	CHECK(strstr(r.err, "test mode") != NULL,
+	      "the refusal does not name the test mode (output: %.300s)",
+	      r.err);
+#endif
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -587,6 +676,7 @@ int main(int argc, char *argv[])
 		test_benchmark();
 		test_privileged_commands();
 		test_pkcs11_config();
+		test_es_rates();
 	}
 
 	server_stop();

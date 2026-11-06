@@ -117,6 +117,9 @@ static void test_malformed_numbers(void)
 		{ "--timeout-msec", "", "timeout-msec" },
 		{ "--reseed-delay-ms", "1.5", "reseed-delay-ms" },
 		{ "--max-reseed-secs", "10min", "max reseed seconds" },
+		{ "--set-es-rate", "JitterRNG", "ES=BITS" },
+		{ "--set-es-rate", "=0", "ES=BITS" },
+		{ "--set-es-rate", "JitterRNG=x", "entropy rate" },
 	};
 	size_t i;
 
@@ -148,6 +151,7 @@ static void test_out_of_range_numbers(void)
 		{ "--benchmark-mode", "sideways", "full, pr or both" },
 		/* Zero is a value of its own here - a negative one is not */
 		{ "--max-reseed-secs", "-1", "out of range" },
+		{ "--set-es-rate", "JitterRNG=-1", "out of range" },
 	};
 	size_t i;
 
@@ -185,6 +189,7 @@ static void test_privileged_commands_refused(void)
 		{ "-W", "some entropy" },
 		{ "--endless-stress", NULL },
 		{ "--selftest", NULL },
+		{ "--set-es-rate", "all=0" },
 		{ "--pkcs11-pin", "1234" },
 		{ "--pkcs11-token-label", "a-token" },
 #ifdef ESDM_HAS_AUX_CLIENT

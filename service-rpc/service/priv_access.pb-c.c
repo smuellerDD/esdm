@@ -277,6 +277,51 @@ void   selftest_response__free_unpacked
   assert(message->base.descriptor == &selftest_response__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
+void   set_es_rate_request__init
+                     (SetEsRateRequest         *message)
+{
+  static const SetEsRateRequest init_value = SET_ES_RATE_REQUEST__INIT;
+  *message = init_value;
+}
+size_t set_es_rate_request__get_packed_size
+                     (const SetEsRateRequest *message)
+{
+  assert(message->base.descriptor == &set_es_rate_request__descriptor);
+  return protobuf_c_message_get_packed_size ((const ProtobufCMessage*)(message));
+}
+size_t set_es_rate_request__pack
+                     (const SetEsRateRequest *message,
+                      uint8_t       *out)
+{
+  assert(message->base.descriptor == &set_es_rate_request__descriptor);
+  return protobuf_c_message_pack ((const ProtobufCMessage*)message, out);
+}
+size_t set_es_rate_request__pack_to_buffer
+                     (const SetEsRateRequest *message,
+                      ProtobufCBuffer *buffer)
+{
+  assert(message->base.descriptor == &set_es_rate_request__descriptor);
+  return protobuf_c_message_pack_to_buffer ((const ProtobufCMessage*)message, buffer);
+}
+SetEsRateRequest *
+       set_es_rate_request__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data)
+{
+  return (SetEsRateRequest *)
+     protobuf_c_message_unpack (&set_es_rate_request__descriptor,
+                                allocator, len, data);
+}
+void   set_es_rate_request__free_unpacked
+                     (SetEsRateRequest *message,
+                      ProtobufCAllocator *allocator)
+{
+  if(!message)
+    return;
+  assert(message->base.descriptor == &set_es_rate_request__descriptor);
+  protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
+}
 static const ProtobufCFieldDescriptor rnd_add_to_ent_cnt_request__field_descriptors[1] =
 {
   {
@@ -609,7 +654,58 @@ const ProtobufCMessageDescriptor selftest_response__descriptor =
   (ProtobufCMessageInit) selftest_response__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCMethodDescriptor priv_access__method_descriptors[8] =
+static const ProtobufCFieldDescriptor set_es_rate_request__field_descriptors[2] =
+{
+  {
+    "es",
+    1,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(SetEsRateRequest, es),
+    NULL,
+    &protobuf_c_empty_string,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "rate",
+    2,
+    PROTOBUF_C_LABEL_NONE,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(SetEsRateRequest, rate),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned set_es_rate_request__field_indices_by_name[] = {
+  0,   /* field[0] = es */
+  1,   /* field[1] = rate */
+};
+static const ProtobufCIntRange set_es_rate_request__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor set_es_rate_request__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "SetEsRateRequest",
+  "SetEsRateRequest",
+  "SetEsRateRequest",
+  "",
+  sizeof(SetEsRateRequest),
+  2,
+  set_es_rate_request__field_descriptors,
+  set_es_rate_request__field_indices_by_name,
+  1,  set_es_rate_request__number_ranges,
+  (ProtobufCMessageInit) set_es_rate_request__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCMethodDescriptor priv_access__method_descriptors[9] =
 {
   { "RpcRndAddToEntCnt", &rnd_add_to_ent_cnt_request__descriptor, &ret_response__descriptor },
   { "RpcRndAddEntropy", &rnd_add_entropy_request__descriptor, &ret_response__descriptor },
@@ -619,6 +715,7 @@ static const ProtobufCMethodDescriptor priv_access__method_descriptors[8] =
   { "RpcSetMinReseedSecs", &set_min_reseed_secs_request__descriptor, &ret_response__descriptor },
   { "RpcSetPkcs11Config", &set_pkcs11_config_request__descriptor, &ret_response__descriptor },
   { "RpcSelftest", &empty_request__descriptor, &selftest_response__descriptor },
+  { "RpcSetEsRate", &set_es_rate_request__descriptor, &ret_response__descriptor },
 };
 const unsigned priv_access__method_indices_by_name[] = {
   1,        /* RpcRndAddEntropy */
@@ -626,6 +723,7 @@ const unsigned priv_access__method_indices_by_name[] = {
   2,        /* RpcRndClearPool */
   3,        /* RpcRndReseedCRNG */
   7,        /* RpcSelftest */
+  8,        /* RpcSetEsRate */
   5,        /* RpcSetMinReseedSecs */
   6,        /* RpcSetPkcs11Config */
   4         /* RpcSetWriteWakeupThresh */
@@ -637,7 +735,7 @@ const ProtobufCServiceDescriptor priv_access__descriptor =
   "PrivAccess",
   "PrivAccess",
   "",
-  8,
+  9,
   priv_access__method_descriptors,
   priv_access__method_indices_by_name
 };
@@ -704,6 +802,14 @@ void priv_access__rpc_selftest(ProtobufCService *service,
 {
   assert(service->descriptor == &priv_access__descriptor);
   service->invoke(service, 7, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
+}
+void priv_access__rpc_set_es_rate(ProtobufCService *service,
+                                  const SetEsRateRequest *input,
+                                  RetResponse_Closure closure,
+                                  void *closure_data)
+{
+  assert(service->descriptor == &priv_access__descriptor);
+  service->invoke(service, 8, (const ProtobufCMessage *) input, (ProtobufCClosure) closure, closure_data);
 }
 void priv_access__init (PrivAccess_Service *service,
                         PrivAccess_ServiceDestroy destroy)
