@@ -23,8 +23,9 @@
 #define _ESDM_XOF_H
 
 /*
- * The kernel module esdm_es (kernel/esdm_es) operates the XDRBG-256 of
- * esdm_xdrbg.c on such an XOF, the SHAKE256 of the kernel.
+ * Shared by the ESDM and the kernel module esdm_es (kernel/esdm_es), which
+ * both operate the XDRBG-256 of esdm_xdrbg.c on such an XOF - the crypto
+ * backend's SHAKE256 in the ESDM, the kernel's in the module.
  */
 
 #ifdef __KERNEL__

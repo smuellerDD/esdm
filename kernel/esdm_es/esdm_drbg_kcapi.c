@@ -99,8 +99,8 @@ static int esdm_drbg_seed_helper(void *drbg, struct list_head *seedlist)
 	const struct drbg_string *s;
 	int ret = 0;
 
-	/* A new instantiation: its seed starts with the personalization */
-	if (!esdm_xdrbg_started(&drbg_s->xdrbg) && drbg_s->perslen)
+	/* A new instantiation: its seed begins with the personalization */
+	if (!esdm_xdrbg_seed_initialized(&drbg_s->xdrbg) && drbg_s->perslen)
 		CKINT(esdm_xdrbg_insert(&drbg_s->xdrbg, drbg_s->pers,
 					drbg_s->perslen));
 
@@ -128,7 +128,7 @@ static void esdm_drbg_dealloc(void *drbg)
 {
 	struct esdm_kernel_xdrbg *drbg_s = drbg;
 
-	esdm_xdrbg_free(&drbg_s->xdrbg);
+	esdm_xdrbg_zero_free(&drbg_s->xdrbg);
 	kfree_sensitive(drbg_s->pers);
 	kfree_sensitive(drbg_s);
 	pr_info("DRBG deallocated\n");
@@ -185,7 +185,7 @@ static int esdm_drbg_is_initialized(void *drbg)
 	if (!drbg_s)
 		return 0;
 
-	return drbg_s->xdrbg.instantiated;
+	return drbg_s->xdrbg.initially_seeded;
 }
 
 static const struct esdm_drbg_cb esdm_drbg_cb_int = {
