@@ -29,6 +29,11 @@ pool and reseed operations
 
 * Entropy pools: each auxiliary pool and the conditioning pool of the eBPF entropy sources is an XDRBG-256 - the XDRBG over SHAKE256 with a state of 512 bits, the one the kernel module esdm_es conditions with - instead of a pair of conditioning hashes; whatever is inserted is the seed of the next reseed and an extraction reseeds and generates; the SHAKE256 is that of the crypto backend (nettle >= 3.6 for the GnuTLS backend, Botan >= 3.2), the crypto self test covers it with a known-answer test of the XDRBG, and esdm_get_digestsize() reports the size of the state; after an XOF failure the eBPF pool takes the seed of a new instantiation instead of leaving the source without one
 
+* Botan backend: with Botan 3.14.0 or later, the ChaCha20 DRNG
+(botan_drng_type=chacha20) runs with fast key erasure, which gives its state
+backtracking resistance (AIS 20/31 DRG.3); its self test uses the known answers
+of the fast key erasure in Botan's own test suite
+
 * Kernel module esdm_es: moved from addon/linux_esdm_es to kernel/esdm_es and
 built from the source tree, sharing the IOCTL interface, the seed sizes and the
 health test cutoffs with the ESDM instead of carrying copies. It needs Linux

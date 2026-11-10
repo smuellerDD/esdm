@@ -957,6 +957,10 @@ option('botan_drng_type', type: 'combo', value: 'hmac',
 
 Botan supports a faster ChaCha20 DRNG and a more conservative HMAC-DRBG implementation,
 which conforms to SP800-90A. Default to the conservative option 'hmac'.
+
+With Botan 3.14.0 or later, the ChaCha20 DRNG runs with fast key erasure: its
+key is overwritten after each request, which gives its state backtracking
+resistance (AIS 20/31 DRG.3).
 ''')
 
 ################################################################################
