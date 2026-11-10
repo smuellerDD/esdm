@@ -1803,6 +1803,18 @@
             ];
           });
 
+          # remove later, for testing the ChaCha20 DRNG with fast key erasure,
+          # which came with Botan 3.14.0, before nixpkgs has it
+          botan3 = pkgs.botan3.overrideAttrs (_: {
+            version = "3.14.1";
+            src = pkgs.fetchFromGitHub {
+              owner = "randombit";
+              repo = "botan";
+              tag = "3.14.1";
+              hash = "sha256-A9OBDsBB1DGQiNaMZXs76XlSo2wEV/XzxjwkaDsmYlM=";
+            };
+          });
+
           # this currently defaults to the botan crypto backend
           esdm =
             (pkgs.esdm.override {
@@ -1819,7 +1831,7 @@
               fips140 = true;
               # remove later, for testing with NTG.1 capable jitterentropy
               jitterentropy = withFipsHmac self.packages.${system}.jitterentropy;
-              botan3 = withFipsHmac pkgs.botan3;
+              botan3 = withFipsHmac self.packages.${system}.botan3;
             }).overrideAttrs
               (prev: {
                 buildInputs = prev.buildInputs ++ [
@@ -2288,7 +2300,7 @@
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
               libp11
-              botan3
+              self.packages.${system}.botan3
               fuse3
               gnutls
               json_c
