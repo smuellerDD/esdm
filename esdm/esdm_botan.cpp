@@ -36,8 +36,18 @@
 #include "config.h"
 
 #include <botan/stateful_rng.h>
+#include <botan/version.h>
 #ifdef ESDM_BOTAN_DRNG_CHACHA20
 #include <botan/chacha_rng.h>
+/*
+ * From Botan 3.14.0 on, ChaCha_RNG offers fast key erasure: the key is
+ * overwritten with ChaCha20 output after each request, which gives the state
+ * backtracking resistance (AIS 20/31 DRG.3), and a request is limited to
+ * 2^19 bits (DRG.3.2) - Botan splits longer ones itself.
+ */
+#if BOTAN_VERSION_CODE >= BOTAN_VERSION_CODE_FOR(3, 14, 0)
+#define ESDM_BOTAN_DRNG_CHACHA20_FKE
+#endif
 #endif
 #ifdef ESDM_BOTAN_DRNG_HMAC
 #include <botan/hmac_drbg.h>
@@ -525,7 +535,13 @@ static int esdm_botan_drbg_alloc(void **drng, uint32_t sec_strength)
 	 * underlying primitive is not compiled into Botan; exceptions must
 	 * not propagate into the C callers */
 	try {
-#ifdef ESDM_BOTAN_DRNG_CHACHA20
+#ifdef ESDM_BOTAN_DRNG_CHACHA20_FKE
+		state->drbg.reset(new Botan::ChaCha_RNG(
+			Botan::ChaCha_RNG::KeyErasure::WithKeyErasure));
+		esdm_logger(
+			LOGGER_VERBOSE, LOGGER_C_ANY,
+			"Botan ChaCha20 DRNG core with fast key erasure allocated\n");
+#elif defined(ESDM_BOTAN_DRNG_CHACHA20)
 		state->drbg.reset(new Botan::ChaCha_RNG());
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ANY,
 			    "Botan ChaCha20 DRNG core allocated\n");
@@ -569,7 +585,9 @@ static void esdm_botan_drbg_dealloc(void *drng)
 
 static const char *esdm_botan_drbg_name(void)
 {
-#ifdef ESDM_BOTAN_DRNG_CHACHA20
+#ifdef ESDM_BOTAN_DRNG_CHACHA20_FKE
+	return "Botan ChaCha20 DRNG with fast key erasure";
+#elif defined(ESDM_BOTAN_DRNG_CHACHA20)
 	return "Botan ChaCha20 DRNG";
 #endif
 
@@ -578,7 +596,89 @@ static const char *esdm_botan_drbg_name(void)
 #endif
 }
 
-#ifdef ESDM_BOTAN_DRNG_CHACHA20
+#ifdef ESDM_BOTAN_DRNG_CHACHA20_FKE
+/*
+ * Known answers of ChaCha_RNG with fast key erasure, verbatim from the test
+ * suite of Botan: ChaCha_RNG_FKE_Unit_Tests::test_reseed_kat() in
+ * src/tests/test_rng_behavior.cpp of Botan 3.14.1,
+ * https://github.com/randombit/botan/blob/3.14.1/src/tests/test_rng_behavior.cpp
+ *
+ * Instantiated from 32 zero bytes, the DRNG generates exp1 and then exp2, 32
+ * bytes each. Reseeded with the 32 bytes 0x80 its underlying RNG
+ * (Request_Counting_RNG) delivers there, it generates exp3. Botan's automatic
+ * reseed is the update of the state with those bytes, which
+ * esdm_botan_drbg_seed() does as well.
+ */
+static int esdm_botan_drbg_selftest_chacha20(void)
+{
+	static const uint8_t seed[32] = { 0 };
+	static const uint8_t exp1[] = {
+		0x12, 0x80, 0x5a, 0x7c, 0x7a, 0x76, 0x65, 0x7d,
+		0xa7, 0xf1, 0x9f, 0x2f, 0xcb, 0xa6, 0x33, 0xa8,
+		0x4c, 0xe8, 0x16, 0xa2, 0x96, 0x17, 0x9c, 0x80,
+		0x5e, 0xbd, 0xa3, 0x00, 0xc1, 0xca, 0x10, 0x0c,
+	};
+	static const uint8_t exp2[] = {
+		0x06, 0x99, 0x88, 0x02, 0xd7, 0x0d, 0xfc, 0x5d,
+		0x11, 0x41, 0xe4, 0xc3, 0x9a, 0x6a, 0x54, 0x98,
+		0xeb, 0x4e, 0x75, 0x92, 0x3b, 0x5e, 0x2f, 0x78,
+		0xd3, 0xc7, 0x80, 0x54, 0x2c, 0x19, 0x75, 0x3e,
+	};
+	static const uint8_t exp3[] = {
+		0xd2, 0x03, 0xeb, 0x11, 0xc3, 0xf1, 0x4a, 0x03,
+		0x41, 0xc5, 0xa6, 0xd8, 0xf2, 0xfa, 0x7f, 0xaa,
+		0x10, 0xc1, 0xfd, 0x21, 0x62, 0x50, 0x7c, 0xa6,
+		0x79, 0xb4, 0x5f, 0x20, 0x24, 0xe7, 0x28, 0x90,
+	};
+	uint8_t reseed[32], act[sizeof(exp1)], mod[sizeof(seed)];
+	void *drng = NULL;
+	/* default to failure so a skipped step cannot return success */
+	int ret = -EFAULT;
+
+	memset(reseed, 0x80, sizeof(reseed));
+
+	CKINT(esdm_botan_drbg_alloc(&drng, 256));
+	CKINT(esdm_botan_drbg_seed(drng, seed, sizeof(seed), NULL, 0));
+
+	if (esdm_botan_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	CKINT(esdm_kat_check(act, exp1, sizeof(exp1)));
+
+	if (esdm_botan_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	CKINT(esdm_kat_check(act, exp2, sizeof(exp2)));
+
+	CKINT(esdm_botan_drbg_seed(drng, reseed, sizeof(reseed), NULL, 0));
+	if (esdm_botan_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	CKINT(esdm_kat_check(act, exp3, sizeof(exp3)));
+
+	/* A seed off by its first byte must not produce that output. */
+	esdm_botan_drbg_dealloc(drng);
+	drng = NULL;
+	CKINT(esdm_kat_modify(mod, seed, sizeof(mod)));
+
+	CKINT(esdm_botan_drbg_alloc(&drng, 256));
+	CKINT(esdm_botan_drbg_seed(drng, mod, sizeof(mod), NULL, 0));
+
+	if (esdm_botan_drbg_generate(drng, act, sizeof(act)) != sizeof(act)) {
+		ret = -EFAULT;
+		goto out;
+	}
+
+	ret = esdm_kat_check_differs(act, exp1, sizeof(exp1));
+
+out:
+	esdm_botan_drbg_dealloc(drng);
+	return ret;
+}
+#elif defined(ESDM_BOTAN_DRNG_CHACHA20)
 static int esdm_botan_drbg_selftest_chacha20(void)
 {
 	void *drng = NULL;
