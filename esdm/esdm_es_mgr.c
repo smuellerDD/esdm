@@ -217,7 +217,7 @@ struct esdm_es_get_ent_thread_arg {
 	unsigned int es_idx;
 	struct entropy_es *eb_es;
 	uint32_t requested_bits;
-	bool fully_seeded;
+	bool allow_cached;
 };
 
 static void *esdm_es_get_ent_thread(void *data)
@@ -226,7 +226,7 @@ static void *esdm_es_get_ent_thread(void *data)
 
 	if (arg->eb_es) {
 		esdm_es[arg->es_idx]->get_ent(arg->eb_es, arg->requested_bits,
-					      arg->fully_seeded);
+					      arg->allow_cached);
 	}
 
 	return NULL;
@@ -1156,7 +1156,7 @@ static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 
 void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 			   struct entropy_buf *addtl, uint32_t requested_bits,
-			   bool force)
+			   bool force, bool allow_cached)
 {
 	struct esdm_state *state = &esdm_state;
 #ifdef ESDM_ES_PARALLEL_FETCH
@@ -1198,7 +1198,7 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 		args[i].es_idx = i;
 		args[i].eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
 		args[i].requested_bits = requested_bits;
-		args[i].fully_seeded = fully_seeded;
+		args[i].allow_cached = allow_cached;
 	}
 	/*
 	 * One join for both buffers. Split over two calls the wait was for the
@@ -1218,7 +1218,7 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 		if (!eb_es)
 			continue;
 
-		esdm_es[i]->get_ent(eb_es, requested_bits, fully_seeded);
+		esdm_es[i]->get_ent(eb_es, requested_bits, allow_cached);
 	}
 #endif
 

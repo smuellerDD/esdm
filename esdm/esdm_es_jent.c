@@ -119,7 +119,7 @@ static uint32_t esdm_jent_poolsize(void)
  * @requested_bits: requested entropy in bits
  */
 static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
-			  uint32_t requested_bits, bool __unused unused)
+			  uint32_t requested_bits)
 {
 	ssize_t ret;
 	uint32_t ent_bits;
@@ -154,7 +154,7 @@ static void esdm_jent_buf_fill(struct entropy_es *eb_es,
 			       uint32_t requested_bits, void *ctx)
 {
 	(void)ctx;
-	esdm_jent_get(&esdm_jent_state_thread, eb_es, requested_bits, false);
+	esdm_jent_get(&esdm_jent_state_thread, eb_es, requested_bits);
 }
 
 static int esdm_jent_async_monitor(void)
@@ -169,25 +169,26 @@ static int esdm_jent_async_monitor(void)
 }
 
 static void esdm_jent_get_check(struct entropy_es *eb_es,
-				uint32_t requested_bits, bool __unused unused)
+				uint32_t requested_bits, bool allow_cached)
 {
 	/*
 	 * Serve small requests without initial oversampling from the async
 	 * cache; fall back to the synchronous Jitter RNG instance on miss or
-	 * when the request is too large for a single cached block.
+	 * when the request is too large for a single cached block - or when
+	 * the request asks for entropy collected for it.
 	 *
 	 * A block without entropy although the Jitter RNG is credited is one
 	 * the asynchronous collector failed to fill - e.g. after its known
 	 * answer tests failed - and counts as a miss as well: the synchronous
 	 * collector may well be serving.
 	 */
-	if (esdm_config_es_jent_async_enabled() &&
+	if (allow_cached && esdm_config_es_jent_async_enabled() &&
 	    esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits,
 				!!esdm_jent_entropylevel(requested_bits)))
 		return;
 
 	mutex_w_lock(&esdm_jent_lock);
-	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
+	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits);
 	mutex_w_unlock(&esdm_jent_lock);
 }
 
@@ -253,10 +254,11 @@ static void esdm_jent_async_fini(void)
 #else
 
 static void esdm_jent_get_check(struct entropy_es *eb_es,
-				uint32_t requested_bits, bool __unused unused)
+				uint32_t requested_bits,
+				bool __unused allow_cached)
 {
 	mutex_w_lock(&esdm_jent_lock);
-	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits, unused);
+	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits);
 	mutex_w_unlock(&esdm_jent_lock);
 }
 
