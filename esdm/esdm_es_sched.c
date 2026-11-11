@@ -413,12 +413,18 @@ static void esdm_sched_buf_fill(struct entropy_es *eb_es,
 	esdm_sched_get_sync(eb_es, requested_bits);
 }
 
+/* A block of the cache only, see struct esdm_es_cb.get_cached */
+static bool esdm_sched_get_cached(struct entropy_es *eb_es,
+				  uint32_t requested_bits)
+{
+	return esdm_es_buf_try_get(&sched_buf, eb_es, requested_bits,
+				   !!esdm_config_es_sched_entropy_rate());
+}
+
 static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			   bool allow_cached)
 {
-	if (allow_cached &&
-	    esdm_es_buf_try_get(&sched_buf, eb_es, requested_bits,
-				!!esdm_config_es_sched_entropy_rate()))
+	if (allow_cached && esdm_sched_get_cached(eb_es, requested_bits))
 		return;
 
 	esdm_sched_get_sync(eb_es, requested_bits);
@@ -544,6 +550,9 @@ struct esdm_es_cb esdm_es_sched = {
 	.fini = esdm_sched_finalize,
 	.monitor_es = esdm_sched_seed_monitor,
 	.get_ent = esdm_sched_get,
+#if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+	.get_cached = esdm_sched_get_cached,
+#endif
 	.curr_entropy = esdm_sched_entropylevel,
 	.max_entropy = esdm_sched_poolsize,
 	.state = esdm_sched_es_state,

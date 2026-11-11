@@ -1197,14 +1197,103 @@ static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 	return slot;
 }
 
-void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
-			   struct entropy_buf *addtl, uint32_t requested_bits,
-			   bool force, bool allow_cached)
+/* Fetch the sources marked in @fetch, each into its slot */
+static void esdm_es_fetch(struct entropy_buf *seedbuf,
+			  struct entropy_buf *addtl, uint32_t requested_bits,
+			  bool allow_cached, const bool *fetch)
 {
-	struct esdm_state *state = &esdm_state;
 #ifdef ESDM_ES_PARALLEL_FETCH
 	struct esdm_es_get_ent_thread_arg args[esdm_ext_es_last];
+	uint32_t n = 0;
 #endif
+	uint32_t i;
+
+#ifdef ESDM_ES_PARALLEL_FETCH
+	/*
+	 * The slots are cleared here before the threads fetching into them
+	 * are started. One join for both buffers: the wait is for the slowest
+	 * source there is rather than for the slowest of each buffer. Only the
+	 * sources to fetch get a thread - a reseed served from the caches
+	 * fetches few, or one, which runs in this thread.
+	 */
+	for_each_esdm_es (i) {
+		struct entropy_es *eb_es;
+
+		if (!fetch[i])
+			continue;
+		eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
+		if (!eb_es)
+			continue;
+
+		args[n].es_idx = i;
+		args[n].eb_es = eb_es;
+		args[n].requested_bits = requested_bits;
+		args[n].allow_cached = allow_cached;
+		n++;
+	}
+	thread_fork_join(esdm_es_get_ent_thread, args, sizeof(args[0]), n);
+#else
+	/* Concatenate the output of the entropy sources. */
+	for_each_esdm_es (i) {
+		struct entropy_es *eb_es;
+
+		if (!fetch[i])
+			continue;
+		eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
+		if (!eb_es)
+			continue;
+
+		esdm_es[i]->get_ent(eb_es, requested_bits, allow_cached);
+	}
+#endif
+}
+
+/*
+ * A reseed takes what the sources with a cache have ready, see struct
+ * esdm_es_cb.get_cached, and the others as always. A source whose cache is
+ * empty is only asked to collect if the rest fall short of @requested_bits:
+ * under load, a slow source such as a TPM otherwise holds up every reseed
+ * once its cache is drained, while the sources served from their caches
+ * deliver the entropy of the reseed by themselves.
+ */
+static void esdm_es_fetch_reseed(struct entropy_buf *seedbuf,
+				 struct entropy_buf *addtl,
+				 uint32_t requested_bits, bool *fetch)
+{
+	bool missed[esdm_ext_es_last];
+	uint32_t i, credited = 0;
+
+	for_each_esdm_es (i) {
+		struct entropy_es *eb_es;
+
+		missed[i] = false;
+		if (!esdm_es[i]->get_cached)
+			continue;
+
+		fetch[i] = false;
+		eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
+		if (eb_es && !esdm_es[i]->get_cached(eb_es, requested_bits))
+			missed[i] = true;
+	}
+
+	esdm_es_fetch(seedbuf, addtl, requested_bits, true, fetch);
+
+	/* An uncredited source writes no entropy into @seedbuf */
+	for_each_esdm_es (i)
+		credited += seedbuf->entropy_es[i].e_bits;
+	if (credited >= requested_bits)
+		return;
+
+	esdm_es_fetch(seedbuf, addtl, requested_bits, true, missed);
+}
+
+static void esdm_get_seed_buffers_common(struct entropy_buf *seedbuf,
+					 struct entropy_buf *addtl,
+					 uint32_t requested_bits, bool force,
+					 bool allow_cached, bool reseed)
+{
+	struct esdm_state *state = &esdm_state;
+	bool fetch[esdm_ext_es_last];
 	uint32_t i, req_ent = esdm_es_oversampling() ?
 				      esdm_security_strength() :
 				      ESDM_FULL_SEED_ENTROPY_BITS;
@@ -1236,35 +1325,31 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 		goto wakeup;
 	}
 
-#ifdef ESDM_ES_PARALLEL_FETCH
-	for_each_esdm_es (i) {
-		args[i].es_idx = i;
-		args[i].eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
-		args[i].requested_bits = requested_bits;
-		args[i].allow_cached = allow_cached;
-	}
-	/*
-	 * One join for both buffers. Split over two calls the wait was for the
-	 * slowest approved source and then for the slowest of the rest; taken
-	 * together it is the slowest source there is, and a machine whose
-	 * jitter RNG and whose TPM each cost milliseconds pays for one of them
-	 * rather than for both. A NULL slot is a source to skip, which is what
-	 * esdm_es_get_ent_thread() does with it.
-	 */
-	thread_fork_join(esdm_es_get_ent_thread, args, sizeof(args[0]),
-			 esdm_ext_es_last);
-#else
-	/* Concatenate the output of the entropy sources. */
-	for_each_esdm_es (i) {
-		struct entropy_es *eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
+	for_each_esdm_es (i)
+		fetch[i] = true;
 
-		if (!eb_es)
-			continue;
-
-		esdm_es[i]->get_ent(eb_es, requested_bits, allow_cached);
-	}
-#endif
+	if (reseed)
+		esdm_es_fetch_reseed(seedbuf, addtl, requested_bits, fetch);
+	else
+		esdm_es_fetch(seedbuf, addtl, requested_bits, allow_cached,
+			      fetch);
 
 wakeup:
 	esdm_writer_wakeup();
+}
+
+void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
+			   struct entropy_buf *addtl, uint32_t requested_bits,
+			   bool force, bool allow_cached)
+{
+	esdm_get_seed_buffers_common(seedbuf, addtl, requested_bits, force,
+				     allow_cached, false);
+}
+
+void esdm_get_reseed_buffers(struct entropy_buf *seedbuf,
+			     struct entropy_buf *addtl, uint32_t requested_bits,
+			     bool force)
+{
+	esdm_get_seed_buffers_common(seedbuf, addtl, requested_bits, force,
+				     true, true);
 }

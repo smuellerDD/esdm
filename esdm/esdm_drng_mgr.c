@@ -757,6 +757,13 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	 * the caches hold. Its seeding goes to the sources themselves.
 	 */
 	bool allow_cached = drng != &esdm_drng_pr;
+	/*
+	 * A reseed may leave out a source with nothing cached when the others
+	 * deliver its entropy: an instantiation goes by the initial seeding
+	 * policy, and the PR DRNG not even by cached blocks - see
+	 * esdm_get_reseed_buffers().
+	 */
+	bool reseed = allow_cached && !do_full_init;
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -800,8 +807,13 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 * oversample ES by 64 bit, when seeding this DRNG instance.
 		 * See SP800-90C sec. 6.5.1.2.
 		 */
-		esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits, forced,
-				      allow_cached);
+		if (reseed) {
+			esdm_get_reseed_buffers(&seedbuf, &addtl,
+						requested_bits, forced);
+		} else {
+			esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits,
+					      forced, allow_cached);
+		}
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 

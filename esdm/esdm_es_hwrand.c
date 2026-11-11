@@ -335,12 +335,18 @@ static int esdm_hwrand_monitor(void)
 					 esdm_hwrand_buf_ready, NULL);
 }
 
+/* A block of the cache only, see struct esdm_es_cb.get_cached */
+static bool esdm_hwrand_get_cached(struct entropy_es *eb_es,
+				   uint32_t requested_bits)
+{
+	return esdm_es_buf_try_get(&hwrand_buf, eb_es, requested_bits,
+				   !!esdm_config_es_hwrand_entropy_rate());
+}
+
 static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			    bool allow_cached)
 {
-	if (allow_cached &&
-	    esdm_es_buf_try_get(&hwrand_buf, eb_es, requested_bits,
-				!!esdm_config_es_hwrand_entropy_rate()))
+	if (allow_cached && esdm_hwrand_get_cached(eb_es, requested_bits))
 		return;
 
 	esdm_hwrand_get_sync(eb_es, requested_bits);
@@ -411,6 +417,9 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.monitor_es = NULL,
 #endif
 	.get_ent = esdm_hwrand_get,
+#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
+	.get_cached = esdm_hwrand_get_cached,
+#endif
 	.curr_entropy = esdm_hwrand_entropylevel,
 	.max_entropy = esdm_hwrand_poolsize,
 	.state = esdm_hwrand_es_state,

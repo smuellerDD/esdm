@@ -118,6 +118,11 @@ struct entropy_buf {
  *	     for entropy collected for this very request - the seeding of the
  *	     prediction resistance DRNG, whose contract is just that - and an
  *	     ES with such a cache then takes its synchronous path.
+ * @get_cached: Fetch a block the ES collected ahead of the request, if one is
+ *		ready, and return true - or return false and leave @eb alone.
+ *		Never collects itself: a reseed asks this first and leaves out
+ *		an ES without a block when the others deliver the entropy, see
+ *		esdm_get_reseed_buffers(). NULL for an ES without a cache.
  * @curr_entropy: Return amount of currently available entropy in bits.
  * @max_entropy: Maximum amount of entropy the entropy source is able to
  *		 maintain.
@@ -147,6 +152,7 @@ struct esdm_es_cb {
 	void (*fini)(void);
 	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits,
 			bool allow_cached);
+	bool (*get_cached)(struct entropy_es *eb, uint32_t requested_bits);
 	uint32_t (*curr_entropy)(uint32_t requested_bits);
 	uint32_t (*max_entropy)(void);
 	void (*state)(char *buf, size_t buflen);

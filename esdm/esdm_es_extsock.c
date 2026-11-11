@@ -596,9 +596,9 @@ static void extsock_buf_fill(struct entropy_es *eb_es, uint32_t requested_bits,
 }
 
 /*
- * A block of the cache, none while the provider is not credited. A block
- * without entropy from a source credited at a rate is a miss: one of a failed
- * request, or claimed with nothing.
+ * A block of the cache only, see struct esdm_es_cb.get_cached - none while the
+ * provider is not credited. A block without entropy from a source credited at
+ * a rate is a miss: one of a failed request, or claimed with nothing.
  */
 static bool extsock_get_cached(struct entropy_es *eb_es,
 			       uint32_t requested_bits)
@@ -893,6 +893,9 @@ struct esdm_es_cb esdm_es_extsock = {
 	.fini = extsock_fini,
 	.monitor_es = extsock_monitor,
 	.get_ent = extsock_get_ent,
+#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
+	.get_cached = extsock_get_cached,
+#endif
 	.curr_entropy = extsock_entropylevel,
 	.max_entropy = extsock_poolsize,
 	.state = extsock_es_state,
