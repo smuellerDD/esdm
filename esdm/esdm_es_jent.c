@@ -168,6 +168,19 @@ static int esdm_jent_async_monitor(void)
 				   esdm_jent_buf_fill, NULL);
 }
 
+/*
+ * A block of the cache only, see struct esdm_es_cb.get_cached: one in the
+ * making is not waited for, as the reseed asking goes on without it should the
+ * other sources cover it.
+ */
+static bool esdm_jent_get_cached(struct entropy_es *eb_es,
+				 uint32_t requested_bits)
+{
+	return esdm_config_es_jent_async_enabled() &&
+	       esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits,
+				   !!esdm_jent_entropylevel(requested_bits));
+}
+
 static void esdm_jent_get_check(struct entropy_es *eb_es,
 				uint32_t requested_bits, bool allow_cached)
 {
@@ -574,6 +587,9 @@ struct esdm_es_cb esdm_es_jent = {
 	.monitor_es = NULL,
 #endif
 	.get_ent = esdm_jent_get_check,
+#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
+	.get_cached = esdm_jent_get_cached,
+#endif
 	.curr_entropy = esdm_jent_entropylevel,
 	.max_entropy = esdm_jent_poolsize,
 	.state = esdm_jent_es_state,

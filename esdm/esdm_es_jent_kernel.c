@@ -204,12 +204,18 @@ static int esdm_jent_kernel_monitor(void)
 				   esdm_jent_kernel_buf_fill, NULL);
 }
 
+/* A block of the cache only, see struct esdm_es_cb.get_cached */
+static bool esdm_jent_kernel_get_cached(struct entropy_es *eb_es,
+					uint32_t requested_bits)
+{
+	return esdm_es_buf_try_get(&jent_kernel_buf, eb_es, requested_bits,
+				   !!esdm_config_es_jent_kernel_entropy_rate());
+}
+
 static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 				 uint32_t requested_bits, bool allow_cached)
 {
-	if (allow_cached &&
-	    esdm_es_buf_try_get(&jent_kernel_buf, eb_es, requested_bits,
-				!!esdm_config_es_jent_kernel_entropy_rate()))
+	if (allow_cached && esdm_jent_kernel_get_cached(eb_es, requested_bits))
 		return;
 
 	esdm_jent_kernel_get_sync(eb_es, requested_bits);
@@ -306,6 +312,9 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.monitor_es = NULL,
 #endif
 	.get_ent = esdm_jent_kernel_get,
+#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
+	.get_cached = esdm_jent_kernel_get_cached,
+#endif
 	.curr_entropy = esdm_jent_kernel_entropylevel,
 	.max_entropy = esdm_jent_kernel_poolsize,
 	.state = esdm_jent_kernel_es_state,

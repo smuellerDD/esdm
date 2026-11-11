@@ -481,12 +481,18 @@ static int esdm_es_tpm2_monitor(void)
 				   esdm_es_tpm2_buf_fill, NULL);
 }
 
+/* A block of the cache only, see struct esdm_es_cb.get_cached */
+static bool esdm_es_tpm2_get_cached(struct entropy_es *eb_es,
+				    uint32_t requested_bits)
+{
+	return esdm_es_buf_try_get(&tpm2_buf, eb_es, requested_bits,
+				   !!esdm_config_es_tpm2_entropy_rate());
+}
+
 static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			     bool allow_cached)
 {
-	if (allow_cached &&
-	    esdm_es_buf_try_get(&tpm2_buf, eb_es, requested_bits,
-				!!esdm_config_es_tpm2_entropy_rate()))
+	if (allow_cached && esdm_es_tpm2_get_cached(eb_es, requested_bits))
 		return;
 
 	esdm_es_tpm2_get_sync(eb_es, requested_bits);
@@ -557,6 +563,9 @@ struct esdm_es_cb esdm_es_tpm2 = {
 	.monitor_es = NULL,
 #endif
 	.get_ent = esdm_es_tpm2_get,
+#if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+	.get_cached = esdm_es_tpm2_get_cached,
+#endif
 	.curr_entropy = esdm_es_tpm2_entropylevel,
 	.max_entropy = esdm_es_tpm2_poolsize,
 	.state = esdm_es_tpm2_es_state,

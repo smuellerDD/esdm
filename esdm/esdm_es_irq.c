@@ -415,12 +415,18 @@ static void esdm_irq_buf_fill(struct entropy_es *eb_es,
 	esdm_irq_get_sync(eb_es, requested_bits);
 }
 
+/* A block of the cache only, see struct esdm_es_cb.get_cached */
+static bool esdm_irq_get_cached(struct entropy_es *eb_es,
+				uint32_t requested_bits)
+{
+	return esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits,
+				   !!esdm_config_es_irq_entropy_rate());
+}
+
 static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			 bool allow_cached)
 {
-	if (allow_cached &&
-	    esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits,
-				!!esdm_config_es_irq_entropy_rate()))
+	if (allow_cached && esdm_irq_get_cached(eb_es, requested_bits))
 		return;
 
 	esdm_irq_get_sync(eb_es, requested_bits);
@@ -541,6 +547,9 @@ struct esdm_es_cb esdm_es_irq = {
 	.monitor_es = esdm_irq_seed_monitor,
 	.fini = esdm_irq_finalize,
 	.get_ent = esdm_irq_get,
+#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+	.get_cached = esdm_irq_get_cached,
+#endif
 	.curr_entropy = esdm_irq_entropylevel,
 	.max_entropy = esdm_irq_poolsize,
 	.state = esdm_irq_es_state,

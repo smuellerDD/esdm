@@ -76,6 +76,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_reseed_cached_test = executable(
+		'esdm_reseed_cached_test',
+		[ esdm_ipc_ns, 'esdm_reseed_cached_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_drng_mgr_throughput_test = executable(
 		'esdm_drng_mgr_throughput_test',
 		[ esdm_ipc_ns, 'esdm_drng_mgr_throughput_test.c' ],
@@ -207,5 +215,8 @@ if get_option('esdm-server').enabled()
 
 	test('ESDM asynchronous reseed worker', esdm_reseed_worker_test,
 		timeout: 120,
+		suite: 'core')
+
+	test('ESDM reseed leaves out an empty cache', esdm_reseed_cached_test,
 		suite: 'core')
 endif

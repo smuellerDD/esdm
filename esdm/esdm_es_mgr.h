@@ -68,6 +68,17 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 			   struct entropy_buf *addtl, uint32_t requested_bits,
 			   bool force, bool allow_cached);
 
+/*
+ * As esdm_get_seed_buffers() with cached blocks allowed, for the reseed of a
+ * DRNG: a source with a cache that has no block ready is left out if the other
+ * sources deliver @requested_bits - see struct esdm_es_cb.get_cached. Neither
+ * for the initial seeding, whose policy may ask for more than one source, nor
+ * for the PR DRNG.
+ */
+void esdm_get_reseed_buffers(struct entropy_buf *seedbuf,
+			     struct entropy_buf *addtl, uint32_t requested_bits,
+			     bool force);
+
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void));
