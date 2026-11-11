@@ -247,11 +247,15 @@ static int esdm_irq_initialize(void)
 		ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY);
 
 #if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
+	/*
+	 * No cap (see esdm_es_buf_alloc()): the kernel credits a block with the
+	 * events it collected, which the rate alone does not tell.
+	 */
 	if (irq_buf_alloced) {
 		esdm_es_buf_reset(&irq_buf);
-	} else if (esdm_es_buf_alloc(&irq_buf, ESDM_IRQ_ENTROPY_BLOCKS,
-				     "Interrupt",
-				     esdm_config_es_irq_entropy_rate) == 0) {
+	} else if (esdm_es_buf_alloc(
+			   &irq_buf, ESDM_IRQ_ENTROPY_BLOCKS, "Interrupt",
+			   esdm_config_es_irq_entropy_rate, NULL) == 0) {
 		irq_buf_alloced = true;
 	}
 #endif

@@ -67,6 +67,13 @@ static DEFINE_MUTEX_UNLOCKED(hwrand_mutex);
 #if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
 static struct esdm_es_buf hwrand_buf;
 static bool hwrand_buf_alloced = false;
+
+/* What a block of @requested_bits is credited with at present */
+static uint32_t esdm_hwrand_buf_credit(uint32_t requested_bits)
+{
+	return esdm_fast_noise_entropylevel(
+		esdm_config_es_hwrand_entropy_rate(), requested_bits);
+}
 #endif
 
 static bool esdm_hwrand_active(void);
@@ -124,7 +131,8 @@ static int esdm_hwrand_init(void)
 		esdm_es_buf_reset(&hwrand_buf);
 	} else if (esdm_es_buf_alloc(&hwrand_buf, ESDM_HWRAND_ENTROPY_BLOCKS,
 				     "LinuxHWRand",
-				     esdm_config_es_hwrand_entropy_rate) == 0) {
+				     esdm_config_es_hwrand_entropy_rate,
+				     esdm_hwrand_buf_credit) == 0) {
 		hwrand_buf_alloced = true;
 	}
 #endif

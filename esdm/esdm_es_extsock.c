@@ -489,6 +489,9 @@ static void extsock_reset_locked(void)
 	extsock.status_warned = false;
 }
 
+/* The cap of the cache, see esdm_es_buf_alloc() */
+static uint32_t extsock_entropylevel(uint32_t requested_bits);
+
 static int extsock_init(void)
 {
 	extsock_lock();
@@ -502,7 +505,8 @@ static int extsock_init(void)
 #if (ESDM_EXT_ENTROPY_BLOCKS != 0)
 	if (!extsock.buf_alloced &&
 	    !esdm_es_buf_alloc(&extsock.buf, ESDM_EXT_ENTROPY_BLOCKS,
-			       EXTSOCK_NAME, extsock_buf_rate))
+			       EXTSOCK_NAME, extsock_buf_rate,
+			       extsock_entropylevel))
 		extsock.buf_alloced = true;
 #endif
 
@@ -592,23 +596,18 @@ static void extsock_buf_fill(struct entropy_es *eb_es, uint32_t requested_bits,
 }
 
 /*
- * A block of the cache at most at the rate now, none while the provider is not
- * credited. A block without entropy from a source credited at a rate is a
- * miss: one of a failed request, or claimed with nothing.
+ * A block of the cache, none while the provider is not credited. A block
+ * without entropy from a source credited at a rate is a miss: one of a failed
+ * request, or claimed with nothing.
  */
 static bool extsock_get_cached(struct entropy_es *eb_es,
 			       uint32_t requested_bits)
 {
-	uint32_t level;
-
 	if (!extsock.buf_alloced || !atomic_load(&extsock.credited))
 		return false;
 
-	level = extsock_entropylevel(requested_bits);
-	if (!esdm_es_buf_try_get(&extsock.buf, eb_es, requested_bits, !!level))
-		return false;
-	eb_es->e_bits = min_uint32(eb_es->e_bits, level);
-	return true;
+	return esdm_es_buf_try_get(&extsock.buf, eb_es, requested_bits,
+				   !!extsock_entropylevel(requested_bits));
 }
 
 #endif

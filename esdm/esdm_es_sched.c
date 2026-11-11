@@ -242,11 +242,15 @@ static int esdm_sched_initialize(void)
 	mutex_unlock(&sched_mutex);
 
 #if (ESDM_SCHED_ENTROPY_BLOCKS != 0)
+	/*
+	 * No cap (see esdm_es_buf_alloc()): the kernel credits a block with the
+	 * events it collected, which the rate alone does not tell.
+	 */
 	if (sched_buf_alloced) {
 		esdm_es_buf_reset(&sched_buf);
-	} else if (esdm_es_buf_alloc(&sched_buf, ESDM_SCHED_ENTROPY_BLOCKS,
-				     "Scheduler",
-				     esdm_config_es_sched_entropy_rate) == 0) {
+	} else if (esdm_es_buf_alloc(
+			   &sched_buf, ESDM_SCHED_ENTROPY_BLOCKS, "Scheduler",
+			   esdm_config_es_sched_entropy_rate, NULL) == 0) {
 		sched_buf_alloced = true;
 	}
 #endif
