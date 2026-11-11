@@ -74,7 +74,7 @@ static void check_reset_discards_cache(void)
 	struct entropy_es out;
 	unsigned int i;
 
-	CHECK_EQ(esdm_es_buf_alloc(&TEST_BUF, TEST_BLOCKS, TEST_ES.name,
+	CHECK_EQ(esdm_es_buf_alloc(&TEST_BUF, TEST_BLOCKS, TEST_ES.name, NULL,
 				   NULL),
 		 0);
 	TEST_BUF_ALLOCED = true;

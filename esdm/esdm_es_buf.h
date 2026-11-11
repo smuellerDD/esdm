@@ -52,19 +52,36 @@ typedef bool (*esdm_es_buf_ready_t)(void *ctx);
 /* The configured entropy rate of the source, see esdm_es_buf_alloc() */
 typedef uint32_t (*esdm_es_buf_rate_t)(void);
 
+/*
+ * The entropy the source credits a block of requested_bits with at present,
+ * see esdm_es_buf_alloc()
+ */
+typedef uint32_t (*esdm_es_buf_cap_t)(uint32_t requested_bits);
+
+/* What the monitor recorded about the fill of one block */
+struct esdm_es_buf_fill_info {
+	/* The entropy rate the block was filled at */
+	uint32_t rate;
+	/* The bits it was filled for */
+	uint32_t bits;
+	/* The reset generation (struct esdm_es_buf.gen) the fill began in */
+	unsigned int gen;
+};
+
 struct esdm_es_buf {
 	struct entropy_es *blocks;
 	_Atomic enum esdm_es_buf_state *states;
-	/* The entropy rate each block was filled at */
-	uint32_t *fill_rates;
+	struct esdm_es_buf_fill_info *fills;
 	esdm_es_buf_rate_t rate;
+	esdm_es_buf_cap_t cap;
 	unsigned int num_blocks;
 	unsigned int mask;
 	atomic_int idx;
 	atomic_bool monitor_initialized;
 	/*
 	 * Bumped by esdm_es_buf_reset(): a fill that began under an older
-	 * generation is discarded instead of being published.
+	 * generation is discarded instead of being published, or instead of
+	 * being served should it have been published all the same.
 	 */
 	atomic_uint gen;
 	/* Set by esdm_es_buf_alloc() once the cache can be used */
@@ -81,9 +98,17 @@ struct esdm_es_buf {
  * credit in proportion to. A block is credited at most in proportion to the
  * rate at the time it is served, so lowering a rate takes effect on the next
  * reseed rather than once the cache is drained. NULL disables that.
+ *
+ * cap, for a source whose credit follows from its rate alone, returns what
+ * the source credits a block of the given size with at present - its rate
+ * applied to the bits, nothing while it is failing its self test. No block is
+ * served with more, which covers a rate that was raised and lowered again
+ * while the block was filled. NULL for a source whose credit depends on more
+ * than its rate, as a cap computed from the rate would cut its credit.
  */
 int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
-		      const char *name, esdm_es_buf_rate_t rate);
+		      const char *name, esdm_es_buf_rate_t rate,
+		      esdm_es_buf_cap_t cap);
 
 /* Release all resources and zero-out cached entropy. */
 void esdm_es_buf_free(struct esdm_es_buf *buf);

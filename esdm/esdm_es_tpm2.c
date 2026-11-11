@@ -42,6 +42,7 @@ static int tpm2_fd = -1;
 static DEFINE_MUTEX_UNLOCKED(tpm2_mutex);
 
 #if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+static uint32_t esdm_es_tpm2_buf_credit(uint32_t requested_bits);
 static struct esdm_es_buf tpm2_buf;
 static bool tpm2_buf_alloced = false;
 #endif
@@ -266,8 +267,8 @@ static int esdm_es_tpm2_init(void)
 	if (tpm2_buf_alloced) {
 		esdm_es_buf_reset(&tpm2_buf);
 	} else if (esdm_es_buf_alloc(&tpm2_buf, ESDM_TPM2_ENTROPY_BLOCKS,
-				     "TPM2.0",
-				     esdm_config_es_tpm2_entropy_rate) == 0) {
+				     "TPM2.0", esdm_config_es_tpm2_entropy_rate,
+				     esdm_es_tpm2_buf_credit) == 0) {
 		tpm2_buf_alloced = true;
 	}
 #endif
@@ -449,6 +450,18 @@ err:
 }
 
 #if (ESDM_TPM2_ENTROPY_BLOCKS != 0)
+
+/*
+ * What a block of @requested_bits is credited with at present: the configured
+ * rate. Unlike esdm_es_tpm2_entropylevel() it does not ask whether the device
+ * is open now - a block cached before the connection was lost was read from a
+ * TPM that delivered.
+ */
+static uint32_t esdm_es_tpm2_buf_credit(uint32_t requested_bits)
+{
+	return esdm_fast_noise_entropylevel(esdm_config_es_tpm2_entropy_rate(),
+					    requested_bits);
+}
 
 static void esdm_es_tpm2_buf_fill(struct entropy_es *eb_es,
 				  uint32_t requested_bits, void *ctx)

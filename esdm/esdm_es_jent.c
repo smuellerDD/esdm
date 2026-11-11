@@ -225,7 +225,8 @@ static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
 	}
 
 	CKINT(esdm_es_buf_alloc(&esdm_jent_buf, ESDM_JENT_ENTROPY_BLOCKS,
-				"JitterRNG", esdm_config_es_jent_entropy_rate));
+				"JitterRNG", esdm_config_es_jent_entropy_rate,
+				esdm_jent_entropylevel));
 
 	esdm_jent_state_thread = jent_entropy_collector_alloc(osr, flags);
 	if (!esdm_jent_state_thread) {

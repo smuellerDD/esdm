@@ -41,11 +41,12 @@ static uint32_t esdm_es_buf_rate(struct esdm_es_buf *buf)
 }
 
 int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
-		      const char *name, esdm_es_buf_rate_t rate)
+		      const char *name, esdm_es_buf_rate_t rate,
+		      esdm_es_buf_cap_t cap)
 {
 	_Atomic enum esdm_es_buf_state *states;
+	struct esdm_es_buf_fill_info *fills;
 	struct entropy_es *blocks;
-	uint32_t *fill_rates;
 
 	if (!buf || !name)
 		return -EINVAL;
@@ -57,11 +58,11 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 
 	blocks = calloc(num_blocks, sizeof(*blocks));
 	states = calloc(num_blocks, sizeof(*states));
-	fill_rates = calloc(num_blocks, sizeof(*fill_rates));
-	if (!blocks || !states || !fill_rates) {
+	fills = calloc(num_blocks, sizeof(*fills));
+	if (!blocks || !states || !fills) {
 		free(blocks);
 		free((void *)states);
-		free(fill_rates);
+		free(fills);
 		return -ENOMEM;
 	}
 
@@ -72,12 +73,15 @@ int esdm_es_buf_alloc(struct esdm_es_buf *buf, unsigned int num_blocks,
 	 */
 	buf->blocks = blocks;
 	buf->states = states;
-	buf->fill_rates = fill_rates;
+	buf->fills = fills;
 	buf->rate = rate;
+	buf->cap = cap;
 	buf->num_blocks = num_blocks;
 	buf->mask = num_blocks - 1;
 	buf->name = name;
 	atomic_store(&buf->idx, -1);
+	/* The generation the zeroed fill records of a new cache belong to */
+	atomic_store(&buf->gen, 0);
 	atomic_store(&buf->monitor_initialized, false);
 	atomic_store_explicit(&buf->ready, true, memory_order_release);
 
@@ -102,8 +106,8 @@ void esdm_es_buf_free(struct esdm_es_buf *buf)
 		free((void *)buf->states);
 		buf->states = NULL;
 	}
-	free(buf->fill_rates);
-	buf->fill_rates = NULL;
+	free(buf->fills);
+	buf->fills = NULL;
 	buf->num_blocks = 0;
 	buf->mask = 0;
 	atomic_store(&buf->monitor_initialized, false);
@@ -130,7 +134,13 @@ void esdm_es_buf_reset(struct esdm_es_buf *buf)
 	 * The block being filled was collected before this reset just as the
 	 * filled ones were, so it must not be published either: the new
 	 * generation, announced before the slots are swept, has the monitor
-	 * discard it once the fill returns.
+	 * discard it once the fill returns. The monitor may be past that check
+	 * already, about to mark the slot filled when this sweep has passed it
+	 * by: it looks at the generation again once it has, and takes back
+	 * what it published. A consumer that gets to the block in between
+	 * finds it filled under an older generation than the current one and
+	 * discards it in turn (esdm_es_buf_try_get()), so no block collected
+	 * before a reset is served once the reset announced itself.
 	 */
 	atomic_fetch_add(&buf->gen, 1);
 
@@ -208,9 +218,42 @@ static int esdm_es_buf_fill_round(struct esdm_es_buf *buf,
 			continue;
 		}
 
-		/* A rate raised during the fill may have applied to it */
-		buf->fill_rates[i] = max_uint32(rate, esdm_es_buf_rate(buf));
+		/*
+		 * A rate raised during the fill may have applied to it. One
+		 * raised and lowered again while it ran is beyond what two
+		 * samples tell: the cap of esdm_es_buf_credit() takes care of
+		 * that one.
+		 */
+		buf->fills[i].rate = max_uint32(rate, esdm_es_buf_rate(buf));
+		buf->fills[i].bits = requested_bits;
+		buf->fills[i].gen = gen;
 		atomic_store(&buf->states[i], esdm_es_buf_filled);
+
+		/*
+		 * A reset that came after the check above swept past the slot
+		 * while it was still being filled, see esdm_es_buf_reset():
+		 * take the block back, unless a consumer was faster - which
+		 * then discards it.
+		 */
+		if (atomic_load(&buf->gen) != gen) {
+			enum esdm_es_buf_state filled = esdm_es_buf_filled;
+
+			if (atomic_compare_exchange_strong(
+				    &buf->states[i], &filled,
+				    esdm_es_buf_reading)) {
+				memset_secure(&buf->blocks[i], 0,
+					      sizeof(buf->blocks[i]));
+				atomic_thread_fence(memory_order_seq_cst);
+				atomic_store(&buf->states[i],
+					     esdm_es_buf_empty);
+			}
+
+			esdm_logger(
+				LOGGER_DEBUG, LOGGER_C_ES,
+				"%s ES monitor: discarded slot %u filled across a reset\n",
+				buf->name, i);
+			continue;
+		}
 
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_ES,
@@ -252,16 +295,29 @@ int esdm_es_buf_monitor_ready(struct esdm_es_buf *buf, uint32_t requested_bits,
 /*
  * The entropy of a block at the rate configured now: one filled at a higher
  * rate was credited for more than the source is assessed to deliver.
+ *
+ * The rate the fill was credited at is known only from samples before and
+ * after it. A rate raised and lowered again while the fill ran escapes both,
+ * and the block carries the entropy of the raised one. For a source whose
+ * credit follows from its rate alone, the cap is what a block of the same
+ * size is credited with now, which bounds that block too. The credit of the
+ * others depends on more than the rate - what the kernel collected meanwhile,
+ * say - so a cap computed from the rate would cut what they deliver in
+ * general; they go without one.
  */
 static uint32_t esdm_es_buf_credit(struct esdm_es_buf *buf, unsigned int slot)
 {
-	uint32_t rate = esdm_es_buf_rate(buf), fill_rate = buf->fill_rates[slot];
+	const struct esdm_es_buf_fill_info *fill = &buf->fills[slot];
+	uint32_t rate = esdm_es_buf_rate(buf),
+		 credit = buf->blocks[slot].e_bits;
 
-	if (!buf->rate || rate >= fill_rate)
-		return buf->blocks[slot].e_bits;
+	if (buf->rate && rate < fill->rate)
+		credit = (uint32_t)((uint64_t)credit * rate / fill->rate);
 
-	return (uint32_t)((uint64_t)buf->blocks[slot].e_bits * rate /
-			  fill_rate);
+	if (buf->cap)
+		credit = min_uint32(credit, buf->cap(fill->bits));
+
+	return credit;
 }
 
 bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
@@ -307,6 +363,24 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 					    esdm_es_buf_reading)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "%s ES monitor: buffer slot %u exhausted\n",
+			    buf->name, slot);
+		esdm_es_mgr_monitor_wakeup();
+		return false;
+	}
+
+	/*
+	 * A block filled before a reset that announced itself in the meantime:
+	 * the reset missed it while it was still being filled, and the monitor
+	 * has not taken it back yet. It carries what the reset discards.
+	 */
+	if (buf->fills[slot].gen != atomic_load(&buf->gen)) {
+		memset_secure(&buf->blocks[slot], 0, sizeof(buf->blocks[slot]));
+
+		atomic_thread_fence(memory_order_seq_cst);
+		atomic_store(&buf->states[slot], esdm_es_buf_empty);
+
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "%s ES monitor: buffer slot %u predates a reset\n",
 			    buf->name, slot);
 		esdm_es_mgr_monitor_wakeup();
 		return false;
