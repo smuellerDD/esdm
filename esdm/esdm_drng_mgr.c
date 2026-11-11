@@ -749,6 +749,14 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		(drng == &esdm_drng_pr && !atomic_load(&drng->initiated)) ||
 		(drng != &esdm_drng_pr && !atomic_load(&drng->fully_seeded));
 	bool forced = atomic_load(&drng->force_reseed) | do_full_init;
+	/*
+	 * The entropy behind a PR DRNG output is collected for that output
+	 * (see esdm_drng_reseed_async_capable()), which a block an entropy
+	 * source cached ahead of the request is not: it may have been
+	 * collected long before, while the PR DRNG asks for exactly the size
+	 * the caches hold. Its seeding goes to the sources themselves.
+	 */
+	bool allow_cached = drng != &esdm_drng_pr;
 
 	for_each_esdm_es (i)
 		collected_seedbuf.entropy_es[i].e_bits = 0;
@@ -792,7 +800,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 * oversample ES by 64 bit, when seeding this DRNG instance.
 		 * See SP800-90C sec. 6.5.1.2.
 		 */
-		esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits, forced);
+		esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits, forced,
+				      allow_cached);
 
 		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
 
@@ -2085,7 +2094,7 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		 * others contribute nothing to collected_bits below and their
 		 * output would be carried out to the caller uncredited.
 		 */
-		esdm_get_seed_buffers(eb, eb, requested_bits, false);
+		esdm_get_seed_buffers(eb, eb, requested_bits, false, true);
 		collected_bits = esdm_entropy_rate_eb(eb);
 
 		/* Break the collection loop if we got entropy, ... */

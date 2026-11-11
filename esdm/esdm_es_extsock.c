@@ -613,11 +613,13 @@ static bool extsock_get_cached(struct entropy_es *eb_es,
 #endif
 
 static void extsock_get_ent(struct entropy_es *eb_es, uint32_t requested_bits,
-			    bool __unused fully_seeded)
+			    bool allow_cached)
 {
 #if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock_get_cached(eb_es, requested_bits))
+	if (allow_cached && extsock_get_cached(eb_es, requested_bits))
 		return;
+#else
+	(void)allow_cached;
 #endif
 	extsock_get(eb_es, requested_bits);
 }

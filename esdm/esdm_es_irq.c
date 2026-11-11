@@ -416,9 +416,10 @@ static void esdm_irq_buf_fill(struct entropy_es *eb_es,
 }
 
 static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool __unused unused)
+			 bool allow_cached)
 {
-	if (esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits,
+	if (allow_cached &&
+	    esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits,
 				!!esdm_config_es_irq_entropy_rate()))
 		return;
 
@@ -428,7 +429,7 @@ static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 #else /* ESDM_IRQ_ENTROPY_BLOCKS == 0 */
 
 static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool __unused unused)
+			 bool __unused allow_cached)
 {
 	esdm_irq_get_sync(eb_es, requested_bits);
 }

@@ -59,10 +59,13 @@ void esdm_init_ops(struct entropy_buf *eb);
  * One pass rather than two: no source belongs in both buffers, so filling them
  * separately meant walking the sources twice and, where the fetch runs in
  * parallel, waiting out two rounds of the slowest one.
+ *
+ * @allow_cached false keeps the sources from serving blocks they collected
+ * ahead of the request, see struct esdm_es_cb.get_ent.
  */
 void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 			   struct entropy_buf *addtl, uint32_t requested_bits,
-			   bool force);
+			   bool force, bool allow_cached);
 
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);
