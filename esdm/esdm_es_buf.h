@@ -35,7 +35,8 @@ enum esdm_es_buf_state {
 
 /*
  * Callback invoked by the monitor to populate a single block. The callback
- * must set eb_es->e_bits to 0 on failure.
+ * must set eb_es->e_bits to 0 on failure, which esdm_es_buf_try_get() takes
+ * for a miss while the source is credited.
  */
 typedef void (*esdm_es_buf_fill_t)(struct entropy_es *eb_es,
 				   uint32_t requested_bits, void *ctx);
@@ -96,8 +97,12 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
  * and the function returns true. On miss (or when requested_bits exceeds what
  * a single cached block carries), the caller must fall back to its
  * synchronous path.
+ *
+ * credited tells whether the source is credited with entropy at present. If
+ * it is, a block without entropy is one whose fill failed and counts as a
+ * miss - the synchronous path may well serve by now.
  */
 bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
-			 uint32_t requested_bits);
+			 uint32_t requested_bits, bool credited);
 
 #endif /* _ESDM_ES_BUF_H */

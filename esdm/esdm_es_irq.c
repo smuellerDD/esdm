@@ -392,7 +392,8 @@ static void esdm_irq_buf_fill(struct entropy_es *eb_es,
 static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			 bool __unused unused)
 {
-	if (esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits))
+	if (esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits,
+				!!esdm_config_es_irq_entropy_rate()))
 		return;
 
 	esdm_irq_get_sync(eb_es, requested_bits);

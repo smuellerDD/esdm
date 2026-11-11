@@ -389,7 +389,8 @@ static void esdm_sched_buf_fill(struct entropy_es *eb_es,
 static void esdm_sched_get(struct entropy_es *eb_es, uint32_t requested_bits,
 			   bool __unused unused)
 {
-	if (esdm_es_buf_try_get(&sched_buf, eb_es, requested_bits))
+	if (esdm_es_buf_try_get(&sched_buf, eb_es, requested_bits,
+				!!esdm_config_es_sched_entropy_rate()))
 		return;
 
 	esdm_sched_get_sync(eb_es, requested_bits);
