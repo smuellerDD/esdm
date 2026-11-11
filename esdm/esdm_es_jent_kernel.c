@@ -193,7 +193,8 @@ static int esdm_jent_kernel_monitor(void)
 static void esdm_jent_kernel_get(struct entropy_es *eb_es,
 				 uint32_t requested_bits, bool __unused unused)
 {
-	if (esdm_es_buf_try_get(&jent_kernel_buf, eb_es, requested_bits))
+	if (esdm_es_buf_try_get(&jent_kernel_buf, eb_es, requested_bits,
+				!!esdm_config_es_jent_kernel_entropy_rate()))
 		return;
 
 	esdm_jent_kernel_get_sync(eb_es, requested_bits);

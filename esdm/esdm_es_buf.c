@@ -195,7 +195,7 @@ int esdm_es_buf_monitor_until(struct esdm_es_buf *buf, uint32_t requested_bits,
 }
 
 bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
-			 uint32_t requested_bits)
+			 uint32_t requested_bits, bool credited)
 {
 	unsigned int slot;
 
@@ -237,6 +237,30 @@ bool esdm_es_buf_try_get(struct esdm_es_buf *buf, struct entropy_es *eb_es,
 					    esdm_es_buf_reading)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "%s ES monitor: buffer slot %u exhausted\n",
+			    buf->name, slot);
+		esdm_es_mgr_monitor_wakeup();
+		return false;
+	}
+
+	/*
+	 * A source that is credited fills no block without entropy unless the
+	 * fill failed - the device, TPM or token returned an error, or the
+	 * kernel had nothing to hand out at the time. Such a block is no hit:
+	 * the synchronous path asks the source anew and gets the entropy of
+	 * one that has recovered or collected since, where serving the block
+	 * would credit it with nothing for as many reseeds as the cache holds
+	 * failed fills. The slot is scrubbed and handed back to the monitor.
+	 * The blocks of an uncredited source never carry entropy and are
+	 * served as they are.
+	 */
+	if (credited && !buf->blocks[slot].e_bits) {
+		memset_secure(&buf->blocks[slot], 0, sizeof(buf->blocks[slot]));
+
+		atomic_thread_fence(memory_order_seq_cst);
+		atomic_store(&buf->states[slot], esdm_es_buf_empty);
+
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "%s ES monitor: buffer slot %u holds a failed fill\n",
 			    buf->name, slot);
 		esdm_es_mgr_monitor_wakeup();
 		return false;

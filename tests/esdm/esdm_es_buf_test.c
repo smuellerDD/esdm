@@ -134,8 +134,11 @@ static void fill_cb_failing(struct entropy_es *eb_es, uint32_t requested_bits,
 	(void)requested_bits;
 	rec->calls++;
 
-	/* The contract for a failed fill: no entropy claimed */
-	memset(eb_es->e, 0, sizeof(eb_es->e));
+	/*
+	 * The contract for a failed fill: no entropy claimed - whatever a read
+	 * that broke off part way left in the buffer
+	 */
+	memset(eb_es->e, 0xa5, sizeof(eb_es->e));
 	eb_es->e_bits = 0;
 }
 
@@ -266,7 +269,7 @@ static void test_free(void)
 	CHECK(buf.blocks == NULL, "a repeated free resurrected the cache");
 
 	/* A released cache serves nothing and accepts no monitor run */
-	CHECK(!esdm_es_buf_try_get(&buf, NULL, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(&buf, NULL, BLOCK_BITS, true),
 	      "a released cache handed out a block");
 	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, NULL), -EINVAL);
 	esdm_es_buf_reset(&buf);
@@ -371,7 +374,7 @@ static void test_monitor_refills_drained_slots(void)
 
 	/* Drain three slots ... */
 	for (i = 0; i < 3; i++)
-		CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+		CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 		      "draining slot %u failed", i);
 	CHECK_EQ(count_state(&buf, esdm_es_buf_empty), 3);
 
@@ -458,11 +461,11 @@ static void test_try_get_validation(void)
 	struct entropy_es out;
 
 	stubs_reset();
-	CHECK(!esdm_es_buf_try_get(NULL, &out, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(NULL, &out, BLOCK_BITS, true),
 	      "a missing cache handed out a block");
 
 	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
-	CHECK(!esdm_es_buf_try_get(&buf, NULL, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(&buf, NULL, BLOCK_BITS, true),
 	      "a missing destination was accepted");
 
 	/*
@@ -491,14 +494,14 @@ static void test_try_get_oversized_request(void)
 	 * the cache. The caller has to fall back to its synchronous path, and
 	 * no block may be spent on the attempt.
 	 */
-	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS + 1),
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS + 1, true),
 	      "an oversized request was served from the cache");
 	CHECK_EQ(count_state(&buf, esdm_es_buf_filled), buf.num_blocks);
 	CHECK_EQ(atomic_load(&buf.idx), -1);
 	CHECK_EQ(stub_wakeups, 0);
 
 	/* Exactly the block size is still served */
-	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 	      "a request of exactly the block size was rejected");
 
 	esdm_es_buf_free(&buf);
@@ -513,12 +516,12 @@ static void test_try_get_empty_cache(void)
 	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
 
 	/* A miss reports the miss and asks the monitor for a refill */
-	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 	      "an empty cache handed out a block");
 	CHECK_EQ(stub_wakeups, 1);
 	CHECK_EQ(atomic_load(&buf.idx), 0);
 
-	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 	      "an empty cache handed out a block");
 	CHECK_EQ(stub_wakeups, 2);
 	CHECK_EQ(atomic_load(&buf.idx), 1);
@@ -546,7 +549,7 @@ static void test_try_get_round_robin(void)
 		uint8_t expect[ESDM_DRNG_INIT_SEED_SIZE_BYTES];
 
 		memset(&out, 0, sizeof(out));
-		if (!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS)) {
+		if (!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true)) {
 			CHECK(0, "the cache ran dry after %u of %u slots", i,
 			      buf.num_blocks);
 			break;
@@ -567,7 +570,7 @@ static void test_try_get_round_robin(void)
 	}
 
 	/* The cache is empty now and the index wraps back to the start */
-	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 	      "the drained cache still handed out a block");
 	CHECK_EQ(atomic_load(&buf.idx), 0);
 
@@ -595,7 +598,7 @@ static void test_try_get_wakeup_heuristic(void)
 		unsigned int before = stub_wakeups;
 		bool expect_wakeup = i && !(i % (buf.num_blocks / 4));
 
-		CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+		CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 		      "draining slot %u failed", i);
 		CHECK(stub_wakeups == before + (expect_wakeup ? 1u : 0u),
 		      "slot %u: %s a monitor wakeup", i,
@@ -625,13 +628,13 @@ static void test_try_get_skips_busy_slot(void)
 	 * The consumer does not wait for it and does not steal it either: it
 	 * reports a miss for this round and asks for a refill.
 	 */
-	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 	      "a slot owned by the monitor was consumed");
 	CHECK_EQ(atomic_load(&buf.states[0]), esdm_es_buf_filling);
 	CHECK_EQ(stub_wakeups, 1);
 
 	/* The next round moves on to the following slot, which is available */
-	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
 	      "the following slot was not served");
 	CHECK_EQ(atomic_load(&buf.states[1]), esdm_es_buf_empty);
 
@@ -639,11 +642,12 @@ static void test_try_get_skips_busy_slot(void)
 	esdm_es_buf_free(&buf);
 }
 
-static void test_failed_fill_is_served(void)
+static void test_failed_fill_is_a_miss(void)
 {
 	struct esdm_es_buf buf;
 	struct fill_record rec = { 0, 0, NULL, 1 };
 	struct entropy_es out;
+	unsigned int i;
 
 	stubs_reset();
 	CHECK_EQ(esdm_es_buf_alloc(&buf, 8, "test"), 0);
@@ -654,14 +658,37 @@ static void test_failed_fill_is_served(void)
 	CHECK_EQ(rec.calls, buf.num_blocks);
 
 	/*
-	 * A source that could not deliver reports zero bits. The block is still
-	 * cached and handed out - the caller sees the zero entropy estimate and
-	 * decides what to do, rather than the cache silently retrying forever.
+	 * A source that could not deliver reports zero bits. For a credited
+	 * source that is a failed fill and no hit: the caller is sent to its
+	 * synchronous path, which serves a source that has recovered since,
+	 * and the slot goes back to the monitor scrubbed.
+	 */
+	stub_wakeups = 0;
+	memset(&out, 0xff, sizeof(out));
+	CHECK(!esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, true),
+	      "a failed fill was served to a credited source");
+	CHECK_EQ(atomic_load(&buf.states[0]), esdm_es_buf_empty);
+	CHECK_EQ(stub_wakeups, 1);
+	for (i = 0; i < sizeof(buf.blocks[0].e); i++) {
+		if (buf.blocks[0].e[i]) {
+			CHECK(0, "the slot of a failed fill was not scrubbed");
+			break;
+		}
+	}
+
+	/*
+	 * The blocks of an uncredited source never carry entropy: they are
+	 * served as they are, the data stirs the DRNG all the same.
 	 */
 	memset(&out, 0xff, sizeof(out));
-	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS),
-	      "a block filled with zero entropy was withheld");
+	CHECK(esdm_es_buf_try_get(&buf, &out, BLOCK_BITS, false),
+	      "a block of an uncredited source was withheld");
 	CHECK_EQ(out.e_bits, 0);
+	CHECK_EQ(atomic_load(&buf.states[1]), esdm_es_buf_empty);
+
+	/* The monitor fills the slot of the failed fill anew */
+	CHECK_EQ(esdm_es_buf_monitor(&buf, BLOCK_BITS, fill_cb, &rec), 0);
+	CHECK_EQ(atomic_load(&buf.states[0]), esdm_es_buf_filled);
 
 	esdm_es_buf_free(&buf);
 }
@@ -795,7 +822,7 @@ int main(int argc, char *argv[])
 	test_try_get_round_robin();
 	test_try_get_wakeup_heuristic();
 	test_try_get_skips_busy_slot();
-	test_failed_fill_is_served();
+	test_failed_fill_is_a_miss();
 
 	test_reset();
 	test_reset_during_fill();
