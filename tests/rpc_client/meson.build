@@ -110,6 +110,21 @@ if get_option('esdm-server').enabled()
 			)
 		test('RPC server robustness', rpc_server_robustness_test,
 			timeout: 120, suite: 'rpc_client')
+
+		# Informational: meson test --benchmark 'RPC latency'
+		rpc_latency_bench = executable(
+				'rpc_latency_bench',
+				[ files('../test_ipc_ns.c'),
+				  'rpc_latency_bench.c',
+				  service_rpc_src, server_rpc_src,
+				  egd_server_src, client_rpc_src ],
+				include_directories: [ include_dirs_server,
+						       include_dirs_client ],
+				dependencies: [ dependencies_server ],
+				link_with: esdm_static_lib
+			)
+		benchmark('RPC latency', rpc_latency_bench, timeout: 600,
+			  suite: 'rpc_client')
 	endif
 
 	# Available test targets:
