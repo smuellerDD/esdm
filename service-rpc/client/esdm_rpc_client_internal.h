@@ -89,6 +89,12 @@ struct esdm_rpc_client_connection {
 	mutex_w_t ref_cnt;
 	atomic_int state;
 
+	/*
+	 * Getters blocked on ref_cnt without esdm_rpcc_conn_lock; counted so
+	 * the teardown does not destroy the connection under them.
+	 */
+	atomic_uint waiters;
+
 	/* Bound of the request in flight - see esdm_client_invoke() */
 	struct timespec deadline;
 
