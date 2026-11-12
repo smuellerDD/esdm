@@ -603,8 +603,16 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				sizeof(tbuf->reqbuf));
 
 		if (received < 0) {
-			if (errno == EINTR)
+			/*
+			 * A signal is no wait for the answer: it does not take
+			 * from the budget, only the bound of the invoke ends it.
+			 */
+			if (errno == EINTR) {
+				if (esdm_rpcc_expired(rpc_conn))
+					break;
+				retries--;
 				continue;
+			}
 
 			/* Receive timeout, see esdm_rpcc_set_timeouts() */
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -850,6 +858,27 @@ out:
 }
 #endif /* ESDM_FUZZING */
 
+/*
+ * May a request be re-sent when its answer does not come? Not one whose
+ * effect adds up or costs, as the server may have run it: entropy credited
+ * twice, a pool cleared again, self tests rerun.
+ */
+static bool esdm_rpcc_resendable(const ProtobufCMethodDescriptor *method)
+{
+	static const char *const once[] = {
+		"RpcRndAddToEntCnt", "RpcRndAddEntropy", "RpcRndClearPool",
+		"RpcRndReseedCRNG",  "RpcSelftest",	 "RpcWriteData",
+	};
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(once); i++) {
+		if (!strcmp(method->name, once[i]))
+			return false;
+	}
+
+	return true;
+}
+
 static void esdm_client_invoke(ProtobufCService *service,
 			       unsigned int method_index,
 			       const ProtobufCMessage *input,
@@ -930,6 +959,12 @@ static void esdm_client_invoke(ProtobufCService *service,
 		 * handed out as the reply to the next call.
 		 */
 		reset_conn_socket(rpc_conn);
+
+		if (!esdm_rpcc_resendable(method)) {
+			if (ret == -EAGAIN)
+				ret = -ETIMEDOUT;
+			break;
+		}
 
 		/*
 		 * Ask again only within bounds, so a server that never answers

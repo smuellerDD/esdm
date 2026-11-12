@@ -22,7 +22,8 @@
  * every call has to give up within a few seconds, so that callers without an
  * interrupt function get to their fallbacks. Also from a thread with a small
  * stack - the client's scratch buffers must not be carved from it. And against
- * a socket file nobody listens on, where a call fails at once.
+ * a socket file nobody listens on, where a call fails at once. A request that
+ * must not run twice is sent once, however long its answer takes.
  *
  * Runs unprivileged: the namespaces of tests/test_ipc_ns.c give it a /tmp of
  * its own to bind the socket in.
@@ -30,7 +31,10 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <poll.h>
 #include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -140,6 +144,107 @@ static int test_stale_socket(void)
 	return 0;
 }
 
+/* A privileged server counting the requests it gets, answering none */
+struct test_counter {
+	int fd;
+	pthread_t thread;
+	atomic_int requests;
+	atomic_bool stop;
+};
+
+static void *test_count_requests(void *arg)
+{
+	struct test_counter *c = arg;
+	struct pollfd pfd[16];
+	nfds_t n = 1, i;
+	uint8_t buf[4096];
+
+	pfd[0].fd = c->fd;
+	pfd[0].events = POLLIN;
+
+	while (!atomic_load(&c->stop)) {
+		if (poll(pfd, n, 50) <= 0)
+			continue;
+
+		if ((pfd[0].revents & POLLIN) && n < 16) {
+			int conn = accept(c->fd, NULL, NULL);
+
+			if (conn >= 0) {
+				pfd[n].fd = conn;
+				pfd[n].events = POLLIN;
+				n++;
+			}
+		}
+
+		for (i = 1; i < n; i++) {
+			if (!(pfd[i].revents & (POLLIN | POLLHUP)))
+				continue;
+			if (read(pfd[i].fd, buf, sizeof(buf)) > 0) {
+				atomic_fetch_add(&c->requests, 1);
+			} else {
+				close(pfd[i].fd);
+				pfd[i--] = pfd[--n];
+			}
+		}
+	}
+
+	for (i = 1; i < n; i++)
+		close(pfd[i].fd);
+	return NULL;
+}
+
+/*
+ * A request whose effect adds up is sent once, however long its answer takes:
+ * the server may run it nonetheless, and entropy would be credited twice.
+ */
+static int test_sent_once(void)
+{
+	struct sockaddr_un addr = { .sun_family = AF_UNIX };
+	struct test_counter c = { .fd = -1 };
+	uint8_t buf[32] = { 0 };
+	double start, seconds;
+	int ret, requests;
+
+	c.fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+	if (c.fd < 0)
+		return 1;
+	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s",
+		 ESDM_RPC_PRIV_SOCKET);
+	unlink(ESDM_RPC_PRIV_SOCKET);
+	if (bind(c.fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ||
+	    listen(c.fd, 16) < 0 ||
+	    pthread_create(&c.thread, NULL, test_count_requests, &c)) {
+		close(c.fd);
+		return 1;
+	}
+
+	if (esdm_rpcc_init_priv_service(NULL)) {
+		ret = 1;
+		requests = -1;
+		seconds = 0;
+	} else {
+		start = test_now();
+		ret = esdm_rpcc_rnd_add_entropy(buf, sizeof(buf), 0);
+		seconds = test_now() - start;
+		esdm_rpcc_fini_priv_service();
+		requests = atomic_load(&c.requests);
+	}
+
+	atomic_store(&c.stop, true);
+	pthread_join(c.thread, NULL);
+	close(c.fd);
+	unlink(ESDM_RPC_PRIV_SOCKET);
+
+	printf("add_entropy without answer: returned %d after %.1f s, %d request(s) sent\n",
+	       ret, seconds, requests);
+	if (ret >= 0 || requests != 1 || seconds > TEST_MAX_SECONDS) {
+		printf("add_entropy without answer: expected a failure after one request\n");
+		return 1;
+	}
+
+	return 0;
+}
+
 static int test_check(const char *what, const struct test_call *call)
 {
 	printf("%s: returned %zd after %.1f s\n", what, call->ret,
@@ -181,6 +286,7 @@ int main(void)
 
 	/* First, while no server has served this process yet */
 	ret = test_stale_socket();
+	ret |= test_sent_once();
 
 	fd = test_stuck_server();
 	if (fd < 0) {
