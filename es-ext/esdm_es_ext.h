@@ -223,9 +223,10 @@ int esdm_es_ext_server_set_entropy_rate(struct esdm_es_ext_server *server,
  * @brief Serve requests until esdm_es_ext_server_stop()
  *
  * Up to ESDM_ES_EXT_MAX_CLIENTS clients at a time, a client breaking the
- * protocol is disconnected. A client beyond takes the slot of the one idle the
- * longest - one of root only for another one of root, as the ESDM connects as
- * root at start up.
+ * protocol is disconnected. A client beyond takes the slot of the one connected
+ * last, so later ones cannot take the ESDM's - one of root only for another one
+ * of root. A process once connected as root counts as root, as the ESDM
+ * reconnects after dropping its privileges.
  *
  * @param [in] server The server
  *

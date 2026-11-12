@@ -25,9 +25,11 @@
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "config.h"
 #include "esdm_es_ext_proto.h"
@@ -37,7 +39,13 @@
 #include "systemd_support.h"
 #include "visibility.h"
 
-static struct esdm_es_ext_server *provider_server;
+/* Set once the source is set up: until then, a signal ends the provider */
+static _Atomic(struct esdm_es_ext_server *) provider_server;
+/* The main thread is done serving: a signal then ends the signal thread */
+static atomic_bool provider_served;
+
+/* Seconds a source has to return after a signal */
+#define PROVIDER_STOP_GRACE 5
 
 /*
  * The signals ending the provider, blocked in every thread - those @init
@@ -50,12 +58,37 @@ static sigset_t provider_signal_set;
 
 static void *provider_signals(void *arg)
 {
+	const struct timespec grace = { .tv_sec = PROVIDER_STOP_GRACE };
+	struct esdm_es_ext_server *server;
 	int sig;
 
 	(void)arg;
-	if (!sigwait(&provider_signal_set, &sig))
-		esdm_es_ext_server_stop(provider_server);
-	return NULL;
+	if (sigwait(&provider_signal_set, &sig) ||
+	    atomic_load(&provider_served))
+		return NULL;
+
+	/* A source setting up - a token or card not answering - cannot stop */
+	server = atomic_load(&provider_server);
+	if (!server) {
+		fprintf(stderr, "Stopped while the source sets up\n");
+		_exit(1);
+	}
+	esdm_es_ext_server_stop(server);
+
+	/*
+	 * The server stops between requests only: a source stuck in a call -
+	 * a card another program holds, a token not answering - would keep
+	 * the provider until SIGKILL. A second signal cuts the wait short; the
+	 * socket left behind is replaced by the next start.
+	 */
+	while (sigtimedwait(&provider_signal_set, NULL, &grace) < 0 &&
+	       errno == EINTR)
+		;
+	if (atomic_load(&provider_served))
+		return NULL;
+	fprintf(stderr,
+		"The source does not return, exiting without cleanup\n");
+	_exit(1);
 }
 
 enum {
@@ -197,6 +230,7 @@ int esdm_es_ext_provider_cli_main(const struct esdm_es_ext_provider_cli *cli,
 	const char *name = cli->name, *socket_path = cli->socket_path;
 	const char *declared = NULL;
 	char *short_options = NULL;
+	struct esdm_es_ext_server *server = NULL;
 	struct option *opts;
 	pthread_t signal_thread;
 	uint32_t rate = ESDM_ES_EXT_PROTO_RATE_NONE;
@@ -327,8 +361,15 @@ int esdm_es_ext_provider_cli_main(const struct esdm_es_ext_provider_cli *cli,
 		goto out;
 	}
 
-	if (cli->setup && cli->setup())
+	/* Before the source sets up, which may hang - see provider_signals() */
+	err = pthread_create(&signal_thread, NULL, provider_signals, NULL);
+	if (err) {
+		fprintf(stderr, "Cannot wait for signals: %s\n", strerror(err));
 		goto out;
+	}
+
+	if (cli->setup && cli->setup())
+		goto out_signals;
 
 	/*
 	 * The server sends with MSG_NOSIGNAL: this is for the I/O of the
@@ -337,18 +378,19 @@ int esdm_es_ext_provider_cli_main(const struct esdm_es_ext_provider_cli *cli,
 	 */
 	signal(SIGPIPE, SIG_IGN);
 
-	err = esdm_es_ext_server_alloc(plugin, socket_path, mode,
-				       &provider_server);
+	err = esdm_es_ext_server_alloc(plugin, socket_path, mode, &server);
 	if (err) {
 		fprintf(stderr, "Cannot serve on %s: %s\n", socket_path,
 			strerror(-err));
-		goto out;
+		goto out_signals;
 	}
+	atomic_store(&provider_server, server);
 
 	/*
 	 * The ESDM runs as nobody unless told otherwise - else root alone. Any
-	 * process of nobody may then take its client slots: --client_uid of a
-	 * user only the ESDM runs as is better.
+	 * process of nobody may then fill the client slots, see
+	 * esdm_es_ext_server_run(): --client_uid of a user only the ESDM runs
+	 * as is better.
 	 */
 	if (!client_uids_num) {
 		client_uids[0] = provider_parse_uid("nobody");
@@ -357,25 +399,18 @@ int esdm_es_ext_provider_cli_main(const struct esdm_es_ext_provider_cli *cli,
 		client_uids_num = 1;
 	}
 	for (i = 0; i < client_uids_num; i++) {
-		err = esdm_es_ext_server_allow_uid(provider_server,
-						   client_uids[i]);
+		err = esdm_es_ext_server_allow_uid(server, client_uids[i]);
 		if (err) {
 			fprintf(stderr, "Cannot serve uid %u: %s\n",
 				(unsigned int)client_uids[i], strerror(-err));
-			goto out_free;
+			goto out_signals;
 		}
 	}
 
 	/* Checked above */
 	if (declared)
-		esdm_es_ext_server_set_name(provider_server, declared);
-	esdm_es_ext_server_set_entropy_rate(provider_server, rate);
-
-	err = pthread_create(&signal_thread, NULL, provider_signals, NULL);
-	if (err) {
-		fprintf(stderr, "Cannot wait for signals: %s\n", strerror(err));
-		goto out_free;
-	}
+		esdm_es_ext_server_set_name(server, declared);
+	esdm_es_ext_server_set_entropy_rate(server, rate);
 
 	if (!declared)
 		declared = esdm_es_ext_name_or_null(plugin->name);
@@ -386,7 +421,8 @@ int esdm_es_ext_provider_cli_main(const struct esdm_es_ext_provider_cli *cli,
 	/* Serving, the source set up: a unit ordered before the ESDM is ready */
 	systemd_notify_ready();
 
-	err = esdm_es_ext_server_run(provider_server);
+	err = esdm_es_ext_server_run(server);
+	atomic_store(&provider_served, true);
 	if (err)
 		fprintf(stderr, "Serving %s failed: %s\n", socket_path,
 			strerror(-err));
@@ -394,13 +430,14 @@ int esdm_es_ext_provider_cli_main(const struct esdm_es_ext_provider_cli *cli,
 
 	systemd_notify_stopping();
 
+out_signals:
 	/* The signal thread ended with the signal, or waits for one still */
+	atomic_store(&provider_served, true);
 	pthread_kill(signal_thread, SIGTERM);
 	pthread_join(signal_thread, NULL);
 
-out_free:
-	esdm_es_ext_server_free(provider_server);
-	provider_server = NULL;
+	atomic_store(&provider_server, NULL);
+	esdm_es_ext_server_free(server);
 out:
 	free(short_options);
 	free(opts);
