@@ -91,15 +91,13 @@ esdm_ebpf_sp80090b_failure(struct esdm_ebpf_percpu_state *state, __u32 test)
 	state->startup_done = 0;
 }
 
+/* As above, restarting the RCT and the APT window as well */
 static __always_inline void
 esdm_ebpf_sp80090b_permanent_failure(struct esdm_ebpf_percpu_state *state,
 				     __u32 test)
 {
-	state->health_failures++;
-	state->health_test = test;
+	esdm_ebpf_sp80090b_failure(state, test);
 	state->permanent_failure = 1;
-	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS;
-	state->startup_done = 0;
 
 	/* Reset RCT and APT */
 	state->rct_count = 0;
