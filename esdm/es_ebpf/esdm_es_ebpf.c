@@ -806,10 +806,15 @@ static void esdm_ebpf_handle_events(struct esdm_ebpf_es *es,
 	es->consumed_events += events;
 	es->ingested += (uint32_t)events;
 
-	/* The deltas are inserted in full, not folded into bytes */
+	/*
+	 * The deltas are inserted in full, not folded into bytes. A failing
+	 * insert discards what the pool absorbed, and so its credit.
+	 */
 	if (esdm_xdrbg_insert(&es->pool, (const uint8_t *)rec->delta,
-			      events * sizeof(rec->delta[0])))
+			      events * sizeof(rec->delta[0]))) {
+		es->credited_events = 0;
 		return;
+	}
 
 	/*
 	 * Events observed under a previous reset generation were in flight in
