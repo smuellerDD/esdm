@@ -1215,7 +1215,8 @@ void esdm_drng_mgr_reseed_worker_stop(void)
 {
 	atomic_store(&esdm_drng_reseed_worker_terminate, true);
 	atomic_store(&esdm_drng_reseed_wakeup_pending, true);
-	thread_wake_all(&esdm_drng_reseed_wait);
+	/* Under the lock of the queue - see esdm_drng_reseed_worker_run() */
+	thread_wake_all_locked(&esdm_drng_reseed_wait);
 }
 
 /*
@@ -1407,6 +1408,15 @@ static uint64_t esdm_drng_reseed_pass(void)
 /* Wait after a pass that reports work of its own left */
 #define ESDM_DRNG_RESEED_PASS_BUSY_SEC 1
 
+/* Is the wait of the worker over before its time? */
+static bool esdm_drng_reseed_wakeup_due(void *unused)
+{
+	(void)unused;
+
+	return atomic_load(&esdm_drng_reseed_wakeup_pending) ||
+	       esdm_drng_reseed_stop();
+}
+
 /*
  * Look after the DRNGs pass by pass, until the worker is to leave: a stop
  * request, the DRNG manager terminating, or a reseed interval of zero seconds,
@@ -1414,16 +1424,11 @@ static uint64_t esdm_drng_reseed_pass(void)
  */
 static void esdm_drng_reseed_worker_run(void)
 {
-	/*
-	 * The wait below reports a timeout through a variable of this name in
-	 * the caller's scope.
-	 */
-	int ret = 0;
-
 	while (!esdm_drng_reseed_stop() && !esdm_drng_reseed_per_request()) {
 		uint64_t next, max_wait;
 		uint32_t interval;
-		struct timespec wait = { .tv_nsec = 0 };
+		struct timespec deadline;
+		int ret;
 
 		/*
 		 * Taken down before the pass, so a wakeup raised while it runs
@@ -1464,8 +1469,6 @@ static void esdm_drng_reseed_worker_run(void)
 		if (!next)
 			next = ESDM_DRNG_RESEED_PASS_BUSY_SEC;
 
-		wait.tv_sec = (time_t)next;
-
 		atomic_store(&esdm_drng_reseed_worker_wakeup,
 			     (uint64_t)esdm_monotonic_now() + next);
 
@@ -1474,16 +1477,18 @@ static void esdm_drng_reseed_worker_run(void)
 			    next);
 
 		/*
-		 * Bounded wait on a wakeup that was raised before its signal,
-		 * so one delivered while the pass above ran ends the wait here
-		 * instead of being lost.
+		 * Bounded wait. A wakeup is raised before its signal, so one
+		 * from the pass above or on the way in is seen by the check
+		 * under the queue lock - see thread_wait_queue_wait_pred().
+		 * The loop covers spurious wakeups.
 		 */
-		ret = 0;
-		thread_timedwait_event(
-			&esdm_drng_reseed_wait,
-			atomic_load(&esdm_drng_reseed_wakeup_pending) ||
-				esdm_drng_reseed_stop(),
-			&wait);
+		clock_gettime(CLOCK_MONOTONIC, &deadline);
+		deadline.tv_sec += (time_t)next;
+		do {
+			ret = thread_wait_queue_wait_pred(
+				&esdm_drng_reseed_wait, &deadline,
+				esdm_drng_reseed_wakeup_due, NULL);
+		} while (!ret && !esdm_drng_reseed_wakeup_due(NULL));
 	}
 }
 
@@ -1597,9 +1602,12 @@ bool esdm_drng_mgr_reseed_worker_start(void)
 /* Tell the worker to look at the DRNGs now instead of after its wait. */
 static void esdm_drng_reseed_notify(void)
 {
-	/* Before the signal, so a worker that misses it still sees this */
+	/*
+	 * Before the signal, sent under the queue lock, so a worker on its way
+	 * into the wait sees it - see esdm_drng_reseed_worker_run().
+	 */
 	atomic_store(&esdm_drng_reseed_wakeup_pending, true);
-	thread_wake_all(&esdm_drng_reseed_wait);
+	thread_wake_all_locked(&esdm_drng_reseed_wait);
 }
 
 /*
