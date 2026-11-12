@@ -78,9 +78,11 @@ esdm_ebpf_sp80090b_startup(struct esdm_ebpf_percpu_state *state)
 
 /*
  * Handle failure of the SP800-90B startup or runtime testing: restart the
- * startup test, which stops this CPU from collecting until it passes again.
- * The failure is recorded in the per-CPU state, from which user space picks it
- * up and invalidates the collected entropy.
+ * startup test, which stops this CPU from collecting until it passes again,
+ * and drop the deltas not handed over yet - no better than the failing time
+ * stamp, they would be flushed and credited later. The failure is recorded in
+ * the per-CPU state, from which user space picks it up and invalidates the
+ * collected entropy.
  *
  * The APT window keeps running: restarting it would restart the count towards
  * the permanent cutoffs, never reaching them. Its completion must not count as
@@ -93,6 +95,9 @@ esdm_ebpf_sp80090b_failure(struct esdm_ebpf_percpu_state *state, __u32 test)
 	state->health_test = test;
 	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS + 1;
 	state->startup_done = 0;
+
+	__builtin_memset(&state->rec, 0, sizeof(state->rec));
+	state->pos = 0;
 }
 
 /* As above, restarting the RCT and the APT window as well */

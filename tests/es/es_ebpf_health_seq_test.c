@@ -141,6 +141,8 @@ static void test_apt(void)
 
 static void test_startup(void)
 {
+	unsigned int i;
+
 	test_reset(30, 60, NEVER, NEVER);
 	test_good(1023, 16);
 	CHECK_EQ(st.startup_done, 0);
@@ -148,9 +150,16 @@ static void test_startup(void)
 	CHECK_EQ(st.startup_done, 1);
 	CHECK(esdm_ebpf_health_ok(&st), "startup passed, collection is not");
 
+	/* A partial batch is discarded with the failure */
+	st.pos = 5;
+	for (i = 0; i < st.pos; i++)
+		st.rec.delta[i] = 0xaa;
 	test_stuck(30);
 	CHECK_EQ(st.health_failures, 1);
 	CHECK_EQ(st.startup_done, 0);
+	CHECK_EQ(st.pos, 0);
+	for (i = 0; i < ESDM_EBPF_BATCH_EVENTS; i++)
+		CHECK(!st.rec.delta[i], "delta %u kept after a failure", i);
 
 	/*
 	 * Time stamp 1054: the rest of the third window, which the failure

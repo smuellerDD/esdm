@@ -1112,8 +1112,11 @@ int esdm_ebpf_consume(struct esdm_ebpf_es *es)
 	 * finds it.
 	 */
 	es->fetch_target = esdm_ebpf_events_per_block(es);
-	if (es->credited_events >= es->fetch_target)
+	if (es->credited_events >= es->fetch_target) {
+		/* A health failure voids the credit of a full pool too */
+		esdm_ebpf_update_status(es);
 		return 0;
+	}
 
 	es->ingested = 0;
 	ret = ring_buffer__consume(es->rb);
