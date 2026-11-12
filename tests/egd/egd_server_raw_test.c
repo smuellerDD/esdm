@@ -412,6 +412,21 @@ static int test_esdm_seed(void)
 }
 
 /*
+ * Entropy to reseed DRNGs drained to where a build capping their output
+ * without a full reseed stops them: no entropy source is credited here.
+ */
+static void test_esdm_refill(void)
+{
+	uint8_t seed[64];
+	unsigned int i;
+
+	for (i = 0; i < 4; i++) {
+		memset(seed, (int)i + 0x5a, sizeof(seed));
+		esdm_pool_insert_aux(seed, sizeof(seed), 8 * sizeof(seed));
+	}
+}
+
+/*
  * Take every entropy source out of the picture, so that the ESDM cannot reach
  * the operational state on its own and the moment it does is the test's to
  * choose. The auxiliary pool is not among them: it holds what is inserted into
@@ -1529,6 +1544,8 @@ static void test_esdm_bulk(void)
 	CHECK(delivered > ESDM_EGD_MAX_TRANSFER &&
 		      !test_all_zero(buf, delivered),
 	      "the bulk read delivered %u bytes", delivered);
+	/* Past what a capped DRNG gives: reseed it for the reads that follow */
+	test_esdm_refill();
 
 	CHECK(test_cmd_bulk_read(fd, ESDM_EGD_CMD_ESDM_READ_UNSEEDED, 1000, buf,
 				 &delivered, TEST_RESPONSE_MS) == 0 &&

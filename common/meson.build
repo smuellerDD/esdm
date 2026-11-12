@@ -35,14 +35,18 @@ endif
 # Everything keyed on the oversampling below therefore reads this variable
 # rather than the option; the thresholds further down are left to the option, so
 # that a DRG.3 build does not pick them up.
-sp80090c = get_option('sp80090c') or get_option('ais2031_drg3')
+#
+# fips140 implies the SP800-90C compliance mode, which a FIPS kernel turns on at
+# runtime - and so the build adjustments of sp80090c: the reseeding limits
+# further down.
+sp80090c = get_option('sp80090c') or get_option('ais2031_drg3') or \
+	   get_option('fips140')
 
-conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
-	      sp80090c or get_option('fips140'))
+conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES', sp80090c)
 conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031_ntg1'))
 conf_data.set('ESDM_AIS2031_DRG3', get_option('ais2031_drg3'))
 conf_data.set('ESDM_AIS2031_DRG4', get_option('ais2031_drg4'))
-if sp80090c or get_option('fips140')
+if sp80090c
 	# The values the kernel module esdm_es applies in a FIPS kernel, from
 	# the header the two share: the seed size makes up the entropy buffer
 	# its IOCTLs hand over.
@@ -225,7 +229,9 @@ conf_data.set('ESDM_LINUX_RESEED_ENTROPY_COUNT', get_option('linux-reseed-entrop
 # outright: these caps are the DRG.4 reseeding limits, and skipping them is the
 # whole point of the DRG.3 option. A build asking for it keeps whatever
 # thresholds it configured, even where sp80090c is set alongside.
-if not get_option('ais2031_drg3') and (get_option('sp80090c') or get_option('ais2031_drg4'))
+if not get_option('ais2031_drg3') and (get_option('sp80090c') or
+				       get_option('fips140') or
+				       get_option('ais2031_drg4'))
 	reseed_thresh = get_option('drng_reseed_threshold_bits')
 	max_reseed = get_option('drng_max_reseed_bits')
 

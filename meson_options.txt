@@ -614,7 +614,8 @@ option('node', type: 'feature', value: 'enabled',
 option('fips140', type: 'boolean', value: false,
        description: '''Enable FIPS 140 support.
 
-This option implicitly enables the SP800-90C compliance mode.
+This option implicitly enables the SP800-90C compliance mode, and with it
+the build adjustments of the sp80090c option: the reseeding limits apply.
 ''')
 
 # Option for: ESDM_OVERSAMPLE_ENTROPY_SOURCES
