@@ -125,7 +125,11 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 			}
 			maxbuflen = new_max;
 			continue;
-		} else if (buffer.ret == -EAGAIN) {
+		} else if (buffer.ret == -EAGAIN || buffer.ret == 0) {
+			/*
+			 * Nothing produced is waited for like -EAGAIN, so an
+			 * empty answer cannot spin the loop.
+			 */
 			nanosleep(&esdm_client_poll_ts, NULL);
 			continue;
 		} else if (buffer.ret < 0) {
