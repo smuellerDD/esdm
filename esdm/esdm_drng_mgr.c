@@ -1674,7 +1674,7 @@ static uint32_t esdm_drng_budget(struct esdm_drng *drng)
  * Reseed @drng ahead of its next chunk if that is due - not the PR DRNG, which
  * seeds every chunk itself.
  */
-static void esdm_drng_get_reseed(struct esdm_drng *drng)
+static void esdm_drng_get_reseed(struct esdm_drng *drng, bool nonblock)
 {
 	if (!esdm_drng_must_reseed(drng, true))
 		return;
@@ -1694,17 +1694,17 @@ static void esdm_drng_get_reseed(struct esdm_drng *drng)
 	}
 
 	/*
-	 * Entropy pool cannot be locked, try to reseed next time, but
-	 * continue to generate random bits.
+	 * Entropy pool busy and the caller may not wait for it: reseed next
+	 * time and generate within the maximum meanwhile.
 	 */
-	if (!esdm_pool_trylock()) {
-		mutex_w_lock(&drng->lock);
+	if (nonblock && !esdm_pool_trylock()) {
 		atomic_store(&drng->force_reseed, true);
-		mutex_w_unlock(&drng->lock);
 		return;
 	}
 
 	/* Perform synchronous reseed */
+	if (!nonblock)
+		esdm_pool_lock();
 	mutex_w_lock(&drng->lock);
 	/* double check, as we did not lock the DRNG in the first check */
 	if (esdm_drng_must_reseed(drng, false))
@@ -1718,18 +1718,19 @@ static void esdm_drng_get_reseed(struct esdm_drng *drng)
  *
  * Stops short when @drng leaves the fully seeded state, reaches the maximum it
  * may produce without a full reseed, or - the PR DRNG - runs out of fresh
- * entropy.
+ * entropy or, for @nonblock, finds the entropy pool busy.
  *
  * @param [in] drng DRNG instance
  * @param [in] outbuf buffer for storing random data
  * @param [in] outbuflen length of outbuf
+ * @param [in] nonblock never wait for the entropy pool
  *
  * @return
  * * < 0 in error case (DRNG generation or update failed)
  * * >=0 returning the returned number of bytes
  */
 static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
-			     size_t outbuflen)
+			     size_t outbuflen, bool nonblock)
 {
 	/* produce max. 128 Byte in pr mode without yielding */
 	const size_t pr_yield_iterations =
@@ -1765,29 +1766,6 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 	outbuflen = min_size(outbuflen, SSIZE_MAX);
 
-	/*
-	 * try to reseed the last resort DRNG in a multi node setup
-	 * before unsetting the fully seeded state in the next check.
-	 *
-	 * This helps to get low but consistent performance when
-	 * operating in DRG.4 mode on request bursts
-	 * (e.g. in esdm-tool --benchmark).
-	 */
-	if (drng == esdm_drng_init_instance()) {
-		if (esdm_drng_must_reseed(drng, false)) {
-			esdm_pool_lock();
-
-			mutex_w_lock(&drng->lock);
-			/* double check, as we did not lock the DRNG in the first check*/
-			if (esdm_drng_must_reseed(drng, false)) {
-				esdm_drng_seed_nolock(drng);
-			}
-			mutex_w_unlock(&drng->lock);
-
-			esdm_pool_unlock();
-		}
-	}
-
 	/* Loop to collect random bits for the caller. */
 	while (outbuflen) {
 		uint32_t todo =
@@ -1806,7 +1784,12 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			 * The pool lock before the DRNG lock, the order of every
 			 * path holding both.
 			 */
-			esdm_pool_lock();
+			if (nonblock) {
+				if (!esdm_pool_trylock())
+					break;
+			} else {
+				esdm_pool_lock();
+			}
 			mutex_w_lock(&drng->lock);
 			injected = esdm_drng_seed_es_nolock(drng, "regular");
 			esdm_pool_unlock();
@@ -1826,7 +1809,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			}
 		} else {
 			/* In normal operation, check whether to reseed */
-			esdm_drng_get_reseed(drng);
+			esdm_drng_get_reseed(drng, nonblock);
 
 			mutex_w_lock(&drng->lock);
 
@@ -1916,17 +1899,22 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 	/*
 	 * Bring the DRNG left at its maximum back, now that its lock is
-	 * dropped, and tell the worker.
+	 * dropped: a caller that may wait for the pool seeds right away, any
+	 * other if the pool is free, and the worker is told either way.
 	 */
 	if (exhausted) {
 		esdm_drng_reseed_notify();
-		esdm_force_fully_seeded();
+		if (nonblock)
+			esdm_drng_seed_work_try();
+		else
+			esdm_force_fully_seeded();
 	}
 
 	return processed;
 }
 
-static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
+static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr,
+				   bool nonblock)
 {
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	struct esdm_drng *drng = &esdm_drng_init;
@@ -1983,7 +1971,7 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 			"Using DRNG instance on node 0 to service generate request\n");
 	}
 
-	ret = esdm_drng_get(drng, outbuf, outbuflen);
+	ret = esdm_drng_get(drng, outbuf, outbuflen, nonblock);
 
 	/*
 	 * A node DRNG stops short at its maximum or when another caller took it
@@ -1994,7 +1982,8 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr)
 	 * never answers with nothing.
 	 */
 	if (!pr && drng != &esdm_drng_init && !ret)
-		ret = esdm_drng_get(&esdm_drng_init, outbuf, outbuflen);
+		ret = esdm_drng_get(&esdm_drng_init, outbuf, outbuflen,
+				    nonblock);
 
 	esdm_drng_put_instances();
 	return ret;
@@ -2088,13 +2077,27 @@ void esdm_force_fully_seeded_all_drbgs(void)
 	esdm_drng_put_instances();
 }
 
+/*
+ * The non-blocking callers - the EGD worker, the RPC handlers - serve every
+ * other request on their thread as well, so they seed only if the entropy pool
+ * is free and leave it to whoever holds it otherwise.
+ */
+static void esdm_drng_try_seed(void)
+{
+	if (!esdm_pool_all_nodes_seeded_get())
+		esdm_drng_seed_work_try();
+}
+
 static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 {
+	if (nonblock) {
+		esdm_drng_try_seed();
+		return esdm_pool_all_nodes_seeded_get() ? 0 : -EAGAIN;
+	}
+
 	esdm_force_fully_seeded_all_drbgs();
 	if (esdm_pool_all_nodes_seeded_get())
 		return 0;
-	if (nonblock)
-		return -EAGAIN;
 	thread_wait_event(&esdm_init_wait,
 			  esdm_pool_all_nodes_seeded_get() ||
 				  atomic_load(&esdm_drng_mgr_terminate));
@@ -2103,11 +2106,14 @@ static int esdm_drng_sleep_while_not_all_nodes_seeded(unsigned int nonblock)
 
 static int esdm_drng_sleep_while_nonoperational(unsigned int nonblock)
 {
+	if (nonblock) {
+		esdm_drng_try_seed();
+		return esdm_state_operational() ? 0 : -EAGAIN;
+	}
+
 	esdm_force_fully_seeded();
 	if (esdm_state_operational())
 		return 0;
-	if (nonblock)
-		return -EAGAIN;
 	thread_wait_event(&esdm_init_wait,
 			  esdm_state_operational() ||
 				  atomic_load(&esdm_drng_mgr_terminate));
@@ -2153,8 +2159,19 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 	CKINT(esdm_drng_sleep_while_not_all_nodes_seeded(
 		flags & ESDM_GET_SEED_NONBLOCK));
 
-	/* Try to get the pool lock and sleep on it to get it. */
-	esdm_pool_lock();
+	/*
+	 * Try to get the pool lock and sleep on it to get it - unless the
+	 * caller may not wait, for whom a seeding in progress is a reason to
+	 * come back.
+	 */
+	if (flags & ESDM_GET_SEED_NONBLOCK) {
+		if (!esdm_pool_trylock()) {
+			ret = -EAGAIN;
+			goto out;
+		}
+	} else {
+		esdm_pool_lock();
+	}
 
 	/* If an ESDM DRNG becomes unseeded, give this DRNG precedence. */
 	if (!esdm_pool_all_nodes_seeded_get()) {
@@ -2225,7 +2242,7 @@ ssize_t esdm_get_random_bytes_pr(uint8_t *buf, size_t nbytes)
 	if (mutex_w_trylock(&esdm_pr_lock) != 0)
 		return -EAGAIN;
 
-	ret = esdm_drng_get_sleep(buf, nbytes, true);
+	ret = esdm_drng_get_sleep(buf, nbytes, true, false);
 	mutex_w_unlock(&esdm_pr_lock);
 	return ret;
 }
@@ -2247,12 +2264,12 @@ ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *buf, size_t nbytes)
 	if (mutex_w_trylock(&esdm_pr_lock) != 0) {
 		return -EAGAIN;
 	}
-	ret = esdm_drng_get_sleep(buf, nbytes, true);
+	ret = esdm_drng_get_sleep(buf, nbytes, true, true);
 	mutex_w_unlock(&esdm_pr_lock);
 
 	/*
-	 * No fresh entropy yet: a reason to come back, which a caller looping
-	 * on a return of zero would not wait for.
+	 * No fresh entropy yet, or the pool is busy: a reason to come back,
+	 * which a caller looping on a return of zero would not wait for.
 	 */
 	return (!ret && buf && nbytes) ? -EAGAIN : ret;
 }
@@ -2270,7 +2287,7 @@ ssize_t esdm_get_random_bytes_full_noblock(uint8_t *buf, size_t nbytes)
 	 * Nothing generated means the initial DRNG just reached its maximum
 	 * without a full reseed and the ESDM went non-operational with it.
 	 */
-	ret = esdm_drng_get_sleep(buf, nbytes, false);
+	ret = esdm_drng_get_sleep(buf, nbytes, false, true);
 	return (!ret && buf && nbytes) ? -EAGAIN : ret;
 }
 
@@ -2292,7 +2309,8 @@ ssize_t esdm_get_random_bytes_full(uint8_t *buf, size_t nbytes)
 		ssize_t ret;
 
 		esdm_drng_sleep_while_nonoperational(0);
-		ret = esdm_drng_get_sleep(buf + done, nbytes - done, false);
+		ret = esdm_drng_get_sleep(buf + done, nbytes - done, false,
+					  false);
 		if (ret < 0)
 			return done ? (ssize_t)done : ret;
 
@@ -2307,7 +2325,11 @@ ssize_t esdm_get_random_bytes(uint8_t *buf, size_t nbytes)
 {
 	ssize_t ret;
 
-	/* Nothing generated means the ESDM just went non-operational */
-	ret = esdm_drng_get_sleep(buf, nbytes, false);
+	/*
+	 * Never waits, neither for the seeding nor for the entropy pool: the
+	 * EGD worker calls this on the thread serving all its clients.
+	 * Nothing generated means the ESDM just went non-operational.
+	 */
+	ret = esdm_drng_get_sleep(buf, nbytes, false, true);
 	return (!ret && buf && nbytes) ? -EOPNOTSUPP : ret;
 }
