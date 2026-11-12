@@ -39,7 +39,9 @@ Should the ESDM be unreachable or not answer within a few seconds, the call
 falls back to the
 .BR getrandom (2)
 system call, so preloading the library cannot leave a program without random
-data.
+data. PID 1 and processes that embed libesdm, such as
+.BR esdm\-server (8),
+always use the system call.
 .SH FLAGS
 The
 .I flags
