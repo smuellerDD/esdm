@@ -63,7 +63,11 @@ void esdm_drng_put_instances(void)
 	mutex_reader_unlock(&esdm_node_cleanup_lock);
 }
 
-static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
+/*
+ * Release the array of @nodes entries, its allocated size: the config may
+ * have changed since, see esdm_config_max_nodes_set().
+ */
+static void esdm_drngs_node_dealloc(struct esdm_drng **drngs, uint32_t nodes)
 {
 	struct esdm_drng *esdm_drng_init = esdm_drng_init_instance();
 	uint32_t node;
@@ -71,7 +75,7 @@ static void esdm_drngs_node_dealloc(struct esdm_drng **drngs)
 	if (!drngs)
 		return;
 
-	for_each_online_node (node) {
+	for (node = 0; node < nodes; node++) {
 		struct esdm_drng *drng = drngs[node];
 
 		if (drng == esdm_drng_init)
@@ -191,7 +195,8 @@ void esdm_drngs_node_alloc(void)
 	}
 
 err:
-	esdm_drngs_node_dealloc(drngs);
+	esdm_drngs_node_dealloc(drngs, nodes);
+	atomic_store(&esdm_drng_node_count, 0);
 
 unlock:
 	mutex_w_unlock(&esdm_crypto_cb_update);
@@ -203,6 +208,7 @@ void esdm_node_fini(void)
 
 	mutex_lock(&esdm_node_cleanup_lock);
 	drngs = atomic_exchange_explicit(&esdm_drng, NULL, memory_order_acquire);
-	esdm_drngs_node_dealloc(drngs);
+	esdm_drngs_node_dealloc(drngs, esdm_drng_node_count_get());
+	atomic_store(&esdm_drng_node_count, 0);
 	mutex_unlock(&esdm_node_cleanup_lock);
 }

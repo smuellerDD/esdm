@@ -177,7 +177,8 @@ struct esdm_drng *esdm_drng_node_instance(void)
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 	uint32_t node = esdm_config_curr_node();
 
-	if (esdm_drng && esdm_drng[node])
+	/* The config may name more nodes than the array was allocated with */
+	if (esdm_drng && node < esdm_drng_node_count_get() && esdm_drng[node])
 		return esdm_drng[node];
 
 	return esdm_drng_init_instance();
@@ -954,7 +955,13 @@ static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 	}
 
 	if (esdm_drng) {
-		for_each_online_node (node) {
+		/*
+		 * Bound by the published count, not by the config, which may
+		 * have grown past the allocated array.
+		 */
+		uint32_t nodes = esdm_drng_node_count_get();
+
+		for (node = 0; node < nodes; node++) {
 			if (esdm_drng[node] &&
 			    !atomic_load(&esdm_drng[node]->fully_seeded)) {
 				drng = esdm_drng[node];
@@ -1060,7 +1067,8 @@ void esdm_drng_force_reseed(void)
 		goto out;
 	}
 
-	for_each_online_node (node) {
+	/* Bound by the published count - see esdm_drng_stats_foreach() */
+	for (node = 0; node < esdm_drng_node_count_get(); node++) {
 		struct esdm_drng *drng = esdm_drng[node];
 
 		if (!drng)
@@ -1913,7 +1921,8 @@ void esdm_reset(void)
 	} else {
 		uint32_t cpu;
 
-		for_each_online_node (cpu) {
+		/* Bound by the published count - see esdm_drng_stats_foreach() */
+		for (cpu = 0; cpu < esdm_drng_node_count_get(); cpu++) {
 			struct esdm_drng *drng = esdm_drng[cpu];
 
 			if (!drng)

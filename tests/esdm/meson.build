@@ -222,7 +222,7 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
-	test('ESDM re-init',
+	test('ESDM node count, re-init',
 		esdm_lifecycle_test,
 		timeout: 120,
 		suite: 'core')
