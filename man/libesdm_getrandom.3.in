@@ -51,7 +51,8 @@ keeps its usual meaning:
 .B GRND_NONBLOCK
 does not wait for the ESDM to be seeded but fails with
 .B EAGAIN
-as long as it is not,
+as long as it is not - also for a request of no bytes, which reports the
+readiness as with the system call,
 .B GRND_RANDOM
 selects the prediction\-resistance generator, and
 .B GRND_INSECURE

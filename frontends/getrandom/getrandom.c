@@ -29,6 +29,7 @@
 #include "config.h"
 #include "constructor.h"
 #include "esdm_rpc_client.h"
+#include "memset_secure.h"
 #include "mutex.h"
 #include "visibility.h"
 
@@ -167,6 +168,32 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 
 	if (!atomic_load(&use_esdm))
 		goto kernel;
+
+	/*
+	 * Nothing to fill, but report readiness as the system call does: EAGAIN
+	 * with GRND_NONBLOCK until seeded, else wait for it. A discarded byte
+	 * asks the same question as any request.
+	 */
+	if (!length && !(flags & (GRND_INSECURE | GRND_SEED))) {
+		uint8_t probe;
+
+		if (flags & GRND_NONBLOCK) {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full_noblock(
+				&probe, sizeof(probe)));
+		} else {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full(
+				&probe, sizeof(probe)));
+		}
+		memset_secure(&probe, 0, sizeof(probe));
+
+		if (ret == -EAGAIN) {
+			errno = EAGAIN;
+			return -1;
+		}
+		if (ret >= 0)
+			return 0;
+		goto kernel;
+	}
 
 	if (flags & GRND_INSECURE) {
 		esdm_invoke(esdm_rpcc_get_random_bytes(buffer, length));

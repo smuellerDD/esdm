@@ -141,8 +141,13 @@ static void test_fallback_to_kernel(void)
 		      "%s delivered nothing", cases[i].desc);
 	}
 
-	/* A request for nothing is not an error */
+	/*
+	 * A request for nothing is not an error. It asks the ESDM whether it
+	 * is seeded, and without one the kernel, whose CRNG is ready here.
+	 */
 	CHECK_EQ(__wrap_getrandom(buf, 0, 0), 0);
+	CHECK_EQ(__wrap_getrandom(buf, 0, GRND_NONBLOCK), 0);
+	CHECK_EQ(__wrap_getrandom(NULL, 0, GRND_RANDOM | GRND_NONBLOCK), 0);
 }
 
 /*
