@@ -158,6 +158,8 @@ static DEFINE_MUTEX_W_UNLOCKED(esdm_pr_lock);
  */
 static struct xoshiro_state esdm_drng_stagger_prng;
 static bool esdm_drng_stagger_avail = false;
+/* Reseed tasks of different DRNGs draw from it at once */
+static DEFINE_MUTEX_W_UNLOCKED(esdm_drng_stagger_lock);
 
 /********************************** Helper ************************************/
 
@@ -213,6 +215,7 @@ static long long esdm_drng_reseed_stagger(void)
 {
 	uint32_t range = atomic_load(&esdm_drng_reseed_max_time) /
 			 ESDM_DRNG_RESEED_STAGGER_DIV;
+	long long ret;
 
 	/*
 	 * Nothing to spread if that share is below a second: the interval is
@@ -222,8 +225,12 @@ static long long esdm_drng_reseed_stagger(void)
 	if (!esdm_drng_stagger_avail || !range)
 		return 0;
 
-	return (long long)xoshiro_generate_interval(&esdm_drng_stagger_prng, 0,
-						    range);
+	mutex_w_lock(&esdm_drng_stagger_lock);
+	ret = (long long)xoshiro_generate_interval(&esdm_drng_stagger_prng, 0,
+						   range);
+	mutex_w_unlock(&esdm_drng_stagger_lock);
+
+	return ret;
 }
 
 /* Push the recorded seed time of a node DRNG out by the offset above. */
@@ -1381,8 +1388,116 @@ static void esdm_drng_reseed_next(struct esdm_drng *drng, uint64_t *next)
 }
 
 /*
+ * Reseeds and bring-ups the worker runs on threads, one per Jitter RNG
+ * collector, as collecting is the bulk of a seeding. Each starts once due and
+ * a slot is free, not after the slowest of a pass. The worker waits for them
+ * before handing back its duty - see esdm_drng_reseed_drain().
+ */
+static atomic_uint esdm_drng_reseed_running = 0;
+static atomic_uint esdm_drng_reseed_bringups = 0;
+
+/* A reseed of @drng, or a bring-up when it is NULL */
+struct esdm_drng_reseed_task {
+	struct esdm_drng *drng;
+	uint32_t node;
+	bool requested;
+};
+
+static uint32_t esdm_drng_reseed_slots(void)
+{
+	return max_uint32(esdm_config_es_jent_instances(), 1);
+}
+
+/* Run a task, accounted for by esdm_drng_reseed_start() */
+static void esdm_drng_reseed_run(struct esdm_drng *drng, uint32_t node,
+				 bool requested)
+{
+	/*
+	 * Held for the task: node DRNGs are freed only after the worker left.
+	 * Inline, the worker holds it already; no writer waits before then.
+	 */
+	struct esdm_drng **drngs = esdm_drng_get_instances();
+
+	if (drng) {
+		esdm_drng_reseed_one(drng, node, requested);
+		atomic_store(&drng->reseed_running, false);
+	} else {
+		__esdm_drng_seed_work(drngs, true, false);
+		atomic_fetch_sub(&esdm_drng_reseed_bringups, 1);
+	}
+
+	esdm_drng_put_instances();
+
+	/* The worker looks again: a slot is free */
+	atomic_fetch_sub(&esdm_drng_reseed_running, 1);
+	esdm_drng_reseed_notify();
+}
+
+static void *esdm_drng_reseed_task(void *arg)
+{
+	struct esdm_drng_reseed_task t = *(struct esdm_drng_reseed_task *)arg;
+
+	free(arg);
+	thread_set_name(drng_reseed, 1);
+	esdm_drng_reseed_run(t.drng, t.node, t.requested);
+
+	return NULL;
+}
+
+/* Start a task on a thread of its own, or run it here without one */
+static void esdm_drng_reseed_start(struct esdm_drng *drng, uint32_t node,
+				   bool requested)
+{
+	struct esdm_drng_reseed_task *t = malloc(sizeof(*t));
+
+	atomic_fetch_add(&esdm_drng_reseed_running, 1);
+	if (drng)
+		atomic_store(&drng->reseed_running, true);
+	else
+		atomic_fetch_add(&esdm_drng_reseed_bringups, 1);
+
+	if (t) {
+		t->drng = drng;
+		t->node = node;
+		t->requested = requested;
+		if (!thread_start_detached(esdm_drng_reseed_task, t))
+			return;
+		free(t);
+	}
+
+	esdm_drng_reseed_run(drng, node, requested);
+}
+
+static bool esdm_drng_reseed_drained(void *unused)
+{
+	(void)unused;
+
+	return !atomic_load(&esdm_drng_reseed_running);
+}
+
+/* Wait for the tasks of the worker to finish */
+static void esdm_drng_reseed_drain(void)
+{
+	struct timespec deadline;
+	int oldstate;
+
+	/* The tasks use the DRNGs, which outlive the worker only */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &oldstate);
+	while (!esdm_drng_reseed_drained(NULL)) {
+		clock_gettime(CLOCK_MONOTONIC, &deadline);
+		deadline.tv_sec += 1;
+		thread_wait_queue_wait_pred(&esdm_drng_reseed_wait, &deadline,
+					    esdm_drng_reseed_drained, NULL);
+	}
+	pthread_setcancelstate(oldstate, NULL);
+}
+
+/*
  * Reseed every DRNG that asked for it, plus every one whose reseed fell due on
- * its own.
+ * its own, and bring up the ones not fully seeded, each on a thread of its own
+ * while slots are free: seedings of different DRNGs share no lock, so they
+ * collect on as many CPUs as there are Jitter RNG collectors. The pass does
+ * not wait; a finished seeding wakes the worker for the next pass.
  */
 static uint64_t esdm_drng_reseed_pass(void)
 {
@@ -1390,9 +1505,10 @@ static uint64_t esdm_drng_reseed_pass(void)
 	/* Bound by the published array size - see esdm_drng_get_sleep() */
 	uint32_t num_nodes = min_uint32(esdm_config_online_nodes(),
 					esdm_drng_node_count_get());
+	uint32_t slots = esdm_drng_reseed_slots();
 	bool unseeded = false;
 	uint64_t next = UINT64_MAX;
-	uint32_t node;
+	uint32_t node, nunseeded = 0;
 
 	/*
 	 * Without per-node DRNGs the initial DRNG is the only one to look at -
@@ -1407,6 +1523,11 @@ static uint64_t esdm_drng_reseed_pass(void)
 
 		if (atomic_load(&esdm_drng_init.fully_seeded))
 			esdm_drng_reseed_next(&esdm_drng_init, &next);
+
+		if (unseeded && !esdm_drng_reseed_stop()) {
+			__esdm_drng_seed_work(esdm_drng, true, false);
+			next = 0;
+		}
 	} else {
 		for (node = 0; node < num_nodes; node++) {
 			struct esdm_drng *drng = esdm_drng[node];
@@ -1424,42 +1545,47 @@ static uint64_t esdm_drng_reseed_pass(void)
 			 * job - noted here and done below.
 			 */
 			if (!atomic_load(&drng->fully_seeded)) {
-				unseeded = true;
+				nunseeded++;
 				continue;
 			}
 
-			/*
-			 * Take a deferred request off the DRNG before
-			 * servicing it
-			 */
-			requested =
-				esdm_drng_reseed_async_capable(drng) &&
-				atomic_exchange(&drng->reseed_pending, false);
+			if (atomic_load(&drng->reseed_running) ||
+			    atomic_load(&esdm_drng_reseed_running) >= slots)
+				continue;
 
-			if (requested || esdm_drng_reseed_due(drng))
-				esdm_drng_reseed_one(drng, node, requested);
+			requested = esdm_drng_reseed_async_capable(drng) &&
+				    atomic_load(&drng->reseed_pending);
+			if (!requested && !esdm_drng_reseed_due(drng))
+				continue;
 
-			esdm_drng_reseed_next(drng, &next);
+			/* Take a deferred request off the DRNG before
+			 * servicing it */
+			if (requested)
+				atomic_store(&drng->reseed_pending, false);
+			esdm_drng_reseed_start(drng, node, requested);
 		}
-	}
 
-	/* Bring up a DRNG that is not seeded yet. */
-	if (unseeded && !esdm_drng_reseed_stop()) {
-		/*
-		 * The node lock is held across the whole pass, so a seed lock
-		 * is taken under it here - the order of
-		 * esdm_drng_seed_work_locked(). One another thread brings up is
-		 * left to it.
-		 */
-		__esdm_drng_seed_work(esdm_drng, true, false);
+		/* One bring-up per unseeded DRNG, counting those under way */
+		if (esdm_drng_reseed_stop())
+			nunseeded = 0;
+		if (nunseeded)
+			unseeded = true;
+		while (nunseeded > atomic_load(&esdm_drng_reseed_bringups) &&
+		       atomic_load(&esdm_drng_reseed_running) < slots)
+			esdm_drng_reseed_start(NULL, 0, false);
+
+		for (node = 0; node < num_nodes; node++) {
+			if (esdm_drng[node] &&
+			    atomic_load(&esdm_drng[node]->fully_seeded))
+				esdm_drng_reseed_next(esdm_drng[node], &next);
+		}
 
 		/*
-		 * One instance per call, and one that could not be brought up
-		 * for want of entropy stays where it is - either way there is
-		 * work left, so the next pass follows as soon as the worker
-		 * allows rather than at the next reseed deadline.
+		 * A DRNG still not fully seeded is work left: the next pass
+		 * follows as soon as possible, not at the next reseed deadline.
 		 */
-		next = 0;
+		if (unseeded)
+			next = 0;
 	}
 
 	/*
@@ -1560,6 +1686,9 @@ static void esdm_drng_reseed_worker_run(void)
 				esdm_drng_reseed_wakeup_due, NULL);
 		} while (!ret && !esdm_drng_reseed_wakeup_due(NULL));
 	}
+
+	/* Still on duty, so no other worker starts tasks meanwhile */
+	esdm_drng_reseed_drain();
 }
 
 static int esdm_drng_reseed_worker(void *unused)

@@ -933,6 +933,29 @@ void thread_fork_join(void *(*start_routine)(void *), void *args,
 		pthread_attr_destroy(fj_attrp);
 }
 
+int thread_start_detached(void *(*start_routine)(void *), void *arg)
+{
+	pthread_attr_t attr;
+	pthread_t tid;
+	int ret;
+
+	/* Invisible to thread_cancel, see thread_fork_join() */
+	if (atomic_load(&threads_in_cancel))
+		return -ESHUTDOWN;
+
+	ret = -pthread_attr_init(&attr);
+	if (ret)
+		return ret;
+	ret = -pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	if (!ret && pthread_stacksize)
+		ret = -pthread_attr_setstacksize(&attr, pthread_stacksize);
+	if (!ret)
+		ret = -pthread_create(&tid, &attr, start_routine, arg);
+	pthread_attr_destroy(&attr);
+
+	return ret;
+}
+
 DSO_PUBLIC
 int thread_release(bool force, bool system_threads)
 {

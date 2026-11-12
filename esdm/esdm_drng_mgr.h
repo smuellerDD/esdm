@@ -96,6 +96,9 @@ struct esdm_drng {
 	 */
 	atomic_bool reseed_pending;
 
+	/* The worker runs a reseed of it on a thread, see esdm_drng_reseed_pass */
+	atomic_bool reseed_running;
+
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
 	mutex_w_t lock; /* Non-atomic DRNG operation */
 
@@ -113,7 +116,7 @@ struct esdm_drng {
 	.request_bits_since_fully_seeded = 0, .seed_generation = 0,            \
 	.last_seeded_time = 0, .last_seeded_wtime = 0, .fully_seeded = false,  \
 	.force_reseed = true, .initiated = false, .reseed_pending = false,     \
-	.seed_lock = MUTEX_W_UNLOCKED
+	.reseed_running = false, .seed_lock = MUTEX_W_UNLOCKED
 
 /*
  * Statistics of one DRNG instance, as handed to the callback of
