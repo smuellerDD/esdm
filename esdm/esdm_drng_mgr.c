@@ -1341,11 +1341,14 @@ static uint64_t esdm_drng_reseed_pass(void)
 	uint32_t node;
 
 	/*
-	 * Without per-node DRNGs the initial DRNG is the only one to look at.
+	 * Without per-node DRNGs the initial DRNG is the only one to look at -
+	 * and to bring up, as below, should it have left the fully seeded state.
 	 */
 	if (!esdm_drng) {
-		if (!esdm_drng_reseed_stop() &&
-		    esdm_drng_reseed_due(&esdm_drng_init))
+		if (!atomic_load(&esdm_drng_init.fully_seeded))
+			unseeded = true;
+		else if (!esdm_drng_reseed_stop() &&
+			 esdm_drng_reseed_due(&esdm_drng_init))
 			esdm_drng_reseed_one(&esdm_drng_init, 0, false);
 
 		if (atomic_load(&esdm_drng_init.fully_seeded))
