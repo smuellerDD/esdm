@@ -1812,6 +1812,21 @@
             };
           });
 
+          # json-c 0.19 with NDEBUG frees no non-empty object or array (the
+          # free sits inside assert()), leaking every status document. Fixed
+          # upstream after 0.19; drop the patch with the next release.
+          json_c = pkgs.json_c.overrideAttrs (prev: {
+            patches =
+              (prev.patches or [ ])
+              ++ lib.optional (prev.version == "0.19") (
+                pkgs.fetchpatch {
+                  name = "json-c-free-objects-outside-assert.patch";
+                  url = "https://github.com/json-c/json-c/commit/f291fa81c6f21d925ea771a8cca597f5886309cc.patch";
+                  hash = "sha256-ZffSw1pfEfOH2ylRpJShdx7sTQR2nmPM/JIj/26UrDM=";
+                }
+              );
+          });
+
           # this currently defaults to the botan crypto backend
           esdm =
             (pkgs.esdm.override {
@@ -1833,7 +1848,7 @@
               (prev: {
                 buildInputs = prev.buildInputs ++ [
                   pkgs.libp11
-                  pkgs.json_c
+                  self.packages.${system}.json_c
                 ];
                 mesonFlags =
                   # nixpkgs still knows the combined 'ais2031' option, which
@@ -2302,7 +2317,7 @@
               self.packages.${system}.botan3
               fuse3
               gnutls
-              json_c
+              self.packages.${system}.json_c
               libbpf
               libkcapi
               libselinux
