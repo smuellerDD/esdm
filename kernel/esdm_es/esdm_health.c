@@ -7,6 +7,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/cache.h>
 #include <linux/fips.h>
 #include <linux/irq_work.h>
 #include <linux/module.h>
@@ -63,16 +64,19 @@ struct esdm_apt {
 	/* LSB of time stamp to process */
 #define ESDM_APT_LSB 16
 #define ESDM_APT_WORD_MASK (ESDM_APT_LSB - 1)
-	atomic_t apt_count; /* APT counter */
-	atomic_t apt_base; /* APT base reference */
+	atomic_t apt_count; /* APT counter B, including the base itself */
+	atomic_t apt_base; /* APT base reference A, -1 until taken */
 
-	atomic_t apt_trigger;
+	atomic_t apt_trigger; /* samples left in the window */
 	u16 cutoff;
 	u16 cutoff_permanent;
-	bool apt_base_set; /* Is APT base set? */
 };
 
-/* Health data collected for one entropy source */
+/*
+ * Health data collected for one entropy source. Written by the events of all
+ * CPUs, so on a cache line of its own, apart from the other source and from
+ * the read-mostly flags of struct esdm_health.
+ */
 struct esdm_health_es_state {
 	struct esdm_rct rct;
 	struct esdm_apt apt;
@@ -87,13 +91,12 @@ struct esdm_health_es_state {
 
 	/* Bitmask of esdm_health_log_bit messages pending deferred printk */
 	unsigned long pending_log;
-};
+} ____cacheline_aligned_in_smp;
 
 #define ESDM_HEALTH_ES_INIT(x)                                                 \
-	x.rct.rct_count = ATOMIC_INIT(0), x.apt.apt_count = ATOMIC_INIT(0),    \
+	x.rct.rct_count = ATOMIC_INIT(0), x.apt.apt_count = ATOMIC_INIT(1),    \
 	x.apt.apt_base = ATOMIC_INIT(-1),                                      \
 	x.apt.apt_trigger = ATOMIC_INIT(ESDM_APT_WINDOW_SIZE),                 \
-	x.apt.apt_base_set = false,                                            \
 	x.sp80090b_startup_blocks = ATOMIC_INIT(ESDM_SP80090B_STARTUP_BLOCKS),
 
 #define ESDM_HEALTH_OSR(curr) ((curr) / ESDM_DRNG_SECURITY_STRENGTH_BITS)
@@ -379,14 +382,11 @@ static bool esdm_sp80090b_startup_restart(struct esdm_health *health,
 }
 
 static void esdm_rct_reset(struct esdm_rct *rct);
-static void esdm_apt_reset(struct esdm_apt *apt, unsigned int time_masked);
-static void esdm_apt_restart(struct esdm_apt *apt);
+static void esdm_apt_reset(struct esdm_apt *apt);
 static void esdm_sp80090b_permanent_failure(struct esdm_health *health,
 					    enum esdm_internal_es es)
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
-	struct esdm_apt *apt = &es_state->apt;
-	struct esdm_rct *rct = &es_state->rct;
 
 	if (esdm_enforce_panic_on_permanent_health_failure()) {
 		panic("SP800-90B permanent health test failure for internal entropy source %u\n",
@@ -396,9 +396,8 @@ static void esdm_sp80090b_permanent_failure(struct esdm_health *health,
 	esdm_health_log(es, esdm_health_log_permanent_failure);
 	esdm_sp80090b_startup_restart(health, es);
 
-	esdm_rct_reset(rct);
-	esdm_apt_reset(apt, 0);
-	esdm_apt_restart(apt);
+	esdm_rct_reset(&es_state->rct);
+	esdm_apt_reset(&es_state->apt);
 }
 
 static void esdm_sp80090b_failure(struct esdm_health *health,
@@ -434,20 +433,16 @@ bool esdm_sp80090b_compliant(enum esdm_internal_es es)
  ***************************************************************************/
 
 /*
- * Reset the APT counter
+ * Start a new APT window with the next sample: it becomes the base A, which
+ * B = 1 counts already.
  *
- * @health [in] Reference to health state
+ * @apt [in] Reference to APT state
  */
-static void esdm_apt_reset(struct esdm_apt *apt, unsigned int time_masked)
-{
-	/* Reset APT */
-	atomic_set(&apt->apt_count, 0);
-	atomic_set(&apt->apt_base, time_masked);
-}
-
-static void esdm_apt_restart(struct esdm_apt *apt)
+static void esdm_apt_reset(struct esdm_apt *apt)
 {
 	atomic_set(&apt->apt_trigger, ESDM_APT_WINDOW_SIZE);
+	atomic_set(&apt->apt_count, 1);
+	atomic_set(&apt->apt_base, -1);
 }
 
 /*
@@ -466,31 +461,37 @@ static void esdm_apt_insert(struct esdm_health *health, u64 now_time,
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 	struct esdm_apt *apt = &es_state->apt;
+	int base;
 
 	if (!esdm_sp80090b_health_requested())
 		return;
 
 	now_time &= ESDM_APT_WORD_MASK;
 
-	/* Initialization of APT */
-	if (!apt->apt_base_set) {
-		atomic_set(&apt->apt_base, now_time);
-		apt->apt_base_set = true;
-		return;
-	}
+	/*
+	 * The first sample of a window is its base A, each further one equal
+	 * to A increments B, and B >= cutoff fails. Of CPUs racing for the
+	 * base, the losers compare against the winner's.
+	 */
+	base = atomic_read(&apt->apt_base);
+	if (base < 0)
+		base = atomic_cmpxchg(&apt->apt_base, -1, (int)now_time);
 
-	if (now_time == (unsigned int)atomic_read(&apt->apt_base)) {
+	if (base == (int)now_time) {
 		u32 apt_val = (u32)atomic_inc_return_relaxed(&apt->apt_count);
 
-		if (apt_val >= apt->cutoff_permanent)
+		if (apt_val >= apt->cutoff_permanent) {
+			/* restarts the window with the next sample */
 			esdm_sp80090b_permanent_failure(health, es);
-		else if (apt_val >= apt->cutoff)
+			return;
+		}
+		if (apt_val >= apt->cutoff)
 			esdm_sp80090b_failure(health, es);
 	}
 
+	/* The last sample of the window: the next one starts a new one */
 	if (atomic_dec_and_test(&apt->apt_trigger)) {
-		esdm_apt_restart(apt);
-		esdm_apt_reset(apt, now_time);
+		esdm_apt_reset(apt);
 		esdm_sp80090b_startup(health, es);
 	}
 }
@@ -542,16 +543,16 @@ static void esdm_rct(struct esdm_health *health, enum esdm_internal_es es,
 		 * In addition, we imply an entropy value H of 1 bit as this
 		 * is the minimum entropy required to provide full entropy.
 		 *
-		 * Note, rct_count (which equals to value B in the
-		 * pseudo code of SP800-90B section 4.4.1) starts with zero.
-		 * Hence we need to subtract one from the cutoff value as
-		 * calculated following SP800-90B.
+		 * Note, rct_count counts the repetitions after the first
+		 * sample, i.e. it is B - 1 of the pseudo code of SP800-90B
+		 * section 4.4.1, and the cutoffs hold C - 1: B >= C fails.
 		 */
-		if (rct_count > rct->cutoff_permanent)
+		if (rct_count >= rct->cutoff_permanent)
 			esdm_sp80090b_permanent_failure(health, es);
-		else if (rct_count > rct->cutoff)
+		else if (rct_count >= rct->cutoff)
 			esdm_sp80090b_failure(health, es);
-	} else {
+	} else if (atomic_read(&rct->rct_count)) {
+		/* Store only when needed, the line is shared by all CPUs */
 		esdm_rct_reset(rct);
 	}
 }
