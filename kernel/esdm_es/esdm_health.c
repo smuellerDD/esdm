@@ -341,10 +341,20 @@ static void esdm_sp80090b_startup(struct esdm_health *health,
 				  enum esdm_internal_es es)
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
+	int blocks = atomic_dec_if_positive(&es_state->sp80090b_startup_blocks);
 
 	/* Only the transition to zero completes the startup test */
-	if (!atomic_dec_if_positive(&es_state->sp80090b_startup_blocks))
+	if (!blocks) {
 		esdm_health_log(es, esdm_health_log_startup_done);
+		return;
+	}
+
+	/*
+	 * The window of a failure completed: discard what it collected, as its
+	 * later failures did not reset (see esdm_sp80090b_startup_restart()).
+	 */
+	if (blocks == ESDM_SP80090B_STARTUP_BLOCKS)
+		esdm_reset_state(es);
 }
 
 /*
@@ -365,6 +375,11 @@ static void esdm_sp80090b_startup(struct esdm_health *health,
  * the lock-less APT itself). After a permanent failure the window restarts
  * and the extra block costs one window more than strictly needed.
  *
+ * Only the window's first failure resets the entropy state: past a cutoff
+ * every further matching sample fails again, and the reset (all CPUs' rings,
+ * locked, IRQs off) would then run for many events in hardirq and scheduler
+ * context. Output stays gated, and the window's completion resets again.
+ *
  * @return true if the startup test had passed before, i.e. this is a runtime
  *	   failure
  */
@@ -378,13 +393,14 @@ static bool esdm_sp80090b_startup_restart(struct esdm_health *health,
 	 * that completion still passes the startup test - and this is a
 	 * runtime failure - or it consumes one of the new blocks.
 	 */
-	bool passed = !atomic_xchg(&es_state->sp80090b_startup_blocks,
-				   ESDM_SP80090B_STARTUP_BLOCKS + 1);
+	int blocks = atomic_xchg(&es_state->sp80090b_startup_blocks,
+				 ESDM_SP80090B_STARTUP_BLOCKS + 1);
 
 	/* Reset entropy state NOTE: we are in atomic context */
-	esdm_reset_state(es);
+	if (blocks != ESDM_SP80090B_STARTUP_BLOCKS + 1)
+		esdm_reset_state(es);
 
-	return passed;
+	return !blocks;
 }
 
 static void esdm_rct_reset(struct esdm_rct *rct);
