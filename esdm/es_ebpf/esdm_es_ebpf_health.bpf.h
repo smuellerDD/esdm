@@ -81,13 +81,17 @@ esdm_ebpf_sp80090b_startup(struct esdm_ebpf_percpu_state *state)
  * startup test, which stops this CPU from collecting until it passes again.
  * The failure is recorded in the per-CPU state, from which user space picks it
  * up and invalidates the collected entropy.
+ *
+ * The APT window keeps running: restarting it would restart the count towards
+ * the permanent cutoffs, never reaching them. Its completion must not count as
+ * a passed block, so one extra block is armed, as in the esdm_es module.
  */
 static __always_inline void
 esdm_ebpf_sp80090b_failure(struct esdm_ebpf_percpu_state *state, __u32 test)
 {
 	state->health_failures++;
 	state->health_test = test;
-	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS;
+	state->startup_blocks = ESDM_EBPF_STARTUP_BLOCKS + 1;
 	state->startup_done = 0;
 }
 
@@ -99,53 +103,62 @@ esdm_ebpf_sp80090b_permanent_failure(struct esdm_ebpf_percpu_state *state,
 	esdm_ebpf_sp80090b_failure(state, test);
 	state->permanent_failure = 1;
 
-	/* Reset RCT and APT */
+	/* The next time stamp starts a new APT window */
 	state->rct_count = 0;
 	state->apt_count = 0;
-	state->apt_base = 0;
-	state->apt_trigger = ESDM_EBPF_APT_WINDOW_SIZE;
+	state->apt_base_set = 0;
 }
 
 /*
- * Adaptive Proportion Test per SP800-90B section 4.4.2. The function does
- * not decide about the fate of the time stamp: an APT failure can only
- * happen at the same time as a stuck test failure which already decides how
- * the time stamp is handled.
+ * Adaptive Proportion Test per SP800-90B section 4.4.2: in a window of
+ * ESDM_EBPF_APT_WINDOW_SIZE time stamps the first is the reference A (B = 1),
+ * each other one equal to A increments B, and B reaching a cutoff fails. The
+ * time stamp after a window is the A of the next.
+ *
+ * The function does not decide about the fate of the time stamp: an APT
+ * failure can only happen at the same time as a stuck test failure which
+ * already decides how the time stamp is handled.
  */
 static __always_inline void
 esdm_ebpf_apt_insert(struct esdm_ebpf_percpu_state *state, __u64 now_time)
 {
 	__u32 now_masked = (__u32)now_time & ESDM_EBPF_APT_WORD_MASK;
 
-	/* Initialization of APT */
+	/* The first time stamp of a window */
 	if (!state->apt_base_set) {
 		state->apt_base = now_masked;
 		state->apt_base_set = 1;
+		state->apt_count = 1;
+		state->apt_trigger = ESDM_EBPF_APT_WINDOW_SIZE - 1;
 		return;
 	}
 
 	if (now_masked == state->apt_base) {
 		__u32 apt_val = ++state->apt_count;
 
-		if (apt_val >= esdm_ebpf_cfg.apt_cutoff_permanent)
+		if (apt_val >= esdm_ebpf_cfg.apt_cutoff_permanent) {
 			esdm_ebpf_sp80090b_permanent_failure(
 				state, esdm_ebpf_health_test_apt);
-		else if (apt_val >= esdm_ebpf_cfg.apt_cutoff)
+			return;
+		}
+		if (apt_val >= esdm_ebpf_cfg.apt_cutoff)
 			esdm_ebpf_sp80090b_failure(state,
 						   esdm_ebpf_health_test_apt);
 	}
 
-	if (state->apt_trigger && --state->apt_trigger == 0) {
-		state->apt_trigger = ESDM_EBPF_APT_WINDOW_SIZE;
-		state->apt_count = 0;
-		state->apt_base = now_masked;
+	/* The last time stamp of the window */
+	if (state->apt_trigger <= 1) {
+		state->apt_base_set = 0;
 		esdm_ebpf_sp80090b_startup(state);
+	} else {
+		state->apt_trigger--;
 	}
 }
 
 /*
  * Repetition Count Test per SP800-90B section 4.4.1, counting the stuck
- * values with an alpha of 2^-30 (FIPS 140-2 IG 9.8).
+ * values with an alpha of 2^-30 (FIPS 140-2 IG 9.8). The count is B - 1
+ * (repetitions after the first value), the cutoffs C - 1: B >= C fails.
  */
 static __always_inline void esdm_ebpf_rct(struct esdm_ebpf_percpu_state *state,
 					  __u32 stuck)
@@ -153,10 +166,10 @@ static __always_inline void esdm_ebpf_rct(struct esdm_ebpf_percpu_state *state,
 	if (stuck) {
 		__u32 rct_count = ++state->rct_count;
 
-		if (rct_count > esdm_ebpf_cfg.rct_cutoff_permanent)
+		if (rct_count >= esdm_ebpf_cfg.rct_cutoff_permanent)
 			esdm_ebpf_sp80090b_permanent_failure(
 				state, esdm_ebpf_health_test_rct);
-		else if (rct_count > esdm_ebpf_cfg.rct_cutoff)
+		else if (rct_count >= esdm_ebpf_cfg.rct_cutoff)
 			esdm_ebpf_sp80090b_failure(state,
 						   esdm_ebpf_health_test_rct);
 	} else {

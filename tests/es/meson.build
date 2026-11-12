@@ -218,6 +218,17 @@ if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
 	test('ES eBPF conditioning pool', es_ebpf_pool_tester, suite: 'es')
 endif
 
+# The health tests of the eBPF programs on known sequences: plain C, so built
+# whether the eBPF sources are or not.
+es_ebpf_health_seq_tester = executable(
+	'es_ebpf_health_seq_tester',
+	[ 'es_ebpf_health_seq_test.c' ],
+	include_directories: [ include_dirs_server,
+			       include_directories('../common') ],
+)
+
+test('ES eBPF health test sequences', es_ebpf_health_seq_tester, suite: 'es')
+
 if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
 	es_ebpf_health_tester = executable(
 		'es_ebpf_health_tester',
