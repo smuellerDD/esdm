@@ -64,6 +64,18 @@ static int ebpf_pool_xof_final(void *xof, uint8_t *out, size_t outlen)
 	return ebpf_pool_xof_real->xof_final(xof, out, outlen);
 }
 
+/* Hand the pool a record of @events deltas, as the ring buffer does */
+static void ebpf_pool_events(struct esdm_ebpf_es *es, uint32_t events)
+{
+	struct esdm_ebpf_event_rec rec;
+
+	memset(&rec, 0, sizeof(rec));
+	rec.type = esdm_ebpf_rec_event;
+	rec.reset_gen = es->reset_gen;
+	rec.events = events;
+	esdm_ebpf_handle_events(es, &rec, ESDM_EBPF_EVENT_REC_LEN(events));
+}
+
 static uint32_t ebpf_pool_rate_bits = ESDM_DRNG_SECURITY_STRENGTH_BITS;
 
 static uint32_t ebpf_pool_rate(void)
@@ -221,6 +233,16 @@ int main(void)
 	CHECK_EQ(esdm_xdrbg_insert(&es.pool, data, sizeof(data)), 0);
 	CHECK(esdm_xdrbg_seed_initialized(&es.pool),
 	      "an insert did not initialize the pool anew");
+
+	/* Uncredited, the events still stir: an extraction fetches them */
+	ebpf_pool_rate_bits = 0;
+	CHECK(esdm_ebpf_events_per_block(&es),
+	      "an uncredited source fetches no events");
+	ebpf_pool_events(&es, 4);
+	CHECK_EQ(es.credited_events, 4);
+	CHECK_EQ(esdm_ebpf_collected_entropy(&es), 0);
+	CHECK_EQ(ebpf_pool_extract(&es), 0);
+	ebpf_pool_rate_bits = ESDM_DRNG_SECURITY_STRENGTH_BITS;
 
 	esdm_xdrbg_zero_free(&es.pool);
 	esdm_default_xof_cb = ebpf_pool_xof_real;

@@ -563,15 +563,20 @@ static uint64_t esdm_ebpf_events_for_bits(struct esdm_ebpf_es *es,
 	uint32_t rate = es->entropy_rate();
 	uint64_t rate_bits, events_rate, events_osr;
 
-	/* An uncredited source never accumulates creditable events */
+	events_osr = (uint64_t)bits * esdm_ebpf_osr(es);
+
+	/*
+	 * An uncredited source has no rate to invert: its events add no entropy
+	 * but still stir the pool, as many as the oversampling rate charges for
+	 * the bits - what an extraction then fetches.
+	 */
 	if (!rate)
-		return 0;
+		return events_osr;
 
 	rate_bits = (uint64_t)rate * ESDM_EBPF_EVENT_DATA_BITS;
 	events_rate = ((uint64_t)bits * ESDM_DRNG_SECURITY_STRENGTH_BITS +
 		       rate_bits - 1) /
 		      rate_bits;
-	events_osr = (uint64_t)bits * esdm_ebpf_osr(es);
 
 	return max_uint64(events_rate, events_osr);
 }
