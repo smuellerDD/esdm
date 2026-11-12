@@ -98,6 +98,13 @@ struct esdm_drng {
 
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
 	mutex_w_t lock; /* Non-atomic DRNG operation */
+
+	/*
+	 * Serializes the seedings of this DRNG, so entropy is collected once
+	 * rather than by every path finding its reseed due. Per DRNG: seedings
+	 * of different DRNGs run side by side. Taken before lock.
+	 */
+	mutex_w_t seed_lock;
 };
 
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
@@ -105,7 +112,8 @@ struct esdm_drng {
 	.requests = ESDM_DRNG_RESEED_THRESH, .requests_since_fully_seeded = 0, \
 	.request_bits_since_fully_seeded = 0, .seed_generation = 0,            \
 	.last_seeded_time = 0, .last_seeded_wtime = 0, .fully_seeded = false,  \
-	.force_reseed = true, .initiated = false, .reseed_pending = false
+	.force_reseed = true, .initiated = false, .reseed_pending = false,     \
+	.seed_lock = MUTEX_W_UNLOCKED
 
 /*
  * Statistics of one DRNG instance, as handed to the callback of

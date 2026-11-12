@@ -153,7 +153,8 @@ void esdm_drngs_node_alloc(void)
 
 		drng->hash_cb = esdm_drng_init->hash_cb;
 
-		if (mutex_w_init(&drng->lock, 0, 0)) {
+		if (mutex_w_init(&drng->lock, 0, 0) ||
+		    mutex_w_init(&drng->seed_lock, 0, 0)) {
 			/*
 			 * The lock is unusable, so the standard dealloc helpers
 			 * (which take drng->lock) must not be used on this DRNG.

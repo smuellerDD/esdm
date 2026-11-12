@@ -919,14 +919,14 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 }
 
 /*
- * Reseed @drng under the pool lock the caller holds. A fully seeded DRNG keeps
+ * Reseed @drng under its seed lock the caller holds. A fully seeded DRNG keeps
  * serving while the entropy is collected - with a slow source that takes
  * milliseconds, which every request on it would otherwise wait for - and is
  * locked for the injection only. One being brought up is locked throughout:
  * it serves nothing anyway, and its emergency seeding adds up consecutive
  * collections.
  */
-static void esdm_drng_reseed_pool_locked(struct esdm_drng *drng)
+static void esdm_drng_reseed_seed_locked(struct esdm_drng *drng)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 		addtl __aligned(ESDM_KCAPI_ALIGN);
@@ -990,35 +990,26 @@ static bool esdm_drngs_all_seeded(struct esdm_drng **esdm_drng)
 	return true;
 }
 
-/**
- * @brief Seeding of one not yet fully seeded DRNG
- *
- * Perform the seeding of a DRNG. The code seeds one DRNG that is currently
- * not (fully) seeded. The logic picks the DRNG to be seeded.
- *
- * @param [in] force Apply the forced seeding operation.
- */
 /*
- * Seed at most one DRNG that is not yet fully seeded.
+ * Seed one DRNG that is not fully seeded, under its seed lock. A DRNG another
+ * thread seeds is skipped, so several come up side by side; only a caller that
+ * may @wait waits for one when no other is left. Returns whether the DRNG is
+ * fully seeded now, false if none was left to seed but some are being seeded,
+ * true once all are fully seeded.
  *
- * Returns true if the pass made forward progress, i.e. the selected DRNG
- * reached the fully-seeded level, or all DRNGs are already fully seeded.
- * Returns false if a DRNG that needed seeding could not be brought to the
- * fully-seeded level (insufficient entropy for the configured policy) - the
- * caller can use this to break out of a retry loop instead of spinning.
- *
- * The node array is the caller's, and so is the lock over it: this runs under
- * the pool lock, and taking the node lock here would be the one place taking
- * the two in the order opposite to every other path - see
+ * The caller passes the node array and holds its lock: taking it here, under a
+ * seed lock, would invert the order of every other path - see
  * esdm_drng_seed_work_locked().
  *
  * Not the PR DRNG: its output stands on a seed collected for it on request,
  * under its lock - see esdm_drng_get().
  */
-static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
+static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force,
+				  bool wait)
 {
-	struct esdm_drng *drng = NULL;
-	uint32_t node = 0;
+	struct esdm_drng *drng = NULL, *busy = NULL;
+	uint32_t node, nodes, busy_node = 0;
+	bool ret;
 
 	/*
 	 * If the DRNG is not yet initialized, return early.
@@ -1027,36 +1018,60 @@ static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 		return false;
 	}
 
-	if (esdm_drng) {
-		/*
-		 * Bound by the published count, not by the config, which may
-		 * have grown past the allocated array.
-		 */
-		uint32_t nodes = esdm_drng_node_count_get();
+	/*
+	 * Bound by the published count, not by the config, which may have
+	 * grown past the allocated array.
+	 */
+	nodes = esdm_drng ? esdm_drng_node_count_get() : 1;
+	for (node = 0; node < nodes; node++) {
+		struct esdm_drng *d =
+			esdm_drng ? esdm_drng[node] : &esdm_drng_init;
 
-		for (node = 0; node < nodes; node++) {
-			if (esdm_drng[node] &&
-			    !atomic_load(&esdm_drng[node]->fully_seeded)) {
-				drng = esdm_drng[node];
-				break;
+		if (!d || atomic_load(&d->fully_seeded))
+			continue;
+
+		if (mutex_w_trylock(&d->seed_lock)) {
+			if (!busy) {
+				busy = d;
+				busy_node = node;
 			}
+			continue;
 		}
-	} else if (!atomic_load(&esdm_drng_init.fully_seeded)) {
-		drng = &esdm_drng_init;
+
+		/* Seeded by another thread between the look and the lock */
+		if (atomic_load(&d->fully_seeded)) {
+			mutex_w_unlock(&d->seed_lock);
+			continue;
+		}
+
+		drng = d;
+		break;
+	}
+
+	if (!drng && busy && wait) {
+		mutex_w_lock(&busy->seed_lock);
+		drng = busy;
+		node = busy_node;
 	}
 
 	if (drng) {
-		if (force)
-			atomic_store(&drng->force_reseed, true);
-		esdm_drng_seed_work_one(drng, node);
-		return atomic_load(&drng->fully_seeded);
+		if (!atomic_load(&drng->fully_seeded)) {
+			if (force)
+				atomic_store(&drng->force_reseed, true);
+			esdm_drng_seed_work_one(drng, node);
+		}
+		ret = atomic_load(&drng->fully_seeded);
+		mutex_w_unlock(&drng->seed_lock);
+		return ret;
 	}
 
+	if (busy)
+		return false;
+
 	/*
-	 * esdm_unset_fully_seeded() clears the flag without the pool lock, so
-	 * the DRNGs are looked at once more after it is set: an unset that
-	 * came after the look above is either seen there or clears the flag
-	 * after this store.
+	 * esdm_unset_fully_seeded() clears the flag without a seed lock, so
+	 * look at the DRNGs again after setting it: a later unset is either
+	 * seen there or clears the flag after this store.
 	 */
 	esdm_pool_all_nodes_seeded(true);
 	if (!esdm_drngs_all_seeded(esdm_drng))
@@ -1068,41 +1083,32 @@ static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 /* Defined with the asynchronous reseeding below */
 
 /*
- * The node lock before the pool lock, which is the order of every path holding
+ * The node lock before a seed lock, which is the order of every path holding
  * both: a request generating takes the node lock in esdm_drng_get_sleep() and
- * runs into the pool lock in esdm_drng_get(), and the reseed worker holds the
+ * runs into the seed lock in esdm_drng_get(), and the reseed worker holds the
  * node lock across its whole pass.
  */
 static void esdm_drng_seed_work_locked(bool force)
 {
 	struct esdm_drng **drngs = esdm_drng_get_instances();
 
-	esdm_pool_lock();
-	__esdm_drng_seed_work(drngs, force);
-	esdm_pool_unlock();
+	__esdm_drng_seed_work(drngs, force, true);
 	esdm_drng_put_instances();
 }
 
 /*
- * The same for a caller that would rather do nothing than wait: a seeding is
- * already under way when the pool lock is taken, and that one collects the
- * entropy this call would have collected.
- * @return true if a seeding was performed, false if one was already running
+ * The same for a caller that would rather do nothing than wait: a DRNG
+ * another thread seeds is left to it.
+ * @return whether a DRNG is fully seeded by this call, or all are
  */
 bool esdm_drng_seed_work_try(void)
 {
 	struct esdm_drng **drngs = esdm_drng_get_instances();
+	bool ret = __esdm_drng_seed_work(drngs, false, false);
 
-	if (!esdm_pool_trylock()) {
-		esdm_drng_put_instances();
-		return false;
-	}
-
-	__esdm_drng_seed_work(drngs, false);
-	esdm_pool_unlock();
 	esdm_drng_put_instances();
 
-	return true;
+	return ret;
 }
 
 /**
@@ -1352,11 +1358,11 @@ static void esdm_drng_reseed_one(struct esdm_drng *drng, uint32_t node,
 		    "%s reseed of DRNG on node %u\n",
 		    requested ? "asynchronous" : "proactive", node);
 
-	esdm_pool_lock();
+	mutex_w_lock(&drng->seed_lock);
 	/* Another path may have reseeded it in the meantime */
 	if (esdm_drng_must_reseed(drng, false))
-		esdm_drng_reseed_pool_locked(drng);
-	esdm_pool_unlock();
+		esdm_drng_reseed_seed_locked(drng);
+	mutex_w_unlock(&drng->seed_lock);
 }
 
 /* Fold the deadline of @drng into the earliest one seen in this pass. */
@@ -1440,13 +1446,12 @@ static uint64_t esdm_drng_reseed_pass(void)
 	/* Bring up a DRNG that is not seeded yet. */
 	if (unseeded && !esdm_drng_reseed_stop()) {
 		/*
-		 * The node lock is held across the whole pass, so the pool lock
+		 * The node lock is held across the whole pass, so a seed lock
 		 * is taken under it here - the order of
-		 * esdm_drng_seed_work_locked().
+		 * esdm_drng_seed_work_locked(). One another thread brings up is
+		 * left to it.
 		 */
-		esdm_pool_lock();
-		__esdm_drng_seed_work(esdm_drng, true);
-		esdm_pool_unlock();
+		__esdm_drng_seed_work(esdm_drng, true, false);
 
 		/*
 		 * One instance per call, and one that could not be brought up
@@ -1750,21 +1755,21 @@ static void esdm_drng_get_reseed(struct esdm_drng *drng, bool nonblock)
 	}
 
 	/*
-	 * Entropy pool busy and the caller may not wait for it: reseed next
-	 * time and generate within the maximum meanwhile.
+	 * The DRNG is being seeded and the caller may not wait for it: reseed
+	 * next time and generate within the maximum meanwhile.
 	 */
-	if (nonblock && !esdm_pool_trylock()) {
+	if (nonblock && mutex_w_trylock(&drng->seed_lock)) {
 		atomic_store(&drng->force_reseed, true);
 		return;
 	}
 
 	/* Perform synchronous reseed */
 	if (!nonblock)
-		esdm_pool_lock();
+		mutex_w_lock(&drng->seed_lock);
 	/* Another path may have reseeded it in the meantime */
 	if (esdm_drng_must_reseed(drng, false))
-		esdm_drng_reseed_pool_locked(drng);
-	esdm_pool_unlock();
+		esdm_drng_reseed_seed_locked(drng);
+	mutex_w_unlock(&drng->seed_lock);
 }
 
 /**
@@ -1772,7 +1777,7 @@ static void esdm_drng_get_reseed(struct esdm_drng *drng, bool nonblock)
  *
  * Stops short when @drng leaves the fully seeded state, reaches the maximum it
  * may produce without a full reseed, or - the PR DRNG - runs out of fresh
- * entropy or, for @nonblock, finds the entropy pool busy.
+ * entropy or, for @nonblock, finds another PR request collecting.
  *
  * @param [in] drng DRNG instance
  * @param [in] outbuf buffer for storing random data
@@ -1836,18 +1841,18 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			 * lock, so no state compromise predicts it. A separate
 			 * DRBG instance, as SP800-90A defines it.
 			 *
-			 * The pool lock before the DRNG lock, the order of every
-			 * path holding both.
+			 * Its lock suffices: the entropy sources lock
+			 * themselves, no other seeding waits for it. A caller
+			 * that may not wait gives up while another PR request
+			 * holds it.
 			 */
 			if (nonblock) {
-				if (!esdm_pool_trylock())
+				if (mutex_w_trylock(&drng->lock))
 					break;
 			} else {
-				esdm_pool_lock();
+				mutex_w_lock(&drng->lock);
 			}
-			mutex_w_lock(&drng->lock);
 			injected = esdm_drng_seed_es_nolock(drng, "regular");
-			esdm_pool_unlock();
 
 			/*
 			 * Output at most the fresh entropy less the 64 bits of
@@ -2123,7 +2128,6 @@ void esdm_force_fully_seeded_all_drbgs(void)
 
 	/* The node lock first - see esdm_drng_seed_work_locked() */
 	drngs = esdm_drng_get_instances();
-	esdm_pool_lock();
 	do {
 		/*
 		 * Each pass fully seeds at most one DRNG. If a pass cannot bring
@@ -2131,23 +2135,21 @@ void esdm_force_fully_seeded_all_drbgs(void)
 		 * insufficient for the configured policy (e.g. NTG.1 requires
 		 * two entropy sources but only one delivers). Stop instead of
 		 * spinning forever: otherwise a single, continuously refilled
-		 * source keeps esdm_es_reseed_wanted() true while we hold the
-		 * pool lock on the synchronous, pre-RPC startup path, hanging
-		 * daemon startup. The terminate check additionally lets a
-		 * shutdown break the loop.
+		 * source keeps esdm_es_reseed_wanted() true on the synchronous,
+		 * pre-RPC startup path, hanging daemon startup. The terminate
+		 * check additionally lets a shutdown break the loop.
 		 */
-		if (!__esdm_drng_seed_work(drngs, true))
+		if (!__esdm_drng_seed_work(drngs, true, true))
 			break;
 	} while (esdm_es_reseed_wanted() &&
 		 !atomic_load(&esdm_drng_mgr_terminate));
-	esdm_pool_unlock();
 	esdm_drng_put_instances();
 }
 
 /*
  * The non-blocking callers - the EGD worker, the RPC handlers - serve every
- * other request on their thread as well, so they seed only if the entropy pool
- * is free and leave it to whoever holds it otherwise.
+ * other request on their thread as well, so they seed only a DRNG no other
+ * thread seeds already.
  */
 static void esdm_drng_try_seed(void)
 {
@@ -2227,22 +2229,11 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		flags & ESDM_GET_SEED_NONBLOCK));
 
 	/*
-	 * Try to get the pool lock and sleep on it to get it - unless the
-	 * caller may not wait, for whom a seeding in progress is a reason to
-	 * come back.
+	 * If an ESDM DRNG becomes unseeded, give this DRNG precedence. The
+	 * entropy sources lock themselves, so the collection below runs next
+	 * to the seedings of the DRNGs.
 	 */
-	if (flags & ESDM_GET_SEED_NONBLOCK) {
-		if (!esdm_pool_trylock()) {
-			ret = -EAGAIN;
-			goto out;
-		}
-	} else {
-		esdm_pool_lock();
-	}
-
-	/* If an ESDM DRNG becomes unseeded, give this DRNG precedence. */
 	if (!esdm_pool_all_nodes_seeded_get()) {
-		esdm_pool_unlock();
 		buflen = 0;
 		goto out;
 	}
@@ -2275,16 +2266,8 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 		    (flags & ESDM_GET_SEED_NONBLOCK))
 			break;
 
-		/*
-		 * Release pool lock while sleeping to avoid starving DRNG
-		 * reseeding operations that need the pool lock.
-		 */
-		esdm_pool_unlock();
 		nanosleep(&poll_ts, NULL);
-		esdm_pool_lock();
 	}
-
-	esdm_pool_unlock();
 
 	/* Write collected entropy size into second word */
 	buf[1] = collected_bits;
@@ -2335,8 +2318,8 @@ ssize_t esdm_get_random_bytes_pr_noblock(uint8_t *buf, size_t nbytes)
 	mutex_w_unlock(&esdm_pr_lock);
 
 	/*
-	 * No fresh entropy yet, or the pool is busy: a reason to come back,
-	 * which a caller looping on a return of zero would not wait for.
+	 * No fresh entropy yet, or another PR request collects: -EAGAIN tells
+	 * the caller to come back, which a return of zero would not.
 	 */
 	return (!ret && buf && nbytes) ? -EAGAIN : ret;
 }

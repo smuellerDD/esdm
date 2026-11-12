@@ -1,9 +1,9 @@
 /*
  * Test of what the ESDM library does around its normal operation
  *
- *   - The non-blocking getters do not wait for the entropy pool: with its lock
- *     held by another thread they answer at once - with the bytes while the
- *     ESDM is operational, with -EAGAIN where only a seeding could help.
+ *   - The non-blocking getters do not wait for a seeding: with the seed lock
+ *     of the initial DRNG held by another thread they answer at once, with
+ *     the bytes while the ESDM is operational.
  *   - A node count raised after esdm_init() is not followed past the DRNG
  *     array allocated then.
  *   - esdm_init() after esdm_fini() is refused.
@@ -51,17 +51,17 @@
 /* Seconds the ESDM is given to reach the fully seeded state */
 #define TEST_SEED_WAIT_SECONDS 30
 
-/* How long the helper holds the entropy pool at most */
-#define TEST_POOL_HOLD_SECONDS 10
+/* How long the helper holds the seed lock at most */
+#define TEST_SEED_HOLD_SECONDS 10
 
-/* A getter that waited for the pool took the hold time, one that did not none */
+/* Well below the hold time, which a getter waiting for the seeding takes */
 #define TEST_NOBLOCK_MAX_MS 2000
 
 /* Large enough for esdm_get_seed(), which answers -EMSGSIZE otherwise */
 #define TEST_SEED_WORDS 1024
 
-static atomic_bool pool_held;
-static atomic_bool pool_release;
+static atomic_bool seed_held;
+static atomic_bool seed_release;
 
 static long long test_now_ms(void)
 {
@@ -79,18 +79,19 @@ static void test_sleep_ms(long ms)
 	nanosleep(&ts, NULL);
 }
 
-/* Hold the entropy pool as a seeding in progress does */
-static void *test_pool_holder(void *unused)
+/* Hold the seed lock of the initial DRNG as a seeding in progress does */
+static void *test_seed_holder(void *unused)
 {
-	long long until = test_now_ms() + TEST_POOL_HOLD_SECONDS * 1000;
+	struct esdm_drng *drng = esdm_drng_init_instance();
+	long long until = test_now_ms() + TEST_SEED_HOLD_SECONDS * 1000;
 
 	(void)unused;
 
-	esdm_pool_lock();
-	atomic_store(&pool_held, true);
-	while (!atomic_load(&pool_release) && test_now_ms() < until)
+	mutex_w_lock(&drng->seed_lock);
+	atomic_store(&seed_held, true);
+	while (!atomic_load(&seed_release) && test_now_ms() < until)
 		test_sleep_ms(10);
-	esdm_pool_unlock();
+	mutex_w_unlock(&drng->seed_lock);
 
 	return NULL;
 }
@@ -101,18 +102,17 @@ static int test_noblock_one(const char *name, ssize_t rc, ssize_t want,
 	long long elapsed = test_now_ms() - start;
 
 	if (elapsed > TEST_NOBLOCK_MAX_MS) {
-		printf("%s waited %lld ms for the entropy pool\n", name,
-		       elapsed);
+		printf("%s waited %lld ms for a seeding\n", name, elapsed);
 		return 1;
 	}
 
 	if (rc != want) {
-		printf("%s returned %zd instead of %zd with the pool busy\n",
+		printf("%s returned %zd instead of %zd during a seeding\n",
 		       name, rc, want);
 		return 1;
 	}
 
-	printf("%s returned %zd after %lld ms with the pool busy\n", name, rc,
+	printf("%s returned %zd after %lld ms during a seeding\n", name, rc,
 	       elapsed);
 	return 0;
 }
@@ -126,16 +126,16 @@ static int test_noblock(void)
 	ssize_t rc;
 	int ret = 0;
 
-	atomic_store(&pool_held, false);
-	atomic_store(&pool_release, false);
-	if (pthread_create(&holder, NULL, test_pool_holder, NULL)) {
-		printf("cannot start the pool holder\n");
+	atomic_store(&seed_held, false);
+	atomic_store(&seed_release, false);
+	if (pthread_create(&holder, NULL, test_seed_holder, NULL)) {
+		printf("cannot start the seed lock holder\n");
 		return 1;
 	}
-	while (!atomic_load(&pool_held))
+	while (!atomic_load(&seed_held))
 		test_sleep_ms(1);
 
-	/* A DRNG wanting a seeding sends the getters to the pool */
+	/* A DRNG wanting a seeding sends the getters to seed one */
 	esdm_pool_all_nodes_seeded(false);
 	start = test_now_ms();
 	rc = esdm_get_random_bytes_full_noblock(buf, sizeof(buf));
@@ -149,17 +149,20 @@ static int test_noblock(void)
 	ret |= test_noblock_one("esdm_get_random_bytes", rc, sizeof(buf),
 				start);
 
-	/* The PR DRNG has to seed from the pool for every output */
+	/*
+	 * The PR DRNG and esdm_get_seed() collect for themselves, from entropy
+	 * sources that lock themselves: no seeding of another DRNG holds them.
+	 */
 	start = test_now_ms();
 	rc = esdm_get_random_bytes_pr_noblock(buf, sizeof(buf));
-	ret |= test_noblock_one("esdm_get_random_bytes_pr_noblock", rc, -EAGAIN,
-				start);
+	ret |= test_noblock_one("esdm_get_random_bytes_pr_noblock",
+				rc > 0 ? 1 : rc, 1, start);
 
 	start = test_now_ms();
 	rc = esdm_get_seed(seed, sizeof(seed), ESDM_GET_SEED_NONBLOCK);
-	ret |= test_noblock_one("esdm_get_seed", rc, -EAGAIN, start);
+	ret |= test_noblock_one("esdm_get_seed", rc > 0 ? 1 : rc, 1, start);
 
-	atomic_store(&pool_release, true);
+	atomic_store(&seed_release, true);
 	pthread_join(holder, NULL);
 
 	return ret;

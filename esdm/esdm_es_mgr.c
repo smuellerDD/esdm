@@ -82,7 +82,6 @@ struct esdm_state {
 	 */
 
 	atomic_int boot_entropy_thresh; /* Reseed threshold */
-	mutex_w_t reseed_in_progress; /* Flag for on executing reseed */
 };
 
 static struct esdm_state esdm_state = {
@@ -90,7 +89,6 @@ static struct esdm_state esdm_state = {
 	.esdm_fully_seeded = false,
 	.all_online_nodes_seeded = false,
 	.boot_entropy_thresh = ESDM_FULL_SEED_ENTROPY_BITS,
-	.reseed_in_progress = MUTEX_W_UNLOCKED,
 };
 
 /*
@@ -486,27 +484,6 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 }
 
 /********************************** Helper ***********************************/
-
-/*
- * Reading of the ESDM pool is only allowed by one caller. The reading is
- * only performed to (re)seed DRNGs. Thus, if this "lock" is already taken,
- * the reseeding operation is in progress. The caller is not intended to wait
- * but continue with its other operation.
- */
-int esdm_pool_trylock(void)
-{
-	return mutex_w_trylock(&esdm_state.reseed_in_progress) == 0;
-}
-
-void esdm_pool_lock(void)
-{
-	mutex_w_lock(&esdm_state.reseed_in_progress);
-}
-
-void esdm_pool_unlock(void)
-{
-	mutex_w_unlock(&esdm_state.reseed_in_progress);
-}
 
 /* Set new entropy threshold for reseeding during boot */
 void esdm_set_entropy_thresh(uint32_t new_entropy_bits)
