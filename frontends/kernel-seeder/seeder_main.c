@@ -228,6 +228,9 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 		}
 
 		if (ret < 0) {
+			/* Interrupted by a stop, see seeder_interrupt() */
+			if (!atomic_load(&should_run))
+				goto out;
 			esdm_logger(LOGGER_ERR, LOGGER_C_SEEDER,
 				    "Failure in generating random bits: %zd\n",
 				    ret);
@@ -297,7 +300,18 @@ static int handle_reseeding(int64_t seeding_interval_secs)
 	}
 
 out:
+	memset_secure(rpi->buf, 0, (size_t)rpi->buf_size);
 	return fn_ret;
+}
+
+/*
+ * Ends RPCs waiting for full seeding or another client's prediction resistant
+ * request, so a stop before the first seed does not wait with them.
+ */
+static int seeder_interrupt(void *data)
+{
+	(void)data;
+	return !atomic_load(&should_run);
 }
 
 /*
@@ -446,7 +460,7 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
-	if (esdm_rpcc_init_unpriv_service(NULL) != 0) {
+	if (esdm_rpcc_init_unpriv_service(seeder_interrupt) != 0) {
 		printf("unable to initialize unprivileged ESDM service, exiting!");
 		tool_ret = EXIT_FAILURE;
 		goto out;
