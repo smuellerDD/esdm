@@ -60,6 +60,7 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	static const int fwd_signals[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM,
 					   SIGUSR1 };
 	struct sigaction sa;
+	sigset_t fwd_set, old_set;
 	unsigned int i;
 	pid_t pid;
 	int errsv, status;
@@ -83,9 +84,20 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
 		    "Successfully entered isolating PID namespace\n");
 
+	/*
+	 * Block the forwarded signals until the forwarders below exist, else
+	 * the daemon's handlers would run in the supervisor and a stop during
+	 * startup would be lost.
+	 */
+	sigemptyset(&fwd_set);
+	for (i = 0; i < sizeof(fwd_signals) / sizeof(fwd_signals[0]); i++)
+		sigaddset(&fwd_set, fwd_signals[i]);
+	sigprocmask(SIG_BLOCK, &fwd_set, &old_set);
+
 	pid = fork();
 	if (pid < 0) {
 		errsv = errno;
+		sigprocmask(SIG_SETMASK, &old_set, NULL);
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot fork into PID namespace: %s\n",
 			    strerror(errsv));
@@ -93,6 +105,8 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	}
 
 	if (pid == 0) {
+		sigprocmask(SIG_SETMASK, &old_set, NULL);
+
 		/*
 		 * Child: PID 1 of the new namespace, continues as the actual
 		 * daemon. Tie its lifetime to the supervisor so a SIGKILLed
@@ -128,6 +142,7 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	sa.sa_flags = SA_RESTART;
 	for (i = 0; i < sizeof(fwd_signals) / sizeof(fwd_signals[0]); i++)
 		sigaction(fwd_signals[i], &sa, NULL);
+	sigprocmask(SIG_SETMASK, &old_set, NULL);
 
 	for (;;) {
 		if (waitpid(pid, &status, 0) >= 0)
