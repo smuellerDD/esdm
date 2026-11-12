@@ -145,6 +145,9 @@ static struct esdm_rpcc_tbuf *esdm_rpcc_tbuf_get(void)
 	(3ULL * (ESDM_MAX_RX_TX_RETRIES + 1) *                                 \
 	 (1ULL << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT))
 
+/* Connection resets after which an invoke gives up */
+#define ESDM_CLIENT_RESET_RETRIES 2
+
 static void esdm_rpcc_arm_deadline(esdm_rpc_client_connection_t *rpc_conn)
 {
 	struct timespec *deadline = &rpc_conn->deadline;
@@ -560,8 +563,19 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			break;
 		}
 
-		if (received < (ssize_t)sizeof(*header))
-			continue;
+		/*
+		 * EOF: the server closed without answering (idle timeout,
+		 * restart, connection limit); like a lost answer, ask again.
+		 */
+		if (received == 0) {
+			ret = -ECONNRESET;
+			break;
+		}
+
+		if (received < (ssize_t)sizeof(*header)) {
+			ret = -EPROTO;
+			break;
+		}
 
 		header = &received_data->header;
 
@@ -699,8 +713,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
-	} else if (ret != -EAGAIN) {
-		/* -EAGAIN is asked again by esdm_client_invoke() */
+	} else if (ret != -EAGAIN && ret != -ECONNRESET) {
+		/* Those two are asked again by esdm_client_invoke() */
 		ProtobufCMessage *msg;
 
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
@@ -782,6 +796,7 @@ static void esdm_client_invoke(ProtobufCService *service,
 	struct esdm_rpcc_tbuf *tbuf;
 	struct timespec current_time;
 	int64_t used_before_ns;
+	unsigned int resets = 0;
 	int ret;
 
 	/*
@@ -832,12 +847,12 @@ static void esdm_client_invoke(ProtobufCService *service,
 		ret = esdm_rpc_client_read_handler(
 			rpc_conn, tbuf, method->output, closure, closure_data);
 		/* EAGAIN is ok here, since sockets are non-blocking now */
-		if (ret < 0 && ret != -EAGAIN) {
+		if (ret < 0 && ret != -EAGAIN && ret != -ECONNRESET) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 				    "Receiving of data failed: %d\n", ret);
 		}
 
-		if (ret != -EAGAIN)
+		if (ret != -EAGAIN && ret != -ECONNRESET)
 			break;
 
 		/*
@@ -849,14 +864,16 @@ static void esdm_client_invoke(ProtobufCService *service,
 		reset_conn_socket(rpc_conn);
 
 		/*
-		 * Ask again only within bounds: a server that never answers
-		 * must not keep callers without an interrupt function from
-		 * falling back.
+		 * Ask again only within bounds, so a server that never answers
+		 * or keeps closing does not block callers' fallbacks.
 		 */
 		if (esdm_rpcc_expired(rpc_conn)) {
-			ret = -ETIMEDOUT;
+			if (ret == -EAGAIN)
+				ret = -ETIMEDOUT;
 			break;
 		}
+		if (ret == -ECONNRESET && ++resets > ESDM_CLIENT_RESET_RETRIES)
+			break;
 	} while (1);
 
 out:
