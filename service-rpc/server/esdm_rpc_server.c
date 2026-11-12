@@ -127,11 +127,14 @@ enum esdm_rpcs_init_state {
 	esdm_rpcs_state_uninitialized,
 	esdm_rpcs_state_priv_init_complete,
 	esdm_rpcs_state_unpriv_init,
+	esdm_rpcs_state_unpriv_failed,
 	esdm_rpcs_state_perm_dropped,
 };
 
 static atomic_int esdm_rpc_init_state =
 	esdm_rpcs_state_uninitialized;
+/* Why the unprivileged interface failed - see esdm_rpcs_state_unpriv_failed */
+static atomic_int esdm_rpcs_unpriv_init_ret = 0;
 static DECLARE_WAIT_QUEUE(esdm_rpc_thread_init_wait);
 
 static atomic_int server_exit = 0;
@@ -1160,7 +1163,7 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 				LOGGER_ERR, LOGGER_C_SERVER,
 				"unable to fetch socket type of systemd provided socket");
 			close(fd);
-			return -1;
+			return -ENOTSOCK;
 		}
 
 		if (type != SOCK_SEQPACKET) {
@@ -1168,7 +1171,7 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 				LOGGER_ERR, LOGGER_C_SERVER,
 				"systemd provided socket is not of type SOCK_SEQPACKET");
 			close(fd);
-			return -1;
+			return -EPROTOTYPE;
 		}
 
 		(void)fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
@@ -1178,7 +1181,7 @@ static int esdm_rpcs_start_systemd(const char *socket_name,
 				LOGGER_STATUS, LOGGER_C_SERVER,
 				"systemd provided socket cannot be set to non-blocking");
 			close(fd);
-			return -1;
+			return -EINVAL;
 		}
 
 		proto->server_listening_fd = fd;
@@ -1316,6 +1319,14 @@ static int esdm_rpcs_unpriv_init(void *args)
 			  (atomic_load(&esdm_rpc_init_state) ==
 			   esdm_rpcs_state_perm_dropped) ||
 				  (atomic_load(&server_exit) != 0));
+
+	/*
+	 * Shutdown - also how a failed privilege drop ends: never serve with
+	 * the privileges it may have left.
+	 */
+	if (atomic_load(&server_exit) != 0)
+		goto out;
+
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC,
 		    "Unprivileged server thread for %s available\n",
 		    ESDM_RPC_UNPRIV_SOCKET);
@@ -1327,6 +1338,15 @@ static int esdm_rpcs_unpriv_init(void *args)
 
 out:
 	eesdm_rpcs_stop(&unpriv_proto);
+
+	/* The mother waits for the outcome of the initialization - report it */
+	if (ret &&
+	    atomic_load(&esdm_rpc_init_state) < esdm_rpcs_state_unpriv_init) {
+		atomic_store(&esdm_rpcs_unpriv_init_ret, ret);
+		atomic_store(&esdm_rpc_init_state,
+			     esdm_rpcs_state_unpriv_failed);
+		thread_wake_all(&esdm_rpc_thread_init_wait);
+	}
 
 	return ret;
 }
@@ -1427,7 +1447,20 @@ static int esdm_rpcs_interfaces_init(const char *username,
 	thread_wait_event(&esdm_rpc_thread_init_wait,
 			  (atomic_load(&esdm_rpc_init_state) ==
 			   esdm_rpcs_state_unpriv_init) ||
+				  (atomic_load(&esdm_rpc_init_state) ==
+				   esdm_rpcs_state_unpriv_failed) ||
 				  (atomic_load(&server_exit) != 0));
+
+	if (atomic_load(&esdm_rpc_init_state) ==
+	    esdm_rpcs_state_unpriv_failed) {
+		ret = atomic_load(&esdm_rpcs_unpriv_init_ret);
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Unprivileged RPC interface failed: %s\n",
+			    strerror(-ret));
+		goto out;
+	}
+	if (atomic_load(&server_exit) != 0)
+		goto out;
 
 	/* Permanently drop all privileges */
 	CKINT(drop_privileges_permanent(username ? username : "nobody",
@@ -1523,7 +1556,7 @@ int esdm_rpc_server_init(const char *username, const char *groupname)
 	esdm_logger(LOGGER_WARN, LOGGER_C_RPC, "RPC server started\n");
 
 	/* start the RPC server threads */
-	esdm_rpcs_interfaces_init(username, groupname);
+	ret = esdm_rpcs_interfaces_init(username, groupname);
 
 out:
 	return ret;
