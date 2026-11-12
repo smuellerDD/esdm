@@ -943,7 +943,8 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
  */
 static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 {
-	bool progress = false;
+	struct esdm_drng *drng = NULL;
+	uint32_t node = 0;
 
 	/*
 	 * If the DRNG is not yet initialized, return early.
@@ -953,38 +954,27 @@ static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 	}
 
 	if (esdm_drng) {
-		uint32_t node;
-
 		for_each_online_node (node) {
-			struct esdm_drng *drng = esdm_drng[node];
-
-			if (!drng)
-				continue;
-
-			if (drng && !atomic_load(&drng->fully_seeded)) {
-				if (force)
-					atomic_store(&drng->force_reseed, true);
-				esdm_drng_seed_work_one(drng, node);
-				progress = atomic_load(&drng->fully_seeded);
-				goto out;
+			if (esdm_drng[node] &&
+			    !atomic_load(&esdm_drng[node]->fully_seeded)) {
+				drng = esdm_drng[node];
+				break;
 			}
 		}
-	} else {
-		if (!atomic_load(&esdm_drng_init.fully_seeded)) {
-			if (force)
-				atomic_store(&esdm_drng_init.force_reseed, true);
-			esdm_drng_seed_work_one(&esdm_drng_init, 0);
-			progress =
-				atomic_load(&esdm_drng_init.fully_seeded);
-			goto out;
-		}
+	} else if (!atomic_load(&esdm_drng_init.fully_seeded)) {
+		drng = &esdm_drng_init;
+	}
+
+	if (drng) {
+		if (force)
+			atomic_store(&drng->force_reseed, true);
+		esdm_drng_seed_work_one(drng, node);
+		return atomic_load(&drng->fully_seeded);
 	}
 
 	esdm_pool_all_nodes_seeded(true);
-	progress = true;
 
-out:
-	return progress;
+	return true;
 }
 
 /* Defined with the asynchronous reseeding below */
