@@ -263,7 +263,8 @@ Rebuild GnuTLS with FIPS140 mode enabled, or select another crypto_backend.''')
 endif
 
 if get_option('crypto_backend') == 'leancrypto'
-	leancrypto_dep = dependency('leancrypto', version: '>= 1.0', required: true)
+	# 1.6.0: lc_hash_init() reports a failed self test instead of asserting
+	leancrypto_dep = dependency('leancrypto', version: '>= 1.6.0', required: true)
 endif
 
 if get_option('crypto_backend') == 'botan'

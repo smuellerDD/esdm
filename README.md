@@ -111,7 +111,7 @@ is enabled during compile time:
   [OpenSSL website](https://www.openssl.org/source/).
 
 * leancrypto: If the leancrypto backend for cryptographic operations shall be
-  enabled during compile time, obtain leancrypto from the
+  enabled during compile time, obtain leancrypto 1.6.0 or later from the
   [leancrypto](https://leancrypto.org) website.
 
 Beyond those dependencies, only POSIX support is required.
