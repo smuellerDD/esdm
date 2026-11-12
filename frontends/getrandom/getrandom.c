@@ -92,10 +92,11 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 {
 	ssize_t ret;
 
+	/* The system call's conventions: -1 and errno */
 	if (flags &
 	    (unsigned int)(~(GRND_NONBLOCK | GRND_RANDOM | GRND_INSECURE |
 			     GRND_SEED | GRND_FULLY_SEEDED)))
-		return -EINVAL;
+		goto einval;
 
 	/*
 	 * Requesting insecure and blocking randomness at the same time makes
@@ -103,12 +104,12 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 	 */
 	if ((flags & (GRND_INSECURE | GRND_RANDOM)) ==
 	    (GRND_INSECURE | GRND_RANDOM))
-		return -EINVAL;
+		goto einval;
 	if ((flags & (GRND_INSECURE | GRND_SEED)) ==
 	    (GRND_INSECURE | GRND_SEED))
-		return -EINVAL;
+		goto einval;
 	if ((flags & (GRND_RANDOM | GRND_SEED)) == (GRND_RANDOM | GRND_SEED))
-		return -EINVAL;
+		goto einval;
 
 	/*
 	 * Cap to INT_MAX to match the kernel getrandom() behavior which
@@ -146,6 +147,10 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 		return ret;
 
 	return syscall(__NR_getrandom, buffer, length, flags);
+
+einval:
+	errno = EINVAL;
+	return -1;
 }
 
 /* Declare the prototype even though libc declares it internally */

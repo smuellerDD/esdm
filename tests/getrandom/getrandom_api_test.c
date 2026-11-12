@@ -91,18 +91,22 @@ static void test_flags_refused(void)
 
 		/*
 		 * Refused before any of it reaches the ESDM or the kernel, so
-		 * the buffer has to come back as it went in.
+		 * the buffer has to come back as it went in - and the way the
+		 * system call refuses, with -1 and errno.
 		 */
-		CHECK(__wrap_getrandom(buf, sizeof(buf), cases[i].flags) ==
-			      -EINVAL,
+		errno = 0;
+		CHECK(__wrap_getrandom(buf, sizeof(buf), cases[i].flags) == -1,
 		      "%s was not refused", cases[i].desc);
+		CHECK_EQ(errno, EINVAL);
 		CHECK(is_untouched(buf, sizeof(buf)),
 		      "%s was refused after writing to the buffer",
 		      cases[i].desc);
 
 		/* The interposed entry point answers the same way */
-		CHECK(getrandom(buf, sizeof(buf), cases[i].flags) == -EINVAL,
+		errno = 0;
+		CHECK(getrandom(buf, sizeof(buf), cases[i].flags) == -1,
 		      "%s was not refused through getrandom()", cases[i].desc);
+		CHECK_EQ(errno, EINVAL);
 	}
 }
 
