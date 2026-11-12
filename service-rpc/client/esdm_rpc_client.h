@@ -481,6 +481,66 @@ ssize_t esdm_rpcc_get_random_bytes(uint8_t *buf, size_t buflen);
 ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 				       void *int_data);
 
+/**
+ * @brief Single attempt of esdm_rpcc_get_random_bytes_full
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * One request to the ESDM server, never waiting for it to become fully
+ * seeded. For callers that must not block or that wait their own way (e.g.
+ * honoring their own interruption) between attempts.
+ *
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
+ *
+ * @return: read data length on success, which may be less than @p buflen,
+ *	    -EAGAIN if the ESDM is not fully seeded, < 0 on other errors
+ *	    (-EINTR means connection was interrupted and the caller may try
+ *	    again)
+ */
+ssize_t esdm_rpcc_get_random_bytes_full_noblock(uint8_t *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes_full_noblock
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+ssize_t esdm_rpcc_get_random_bytes_full_noblock_int(uint8_t *buf, size_t buflen,
+						    void *int_data);
+
+/**
+ * @brief Single attempt of esdm_rpcc_get_random_bytes_pr
+ *
+ * This call uses the unprivileged RPC endpoint of the ESDM server. It therefore
+ * can be invoked by any user.
+ *
+ * One request for at most one chunk of prediction resistant data, never
+ * waiting for full seeding or for another prediction resistant request.
+ *
+ * @param [out] buf Buffer to be filled with random bits.
+ * @param [in] buflen Size of the buffer to be filled.
+ *
+ * @return: read data length on success, which may be less than @p buflen,
+ *	    -EAGAIN if the ESDM is not fully seeded, busy with another
+ *	    prediction resistant request or has no entropy at hand, < 0 on
+ *	    other errors (-EINTR means connection was interrupted and the
+ *	    caller may try again)
+ */
+ssize_t esdm_rpcc_get_random_bytes_pr_noblock(uint8_t *buf, size_t buflen);
+
+/**
+ * @brief See esdm_rpcc_get_random_bytes_pr_noblock
+ *
+ * The function allows specifying an interrupt callback data structure that
+ * is used when invoking the interrupt check function registered with
+ * esdm_rpcc_init_priv_service / esdm_rpcc_init_unpriv_service
+ */
+ssize_t esdm_rpcc_get_random_bytes_pr_noblock_int(uint8_t *buf, size_t buflen,
+						  void *int_data);
+
 enum esdm_get_seed_flags {
 	ESDM_GET_SEED_NONBLOCK = 0x0001, /**< Do not block the call */
 	ESDM_GET_SEED_FULLY_SEEDED = 0x0002, /**< DRNG is fully seeded */
