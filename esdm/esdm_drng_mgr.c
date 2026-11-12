@@ -1638,6 +1638,49 @@ static void esdm_drng_reseed_async(struct esdm_drng *drng)
 	esdm_drng_reseed_notify();
 }
 
+/*
+ * Reseed @drng ahead of its next chunk if that is due - not the PR DRNG, which
+ * seeds itself.
+ */
+static void esdm_drng_get_reseed(struct esdm_drng *drng)
+{
+	if (!esdm_drng_must_reseed(drng, true))
+		return;
+
+	if (esdm_drng_reseed_async_capable(drng)) {
+		/*
+		 * Hand the entropy collection to the worker and keep
+		 * generating. Under SP800-90C / AIS 20/31 DRG.4 the reseed
+		 * threshold sits at half the maximum number of bits allowed
+		 * without a full reseed, so there is a whole threshold's worth
+		 * of output left to cover the collection - and where it does
+		 * not, the DRNG leaves the fully seeded state and the caller
+		 * moves to another node instead of waiting here.
+		 */
+		esdm_drng_reseed_async(drng);
+		return;
+	}
+
+	/*
+	 * Entropy pool cannot be locked, try to reseed next time, but
+	 * continue to generate random bits.
+	 */
+	if (!esdm_pool_trylock()) {
+		mutex_w_lock(&drng->lock);
+		atomic_store(&drng->force_reseed, true);
+		mutex_w_unlock(&drng->lock);
+		return;
+	}
+
+	/* Perform synchronous reseed */
+	mutex_w_lock(&drng->lock);
+	/* double check, as we did not lock the DRNG in the first check */
+	if (esdm_drng_must_reseed(drng, false))
+		esdm_drng_seed_nolock(drng);
+	mutex_w_unlock(&drng->lock);
+	esdm_pool_unlock();
+}
+
 /**
  * @brief Get random data out of the DRNG which is reseeded frequently.
  *
@@ -1725,43 +1768,6 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			min_uint32((uint32_t)outbuflen, ESDM_DRNG_MAX_REQSIZE);
 		ssize_t ret;
 
-		/* In normal operation, check whether to reseed */
-		if (!pr && esdm_drng_must_reseed(drng, true)) {
-			if (esdm_drng_reseed_async_capable(drng)) {
-				/*
-				 * Hand the entropy collection to the worker and
-				 * keep generating. Under SP800-90C / AIS 20/31
-				 * DRG.4 the reseed threshold sits at half the
-				 * maximum number of bits allowed without a full
-				 * reseed, so there is a whole threshold's worth
-				 * of output left to cover the collection - and
-				 * where it does not, the DRNG leaves the fully
-				 * seeded state below and the caller moves to
-				 * another node instead of waiting here.
-				 */
-				esdm_drng_reseed_async(drng);
-			} else if (!esdm_pool_trylock()) {
-				/*
-				 * Entropy pool cannot be locked, try to reseed
-				 * next time, but continue to generate random
-				 * bits.
-				 */
-				mutex_w_lock(&drng->lock);
-				atomic_store(&drng->force_reseed, true);
-				mutex_w_unlock(&drng->lock);
-			} else { /* Perform synchronous reseed */
-				mutex_w_lock(&drng->lock);
-				/* double check, as we did not lock the DRNG in the first check*/
-				if (esdm_drng_must_reseed(drng, false)) {
-					esdm_drng_seed_nolock(drng);
-				}
-				mutex_w_unlock(&drng->lock);
-				esdm_pool_unlock();
-			}
-		}
-
-		mutex_w_lock(&drng->lock);
-
 		/*
 		 * Handle prediction resistance requests.
 		 *
@@ -1774,6 +1780,8 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 		 * of SP800-90A.
 		 */
 		if (pr) {
+			mutex_w_lock(&drng->lock);
+
 			/* If async reseed did not deliver entropy, try now */
 			if (!atomic_load(&drng->fully_seeded)) {
 				uint32_t collected_ent_bits;
@@ -1815,6 +1823,11 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 
 			/* Do not produce more than DRNG security strength. */
 			todo = min_uint32(todo, esdm_security_strength() >> 3);
+		} else {
+			/* In normal operation, check whether to reseed */
+			esdm_drng_get_reseed(drng);
+
+			mutex_w_lock(&drng->lock);
 		}
 
 		/*
