@@ -143,8 +143,9 @@ int esdm_egd_client_get_random(struct esdm_egd_client *client, uint8_t *buf,
 /**
  * @brief Obtain random data without waiting
  *
- * The ESDM answers with as much data as it can deliver right away, which is
- * nothing at all while it is not operational yet. Use this only where a short
+ * The ESDM answers with as much data as it can deliver without blocking,
+ * which is nothing at all while it is not operational yet. While its DRNGs
+ * wait for a reseed, it holds the answer back for up to a second. Use this only where a short
  * answer is acceptable - a seed consumer wants esdm_egd_client_get_random().
  *
  * @param [in] client Client to use

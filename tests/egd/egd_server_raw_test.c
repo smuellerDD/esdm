@@ -55,6 +55,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_egd_protocol.h"
@@ -122,6 +123,9 @@ int set_fd_nonblocking(int fd)
 /* How long the ESDM is fed and given time to reach the operational state. */
 #define TEST_SEED_ROUNDS 200
 #define TEST_SEED_INTERVAL_MS 50
+
+/* Requests of 256 bytes draining the DRNGs, 16 MiB */
+#define TEST_DRAIN_ROUNDS 65536
 
 static char tmpdir[] = "/tmp/esdm-egd-raw-test-XXXXXX";
 static char sockpath[sizeof(tmpdir) + 32];
@@ -1946,6 +1950,90 @@ static void test_hangup_input(void)
 	close(fd);
 }
 
+/*
+ * A non-blocking read while the ESDM is operational but its DRNGs await a
+ * reseed (a capped build stops at the threshold) is answered after the
+ * reseed, not empty, which would tell the client it is not operational.
+ */
+static void test_esdm_reseed_read(void)
+{
+#if ESDM_DRNG_MAX_RESEED_BITS == 0xffffffff
+	printf("EGD raw: non-blocking reads waiting for a reseed\n");
+	printf("  SKIPPED: the output is not capped without a full reseed\n");
+#else
+	/* 0x01 and 0xe2 of 32 bytes, and the bulk read of 64 behind them */
+	uint8_t cmds[] = { ESDM_EGD_CMD_READ_NONBLOCK,
+			   32,
+			   ESDM_EGD_CMD_ESDM_READ_UNSEEDED,
+			   32,
+			   ESDM_EGD_CMD_ESDM_BULK_READ,
+			   ESDM_EGD_CMD_READ_NONBLOCK,
+			   0,
+			   0,
+			   0,
+			   64 };
+	uint8_t buf[256];
+	ssize_t got = 0;
+	unsigned int i;
+	int fd;
+
+	printf("EGD raw: non-blocking reads waiting for a reseed\n");
+
+	if (!esdm_state_operational()) {
+		printf("  SKIPPED: the ESDM is not operational\n");
+		return;
+	}
+
+	/*
+	 * Every thread on the initial DRNG: else the EGD worker may read a node
+	 * DRNG the loop below does not drain
+	 */
+	esdm_config_max_nodes_set(1);
+
+	/* The auxiliary pool holds too little to reseed the DRNGs */
+	for (i = 0; i < TEST_DRAIN_ROUNDS && got != -EAGAIN; i++)
+		got = esdm_get_random_bytes(buf, sizeof(buf));
+	if (got != -EAGAIN || !esdm_state_operational()) {
+		printf("  SKIPPED: the DRNGs did not stop at their reseed threshold\n");
+		return;
+	}
+
+	fd = test_connect();
+	if (fd < 0) {
+		CHECK(0, "cannot connect");
+		return;
+	}
+
+	CHECK(!test_send(fd, cmds, sizeof(cmds)), "cannot send the reads");
+	/*
+	 * A quarter of ESDM_EGD_PARK_MS, after which the reads are answered
+	 * empty: the rest is left for the reseed below, on a loaded machine
+	 */
+	CHECK(test_quiet(fd, 250),
+	      "a read was answered while the DRNGs wait for their reseed");
+
+	/*
+	 * Fed until answered: an insertion seeds one DRNG, and the drained node
+	 * DRNGs, up to one per CPU, come before the initial one
+	 */
+	for (i = 0; i < TEST_SEED_ROUNDS; i++) {
+		test_esdm_refill();
+		if (!test_quiet(fd, 10))
+			break;
+	}
+
+	CHECK(!test_recv(fd, buf, 1 + 32, TEST_RESPONSE_MS) && buf[0] == 32,
+	      "the read 0x01 was not answered in full after the reseed");
+	CHECK(!test_recv(fd, buf, 1 + 32, TEST_RESPONSE_MS) && buf[0] == 32,
+	      "the read 0xe2 was not answered in full after the reseed");
+	CHECK(!test_recv(fd, buf, 4 + 64, TEST_RESPONSE_MS) &&
+		      test_be32(buf) == 64,
+	      "the bulk read was not answered in full after the reseed");
+
+	close(fd);
+#endif
+}
+
 int main(int argc, char *argv[])
 {
 	struct stat sb;
@@ -2045,6 +2133,8 @@ int main(int argc, char *argv[])
 	test_vanishing_client();
 	test_unknown_command();
 	test_hangup_input();
+	/* Drains the DRNGs, after every test that needs their output */
+	test_esdm_reseed_read();
 
 	/* Nothing anywhere above may have signalled the process. */
 	CHECK(!test_sigpipe, "the server raised SIGPIPE");
