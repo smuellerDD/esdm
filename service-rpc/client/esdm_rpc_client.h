@@ -466,8 +466,9 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
  * @param [out] buf Buffer to be filled with random bits.
  * @param [in] buflen Size of the buffer to be filled.
  *
- * @return: read data length on success, < 0 on error (-EINTR means connection
- *	    was interrupted and the caller may try again)
+ * @return: read data length on success, short while all DRNGs await their
+ *	    reseed, < 0 on error (-EAGAIN if that yields nothing, -EINTR means
+ *	    connection was interrupted and the caller may try again)
  */
 ssize_t esdm_rpcc_get_random_bytes(uint8_t *buf, size_t buflen);
 
