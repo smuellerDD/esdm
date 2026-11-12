@@ -527,6 +527,13 @@
               machine.succeed("esdm-tool --is-fully-seeded")
               machine.succeed("esdm-tool --status")
 
+              # The VM boots with fips=1, which the hardening of the unit must
+              # leave visible to the server - it reports FIPS 140 then.
+              machine.succeed(
+                  "esdm-tool --status-json | "
+                  "jq -e '.standards_compliance | index(\"FIPS 140\")'"
+              )
+
               # Draw random data over the RPC interface; 32 bytes are printed
               # hex-encoded, so expect at least 64 characters back.
               out = machine.succeed("esdm-tool --get-random 32").strip()
