@@ -27,6 +27,11 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Leave the mount, cgroup and network namespaces of the host.
+ *
+ * unshare(2) moves the calling thread only: call before creating threads.
+ */
 int linux_isolate_namespace(void);
 /**
  * @brief Whether a task holds CAP_SYS_ADMIN in our user namespace.

@@ -184,16 +184,14 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	exit(WIFEXITED(status) ? WEXITSTATUS(status) : EXIT_FAILURE);
 }
 
-int linux_isolate_namespace(void)
+static int linux_unshare(int flags)
 {
 	/*
 	 * Unshare from the following namespaces - the ESDM process cannot
 	 * re-establish connection to those resources. Hence, the ESDM process
 	 * is effectively jailed with respect to those resources.
-	 *
-	 * The ESDM server only needs shared IPC and Semaphores.
 	 */
-	if (unshare(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWNET) == -1) {
+	if (unshare(flags) == -1) {
 		int errsv = errno;
 
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
@@ -205,6 +203,12 @@ int linux_isolate_namespace(void)
 		    "Successfully entered isolating namespaces\n");
 
 	return 0;
+}
+
+int linux_isolate_namespace(void)
+{
+	/* The ESDM server only needs shared IPC and Semaphores. */
+	return linux_unshare(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWNET);
 }
 
 /* Whether @path reads the same as @ref, which a shorter read cannot */
