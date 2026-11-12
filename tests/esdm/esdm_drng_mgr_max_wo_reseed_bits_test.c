@@ -35,10 +35,14 @@
 #include "ret_checkers.h"
 
 #ifdef ESDM_TESTMODE
-static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
+/* Bits a DRNG may produce without a full reseed once the test lowered it */
+#define TEST_MAX_BITS 256
+
+static int esdm_drng_mgr_max_wo_reseed_bits_test(bool multi)
 {
 	uint8_t buf[256];
 	unsigned int i;
+	ssize_t rc;
 	int ret;
 
 	esdm_logger_set_verbosity(LOGGER_DEBUG);
@@ -66,7 +70,7 @@ static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
 	}
 
 	esdm_drng_force_reseed();
-	esdm_config_drng_max_wo_reseed_bits_set(256);
+	esdm_config_drng_max_wo_reseed_bits_set(TEST_MAX_BITS);
 
 	esdm_test_es_rates_zero();
 
@@ -75,11 +79,24 @@ static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
 		goto err;
 	}
 
+	/*
+	 * No DRNG reseeds with entropy, and the limit is checked before every
+	 * chunk. With one DRNG, the initial one is spent already. With more,
+	 * the node DRNG of this CPU is spent and the initial one, unused since
+	 * its last full seed, serves at most its own maximum: short of the
+	 * request either way.
+	 */
 	esdm_drng_force_reseed();
-	esdm_get_random_bytes(buf, sizeof(buf));
-	if (esdm_state_operational() != success) {
-		printf("failed to %soperational mode\n",
-		       success ? "remain in " : "enter non-");
+	rc = esdm_get_random_bytes(buf, sizeof(buf));
+	if (rc > (multi ? (ssize_t)(TEST_MAX_BITS / 8) : 0)) {
+		printf("%zd bytes generated past the maximum of %u bits\n", rc,
+		       TEST_MAX_BITS);
+		goto err;
+	}
+
+	/* Which takes the ESDM out of operation with the initial DRNG */
+	if (esdm_state_operational()) {
+		printf("failed to enter non-operational mode\n");
 		goto err;
 	}
 
@@ -111,10 +128,10 @@ int main(int argc, char *argv[])
 		return 1;
 
 	/*
-	 * Test idea: instantiate 1 DRNG and set the max without reseed
-	 * threshold to 2. Also set all entropy sources to deliver insufficient
-	 * entropy. Now, cause 2 reseeds and verify that the DRNG goes
-	 * into non-operational mode.
+	 * Test idea: set the maximum of bits without a full reseed below what
+	 * the DRNGs produced and starve the entropy sources. Request more than
+	 * that maximum: no DRNG may generate past it, and the ESDM goes
+	 * non-operational.
 	 */
 	esdm_config_max_nodes_set((uint32_t)drng_instances);
 	if (drng_instances > 1) {
