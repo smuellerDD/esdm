@@ -347,6 +347,8 @@ static int extsock_info(void)
 	return 0;
 }
 
+static void extsock_status_refresh(void);
+
 /* Connect to the provider, ask it what it declares and test it */
 static bool extsock_connect(void)
 {
@@ -404,6 +406,8 @@ static bool extsock_connect(void)
 	extsock.was_connected = true;
 
 	extsock_selftest_locked();
+	/* Shown from the connection on, not only after the next monitor pass */
+	extsock_status_refresh();
 	return extsock.fd >= 0;
 
 err:
@@ -558,6 +562,8 @@ static int extsock_monitor(void)
 		}
 		memset_secure(&extsock.rsp, 0, sizeof(extsock.rsp));
 	}
+	/* Here rather than by whoever renders the ESDM status, see there */
+	extsock_status_refresh();
 	extsock_unlock();
 
 	return 0;
@@ -623,8 +629,6 @@ struct extsock_state {
 /* Caller holds the mutex, which keeps what @st points to */
 static void extsock_state_locked(struct extsock_state *st)
 {
-	extsock_status_refresh();
-
 	st->poolsize = extsock_level(extsock_credited(), extsock.rate,
 				     esdm_security_strength());
 	st->entropy_rate = extsock_level(extsock_credited(), extsock.rate, 256);
@@ -663,7 +667,33 @@ static void extsock_es_state_json(char *buf, size_t buflen)
 		return;
 	}
 
-	extsock_lock();
+	/*
+	 * Not waiting for the mutex, held across each provider request for up
+	 * to ESDM_EXT_TIMEOUT_MS: the single EGD worker and the RPC workers
+	 * render the status, and their other clients would wait as long. During
+	 * a request, the state published at the last release stands in.
+	 */
+	if (mutex_trylock(&extsock.mutex)) {
+		bool credited = atomic_load(&extsock.credited);
+		uint32_t rate = atomic_load(&extsock.published_rate);
+
+		json_object_object_add(obj, "name",
+				       json_object_new_string(EXTSOCK_NAME));
+		json_object_object_add(obj, "instance",
+				       json_object_new_string(EXTSOCK_NAME));
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(extsock_level(
+				credited, rate, esdm_security_strength())));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(extsock_level(credited, rate, 256)));
+		json_object_object_add(
+			obj, "status",
+			json_object_new_string("busy with a request"));
+		esdm_es_state_write(obj, buf, buflen);
+		return;
+	}
 	extsock_state_locked(&st);
 	json_object_object_add(obj, "name",
 			       json_object_new_string(extsock.name[0] ?

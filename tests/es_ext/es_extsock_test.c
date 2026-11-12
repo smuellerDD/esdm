@@ -222,7 +222,9 @@ static bool test_state_has(const char *key, const char *what)
 /* The "provider" member of the state, the provider asked anew */
 static struct json_object *test_provider(struct json_object **state)
 {
+	/* The monitor asks the provider for it, the status only shows it */
 	extsock.status_at = 0;
+	test_monitor();
 	*state = es_state_get(ES);
 	return es_state_member(*state, "provider", json_type_object);
 }
@@ -601,6 +603,43 @@ static void test_status(void)
 	}
 }
 
+static void *test_slow_get(void *arg)
+{
+	(void)arg;
+	test_get(BITS, NULL);
+	return NULL;
+}
+
+/*
+ * The status does not wait for a provider request in progress: the EGD and
+ * RPC workers rendering it would keep their other clients waiting as long
+ */
+static void test_status_busy(void)
+{
+	struct json_object *state;
+	pthread_t thread;
+	uint64_t start;
+
+	test_connect(test_good);
+	ctl->get_delay_ms = ESDM_EXT_TIMEOUT_MS * 6 / 10;
+	if (pthread_create(&thread, NULL, test_slow_get, NULL)) {
+		CHECK(0, "cannot start the request");
+		ctl->get_delay_ms = 0;
+		return;
+	}
+	es_ext_test_sleep_ms(ESDM_EXT_TIMEOUT_MS / 10);
+
+	start = esdm_monotonic_now_ns();
+	state = es_state_get(ES);
+	CHECK(esdm_monotonic_now_ns() - start < ESDM_EXT_TIMEOUT_MS / 10 * MS,
+	      "the status waited for the request");
+	CHECK(es_state_str_has(state, "status", "busy"),
+	      "no busy status: %s", es_state_print(state));
+	json_object_put(state);
+
+	pthread_join(thread, NULL);
+	ctl->get_delay_ms = 0;
+}
 
 int main(void)
 {
@@ -631,6 +670,7 @@ int main(void)
 	test_names();
 	test_rates();
 	test_status();
+	test_status_busy();
 
 	ES->fini();
 	good_stop();
