@@ -17,6 +17,7 @@
  * DAMAGE.
  */
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +26,7 @@
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_jent.h"
 #include "esdm_es_mgr.h"
 #include "test_pertubation.h"
 #include "../es_state_check.h"
@@ -206,6 +208,25 @@ static int es_jent_fini(void)
 	return 0;
 }
 
+/* The status of the Jitter RNG library, as the RPC interface reports it */
+static int es_jent_status(void)
+{
+	char buf[4096];
+	int ret = esdm_jent_status(buf, sizeof(buf));
+
+	if (ret == -ENOENT) {
+		printf("ES Jitter RNG - skip: jitterentropy without jent_status\n");
+		return 0;
+	}
+	if (ret || buf[0] != '{') {
+		printf("ES Jitter RNG - fail: status %d: %.80s\n", ret, buf);
+		return 1;
+	}
+
+	printf("ES Jitter RNG - pass: status\n");
+	return 0;
+}
+
 #ifdef ESDM_TESTMODE
 /*
  * While a collector fails, the source is credited with nothing until that
@@ -273,6 +294,7 @@ int main(int argc, char *argv[])
 		ret += es_jent_getdata(i);
 	}
 
+	ret += es_jent_status();
 	ret += es_jent_after_failure();
 	ret += es_jent_getstate();
 	ret += es_jent_fini();

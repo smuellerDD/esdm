@@ -80,14 +80,20 @@ int esdm_jent_status(char *buf, size_t buf_length)
 	int ret = -ENOENT;
 
 #if JENT_VERSION >= 3070000
-	/* The first collector stands for all, they run with the same settings */
-	mutex_lock(&esdm_jent_lock);
+	/*
+	 * The first collector stands for all (same settings). Taken shared: the
+	 * writer-preferring lock would else stall all collection for any user's
+	 * status request. The collector lock keeps a read off its state.
+	 */
+	mutex_reader_lock(&esdm_jent_lock);
 	if (atomic_load(&esdm_jent_initialized) && esdm_jent_num_sync) {
+		mutex_w_lock(&esdm_jent_sync[0].lock);
 		ret = jent_status(esdm_jent_sync[0].ec, buf, buf_length);
+		mutex_w_unlock(&esdm_jent_sync[0].lock);
 	} else {
 		ret = -EAGAIN;
 	}
-	mutex_unlock(&esdm_jent_lock);
+	mutex_reader_unlock(&esdm_jent_lock);
 #else
 	snprintf(buf, buf_length, "{}");
 #endif
