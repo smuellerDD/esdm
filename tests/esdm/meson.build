@@ -108,6 +108,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_reseed_no_worker_test = executable(
+		'esdm_reseed_no_worker_test',
+		[ esdm_ipc_ns, 'esdm_reseed_no_worker_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_ntg1_seeding_test = executable(
 		'esdm_ntg1_seeding_test',
 		[ esdm_ipc_ns, 'esdm_ntg1_seeding_test.c' ],
@@ -202,6 +210,8 @@ if get_option('esdm-server').enabled()
 		timeout: 120,
 		suite: 'core')
 
+	test('ESDM reseed of node DRNGs without a worker',
+		esdm_reseed_no_worker_test, suite: 'core')
 
 	esdm_aux_xdrbg_test = executable(
 		'esdm_aux_xdrbg_test',

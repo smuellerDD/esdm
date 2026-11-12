@@ -1835,8 +1835,10 @@ static void esdm_drng_reseed_kick(void)
  * generating from the DRNG until the reseed lands, or until the DRNG runs into
  * the configured maximum without a full reseed - which the generate path
  * enforces on its own and which no deferral relaxes.
+ *
+ * @return whether the worker takes it - not without one on duty
  */
-static void esdm_drng_reseed_async(struct esdm_drng *drng)
+static bool esdm_drng_reseed_async(struct esdm_drng *drng)
 {
 	/*
 	 * The reseed condition holds on every loop iteration until the worker
@@ -1844,7 +1846,7 @@ static void esdm_drng_reseed_async(struct esdm_drng *drng)
 	 * worker.
 	 */
 	if (atomic_exchange(&drng->reseed_pending, true))
-		return;
+		return true;
 
 	/*
 	 * Nobody to service the request - do not leave it queued, or the DRNG
@@ -1852,10 +1854,11 @@ static void esdm_drng_reseed_async(struct esdm_drng *drng)
 	 */
 	if (!esdm_drng_mgr_reseed_worker_running()) {
 		atomic_store(&drng->reseed_pending, false);
-		return;
+		return false;
 	}
 
 	esdm_drng_reseed_notify();
+	return true;
 }
 
 /*
@@ -1892,16 +1895,16 @@ static void esdm_drng_get_reseed(struct esdm_drng *drng, bool nonblock)
 
 	if (esdm_drng_reseed_async_capable(drng)) {
 		/*
-		 * Hand the entropy collection to the worker and keep
-		 * generating. Under SP800-90C / AIS 20/31 DRG.4 the reseed
-		 * threshold sits below the maximum number of bits allowed
-		 * without a full reseed, so there is output left to cover the
-		 * collection - and where it does not, esdm_drng_get() stops the
-		 * DRNG at that maximum and the caller moves on to another
-		 * instance instead of waiting here.
+		 * Hand the collection to the worker and keep generating: under
+		 * SP800-90C / AIS 20/31 DRG.4 the reseed threshold is below the
+		 * maximum without a full reseed, leaving output to cover the
+		 * collection. Where it does not, esdm_drng_get() stops at the
+		 * maximum and the caller moves on to another instance. Without
+		 * a worker on duty (libesdm without its monitor, or a failed
+		 * start) the reseed is done here.
 		 */
-		esdm_drng_reseed_async(drng);
-		return;
+		if (esdm_drng_reseed_async(drng))
+			return;
 	}
 
 	/*
