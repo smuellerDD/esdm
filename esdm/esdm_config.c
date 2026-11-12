@@ -509,9 +509,24 @@ uint32_t esdm_config_online_nodes(void)
 	return min_uint32(esdm_online_nodes(), esdm_config_max_nodes());
 }
 
+/* The node of the calling thread, see esdm_config_thread_node_set() */
+static __thread uint32_t esdm_config_thread_node = UINT32_MAX;
+
+DSO_PUBLIC
+void esdm_config_thread_node_set(uint32_t index)
+{
+	uint32_t nodes = esdm_config_online_nodes();
+
+	/* Node 0 is the initial DRNG, the fallback of every request */
+	esdm_config_thread_node = nodes > 1 ? 1 + index % (nodes - 1) : 0;
+}
+
 DSO_PUBLIC
 uint32_t esdm_config_curr_node(void)
 {
+	if (esdm_config_thread_node != UINT32_MAX)
+		return esdm_config_thread_node % esdm_config_max_nodes();
+
 	return esdm_curr_node() % esdm_config_max_nodes();
 }
 

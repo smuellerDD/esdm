@@ -50,6 +50,7 @@
 #include "config.h"
 #include "esdm.h"
 #include "esdm_config.h"
+#include "esdm_config_internal.h"
 #include "esdm_egd_server.h"
 #include "esdm_shm_status.h"
 #include "esdm_rpc_protocol.h"
@@ -798,6 +799,9 @@ static int esdm_rpcs_handler(void *args)
 
 	worker.proto = thread->proto;
 	TAILQ_INIT(&worker.conns);
+
+	/* Each worker serves its requests from a DRNG of its own */
+	esdm_config_thread_node_set(thread->id);
 
 	thread_set_name(thread->proto->privileged ? rpc_handler_priv :
 						    rpc_handler_unpriv,
