@@ -326,11 +326,12 @@ static void *thread_worker(void *arg)
 	int (*routine)(void *);
 
 	/*
-	 * pthread_setcanceltype() only affects the calling thread, so it must
-	 * be invoked here in the worker and not in thread_create() (where it
-	 * would mark the creator async-cancelable instead).
+	 * Deferred (the default, made explicit): an asynchronous cancel could
+	 * hit inside malloc or the logger's stdio lock and leave either locked
+	 * for good - see thread_cancel(). It affects the calling thread only,
+	 * hence here and not in thread_create().
 	 */
-	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
 	if (!thread_is_special(tctx)) {
 		sigset_t block, old;
@@ -732,11 +733,31 @@ out:
 	return ret;
 }
 
+/* Time thread_cancel() gives the workers to leave before cancelling them */
+#define THREAD_CANCEL_GRACE_NS (500 * 1000 * 1000L)
+
+/* Has every thread marked in @join_me left on its own? */
+static bool thread_cancel_all_left(const bool *join_me, unsigned int upper)
+{
+	unsigned int i;
+
+	for (i = 0; i < upper; i++) {
+		if (join_me[i] && thread_dirty(i))
+			return false;
+	}
+
+	return true;
+}
+
 /* Kill all threads */
 static void thread_cancel(bool system_threads)
 {
+	static const struct timespec step = { .tv_sec = 0,
+					      .tv_nsec = 1000 * 1000 };
 	unsigned int i, upper = system_threads ? THREADING_REALLY_ALL_THREADS :
 						 THREADING_MAX_THREADS;
+	bool join_me[THREADING_REALLY_ALL_THREADS];
+	struct timespec deadline, now;
 
 	atomic_store(&threads_in_cancel, true);
 	mutex_w_lock(&threads_cleanup);
@@ -744,27 +765,60 @@ static void thread_cancel(bool system_threads)
 	 * Ensure that no new thread is spawned.
 	 *
 	 * Do not clear threads[i].start_routine here: it is protected by the
-	 * per-slot inuse lock (which we intentionally do not take on this kill
-	 * path), and a running worker dereferences it under that lock. An
-	 * unlocked write races that dereference and can crash the worker. The
-	 * shutdown flag plus the pthread_cancel below already terminate every
-	 * worker, so the write is redundant as well as unsafe.
+	 * per-slot inuse lock, held by a worker for its whole job, and an
+	 * unlocked write races the worker's dereference and can crash it.
+	 *
+	 * Set the flag under the inuse lock where it is free, as in
+	 * thread_wait_all(), so an idle worker cannot miss the wakeup. A busy
+	 * worker sees the flag after its job or is cancelled below.
 	 */
 	for (i = 0; i < upper; i++) {
+		bool locked = !mutex_w_trylock(&threads[i].inuse);
+
+		/* Before the flag - see thread_wait_all() */
+		join_me[i] = thread_dirty(i);
 		atomic_store(&threads[i].shutdown, true);
 		pthread_cond_broadcast(&threads[i].worker_cv);
+		if (locked)
+			mutex_w_unlock(&threads[i].inuse);
 	}
 	pthread_cond_broadcast(&thread_wait_cv);
 
-	/* Kill all worker threads. */
+	/*
+	 * Cooperative first: idle workers and finished jobs leave on the
+	 * shutdown flag. Only a worker still in a job after the grace period is
+	 * cancelled, at a cancellation point such as the sem_wait() of the CUSE
+	 * poll checker (deferred cancellation, see thread_worker()).
+	 */
+	clock_gettime(CLOCK_MONOTONIC, &deadline);
+	deadline.tv_nsec += THREAD_CANCEL_GRACE_NS;
+	if (deadline.tv_nsec >= 1000000000L) {
+		deadline.tv_sec++;
+		deadline.tv_nsec -= 1000000000L;
+	}
+	while (!thread_cancel_all_left(join_me, upper)) {
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (now.tv_sec > deadline.tv_sec ||
+		    (now.tv_sec == deadline.tv_sec &&
+		     now.tv_nsec >= deadline.tv_nsec))
+			break;
+		nanosleep(&step, NULL);
+	}
+
 	for (i = 0; i < upper; i++) {
-		if (thread_dirty(i)) {
+		bool cancelled;
+
+		if (!join_me[i])
+			continue;
+
+		cancelled = thread_dirty(i);
+		if (cancelled)
 			pthread_cancel(threads[i].thread_id);
-			pthread_join(threads[i].thread_id, NULL);
-			thread_cleanup_full(&threads[i]);
-			esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
-				    "Thread %u killed\n", i);
-		}
+		pthread_join(threads[i].thread_id, NULL);
+		thread_cleanup_full(&threads[i]);
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_THREADING,
+			    "Thread %u %s\n", i,
+			    cancelled ? "killed" : "terminated");
 	}
 
 	/*
