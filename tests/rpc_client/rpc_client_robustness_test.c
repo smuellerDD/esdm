@@ -20,7 +20,8 @@
 /*
  * The RPC client against a server that accepts connections but never answers:
  * every call has to give up within a few seconds, so that callers without an
- * interrupt function get to their fallbacks.
+ * interrupt function get to their fallbacks. Also from a thread with a small
+ * stack - the client's scratch buffers must not be carved from it.
  *
  * Runs unprivileged: the namespaces of tests/test_ipc_ns.c give it a /tmp of
  * its own to bind the socket in.
@@ -28,6 +29,7 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -41,6 +43,9 @@
 
 /* What the client may take at most, with ample slack for a loaded machine */
 #define TEST_MAX_SECONDS 20
+
+/* Below the ~130 kB the client buffers took as static TLS */
+#define TEST_SMALL_STACK (96 * 1024)
 
 static double test_now(void)
 {
@@ -111,6 +116,10 @@ static int test_check(const char *what, const struct test_call *call)
 int main(void)
 {
 	struct test_call call = { 0 };
+	size_t stack = TEST_SMALL_STACK;
+	pthread_attr_t attr;
+	pthread_t thread;
+	long min_stack;
 	int fd, ret;
 
 	ret = test_isolate_namespaces();
@@ -136,6 +145,29 @@ int main(void)
 	test_get_full(&call);
 	ret = test_check("calling thread", &call);
 
+	/* At least the minimum of the platform: 128 kB on arm64 with glibc 2.35 */
+	min_stack = sysconf(_SC_THREAD_STACK_MIN);
+	if (min_stack > 0 && (size_t)min_stack > stack)
+		stack = (size_t)min_stack;
+
+	memset(&call, 0, sizeof(call));
+	if (pthread_attr_init(&attr) ||
+	    pthread_attr_setstacksize(&attr, stack)) {
+		printf("Cannot set up the thread attributes\n");
+		ret = 1;
+		goto out_fini;
+	}
+	if (pthread_create(&thread, &attr, test_get_full, &call)) {
+		printf("Cannot start a thread with a %zu kB stack\n",
+		       stack / 1024);
+		ret = 1;
+	} else {
+		pthread_join(thread, NULL);
+		ret |= test_check("small stack thread", &call);
+	}
+	pthread_attr_destroy(&attr);
+
+out_fini:
 	esdm_rpcc_fini_unpriv_service();
 out:
 	close(fd);
