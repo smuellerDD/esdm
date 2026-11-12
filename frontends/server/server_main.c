@@ -259,7 +259,7 @@ static void parse_opts(int argc, char *argv[])
 			{ "pid", 1, 0, 0 },
 			{ "help", 0, 0, 0 },
 			{ "version", 0, 0, 0 },
-			{ "username", 0, 0, 0 },
+			{ "username", 1, 0, 0 },
 			{ "foreground", 0, 0, 0 },
 			{ "force_irqes", 0, 0, 0 },
 			{ "force_schedes", 0, 0, 0 },

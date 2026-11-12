@@ -143,6 +143,14 @@ static void test_options_accepted(void)
 		"--egd_socket", "/nonexistent/esdm-egd.socket",
 		"--egd_socket_pr", "/nonexistent/esdm-egd-pr.socket", NULL
 	};
+	/*
+	 * An option taking an argument also takes it after "=": with a
+	 * space, one declared without an argument passes too, as a stray word.
+	 */
+	static const char *const assigned[] = { "--username=nobody",
+						"--groupname=nogroup",
+						"--es_jent_instances=4",
+						NULL };
 	struct test_run r;
 
 	if (!geteuid()) {
@@ -175,6 +183,11 @@ static void test_options_accepted(void)
 	CHECK_EQ(test_run(&r, sockets_long, NULL), 1);
 	CHECK(strstr(r.err, TEST_NOT_ROOT) != NULL,
 	      "the long EGD socket options were not accepted (output: %.300s)",
+	      r.err);
+
+	CHECK_EQ(test_run(&r, assigned, NULL), 1);
+	CHECK(strstr(r.err, TEST_NOT_ROOT) != NULL,
+	      "the options with \"=\" were not all accepted (output: %.300s)",
 	      r.err);
 }
 
