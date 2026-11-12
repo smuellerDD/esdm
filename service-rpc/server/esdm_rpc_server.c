@@ -86,6 +86,13 @@ struct esdm_rpcs_connection {
 	uint32_t request_id;
 	struct timespec last_used;
 
+	/*
+	 * A reply was lost and the client is out of step: the event loop closes
+	 * it, deregistering it from epoll explicitly - a close() alone does not
+	 * if a fork() of the embedding process holds a copy.
+	 */
+	bool broken;
+
 	/* list handling for cleanup */
 	TAILQ_ENTRY(esdm_rpcs_connection) tailq;
 };
@@ -203,7 +210,7 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 	unsigned int retries = 0;
 	ssize_t ret;
 
-	if (rpc_conn->child_fd < 0)
+	if (rpc_conn->child_fd < 0 || rpc_conn->broken)
 		return -EINVAL;
 
 	do {
@@ -246,10 +253,8 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 				"Writing of data to file descriptor %d failed: %s\n",
 				rpc_conn->child_fd, strerror(errsv));
 
-			if (errsv == EPIPE) {
-				close(rpc_conn->child_fd);
-				rpc_conn->child_fd = -1;
-			}
+			if (errsv == EPIPE)
+				rpc_conn->broken = true;
 
 			return -errsv;
 		}
@@ -500,7 +505,7 @@ out:
 		memset_secure(unpack_buf, 0, tlh.consumed);
 
 	/* Pick up the error from esdm_rpcs_write_data */
-	if (rpc_conn->child_fd == -1)
+	if (rpc_conn->broken)
 		ret = -EPIPE;
 
 	return ret;
@@ -667,6 +672,7 @@ static void esdm_rpcs_close_conn(struct esdm_rpcs_worker *worker,
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_RPC, "Closing client FD %d%s\n",
 		    rpc_conn->child_fd, why);
 
+	/* Explicitly - a copy of the descriptor would keep it registered */
 	if (rpc_conn->child_fd >= 0)
 		epoll_ctl(worker->epfd, EPOLL_CTL_DEL, rpc_conn->child_fd,
 			  NULL);
@@ -751,11 +757,9 @@ static void esdm_rpcs_conn_event(struct esdm_rpcs_worker *worker,
 	ret = esdm_rpcs_read(rpc_conn);
 
 	/*
-	 * Decide on the returned code, not the global errno: intermediate
-	 * logger/handler calls may have clobbered errno since the failing
-	 * read, and e.g. a stale EAGAIN would leave a half-torn connection
-	 * (child_fd already closed on the EPIPE path) linger in the list
-	 * until the idle timeout reaps it.
+	 * Decide on the returned code, not errno: logger/handler calls may
+	 * have clobbered it since the failing read, and a stale EAGAIN would
+	 * leave a broken connection in the list until the idle reaper.
 	 */
 	if (ret && ret != -EAGAIN)
 		esdm_rpcs_close_conn(worker, rpc_conn, " on error");
