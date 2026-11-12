@@ -64,11 +64,13 @@ extern "C" {
  * Syscall discipline
  * ------------------
  * Once connected, the operations stay within read(2), write(2), poll(2),
- * close(2), getpid(2), getpeername(2), clock_gettime(2) and nanosleep(2) - the
- * set a seccomp confined process is typically still allowed, OpenSSH's pre-auth
- * sandbox being the reference case. send(2)/recv(2) are avoided as they are
- * sendto(2)/recvfrom(2), which that filter answers with SECCOMP_RET_KILL, so
- * MSG_NOSIGNAL is unavailable and a write is preceded by a poll instead.
+ * close(2), getpid(2), getpeername(2), rt_sigprocmask(2), clock_gettime(2) and
+ * nanosleep(2) - the set a seccomp confined process is typically still allowed,
+ * OpenSSH's pre-auth sandbox being the reference case. send(2)/recv(2) are
+ * avoided as they are sendto(2)/recvfrom(2), which that filter answers with
+ * SECCOMP_RET_KILL, so MSG_NOSIGNAL is unavailable: a write blocks SIGPIPE for
+ * its thread instead, and only once the peer is gone takes the signal off with
+ * rt_sigtimedwait(2) - where a reconnect would follow anyway.
  *
  * Connecting needs socket(2) and connect(2), which such a sandbox kills the
  * process for. A client serving a sandboxed process must therefore be connected

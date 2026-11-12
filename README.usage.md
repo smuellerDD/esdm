@@ -319,7 +319,9 @@ OpenSSH is the reference case: sshd hands the pre-authentication protocol,
 including the key exchange, to a privilege separated child that re-execs itself
 and is then confined by a seccomp filter which permits little more than `read`,
 `write`, `poll`, `close` and `getpid` - `socket` and `connect` are answered with
-`SECCOMP_RET_KILL`, as are `sendto` and `recvfrom`.
+`SECCOMP_RET_KILL`, as are `sendto` and `recvfrom`. The client therefore writes
+with `write` and keeps SIGPIPE away with `rt_sigprocmask` instead of
+`MSG_NOSIGNAL`.
 
 Pointing sshd at the EGD provider works because the client establishes its
 connection when it is allocated, which happens while OpenSSL loads the provider

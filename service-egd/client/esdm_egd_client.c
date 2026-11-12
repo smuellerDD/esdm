@@ -24,6 +24,7 @@
 #include <limits.h>
 #include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -502,6 +503,46 @@ static int esdm_egd_client_ensure_connected_locked(struct esdm_egd_client *clien
  * Raw transfers
  ****************************/
 
+/*
+ * write(2) without the SIGPIPE of a vanished peer, which would kill the
+ * application. send(2) with MSG_NOSIGNAL is sendto(2), which OpenSSH's
+ * pre-auth sandbox kills for (see the header). So SIGPIPE is blocked for this
+ * thread and, if the write raised it, consumed before the mask is restored.
+ * The sandbox permits rt_sigprocmask(2); rt_sigtimedwait(2) runs only once
+ * the peer is gone, where the following reconnect is not permitted either.
+ */
+static ssize_t esdm_egd_client_write_nosignal(int fd, const uint8_t *buf,
+					      size_t len)
+{
+	static const struct timespec nowait = { 0, 0 };
+	sigset_t sigpipe, old;
+	ssize_t ret;
+	int errsv;
+
+	sigemptyset(&sigpipe);
+	sigaddset(&sigpipe, SIGPIPE);
+	if (pthread_sigmask(SIG_BLOCK, &sigpipe, &old))
+		return write(fd, buf, len);
+
+	ret = write(fd, buf, len);
+	errsv = errno;
+
+	/*
+	 * A SIGPIPE the caller blocks itself stays pending for the caller.
+	 * Otherwise none was pending before, so one pending now is the write's.
+	 */
+	if (ret < 0 && errsv == EPIPE && !sigismember(&old, SIGPIPE)) {
+		while (sigtimedwait(&sigpipe, NULL, &nowait) < 0 &&
+		       errno == EINTR)
+			;
+	}
+
+	pthread_sigmask(SIG_SETMASK, &old, NULL);
+	errno = errsv;
+
+	return ret;
+}
+
 /* Caller holds the lock. */
 static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 					    const uint8_t *buf, size_t len)
@@ -517,11 +558,8 @@ static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 		/*
 		 * Establish writability before writing rather than after an
 		 * EAGAIN: poll reports the hangup of a peer that went away, so
-		 * the write never happens and cannot raise a SIGPIPE that would
-		 * kill the application this library is linked into. send(2)
-		 * with MSG_NOSIGNAL is deliberately not used - it is sendto(2),
-		 * which OpenSSH's pre-auth sandbox answers with
-		 * SECCOMP_RET_KILL (see the header).
+		 * the write is not even attempted then. A peer going away
+		 * between the two is covered by the write itself.
 		 */
 		wret = esdm_egd_client_wait(client->fd, POLLOUT, timeout_ms,
 					    &revents);
@@ -530,7 +568,8 @@ static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 		if (revents & (POLLERR | POLLHUP | POLLNVAL))
 			return -EPIPE;
 
-		ret = write(client->fd, buf + written, len - written);
+		ret = esdm_egd_client_write_nosignal(client->fd, buf + written,
+						     len - written);
 
 		if (ret > 0) {
 			written += (size_t)ret;

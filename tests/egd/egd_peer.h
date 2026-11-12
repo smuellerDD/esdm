@@ -61,6 +61,13 @@ enum egd_peer_mode {
 	 * every later one normally - a daemon restarted between two requests.
 	 */
 	EGD_PEER_HANGUP,
+
+	/*
+	 * Shut down the receiving end on accept and read nothing: the client's
+	 * socket stays writable without a hangup, yet writes fail with EPIPE.
+	 * A connection counts once its end is shut down.
+	 */
+	EGD_PEER_SHUT_RD,
 };
 
 /* What the peer answers an entropy count command with. */

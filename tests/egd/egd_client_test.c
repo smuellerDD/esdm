@@ -30,6 +30,8 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -635,6 +637,71 @@ static int test_symlinked_path(void)
 	return ret;
 }
 
+static volatile sig_atomic_t test_sigpipe;
+
+static void test_sigpipe_handler(int sig)
+{
+	(void)sig;
+	test_sigpipe = 1;
+}
+
+/*
+ * A peer that stopped reading leaves the socket writable without a hangup;
+ * the write then must fail the operation, not raise SIGPIPE and kill the
+ * application. Caught here so that a failure is reported, not fatal.
+ */
+static int test_write_to_closed_peer(void)
+{
+	struct sigaction sa, old_sa;
+	sigset_t mask, pending;
+	struct egd_peer *peer;
+	struct esdm_egd_client *client = NULL;
+	uint32_t bits = 0;
+	unsigned int i;
+	int rc, ret = 0;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = test_sigpipe_handler;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGPIPE, &sa, &old_sa))
+		return 1;
+	test_sigpipe = 0;
+
+	if (egd_peer_start(&peer, test_socket("shutrd"), EGD_PEER_SHUT_RD)) {
+		sigaction(SIGPIPE, &old_sa, NULL);
+		return 1;
+	}
+
+	/* Short: the retry may write before the peer shut its end down */
+	if (esdm_egd_client_alloc(&client, test_socket("shutrd"), 500)) {
+		egd_peer_stop(peer);
+		sigaction(SIGPIPE, &old_sa, NULL);
+		return 1;
+	}
+
+	/* The first attempt is to find the receiving end shut down */
+	for (i = 0; i < 100 && egd_peer_connections(peer) < 1; i++)
+		usleep(10 * 1000);
+
+	rc = esdm_egd_client_entropy_count(client, &bits);
+	CHECK(rc == -EPIPE || rc == -ETIMEDOUT,
+	      "the request to a peer that does not read returned %d", rc);
+	CHECK(!test_sigpipe, "writing to the peer raised SIGPIPE");
+
+	/* The signal mask is as it was, with nothing left pending */
+	CHECK(pthread_sigmask(SIG_SETMASK, NULL, &mask) == 0 &&
+		      !sigismember(&mask, SIGPIPE),
+	      "SIGPIPE was left blocked");
+	CHECK(sigpending(&pending) == 0 && !sigismember(&pending, SIGPIPE),
+	      "a SIGPIPE was left pending");
+
+	esdm_egd_client_free(client);
+	egd_peer_stop(peer);
+	sigaction(SIGPIPE, &old_sa, NULL);
+
+	return ret;
+}
+
 /*
  * Two processes issuing commands on one connection would desynchronize the
  * stream, so a child must not inherit the parent's. It gets one of its own,
@@ -754,6 +821,8 @@ int main(int argc, char *argv[])
 		{ "buffer cleansing on failure", test_failure_wipes_buffer },
 		{ "descriptor identity", test_descriptor_identity },
 		{ "socket path through a symlink", test_symlinked_path },
+		{ "write to a peer that does not read",
+		  test_write_to_closed_peer },
 		{ "fork", test_fork },
 		{ "peer arriving late", test_late_peer },
 	};

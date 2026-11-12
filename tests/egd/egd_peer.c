@@ -175,6 +175,7 @@ static int peer_cmd_read_nonblock(struct egd_peer_conn *conn)
 	case EGD_PEER_NORMAL:
 	case EGD_PEER_SILENT:
 	case EGD_PEER_HANGUP:
+	case EGD_PEER_SHUT_RD:
 		delivered = requested;
 		break;
 	}
@@ -288,6 +289,16 @@ static void *peer_conn_thread(void *arg)
 			continue;
 		}
 
+		/* Nothing to read either - until the client is gone. */
+		if (peer->mode == EGD_PEER_SHUT_RD) {
+			struct pollfd pfd = { .fd = conn->fd, .events = 0 };
+
+			if (poll(&pfd, 1, EGD_PEER_POLL_MS) > 0 &&
+			    (pfd.revents & (POLLHUP | POLLERR)))
+				break;
+			continue;
+		}
+
 		ret = peer_read_all(conn->fd, &cmd, sizeof(cmd));
 		if (ret)
 			break;
@@ -366,6 +377,9 @@ static void *peer_accept_thread(void *arg)
 		fd = accept(peer->listen_fd, NULL, NULL);
 		if (fd < 0)
 			continue;
+
+		if (peer->mode == EGD_PEER_SHUT_RD)
+			shutdown(fd, SHUT_RD);
 
 		pthread_mutex_lock(&peer->lock);
 		peer->connections++;
