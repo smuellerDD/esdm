@@ -30,6 +30,8 @@
  */
 
 #define _GNU_SOURCE
+#include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -150,20 +152,112 @@ static void test_suspend_unsignalable_pid(void)
 	      "suspend claimed success for a PID that cannot be signalled");
 }
 
+/*
+ * A server stand-in: a child writing its PID (or @pid_written) and @junk into
+ * the pidfile and holding its lock, as esdm-server does. It reports a SIGUSR1
+ * on server->report.
+ */
+struct fake_server {
+	pid_t pid;
+	int report;
+};
+
+static bool fake_server_start(struct fake_server *server, const char *junk,
+			      pid_t pid_written)
+{
+	int ready[2], report[2];
+	char c = 0;
+	pid_t pid;
+
+	server->pid = 0;
+	server->report = -1;
+
+	if (pipe(ready))
+		return false;
+	if (pipe(report)) {
+		close(ready[0]);
+		close(ready[1]);
+		return false;
+	}
+
+	pid = fork();
+	if (!pid) {
+		char buf[64];
+		sigset_t set;
+		int fd, sig;
+
+		sigemptyset(&set);
+		sigaddset(&set, SIGUSR1);
+		sigprocmask(SIG_BLOCK, &set, NULL);
+
+		fd = open(pidfile_path, O_RDWR | O_CREAT | O_TRUNC, 0600);
+		if (fd < 0 || lockf(fd, F_TLOCK, 0))
+			_exit(1);
+		snprintf(buf, sizeof(buf), "%d\n%s",
+			 (int)(pid_written ? pid_written : getpid()), junk);
+		if (write(fd, buf, strlen(buf)) != (ssize_t)strlen(buf) ||
+		    write(ready[1], "r", 1) != 1)
+			_exit(1);
+
+		if (!sigwait(&set, &sig) && write(report[1], "u", 1) != 1)
+			_exit(1);
+		_exit(0);
+	}
+
+	close(ready[1]);
+	close(report[1]);
+	if (pid < 0 || read(ready[0], &c, 1) != 1 || c != 'r') {
+		close(ready[0]);
+		close(report[0]);
+		if (pid > 0)
+			waitpid(pid, NULL, 0);
+		return false;
+	}
+	close(ready[0]);
+
+	server->pid = pid;
+	server->report = report[0];
+
+	return true;
+}
+
+/*
+ * Whether the stand-in got the SIGUSR1 within @timeout_ms, then let it go. The
+ * helper has returned by then, so a signal it sent is on its way already.
+ */
+static bool fake_server_stop(struct fake_server *server, int timeout_ms)
+{
+	struct pollfd pfd = { .fd = server->report, .events = POLLIN };
+	bool got = false;
+	char c;
+
+	if (poll(&pfd, 1, timeout_ms) == 1 && read(server->report, &c, 1) == 1)
+		got = c == 'u';
+
+	close(server->report);
+	kill(server->pid, SIGKILL);
+	waitpid(server->pid, NULL, 0);
+
+	return got;
+}
+
 static void test_suspend_signals(void)
 {
 	/*
-	 * The one case that has to work: point it at ourselves and check that
-	 * SIGUSR1 - the signal the server installs its suspend handler for -
-	 * actually arrives.
+	 * The one case that has to work: a running server, which holds the
+	 * pidfile lock, gets SIGUSR1 - the signal it installs its suspend
+	 * handler for.
 	 */
-	char buf[32];
+	struct fake_server server;
 
-	got_sigusr1 = 0;
-	snprintf(buf, sizeof(buf), "%d\n", (int)getpid());
-	CHECK_EQ(write_pidfile(buf), 0);
-	CHECK(signal_suspend(pidfile_path), "suspend failed for our own PID");
-	CHECK(got_sigusr1, "suspend did not deliver SIGUSR1");
+	CHECK(fake_server_start(&server, "", 0),
+	      "cannot start the server stand-in");
+	if (!server.pid)
+		return;
+	CHECK(signal_suspend(pidfile_path),
+	      "suspend failed for a running server");
+	CHECK(fake_server_stop(&server, 5000),
+	      "suspend did not deliver SIGUSR1");
 }
 
 static void test_suspend_trailing_junk(void)
@@ -172,14 +266,50 @@ static void test_suspend_trailing_junk(void)
 	 * The server writes the PID followed by a newline; anything trailing
 	 * it must not stop the number in front from being used.
 	 */
-	char buf[64];
+	struct fake_server server;
 
-	got_sigusr1 = 0;
-	snprintf(buf, sizeof(buf), "%d\njunk\n", (int)getpid());
-	CHECK_EQ(write_pidfile(buf), 0);
+	CHECK(fake_server_start(&server, "junk\n", 0),
+	      "cannot start the server stand-in");
+	if (!server.pid)
+		return;
 	CHECK(signal_suspend(pidfile_path),
 	      "suspend rejected a pidfile with trailing content");
-	CHECK(got_sigusr1, "suspend did not deliver SIGUSR1");
+	CHECK(fake_server_stop(&server, 5000),
+	      "suspend did not deliver SIGUSR1");
+}
+
+static void test_suspend_stale_pidfile(void)
+{
+	/*
+	 * A pidfile nobody holds the lock on is left behind by a server that is
+	 * gone - its removal fails after the privilege drop. The PID in it may
+	 * be anybody's by now, whom SIGUSR1 would terminate: here it is ours.
+	 */
+	char buf[32];
+
+	got_sigusr1 = 0;
+	snprintf(buf, sizeof(buf), "%d\n", (int)getpid());
+	CHECK_EQ(write_pidfile(buf), 0);
+	CHECK(!signal_suspend(pidfile_path),
+	      "suspend signalled the PID of a stale pidfile");
+	CHECK(!got_sigusr1, "suspend delivered SIGUSR1 to a stale PID");
+}
+
+static void test_suspend_lock_of_another(void)
+{
+	/* The lock is held, but not by the process the file names */
+	struct fake_server server;
+
+	got_sigusr1 = 0;
+	CHECK(fake_server_start(&server, "", getpid()),
+	      "cannot start the server stand-in");
+	if (!server.pid)
+		return;
+	CHECK(!signal_suspend(pidfile_path),
+	      "suspend signalled a PID that does not hold the lock");
+	CHECK(!got_sigusr1, "suspend delivered SIGUSR1 to the wrong PID");
+	CHECK(!fake_server_stop(&server, 200),
+	      "the lock holder got SIGUSR1 although not named");
 }
 
 static void test_resume_without_server(void)
@@ -234,18 +364,23 @@ static void test_cli_suspend_with_pid(void)
 			 pidfile_path, (char *)"--suspend", NULL };
 	char *argv_short[] = { (char *)"esdm-server-signal-helper",
 			       (char *)"-p", pidfile_path, (char *)"-s", NULL };
-	char buf[32];
+	struct fake_server server;
 
-	snprintf(buf, sizeof(buf), "%d\n", (int)getpid());
-	CHECK_EQ(write_pidfile(buf), 0);
+	if (fake_server_start(&server, "", 0)) {
+		CHECK_EQ(run_main(4, argv), EXIT_SUCCESS);
+		CHECK(fake_server_stop(&server, 5000),
+		      "--pid/--suspend did not deliver SIGUSR1");
+	} else {
+		CHECK(0, "cannot start the server stand-in");
+	}
 
-	got_sigusr1 = 0;
-	CHECK_EQ(run_main(4, argv), EXIT_SUCCESS);
-	CHECK(got_sigusr1, "--pid/--suspend did not deliver SIGUSR1");
-
-	got_sigusr1 = 0;
-	CHECK_EQ(run_main(4, argv_short), EXIT_SUCCESS);
-	CHECK(got_sigusr1, "-p/-s did not deliver SIGUSR1");
+	if (fake_server_start(&server, "", 0)) {
+		CHECK_EQ(run_main(4, argv_short), EXIT_SUCCESS);
+		CHECK(fake_server_stop(&server, 5000),
+		      "-p/-s did not deliver SIGUSR1");
+	} else {
+		CHECK(0, "cannot start the server stand-in");
+	}
 }
 
 static void test_cli_suspend_bad_pidfile(void)
@@ -299,6 +434,8 @@ int main(int argc, char *argv[])
 	test_suspend_unsignalable_pid();
 	test_suspend_signals();
 	test_suspend_trailing_junk();
+	test_suspend_stale_pidfile();
+	test_suspend_lock_of_another();
 
 	test_resume_without_server();
 

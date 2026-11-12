@@ -60,6 +60,8 @@ static unsigned int foreground = 0;
 /* "/run/esdm-rpc-server.pid" */
 static char *pidfile = NULL;
 static int pidfile_fd = -1;
+/* The process holding the PID file lock, the only one to remove the file */
+static pid_t pidfile_owner = 0;
 static const char *username = NULL;
 static const char *groupname = NULL;
 static unsigned int memlock = 0;
@@ -492,16 +494,31 @@ static void daemon_raise_sched_priority(void)
 static void dealloc(void)
 {
 	if (pidfile_fd != -1) {
+		/*
+		 * Remove while still locked, so a new instance's file is not
+		 * taken along, and only as the lock holder - not the daemon of
+		 * a PID namespace supervisor. This fails after the permanent
+		 * privilege drop; systemd removes the file then (PIDFile=), and
+		 * esdm-server-signal-helper signals only a lock holder.
+		 */
+		if (pidfile != NULL && getpid() == pidfile_owner)
+			unlink(pidfile);
 		close(pidfile_fd);
 		pidfile_fd = -1;
-		if (pidfile != NULL) {
-			unlink(pidfile);
-			free(pidfile);
-			pidfile = NULL;
-		}
+		free(pidfile);
+		pidfile = NULL;
 	}
 
 	daemon_release();
+}
+
+/* Teardown of the PID namespace supervisor, which keeps its privileges */
+static void supervisor_exit(void)
+{
+	esdm_rpc_server_cleanup();
+
+	if (pidfile)
+		unlink(pidfile);
 }
 
 /*
@@ -581,8 +598,10 @@ static void create_pid_file(const char *pid_file)
 		exit(1);
 	}
 
+	pidfile_owner = getpid();
+
 	/* write our pid to the pid file */
-	snprintf(pid_str, sizeof(pid_str), "%i\n", getpid());
+	snprintf(pid_str, sizeof(pid_str), "%i\n", pidfile_owner);
 	if (write(pidfile_fd, pid_str, strlen(pid_str)) !=
 	    (ssize_t)strlen(pid_str)) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
@@ -744,11 +763,11 @@ int main(int argc, char *argv[])
 	 *
 	 * The supervisor performs the IPC cleanup after the daemon terminated:
 	 * the daemon permanently drops its privileges and can no longer remove
-	 * the root-owned sockets, SHM segment and semaphores itself.
+	 * the root-owned sockets, SHM segment and semaphores - nor the PID
+	 * file - itself.
 	 */
 	if (pid_namespace)
-		CKINT(linux_isolate_namespace_prefork(
-			esdm_rpc_server_cleanup));
+		CKINT(linux_isolate_namespace_prefork(supervisor_exit));
 
 	/*
 	 * The IPC cleanup at shutdown only succeeds with privileges retained,
