@@ -50,6 +50,12 @@ static atomic_bool esdm_cpu_read_failed = false;
 /* Tracks whether the CPU RNG ever delivered. */
 static atomic_bool esdm_cpu_delivered = false;
 
+/*
+ * A CPU RNG repeating its output in the self test is credited with nothing
+ * until a later self test passes - a read that works does not clear it.
+ */
+static atomic_bool esdm_cpu_selftest_failed = false;
+
 static int esdm_cpu_init(void)
 {
 	esdm_cpu_data_multiplier = cpu_es_multiplier();
@@ -69,7 +75,8 @@ static int esdm_cpu_init(void)
 
 static uint32_t esdm_cpu_entropylevel(uint32_t requested_bits)
 {
-	if (atomic_load(&esdm_cpu_read_failed))
+	if (atomic_load(&esdm_cpu_read_failed) ||
+	    atomic_load(&esdm_cpu_selftest_failed))
 		return 0;
 
 	return esdm_fast_noise_entropylevel(esdm_config_es_cpu_entropy_rate(),
@@ -304,7 +311,7 @@ static int esdm_cpu_selftest(void)
 	atomic_store(&esdm_cpu_delivered, true);
 
 	if (first == second) {
-		atomic_store(&esdm_cpu_read_failed, true);
+		atomic_store(&esdm_cpu_selftest_failed, true);
 		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
 			    "CPU ES: the CPU RNG repeated its output\n");
 		return -EFAULT;
@@ -312,6 +319,10 @@ static int esdm_cpu_selftest(void)
 
 	memset_secure(&first, 0, sizeof(first));
 	memset_secure(&second, 0, sizeof(second));
+
+	if (atomic_exchange(&esdm_cpu_selftest_failed, false))
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "CPU ES: self test passed again\n");
 
 	return 0;
 #else

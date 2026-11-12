@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,9 @@ static DEFINE_MUTEX_UNLOCKED(jent_rng_mutex);
 static char *jent_kernel_runtime_name = NULL;
 /* Between init and fini - a new name is opened at once then */
 static bool jent_kernel_initialized = false;
+
+/* A failed self test: no entropy is claimed until a later one passes */
+static atomic_bool jent_kernel_selftest_failed = false;
 
 /* Caller must hold jent_rng_mutex. */
 static const char *esdm_jent_kernel_name_locked(void)
@@ -111,7 +115,7 @@ static int esdm_jent_kernel_init(void)
 /* Caller must hold jent_rng_mutex. */
 static uint32_t esdm_jent_kernel_entropylevel_locked(uint32_t requested_bits)
 {
-	if (jent_rng == NULL)
+	if (jent_rng == NULL || atomic_load(&jent_kernel_selftest_failed))
 		return 0;
 
 	return esdm_fast_noise_entropylevel(
@@ -212,6 +216,7 @@ static bool esdm_jent_kernel_active(void)
 
 /*
  * Read from the kernel's jitterentropy RNG and require two different answers.
+ * A failure is sticky, see jent_kernel_selftest_failed.
  */
 static int esdm_jent_kernel_selftest(void)
 {
@@ -243,12 +248,20 @@ static int esdm_jent_kernel_selftest(void)
 			LOGGER_ERR, LOGGER_C_ES,
 			"KernelJitterRNG ES: the kernel jitterentropy RNG repeated its output\n");
 		ret = -EFAULT;
+		goto out;
 	}
+
+	if (atomic_exchange(&jent_kernel_selftest_failed, false))
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "KernelJitterRNG ES: self test passed again\n");
 
 out:
 	mutex_unlock(&jent_rng_mutex);
 	memset_secure(first, 0, sizeof(first));
 	memset_secure(second, 0, sizeof(second));
+
+	if (ret)
+		atomic_store(&jent_kernel_selftest_failed, true);
 
 	return ret;
 }
