@@ -108,6 +108,14 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_weak_source_reseed_test = executable(
+		'esdm_weak_source_reseed_test',
+		[ esdm_ipc_ns, 'esdm_weak_source_reseed_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_reseed_no_worker_test = executable(
 		'esdm_reseed_no_worker_test',
 		[ esdm_ipc_ns, 'esdm_reseed_no_worker_test.c' ],
@@ -209,6 +217,9 @@ if get_option('esdm-server').enabled()
 	test('ESDM asynchronous reseed worker', esdm_reseed_worker_test,
 		timeout: 120,
 		suite: 'core')
+
+	test('ESDM reseed with a single source below a full seed',
+		esdm_weak_source_reseed_test, timeout: 120, suite: 'core')
 
 	test('ESDM reseed of node DRNGs without a worker',
 		esdm_reseed_no_worker_test, suite: 'core')

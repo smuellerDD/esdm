@@ -761,17 +761,18 @@ static bool esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
  * The function returns the entropy injected into the DRNG in bits - none of
  * what a failed injection collected.
  *
- * The caller must hold the DRNG lock.
+ * The caller holds the DRNG lock, or with @lock it is taken for each injection
+ * only - see esdm_drng_reseed_seed_locked().
  */
-static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
-					 const char *drng_type)
+static uint32_t esdm_drng_seed_es(struct esdm_drng *drng,
+				  const char *drng_type, bool lock)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 			   addtl __aligned(ESDM_KCAPI_ALIGN),
 		collected_seedbuf;
 	uint32_t requested_bits, collected_entropy = 0, injected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
-	bool seeded = false;
+	bool seeded = false, reached = false;
 	bool pr = (drng == &esdm_drng_pr);
 	unsigned int es_delivered_threshold = 1;
 	bool do_full_init =
@@ -826,6 +827,12 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 */
 		esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits, forced);
 
+		if (lock) {
+			mutex_w_lock(&drng->lock);
+			/* One taken out of the fully seeded state needs more */
+			do_full_init |= !atomic_load(&drng->fully_seeded);
+		}
+
 		seed_entropy = esdm_entropy_rate_eb(&seedbuf);
 		collected_entropy += seed_entropy;
 
@@ -849,7 +856,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 * provided. Although several entropy gather/seed operations
 		 * can take place in this loop, it is still an atomic seeding
 		 * process from the DRBG perspective as the DRBG is locked
-		 * during that time and cannot produce output.
+		 * during that time, or with @lock is spent, and cannot produce
+		 * output.
 		 *
 		 * A reseed of the PR DRNG is fully seeded only with the
 		 * oversampled amount it asked for, see above.
@@ -864,7 +872,10 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 				     fully_seeded, drng_type)) {
 			seeded = true;
 			injected_entropy += seed_entropy;
+			reached = fully_seeded;
 		}
+		if (lock)
+			mutex_w_unlock(&drng->lock);
 
 		/*
 	 * Emergency reseeding: If we reached the min seed threshold now
@@ -878,8 +889,12 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	 * entropy can be added up. This is applicable due to the fact that
 	 * the entire operation is atomic which means that the DRNG is not
 	 * producing data while this is ongoing.
+	 *
+	 * Until this seeding reached the fully seeded level rather than until
+	 * the DRNG is fully seeded: a forced reseed of a fully seeded DRNG adds
+	 * up collections the same way - see esdm_drng_reseed_seed_locked().
 	 */
-	} while (forced && !atomic_load(&drng->fully_seeded) &&
+	} while (forced && !reached &&
 		 num_es_delivered >= es_delivered_threshold &&
 		 !atomic_load(&esdm_drng_mgr_terminate));
 
@@ -895,9 +910,13 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 * The operational state of the ESDM follows the initial DRNG,
 		 * and only an injection that took can have seeded it.
 		 */
+		if (lock)
+			mutex_w_lock(&drng->lock);
 		if (drng == esdm_drng_init_instance() &&
 		    atomic_load(&drng->fully_seeded))
 			esdm_init_ops(injected_entropy);
+		if (lock)
+			mutex_w_unlock(&drng->lock);
 	}
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
@@ -912,7 +931,7 @@ static void esdm_drng_seed_nolock(struct esdm_drng *drng)
 		     ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
 	/* (Re-)Seed DRNG */
-	esdm_drng_seed_es_nolock(drng, "regular");
+	esdm_drng_seed_es(drng, "regular", false);
 }
 
 static void esdm_drng_seed(struct esdm_drng *drng)
@@ -926,14 +945,8 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 	mutex_w_unlock(&drng->lock);
 }
 
-/*
- * Reseed @drng under its seed lock the caller holds. A fully seeded DRNG keeps
- * serving while the entropy is collected - with a slow source that takes
- * milliseconds, which every request on it would otherwise wait for - and is
- * locked for the injection only. One being brought up is locked throughout:
- * it serves nothing anyway, and its emergency seeding adds up consecutive
- * collections.
- */
+static uint32_t esdm_drng_budget(struct esdm_drng *drng);
+
 static void esdm_drng_reseed_seed_locked(struct esdm_drng *drng)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
@@ -943,6 +956,20 @@ static void esdm_drng_reseed_seed_locked(struct esdm_drng *drng)
 
 	if (drng == &esdm_drng_pr || !atomic_load(&drng->fully_seeded)) {
 		esdm_drng_seed(drng);
+		return;
+	}
+
+	/*
+	 * One that used up its output (kept fully seeded, see esdm_drng_get())
+	 * serves nothing until a full reseed lands. Seed it forced, adding up
+	 * collections like a bring-up: one collection may credit less than a
+	 * full seed, and an unforced reseed would not collect at all with too
+	 * little available. Locked for each injection only, so a request finds
+	 * it busy no longer than that.
+	 */
+	if (!esdm_drng_budget(drng)) {
+		atomic_store(&drng->force_reseed, true);
+		esdm_drng_seed_es(drng, "regular", true);
 		return;
 	}
 
@@ -2015,7 +2042,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			} else {
 				mutex_w_lock(&drng->lock);
 			}
-			injected = esdm_drng_seed_es_nolock(drng, "regular");
+			injected = esdm_drng_seed_es(drng, "regular", false);
 
 			/*
 			 * Output at most the fresh entropy less the 64 bits of
