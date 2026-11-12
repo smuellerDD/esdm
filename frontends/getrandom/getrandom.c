@@ -88,6 +88,26 @@ ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags)
 	return syscall(__NR_getrandom, __buffer, __length, __flags);
 }
 
+/*
+ * GRND_NONBLOCK: what the ESDM serves right away, nothing (EAGAIN) before it
+ * is fully seeded - as the kernel's getrandom() before its CRNG is ready.
+ */
+static ssize_t getrandom_nonblock(uint8_t *buffer, size_t length,
+				  ssize_t (*get)(uint8_t *buf, size_t buflen))
+{
+	size_t done = 0;
+	ssize_t ret = 0;
+
+	while (done < length) {
+		esdm_invoke(get(buffer + done, length - done));
+		if (ret <= 0)
+			break;
+		done += (size_t)ret;
+	}
+
+	return done ? (ssize_t)done : ret;
+}
+
 static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 {
 	ssize_t ret;
@@ -124,6 +144,16 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 
 	if (flags & GRND_INSECURE) {
 		esdm_invoke(esdm_rpcc_get_random_bytes(buffer, length));
+	} else if ((flags & GRND_NONBLOCK) && !(flags & GRND_SEED)) {
+		ret = getrandom_nonblock(
+			buffer, length,
+			(flags & GRND_RANDOM) ?
+				esdm_rpcc_get_random_bytes_pr_noblock :
+				esdm_rpcc_get_random_bytes_full_noblock);
+		if (ret == -EAGAIN) {
+			errno = EAGAIN;
+			return -1;
+		}
 	} else if (flags & GRND_RANDOM) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer, length));
 	} else if (flags & GRND_SEED) {

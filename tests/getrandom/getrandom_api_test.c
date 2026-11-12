@@ -125,6 +125,8 @@ static void test_fallback_to_kernel(void)
 		{ "a non-blocking request", GRND_NONBLOCK },
 		{ "insecure randomness", GRND_INSECURE },
 		{ "prediction resistant randomness", GRND_RANDOM },
+		{ "non-blocking prediction resistant randomness",
+		  GRND_RANDOM | GRND_NONBLOCK },
 	};
 	uint8_t buf[32];
 	size_t i;
