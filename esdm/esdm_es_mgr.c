@@ -702,21 +702,24 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 	return collected_entropy;
 }
 
-/* Mark one DRNG as not fully seeded */
+/*
+ * Mark one DRNG as not fully seeded.
+ *
+ * Nothing is seeded here and no lock is taken, so a non-blocking request can
+ * call this, and so can one holding the lock of @drng. Bringing the DRNG up
+ * again is left to the caller, which knows whether it may wait for the entropy
+ * pool, to the ES monitor woken here and to the reseed worker.
+ */
 void esdm_unset_fully_seeded(struct esdm_drng *drng)
 {
 	atomic_store(&drng->fully_seeded, false);
 
 	/*
-	 * Clear all_online_nodes_seeded under the pool lock so it stays ordered
-	 * with the pool-lock-guarded set-to-true in __esdm_drng_seed_work() and
-	 * with the readers in esdm_get_seed() that evaluate this flag under
-	 * the same lock. The lock is scoped narrowly here because
-	 * esdm_force_fully_seeded() below acquires the pool lock itself.
+	 * After the DRNG: __esdm_drng_seed_work() sets this flag only to look
+	 * at every DRNG once more afterwards, so a seeding that saw this one
+	 * still seeded either finds it unset there or is followed by this.
 	 */
-	esdm_pool_lock();
 	esdm_pool_all_nodes_seeded(false);
-	esdm_pool_unlock();
 
 	/*
 	 * The init DRNG instance must always be fully seeded as this instance
@@ -733,8 +736,6 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 		esdm_shm_status_set_operational(false);
 	}
 
-	/* If sufficient entropy is available, reseed now. */
-	esdm_force_fully_seeded();
 	esdm_es_mgr_monitor_wakeup();
 }
 

@@ -917,6 +917,25 @@ static void esdm_drng_seed_work_one(struct esdm_drng *drng, uint32_t node)
 	esdm_drng_seed(drng);
 }
 
+/* Are all DRNGs serving ordinary requests fully seeded? */
+static bool esdm_drngs_all_seeded(struct esdm_drng **esdm_drng)
+{
+	uint32_t node, nodes;
+
+	if (!esdm_drng)
+		return atomic_load(&esdm_drng_init.fully_seeded);
+
+	/* Bound by the published count - see esdm_drng_stats_foreach() */
+	nodes = esdm_drng_node_count_get();
+	for (node = 0; node < nodes; node++) {
+		if (esdm_drng[node] &&
+		    !atomic_load(&esdm_drng[node]->fully_seeded))
+			return false;
+	}
+
+	return true;
+}
+
 /**
  * @brief Seeding of one not yet fully seeded DRNG
  *
@@ -979,7 +998,15 @@ static bool __esdm_drng_seed_work(struct esdm_drng **esdm_drng, bool force)
 		return atomic_load(&drng->fully_seeded);
 	}
 
+	/*
+	 * esdm_unset_fully_seeded() clears the flag without the pool lock, so
+	 * the DRNGs are looked at once more after it is set: an unset that
+	 * came after the look above is either seen there or clears the flag
+	 * after this store.
+	 */
 	esdm_pool_all_nodes_seeded(true);
+	if (!esdm_drngs_all_seeded(esdm_drng))
+		esdm_pool_all_nodes_seeded(false);
 
 	return true;
 }
