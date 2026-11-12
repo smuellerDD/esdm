@@ -19,12 +19,14 @@
 
 #include <errno.h>
 #include <leancrypto.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "esdm_crypto.h"
 #include "esdm_leancrypto.h"
 #include "esdm_logger.h"
+#include "memset_secure.h"
 
 #define ESDM_LEANCRYPTO_HASH lc_sha3_512
 
@@ -138,8 +140,34 @@ static int esdm_leancrypto_drbg_seed(void *drng, const uint8_t *inbuf,
 				     size_t addtllen)
 {
 	struct lc_rng_ctx *ctx = drng;
+	uint8_t *seed = NULL;
+	size_t seedlen = inbuflen;
+	int ret;
 
-	return lc_rng_seed(ctx, inbuf, inbuflen, addtl, addtllen);
+	/*
+	 * The XDRBG keeps only 84 bytes of additional input alpha, so addtl
+	 * (output of zero-credit sources) follows the seed, taken whole.
+	 */
+	if (addtl && addtllen) {
+		if (inbuflen > SIZE_MAX - addtllen)
+			return -EINVAL;
+		seedlen += addtllen;
+		seed = malloc(seedlen);
+		if (!seed)
+			return -ENOMEM;
+		memcpy(seed, inbuf, inbuflen);
+		memcpy(seed + inbuflen, addtl, addtllen);
+		inbuf = seed;
+	}
+
+	ret = lc_rng_seed(ctx, inbuf, seedlen, NULL, 0);
+
+	if (seed) {
+		memset_secure(seed, 0, seedlen);
+		free(seed);
+	}
+
+	return ret;
 }
 
 static ssize_t esdm_leancrypto_drbg_generate(void *drng, uint8_t *outbuf,
