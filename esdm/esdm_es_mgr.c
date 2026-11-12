@@ -214,19 +214,6 @@ void esdm_es_mgr_monitor_resume(void)
 	mutex_w_unlock(&esdm_es_mgr_monitor_lock);
 }
 
-struct esdm_es_monitor_thread_arg {
-	unsigned int es_idx;
-	int rc;
-};
-
-static int esdm_es_monitor_thread(void *data)
-{
-	struct esdm_es_monitor_thread_arg *arg = data;
-
-	arg->rc = esdm_es[arg->es_idx]->monitor_es();
-	return arg->rc;
-}
-
 #ifdef ESDM_ES_PARALLEL_FETCH
 struct esdm_es_get_ent_thread_arg {
 	unsigned int es_idx;
@@ -248,7 +235,6 @@ static void *esdm_es_get_ent_thread(void *data)
 /* ES monitor worker loop */
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
-	struct esdm_es_monitor_thread_arg args[esdm_ext_es_last];
 	unsigned int i, avail = 0;
 	bool priv_init_completed = false;
 
@@ -273,76 +259,28 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 	while (!atomic_load(&esdm_es_mgr_terminate)) {
 		struct timespec deadline;
 		unsigned int j;
-		int ret = 0;
+		int ret;
 		bool priv_init_complete = true;
-		bool spawned = false;
 
 		/* Taken down before the round, so one raised during it is kept */
 		atomic_store(&esdm_es_mgr_monitor_pending, false);
 
 		/*
-		 * Hold the monitor lock across the active pass (spawning the
-		 * per-ES monitors, joining them, and consuming their results) so
-		 * esdm_reinit() cannot tear down/re-initialize entropy sources
-		 * while a monitor pass is touching them. The lock is dropped
-		 * before the sleep below so a pause only waits for an in-flight
-		 * pass to finish.
+		 * Under the monitor lock, so esdm_reinit() does not tear the
+		 * sources down underneath a round. The monitors are cheap, a
+		 * failing device's probe bounded by its read deadline, so they
+		 * run one after the other in this thread.
 		 */
 		mutex_w_lock(&esdm_es_mgr_monitor_lock);
 
-		/*
-		 * Re-check the termination request under the lock: the loop
-		 * condition above may have been evaluated just before
-		 * esdm_es_mgr_finalize() set the flag. Starting a pass after
-		 * that function waited one out leaves the per-ES threads
-		 * outstanding when it joins every thread - and joining makes an
-		 * unstarted worker exit without clearing the job this pass waits
-		 * for, so neither the pass nor the join ever returns.
-		 */
-		if (atomic_load(&esdm_es_mgr_terminate)) {
-			mutex_w_unlock(&esdm_es_mgr_monitor_lock);
-			break;
-		}
-
 		for_each_esdm_es (j) {
-			args[j].es_idx = j;
-			args[j].rc = 0;
-
-			if (!esdm_es[j]->monitor_es)
-				continue;
-
-			if (thread_start(esdm_es_monitor_thread, &args[j], 0,
-					 NULL) == 0) {
-				spawned = true;
-			} else {
-				/*
-				 * Fall back to running the monitor in this
-				 * thread if no worker slot is available.
-				 */
-				args[j].rc = esdm_es[j]->monitor_es();
-			}
-		}
-
-		if (spawned)
-			thread_wait(true);
-
-		for_each_esdm_es (j) {
-			int rc;
-
-			if (!esdm_es[j]->monitor_es)
-				continue;
-
-			rc = args[j].rc;
-
 			/*
-			 * If the caller returns -EAGAIN, it blocks
-			 * the initialization process as it requires
-			 * root privileges until completed.
+			 * -EAGAIN: initialization needing root privileges is
+			 * not complete yet.
 			 */
-			if (rc == -EAGAIN)
+			if (esdm_es[j]->monitor_es &&
+			    esdm_es[j]->monitor_es() == -EAGAIN)
 				priv_init_complete = false;
-
-			ret |= rc;
 		}
 
 		if (!priv_init_completed && priv_init_complete &&
@@ -1061,19 +999,6 @@ void esdm_es_mgr_finalize(void)
 
 	atomic_store(&esdm_es_mgr_terminate, 1);
 	esdm_es_mgr_monitor_wakeup();
-
-	/*
-	 * Wait out an in-flight monitor pass before joining anything. A pass
-	 * waits for its per-ES threads with thread_wait(), which ignores the
-	 * shutdown flag, while thread_wait_all() below sets that flag and joins
-	 * - and a worker with a job assigned but not started exits on the flag
-	 * without running or clearing it, so the pass waits forever and the join
-	 * never returns. Taking the monitor lock blocks until any pass has
-	 * finished, and the terminate flag set above keeps the monitor from
-	 * starting another (it re-checks under this very lock).
-	 */
-	esdm_es_mgr_monitor_pause();
-	esdm_es_mgr_monitor_resume();
 
 	/* wait for monitor thread */
 	thread_wait_all(true);
