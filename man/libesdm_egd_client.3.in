@@ -134,10 +134,10 @@ Once connected, the operations stay within
 .BR poll (2),
 .BR close (2),
 .BR getpid (2),
-.BR clock_gettime (2),
-.BR nanosleep (2)
+.BR getpeername (2),
+.BR clock_gettime (2)
 and
-.BR getsockopt (2).
+.BR nanosleep (2).
 That is deliberate: it is the set a seccomp confined process is typically still
 allowed, OpenSSH's pre\-auth sandbox being the reference case. In particular
 .BR send (2)/ recv (2)
