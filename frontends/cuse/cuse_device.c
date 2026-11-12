@@ -434,11 +434,12 @@ static bool esdm_cuse_client_privileged(fuse_req_t req)
  * admin control path.
  */
 static mutex_t esdm_cuse_priv = MUTEX_UNLOCKED_PREFER_WRITER;
-static void esdm_cuse_raise_privilege_transient(fuse_req_t req)
+
+/* Only for a caller esdm_cuse_client_privileged() accepted */
+static void esdm_cuse_raise_privilege_transient(void)
 {
 	mutex_lock(&esdm_cuse_priv);
-	if (esdm_cuse_client_privileged(req))
-		raise_privilege_transient(0, 0);
+	raise_privilege_transient(0, 0);
 }
 
 static void esdm_cuse_drop_privilege_transient(void)
@@ -684,7 +685,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege_transient(req);
+			esdm_cuse_raise_privilege_transient();
 			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt_int(
 				ent_count_bits, req));
 			/* In case of an error, update the kernel */
@@ -739,7 +740,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege_transient(req);
+			esdm_cuse_raise_privilege_transient();
 
 			esdm_invoke(esdm_rpcc_rnd_add_entropy_int(
 				(const uint8_t *)rpi->buf,
@@ -771,7 +772,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege_transient(req);
+		esdm_cuse_raise_privilege_transient();
 		esdm_invoke(esdm_rpcc_rnd_clear_pool_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
@@ -793,7 +794,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege_transient(req);
+		esdm_cuse_raise_privilege_transient();
 		esdm_invoke(esdm_rpcc_rnd_reseed_crng_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
@@ -859,7 +860,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege_transient(req);
+			esdm_cuse_raise_privilege_transient();
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
 				ret = -errno;
@@ -883,7 +884,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege_transient(req);
+		esdm_cuse_raise_privilege_transient();
 		if (backend_fd >= 0 && ioctl(backend_fd, RNDRESEEDCRNG) == -1)
 			ret = -errno;
 		else
