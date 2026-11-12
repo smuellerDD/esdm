@@ -177,6 +177,13 @@ static bool esdm_rpcc_expired(const esdm_rpc_client_connection_t *rpc_conn)
 	return esdm_rpcc_passed(&rpc_conn->deadline);
 }
 
+/* Does the caller want us to interrupt? */
+static bool esdm_rpcc_interrupted(const esdm_rpc_client_connection_t *rpc_conn)
+{
+	return rpc_conn->interrupt_func &&
+	       rpc_conn->interrupt_func(rpc_conn->interrupt_data);
+}
+
 static void register_fork_handler(void);
 
 static void reset_conn_socket(esdm_rpc_client_connection_t *rpc_conn)
@@ -334,10 +341,8 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 
 	do {
 		/* Does the caller wants us to interrupt? */
-		if (rpc_conn->interrupt_func &&
-		    rpc_conn->interrupt_func(rpc_conn->interrupt_data)) {
+		if (esdm_rpcc_interrupted(rpc_conn))
 			return -EAGAIN;
-		}
 
 		retries++;
 		ret = write(rpc_conn->fd, data, len);
@@ -506,8 +511,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	/* Read the data into the local buffer storage */
 	do {
 		/* Does the caller wants us to interrupt? */
-		if (rpc_conn->interrupt_func &&
-		    rpc_conn->interrupt_func(rpc_conn->interrupt_data)) {
+		if (esdm_rpcc_interrupted(rpc_conn)) {
 			interrupted = true;
 			break;
 		}
