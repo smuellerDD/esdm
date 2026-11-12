@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <json-c/json.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -257,8 +258,9 @@ err:
 	eb_es->e_bits = 0;
 }
 
-static void esdm_hwrand_es_state(char *buf, size_t buflen)
+static void esdm_hwrand_es_state_json(char *buf, size_t buflen)
 {
+	struct json_object *obj = json_object_new_object();
 	uint32_t poolsize, entropy_rate;
 
 	mutex_reader_lock(&hwrand_mutex);
@@ -266,10 +268,14 @@ static void esdm_hwrand_es_state(char *buf, size_t buflen)
 	entropy_rate = esdm_hwrand_entropylevel_locked(256);
 	mutex_reader_unlock(&hwrand_mutex);
 
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n",
-		 poolsize, entropy_rate);
+	if (obj) {
+		json_object_object_add(obj, "available_entropy",
+				       json_object_new_int64(poolsize));
+		json_object_object_add(obj, "entropy_rate_per_256_data_bits",
+				       json_object_new_int64(entropy_rate));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_hwrand_active(void)
@@ -310,7 +316,7 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.get_ent = esdm_hwrand_get,
 	.curr_entropy = esdm_hwrand_entropylevel,
 	.max_entropy = esdm_hwrand_poolsize,
-	.state = esdm_hwrand_es_state,
+	.state_json = esdm_hwrand_es_state_json,
 	.reset = NULL,
 	.active = esdm_hwrand_active,
 	.selftest = esdm_hwrand_selftest,

@@ -55,6 +55,7 @@ static void test_kcapi_rng_destroy(struct kcapi_handle *handle);
 
 #include "common_test.h"
 #include "esdm_logger.h"
+#include "../es_state_check.h"
 
 #define TEST_MODULE_RNG "jitterentropy_rng_module"
 
@@ -98,11 +99,11 @@ static ssize_t test_kcapi_rng_generate(struct kcapi_handle *handle,
 
 static bool test_state_has(const char *what)
 {
-	char buf[512];
+	struct json_object *state = es_state_get(&esdm_es_jent_kernel);
+	bool ret = es_state_str_is(state, "kernel_rng", what);
 
-	memset(buf, 0, sizeof(buf));
-	esdm_es_jent_kernel.state(buf, sizeof(buf));
-	return strstr(buf, what) != NULL;
+	json_object_put(state);
+	return ret;
 }
 
 int main(void)

@@ -21,12 +21,13 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <json-c/json.h>
+#include <kcapi.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <kcapi.h>
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
@@ -183,8 +184,9 @@ err:
 	eb_es->e_bits = 0;
 }
 
-static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
+static void esdm_jent_kernel_es_state_json(char *buf, size_t buflen)
 {
+	struct json_object *obj = json_object_new_object();
 	uint32_t poolsize, entropy_rate;
 	/* Copied, as a new name frees the old one */
 	char name[CRYPTO_MAX_ALG_NAME_ESDM];
@@ -196,11 +198,16 @@ static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 	snprintf(name, sizeof(name), "%s", esdm_jent_kernel_name_locked());
 	mutex_reader_unlock(&jent_rng_mutex);
 
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n"
-		 " Kernel RNG: %s\n",
-		 poolsize, entropy_rate, name);
+	if (obj) {
+		json_object_object_add(obj, "available_entropy",
+				       json_object_new_int64(poolsize));
+		json_object_object_add(obj, "entropy_rate_per_256_data_bits",
+				       json_object_new_int64(entropy_rate));
+		json_object_object_add(obj, "kernel_rng",
+				       json_object_new_string(name));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_jent_kernel_active(void)
@@ -309,7 +316,7 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.get_ent = esdm_jent_kernel_get,
 	.curr_entropy = esdm_jent_kernel_entropylevel,
 	.max_entropy = esdm_jent_kernel_poolsize,
-	.state = esdm_jent_kernel_es_state,
+	.state_json = esdm_jent_kernel_es_state_json,
 	.reset = NULL,
 	.active = esdm_jent_kernel_active,
 	.selftest = esdm_jent_kernel_selftest,

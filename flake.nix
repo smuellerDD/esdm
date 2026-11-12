@@ -242,7 +242,7 @@
               # The programs have to load and attach on the stock kernel ...
               for source in ["SchedulerEBPF", "InterruptEBPF"]:
                   machine.wait_until_succeeds(
-                      f"${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A6 'Name: {source}' "
+                      f"${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A6 '^ {source} (ID' "
                       "| grep -q 'eBPF programs loaded: true'", 60
                   )
 
@@ -251,7 +251,7 @@
               # trickling in. Only the scheduler source is credited - the
               # interrupt source is built with an entropy rate of 0.
               machine.wait_until_succeeds(
-                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 'Name: SchedulerEBPF' "
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 '^ SchedulerEBPF (ID' "
                   "| grep -qE 'Available entropy: [1-9][0-9][0-9]'", 60
               )
 
@@ -261,14 +261,14 @@
               # oversampling surcharge, so capping at the digest alone would
               # clip the surcharge and leave it stuck below.
               machine.wait_until_succeeds(
-                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 'Name: SchedulerEBPF' "
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 '^ SchedulerEBPF (ID' "
                   "| grep -q 'Available entropy: 512'", 60
               )
 
               def avail():
                   return int(machine.succeed(
                       "${esdm-ebpf}/bin/esdm-tool -s 2>&1 "
-                      "| grep -A2 'Name: SchedulerEBPF' "
+                      "| grep -A2 '^ SchedulerEBPF (ID' "
                       "| sed -n 's/.*Available entropy: //p'"
                   ))
 
@@ -1053,7 +1053,7 @@
                   print(machine.succeed("cat /tmp/loop.log"))
                   machine.succeed("grep -q 'errors=0' /tmp/loop.log")
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
                   machine.succeed("${check} proc")
 
@@ -1070,7 +1070,7 @@
                   machine.succeed("pkill -f 'esdm-cdev-check [b]lock'")
                   machine.wait_until_fails("pgrep -f 'esdm-cdev-check [b]lock'", 30)
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
 
               with subtest("the ESDM unreachable: nothing served from elsewhere"):
@@ -1090,7 +1090,7 @@
               with subtest("the ESDM comes back"):
                   machine.succeed(f"systemctl start {esdm_units}")
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
                   machine.succeed("${check} reads")
                   machine.succeed("${check} ioctl-priv")
@@ -1126,7 +1126,7 @@
                   manual_esdm_stop()
                   machine.succeed(f"systemctl start {esdm_units}")
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
 
               # The module against the fake EGD server of esdm-cdev-check, for

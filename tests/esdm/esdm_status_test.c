@@ -72,19 +72,21 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (!strstr(buf, "DRNG name") ||
-	    !strstr(buf, "ESDM security strength") ||
-	    !strstr(buf, "Number of DRNG instances") ||
-	    !strstr(buf, "Standards compliance") ||
-	    !strstr(buf, "ESDM fully seeded") ||
-	    !strstr(buf, "DRNG instance 0 properties") ||
+	if (!strstr(buf, "\nDRNG name: ") ||
+	    !strstr(buf, "\nSecurity strength bits: ") ||
+	    !strstr(buf, "\nDRNG instances: ") ||
+	    !strstr(buf, "\nStandards compliance: ") ||
+	    !strstr(buf, "\nFully seeded: ") ||
+	    !strstr(buf, "\nEntropy sources:\n ") ||
+	    !strstr(buf, " (ID 0):\n") || strstr(buf, "  ID: ") ||
+	    !strstr(buf, "\nDRNGs:\n 0:\n") ||
 	    !strstr(buf, " Type: initial") ||
 	    !strstr(buf, " Type: prediction resistance") ||
 	    !strstr(buf, "Requests until reseed") ||
 	    !strstr(buf, "Seed generation") ||
 	    !strstr(buf, "Last seeding time") ||
-	    !strstr(buf, "Reseed worker properties") ||
-	    !strstr(buf, "Periodic self test properties") ||
+	    !strstr(buf, "\nReseed worker:\n") ||
+	    !strstr(buf, "\nPeriodic self test:\n") ||
 	    !strstr(buf, "Entropy sources tested") ||
 	    /* The ESDM only hands out a status when its self tests passed */
 	    !strstr(buf, " State: passed")) {
@@ -190,7 +192,7 @@ int main(int argc, char *argv[])
 	/* The text report is reported as incomplete, and stays readable */
 	memset(buf, 0, sizeof(buf));
 	ret = esdm_status(buf, 512);
-	if (ret != -EMSGSIZE || !strstr(buf, "library version")) {
+	if (ret != -EMSGSIZE || strncmp(buf, "Library version: ", 17)) {
 		printf("The status report was truncated into 512 bytes: %d\n",
 		       ret);
 		ret = 1;

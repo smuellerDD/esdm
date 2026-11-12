@@ -967,9 +967,8 @@ static void cmd_proc(int argc, char *argv[])
 					       "write_wakeup_threshold",
 					       "urandom_min_reseed_secs" };
 	static const char *const bad[] = { "abc", "-1", "4294967295", "1 2" };
-	static const char *const sections[] = { "ESDM library version",
-						"Entropy Source",
-						"DRNG instance" };
+	static const char *const sections[] = { "Library version",
+						"Entropy sources:", "DRNGs:" };
 	char *val;
 	size_t i;
 	int err;

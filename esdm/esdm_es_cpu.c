@@ -19,6 +19,7 @@
  * DAMAGE.
  */
 
+#include <json-c/json.h>
 #include <stdatomic.h>
 #include <stdio.h>
 
@@ -271,20 +272,32 @@ static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits)
 	eb_es->e_bits = ent_bits;
 }
 
-static void esdm_cpu_es_state(char *buf, size_t buflen)
+static void esdm_cpu_es_state_json(char *buf, size_t buflen)
 {
 	const struct esdm_drng *esdm_drng_init = esdm_drng_init_instance();
 	uint32_t multiplier = esdm_cpu_multiplier();
+	struct json_object *obj = json_object_new_object();
 
 	/* Assume the esdm_drng_init lock is taken by caller */
-	snprintf(buf, buflen,
-		 " Hash for compressing data: %s\n"
-		 " Available entropy: %u\n"
-		 " Data multiplier: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n",
-		 (multiplier <= 1) ? "N/A" :
-				     esdm_drng_init->hash_cb->hash_name(),
-		 esdm_cpu_poolsize(), multiplier, esdm_cpu_entropylevel(256));
+	if (obj) {
+		/* Without a multiplier, nothing is compressed */
+		json_object_object_add(
+			obj, "hash_for_compressing_data",
+			(multiplier <= 1) ?
+				NULL :
+				json_object_new_string(
+					esdm_drng_init->hash_cb->hash_name()));
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_cpu_poolsize()));
+		json_object_object_add(obj, "data_multiplier",
+				       json_object_new_int64(multiplier));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(esdm_cpu_entropylevel(256)));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_cpu_active(void)
@@ -352,7 +365,7 @@ struct esdm_es_cb esdm_es_cpu = {
 	.get_ent = esdm_cpu_get,
 	.curr_entropy = esdm_cpu_entropylevel,
 	.max_entropy = esdm_cpu_poolsize,
-	.state = esdm_cpu_es_state,
+	.state_json = esdm_cpu_es_state_json,
 	.reset = NULL,
 	.active = esdm_cpu_active,
 	.selftest = esdm_cpu_selftest,

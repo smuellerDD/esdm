@@ -36,6 +36,7 @@
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "../es_state_check.h"
 
 #define ES_IDX esdm_ext_es_hwrand
 #define ES_NAME "hwrand"
@@ -54,21 +55,21 @@ static int es_hwrand_name(void)
 
 static int es_hwrand_state(void)
 {
-	char buf[512];
+	struct json_object *state = es_state_get(esdm_es[ES_IDX]);
+	int ret = 0;
 
-	/* state is optional; nothing to check if absent */
-	if (!esdm_es[ES_IDX]->state)
-		return 0;
-
-	memset(buf, 0, sizeof(buf));
-	esdm_es[ES_IDX]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Available entropy")) {
-		printf("ES %s - fail: state string malformed: %s\n", ES_NAME,
-		       buf);
-		return 1;
+	if (!es_state_member(state, "available_entropy", json_type_int)) {
+		printf("ES " ES_NAME
+		       " - fail: state information contains unexpected content: %s\n",
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES " ES_NAME " - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
-	printf("ES %s - pass: state:\n%s\n", ES_NAME, buf);
-	return 0;
+
+	json_object_put(state);
+	return ret;
 }
 
 static int es_hwrand_poolsize(void)

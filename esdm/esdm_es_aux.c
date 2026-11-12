@@ -21,6 +21,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <json-c/json.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -642,18 +643,34 @@ static uint32_t esdm_aux_max_entropy(void)
 #endif
 }
 
-static void esdm_aux_es_state(char *buf, size_t buflen)
+static void esdm_aux_es_state_json(char *buf, size_t buflen)
 {
-	snprintf((char *)buf, buflen,
-		 " DRBG for operating entropy pool: XDRBG-256 with %s\n"
-		 " Available entropy: %u\n"
-		 " Maximum entropy: %u\n"
-		 " Pools: %u\n"
-		 " Write wakeup threshold: %u\n"
-		 " Digestsize: %u\n",
-		 esdm_default_xof_cb->xof_name(), esdm_aux_avail_entropy(0),
-		 esdm_aux_max_entropy(), ESDM_NUM_AUX_POOLS,
-		 esdm_write_wakeup_bits, esdm_get_digestsize());
+	struct json_object *obj = json_object_new_object();
+	char drbg[64];
+
+	if (obj) {
+		snprintf(drbg, sizeof(drbg), "XDRBG-256 with %s",
+			 esdm_default_xof_cb->xof_name());
+		json_object_object_add(obj, "drbg_for_operating_entropy_pool",
+				       json_object_new_string(drbg));
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_aux_avail_entropy(0)));
+		json_object_object_add(
+			obj, "maximum_entropy",
+			json_object_new_int64(esdm_aux_max_entropy()));
+		json_object_object_add(
+			obj, "pools",
+			json_object_new_int64(ESDM_NUM_AUX_POOLS));
+		json_object_object_add(
+			obj, "write_wakeup_threshold",
+			json_object_new_int64(esdm_write_wakeup_bits));
+		json_object_object_add(
+			obj, "digestsize",
+			json_object_new_int64(esdm_get_digestsize()));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_aux_active(void)
@@ -693,7 +710,7 @@ struct esdm_es_cb esdm_es_aux = {
 	.get_ent = esdm_aux_get_backtrack,
 	.curr_entropy = esdm_aux_avail_entropy,
 	.max_entropy = esdm_aux_max_entropy,
-	.state = esdm_aux_es_state,
+	.state_json = esdm_aux_es_state_json,
 	.reset = esdm_aux_reset,
 	.active = esdm_aux_active,
 	.selftest = esdm_aux_selftest,

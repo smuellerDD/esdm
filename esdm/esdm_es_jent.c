@@ -20,6 +20,7 @@
  */
 
 #include <jitterentropy.h>
+#include <json-c/json.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -441,21 +442,33 @@ out:
 	return ret;
 }
 
-static void esdm_jent_es_state(char *buf, size_t buflen)
+static void esdm_jent_es_state_json(char *buf, size_t buflen)
 {
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Library version: %u\n"
-		 " Standards compliance: %s%s\n"
-		 " Entropy Rate per 256 data bits: %u\n"
-		 " Oversampling Rate: %u\n",
-		 esdm_jent_poolsize(), jent_version(),
-		 (esdm_es_oversampling() || esdm_config_fips_enabled() ||
-		  esdm_ntg1_2024_compliant() || esdm_jent_ntg1()) ?
-			 "SP800-90B " :
-			 "",
-		 esdm_jent_ntg1() ? "NTG.1(2024)" : "",
-		 esdm_jent_entropylevel(256), ESDM_JENT_OSR);
+	struct json_object *obj = json_object_new_object();
+	bool sp80090b = esdm_es_oversampling() || esdm_config_fips_enabled() ||
+			esdm_ntg1_2024_compliant() || esdm_jent_ntg1();
+	char compliance[32];
+
+	if (obj) {
+		snprintf(compliance, sizeof(compliance), "%s%s%s",
+			 sp80090b ? "SP800-90B" : "",
+			 (sp80090b && esdm_jent_ntg1()) ? " " : "",
+			 esdm_jent_ntg1() ? "NTG.1(2024)" : "");
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_jent_poolsize()));
+		json_object_object_add(obj, "library_version",
+				       json_object_new_int64(jent_version()));
+		json_object_object_add(obj, "standards_compliance",
+				       json_object_new_string(compliance));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(esdm_jent_entropylevel(256)));
+		json_object_object_add(obj, "oversampling_rate",
+				       json_object_new_int64(ESDM_JENT_OSR));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_jent_active(void)
@@ -539,7 +552,7 @@ struct esdm_es_cb esdm_es_jent = {
 	.get_ent = esdm_jent_get_check,
 	.curr_entropy = esdm_jent_entropylevel,
 	.max_entropy = esdm_jent_poolsize,
-	.state = esdm_jent_es_state,
+	.state_json = esdm_jent_es_state_json,
 	.reset = NULL,
 	.active = esdm_jent_active,
 	.selftest = esdm_jent_selftest,

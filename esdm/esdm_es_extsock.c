@@ -647,41 +647,9 @@ static void extsock_state_locked(struct extsock_state *st)
 		snprintf(st->accepted, sizeof(st->accepted), "root");
 }
 
-static void extsock_es_state(char *buf, size_t buflen)
-{
-	struct extsock_state st;
-	size_t len;
-
-	extsock_lock();
-	extsock_state_locked(&st);
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n"
-		 " Assessed rate: %u\n"
-		 " Assessed rate source: %s\n"
-		 "%s%s%s"
-		 " Provider socket: %s\n"
-		 " Provider accepted: %s\n"
-		 " Status: %s\n",
-		 st.poolsize, st.entropy_rate, st.rate, st.rate_source,
-		 extsock.name[0] ? " Declared name: " : "", extsock.name,
-		 extsock.name[0] ? "\n" : "", st.path, st.accepted, st.status);
-
-	/* JSON escapes the control characters of the status */
-	len = strlen(buf);
-	if (extsock.status)
-		snprintf(buf + len, buflen - len, " Provider status: %s\n",
-			 json_object_to_json_string_ext(
-				 extsock.status,
-				 JSON_C_TO_STRING_PLAIN |
-					 JSON_C_TO_STRING_NOSLASHESCAPE));
-	extsock_unlock();
-}
-
 /*
- * The members of the text above, but for the name declared: it replaces
- * "name", the ES table name kept as "instance" - see esdm_es_mgr_cb.h - and
- * the status of the provider is the object "provider".
+ * The provider's declared name replaces "name", the ES table name is kept as
+ * "instance", and the provider's status is the object "provider".
  */
 static void extsock_es_state_json(char *buf, size_t buflen)
 {
@@ -796,7 +764,6 @@ struct esdm_es_cb esdm_es_extsock = {
 	.get_ent = extsock_get,
 	.curr_entropy = extsock_entropylevel,
 	.max_entropy = extsock_poolsize,
-	.state = extsock_es_state,
 	.state_json = extsock_es_state_json,
 	.reset = NULL,
 	.active = extsock_active,

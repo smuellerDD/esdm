@@ -20,6 +20,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <json-c/json.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,19 +36,13 @@
 #include "esdm_es_jent.h"
 #include "esdm_es_sched.h"
 #include "esdm_info.h"
+#include "helper.h"
 #include "esdm_logger.h"
 #include "esdm_selftest.h"
 #include "test_pertubation.h"
 #include "visibility.h"
 
 static unsigned int esdm_nodes = 1;
-
-static inline size_t esdm_used_buf_len(char *buf, size_t buflen)
-{
-	size_t len = strlen(buf);
-
-	return min_size(len, buflen);
-}
 
 void esdm_pool_inc_node_node(void)
 {
@@ -78,313 +73,30 @@ static void esdm_time_str(long long wtime, char *buf, size_t buflen)
 		buf[0] = '\0';
 }
 
-/* Rendering state of the DRNG section of the status text */
-struct esdm_drng_txt_state {
-	char *buf;
-	size_t buflen;
-	uint32_t idx;
-};
-
-/* Render the statistics of one DRNG instance into the status text */
-static void esdm_drng_status_txt(const struct esdm_drng_stats *stats,
-				 void *priv)
-{
-	struct esdm_drng_txt_state *txt = priv;
-	size_t len = esdm_used_buf_len(txt->buf, txt->buflen);
-	char node[16] = "";
-	char stamp[32] = "";
-	char reseed[32] = "";
-
-	/*
-	 * A value the DRNG does not have - the node of the DRNG that is not
-	 * bound to one, the seeding time of one that was never seeded - is
-	 * reported as N/A.
-	 */
-	if (stats->node_valid)
-		snprintf(node, sizeof(node), "%u", stats->node);
-	if (stats->seeded_wtime_valid)
-		esdm_time_str(stats->seeded_wtime, stamp, sizeof(stamp));
-	if (stats->seeded_time_valid)
-		snprintf(reseed, sizeof(reseed), "%lld",
-			 stats->seconds_since_reseed);
-
-	if (!node[0])
-		snprintf(node, sizeof(node), "N/A");
-	if (!stamp[0])
-		snprintf(stamp, sizeof(stamp), "N/A");
-	if (!reseed[0])
-		snprintf(reseed, sizeof(reseed), "N/A");
-
-	snprintf(txt->buf + len, txt->buflen - len,
-		 "DRNG instance %u properties:\n"
-		 " Type: %s\n"
-		 " Node: %s\n"
-		 " Name: %s\n"
-		 " Fully seeded: %s\n"
-		 " Initiated: %s\n"
-		 " Force reseed: %s\n"
-		 " Reseed pending: %s\n"
-		 " Requests until reseed: %d\n"
-		 " Seconds until reseed: %lld\n"
-		 " Requests since fully seeded: %u\n"
-		 " Generated bits since fully seeded: %u\n"
-		 " Seed generation: %lld\n"
-		 " Last seeding time: %s\n"
-		 " Seconds since last reseed: %s\n",
-		 txt->idx++, stats->type, node,
-		 stats->drng_name ? stats->drng_name : "N/A",
-		 stats->fully_seeded ? "true" : "false",
-		 stats->initiated ? "true" : "false",
-		 stats->force_reseed ? "true" : "false",
-		 stats->reseed_pending ? "true" : "false",
-		 stats->requests_until_reseed, stats->seconds_until_reseed,
-		 stats->requests_since_fully_seeded,
-		 stats->bits_since_fully_seeded, stats->seed_generation, stamp,
-		 reseed);
-}
-
-DSO_PUBLIC
-int esdm_status(char *buf, size_t buflen)
-{
-	struct esdm_drng *drng = esdm_drng_init_instance();
-	size_t len;
-	struct esdm_drng_txt_state txt;
-	uint32_t i;
-
-	if (!buf || !buflen) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-			    "Status information cannot be created\n");
-		return -EINVAL;
-	}
-
-	snprintf(buf, buflen, "ESDM %slibrary version: %s\n", TESTMODE_STR,
-		 VERSION);
-	len = esdm_used_buf_len(buf, buflen);
-
-	snprintf(buf + len, buflen - len,
-		 "DRNG name: %s\n"
-		 "ESDM security strength in bits: %d\n"
-		 "Number of DRNG instances: %u\n"
-		 "Standards compliance: %s%s%s%s%s%s\n"
-		 "ESDM fully seeded: %s\n"
-		 "ESDM entropy level: %u\n",
-		 drng->drng_cb->drng_name(), esdm_security_strength(),
-		 esdm_nodes, esdm_config_fips_enabled() ? "FIPS 140 " : "",
-		 /* A DRG.4 build satisfies DRG.3 and reports both */
-		 esdm_drg3_compliant() ? "DRG.3 " : "",
-		 esdm_drg4_compliant() ? "DRG.4 " : "",
-		 esdm_sp80090c_compliant() ? "SP800-90C " : "",
-		 esdm_ntg1_compliant() ? "NTG.1(2011) " : "",
-		 (esdm_ntg1_2024_compliant() || esdm_jent_ntg1()) ?
-			 "NTG.1(2024)" :
-			 "",
-		 esdm_state_fully_seeded() ? "true" : "false",
-		 esdm_avail_entropy());
-
-	/* Concatenate the output of the entropy sources. */
-	for_each_esdm_es (i) {
-		len = esdm_used_buf_len(buf, buflen);
-		snprintf(buf + len, buflen - len,
-			 "Entropy Source %u properties:\n"
-			 " Name: %s\n",
-			 i, esdm_es[i]->name);
-
-		len = esdm_used_buf_len(buf, buflen);
-		esdm_es[i]->state(buf + len, buflen - len);
-	}
-
-	/* The initial and the prediction resistance DRNG only. */
-	txt.buf = buf;
-	txt.buflen = buflen;
-	txt.idx = 0;
-	esdm_drng_stats_summary(esdm_drng_status_txt, &txt);
-
-	/*
-	 * The thread that reseeds the DRNGs before a request runs into their
-	 * reseed condition.
-	 */
-	len = esdm_used_buf_len(buf, buflen);
-	snprintf(buf + len, buflen - len,
-		 "Reseed worker properties:\n"
-		 " Running: %s\n"
-		 " Reseed interval in seconds: %u\n",
-		 esdm_drng_mgr_reseed_worker_running() ? "true" : "false",
-		 esdm_get_reseed_max_time());
-
-	/*
-	 * The self tests of the hash and the DRNG implementation and of the
-	 * entropy sources.
-	 */
-	len = esdm_used_buf_len(buf, buflen);
-	snprintf(buf + len, buflen - len,
-		 "Periodic self test properties:\n"
-		 " State: %s\n"
-		 " Running: %s\n"
-		 " Completed self tests: %lld\n"
-		 " Self test interval in seconds: %u\n"
-		 " Entropy source state: %s\n"
-		 " Entropy sources tested: %u\n"
-		 " Entropy sources failed: %u\n",
-		 esdm_selftest_crypto_state_name(),
-		 esdm_selftest_periodic_running() ? "true" : "false",
-		 esdm_selftest_passes(), esdm_selftest_periodic_interval(),
-		 esdm_selftest_es_state_name(), esdm_selftest_es_sources(),
-		 esdm_selftest_es_failures());
-
-	/*
-	 * Every section above appends with snprintf(), which stops where the
-	 * buffer ends.
-	 */
-	if (esdm_used_buf_len(buf, buflen) + 1 >= buflen) {
-		esdm_logger(
-			LOGGER_WARN, LOGGER_C_ANY,
-			"Status report does not fit into the buffer of %zu bytes\n",
-			buflen);
-		return -EMSGSIZE;
-	}
-
-	return 0;
-}
-
 /****************************** JSON status ***********************************/
 
 /* The state of one ES, with room for the status of an external provider */
 #define ESDM_ES_STATE_BUFLEN 4096
 
-/*
- * Turn a status label into a JSON member name: the label is lower-cased and
- * every run of non-alphanumeric characters becomes one underscore, e.g.
- * "Entropy Rate per 256 data bits" turns into "entropy_rate_per_256_data_bits".
- */
-static void esdm_json_key(const char *label, char *key, size_t keylen)
-{
-	bool pending_sep = false;
-	size_t used = 0;
-
-	while (*label && used < keylen - 1) {
-		unsigned char c = (unsigned char)*label++;
-
-		if (!isalnum(c)) {
-			pending_sep = true;
-			continue;
-		}
-
-		if (pending_sep && used) {
-			key[used++] = '_';
-			if (used >= keylen - 1)
-				break;
-		}
-
-		key[used++] = (char)tolower(c);
-		pending_sep = false;
-	}
-
-	key[used] = '\0';
-}
-
-/*
- * Add a status value to an object: an integer or a boolean is added as such,
- * anything else as a string.
- */
-static void esdm_json_add_value(struct json_object *obj, const char *key,
-				const char *val)
-{
-	long long num;
-	char *end;
-
-	if (!strcmp(val, "true") || !strcmp(val, "false")) {
-		json_object_object_add(
-			obj, key,
-			json_object_new_boolean(!strcmp(val, "true")));
-		return;
-	}
-
-	errno = 0;
-	num = strtoll(val, &end, 10);
-	if (!errno && end != val && !*end) {
-		json_object_object_add(obj, key, json_object_new_int64(num));
-		return;
-	}
-
-	json_object_object_add(obj, key, json_object_new_string(val));
-}
-
-/*
- * Add the members an entropy source renders itself. Used by the sources whose
- * state lives outside this process (the kernel add-on returns a JSON object
- * through its status IOCTL), so that no status text has to be parsed.
- *
- * Returns true when the object was consumed.
- */
-static bool esdm_json_es_state_native(struct json_object *es_obj, uint32_t es)
+/* Add the members of the JSON state of entropy source @es to @es_obj */
+static void esdm_json_es_state(struct json_object *es_obj, uint32_t es)
 {
 	char state[ESDM_ES_STATE_BUFLEN] = { 0 };
 	struct json_object *obj;
-	bool consumed = false;
-
-	if (!esdm_es[es]->state_json)
-		return false;
 
 	esdm_es[es]->state_json(state, sizeof(state));
 
-	/*
-	 * A source that cannot render its state (e.g. a truncated or otherwise
-	 * malformed document) falls back to the status text below rather than
-	 * corrupting the status document.
-	 */
+	/* A state that did not fit, or is no object, adds no members */
 	obj = json_tokener_parse(state);
-	if (!obj)
-		return false;
-
 	if (json_object_is_type(obj, json_type_object)) {
 		json_object_object_foreach(obj, key, val)
 		{
 			json_object_object_add(es_obj, key,
 					       json_object_get(val));
 		}
-		consumed = true;
 	}
 
 	json_object_put(obj);
-
-	return consumed;
-}
-
-/*
- * Turn the status text of one entropy source into JSON members: its lines are
- * of the shape " Label: value", which become "label": value.
- */
-static void esdm_json_es_state(struct json_object *es_obj, uint32_t es)
-{
-	char state[ESDM_ES_STATE_BUFLEN] = { 0 };
-	char *line, *saveptr = NULL;
-
-	if (esdm_json_es_state_native(es_obj, es))
-		return;
-
-	esdm_es[es]->state(state, sizeof(state));
-
-	for (line = strtok_r(state, "\n", &saveptr); line;
-	     line = strtok_r(NULL, "\n", &saveptr)) {
-		char key[128];
-		char *val = strchr(line, ':');
-
-		/* Lines without a label (e.g. an error report) carry no member */
-		if (!val)
-			continue;
-
-		*val++ = '\0';
-		while (*line == ' ' || *line == '\t')
-			line++;
-		while (*val == ' ' || *val == '\t')
-			val++;
-
-		esdm_json_key(line, key, sizeof(key));
-		if (!key[0])
-			continue;
-
-		esdm_json_add_value(es_obj, key, val);
-	}
 }
 
 /* Render the statistics of one DRNG instance as a JSON object. */
@@ -547,21 +259,13 @@ int esdm_status_drng_pr_json(char *buf, size_t buflen)
 	return esdm_drng_status_json_write(obj, buf, buflen);
 }
 
-DSO_PUBLIC
-int esdm_status_json(char *buf, size_t buflen)
+/* The status document, NULL when it cannot be created */
+static struct json_object *esdm_status_obj(void)
 {
 	struct esdm_drng *drng = esdm_drng_init_instance();
 	struct json_object *root, *compliance, *sources, *drngs, *worker,
 		*selftest;
-	int ret = -ENOMEM;
 	uint32_t i;
-
-	if (!buf || !buflen) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
-			    "Status information cannot be created\n");
-		return -EINVAL;
-	}
-	buf[0] = '\0';
 
 	root = json_object_new_object();
 	compliance = json_object_new_array();
@@ -573,6 +277,8 @@ int esdm_status_json(char *buf, size_t buflen)
 	    !selftest) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 			    "Status information cannot be created\n");
+		json_object_put(root);
+		root = NULL;
 		goto out;
 	}
 
@@ -634,7 +340,7 @@ int esdm_status_json(char *buf, size_t buflen)
 	json_object_object_add(root, "entropy_sources", sources);
 	sources = NULL;
 
-	/* The initial and the prediction resistance DRNG - see esdm_status() */
+	/* The initial and the prediction resistance DRNG only */
 	esdm_drng_stats_summary(esdm_drng_status_json, drngs);
 	json_object_object_add(root, "drngs", drngs);
 	drngs = NULL;
@@ -671,17 +377,292 @@ int esdm_status_json(char *buf, size_t buflen)
 	json_object_object_add(root, "periodic_self_test", selftest);
 	selftest = NULL;
 
-	ret = esdm_json_write(
-		json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY),
-		buf, buflen);
-
 out:
-	json_object_put(root);
 	json_object_put(compliance);
 	json_object_put(sources);
 	json_object_put(drngs);
 	json_object_put(worker);
 	json_object_put(selftest);
+
+	return root;
+}
+
+DSO_PUBLIC
+int esdm_status_json(char *buf, size_t buflen)
+{
+	struct json_object *root;
+	int ret;
+
+	if (!buf || !buflen) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Status information cannot be created\n");
+		return -EINVAL;
+	}
+	buf[0] = '\0';
+
+	root = esdm_status_obj();
+	if (!root)
+		return -ENOMEM;
+
+	ret = esdm_json_write(
+		json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY),
+		buf, buflen);
+	json_object_put(root);
+
+	return ret;
+}
+
+/****************************** Status text ***********************************/
+
+/* Words of member names that a label spells as written here */
+static const struct {
+	const char *word;
+	const char *label;
+} esdm_status_words[] = {
+	{ "cpu", "CPU" },     { "drbg", "DRBG" }, { "drng", "DRNG" },
+	{ "drngs", "DRNGs" }, { "ebpf", "eBPF" }, { "fips", "FIPS" },
+	{ "id", "ID" },	      { "rng", "RNG" },
+};
+
+struct esdm_status_txt {
+	char *buf;
+	size_t buflen;
+	size_t len;
+	bool overflow;
+};
+
+static void esdm_status_txt_add(struct esdm_status_txt *txt, const char *fmt,
+				...) __attribute__((format(printf, 2, 3)));
+static void esdm_status_txt_add(struct esdm_status_txt *txt, const char *fmt,
+				...)
+{
+	va_list ap;
+	int ret;
+
+	if (txt->overflow)
+		return;
+
+	va_start(ap, fmt);
+	ret = vsnprintf(txt->buf + txt->len, txt->buflen - txt->len, fmt, ap);
+	va_end(ap);
+
+	/* What did not fit stays cut off, as far as it got */
+	if (ret < 0 || (size_t)ret >= txt->buflen - txt->len) {
+		txt->overflow = true;
+		return;
+	}
+	txt->len += (size_t)ret;
+}
+
+/* "fully_seeded" turns into "Fully seeded", "drng_name" into "DRNG name" */
+static void esdm_status_label(const char *key, char *label, size_t labellen)
+{
+	bool first_spelled = false;
+	size_t used = 0;
+
+	label[0] = '\0';
+	while (*key) {
+		size_t wlen = strcspn(key, "_"), i;
+		const char *word = NULL;
+		int ret;
+
+		for (i = 0; i < ARRAY_SIZE(esdm_status_words); i++) {
+			if (!strncmp(key, esdm_status_words[i].word, wlen) &&
+			    !esdm_status_words[i].word[wlen])
+				word = esdm_status_words[i].label;
+		}
+		if (!used)
+			first_spelled = word != NULL;
+
+		if (word)
+			ret = snprintf(label + used, labellen - used, "%s%s",
+				       used ? " " : "", word);
+		else
+			ret = snprintf(label + used, labellen - used, "%s%.*s",
+				       used ? " " : "", (int)wlen, key);
+		if (ret < 0 || (size_t)ret >= labellen - used)
+			break;
+		used += (size_t)ret;
+
+		key += wlen;
+		if (*key)
+			key++;
+	}
+
+	if (!first_spelled)
+		label[0] = (char)toupper((unsigned char)label[0]);
+}
+
+static bool esdm_status_is_scalar(struct json_object *val)
+{
+	return !json_object_is_type(val, json_type_object) &&
+	       !json_object_is_type(val, json_type_array);
+}
+
+/*
+ * A scalar as text. A string with a control character is JSON-quoted, so that
+ * no line break in it forges a line of the text.
+ */
+static const char *esdm_status_scalar(struct json_object *val)
+{
+	const char *str;
+
+	if (!val)
+		return "N/A";
+
+	str = json_object_get_string(val);
+	if (json_object_is_type(val, json_type_string)) {
+		const unsigned char *c;
+
+		for (c = (const unsigned char *)str; *c; c++) {
+			if (*c < 0x20)
+				return json_object_to_json_string_ext(
+					val,
+					JSON_C_TO_STRING_PLAIN |
+						JSON_C_TO_STRING_NOSLASHESCAPE);
+		}
+	}
+
+	return str;
+}
+
+static void esdm_status_txt_obj(struct esdm_status_txt *txt,
+				struct json_object *obj, int depth,
+				bool headed);
+
+/*
+ * Heading of an array element: "<name> (ID <id>)" for an object with an ID
+ * (an entropy source), whose lines then omit both; the index otherwise.
+ */
+static bool esdm_status_heading(struct json_object *elem, size_t idx,
+				char *head, size_t headlen)
+{
+	struct json_object *id, *name;
+
+	if (!json_object_is_type(elem, json_type_object) ||
+	    !json_object_object_get_ex(elem, "id", &id) ||
+	    !esdm_status_is_scalar(id)) {
+		snprintf(head, headlen, "%zu", idx);
+		return false;
+	}
+
+	if (json_object_object_get_ex(elem, "name", &name) &&
+	    esdm_status_is_scalar(name))
+		snprintf(head, headlen, "%s (ID %s)",
+			 esdm_status_scalar(name), esdm_status_scalar(id));
+	else
+		snprintf(head, headlen, "ID %s", esdm_status_scalar(id));
+
+	return true;
+}
+
+static void esdm_status_txt_member(struct esdm_status_txt *txt,
+				   const char *label, struct json_object *val,
+				   int depth)
+{
+	size_t i, n;
+
+	if (esdm_status_is_scalar(val)) {
+		esdm_status_txt_add(txt, "%*s%s: %s\n", depth, "", label,
+				    esdm_status_scalar(val));
+		return;
+	}
+
+	if (json_object_is_type(val, json_type_object)) {
+		esdm_status_txt_add(txt, "%*s%s:\n", depth, "", label);
+		esdm_status_txt_obj(txt, val, depth + 1, false);
+		return;
+	}
+
+	/* An array of scalars is one line, any other a block per element */
+	n = json_object_array_length(val);
+	for (i = 0; i < n; i++) {
+		if (!esdm_status_is_scalar(json_object_array_get_idx(val, i)))
+			break;
+	}
+
+	if (i == n) {
+		esdm_status_txt_add(txt, "%*s%s: %s", depth, "", label,
+				    n ? "" : "none");
+		for (i = 0; i < n; i++) {
+			esdm_status_txt_add(
+				txt, "%s%s", i ? ", " : "",
+				esdm_status_scalar(
+					json_object_array_get_idx(val, i)));
+		}
+		esdm_status_txt_add(txt, "\n");
+		return;
+	}
+
+	esdm_status_txt_add(txt, "%*s%s:\n", depth, "", label);
+	for (i = 0; i < n; i++) {
+		struct json_object *elem = json_object_array_get_idx(val, i);
+		char head[160];
+
+		if (esdm_status_heading(elem, i, head, sizeof(head))) {
+			esdm_status_txt_add(txt, "%*s%s:\n", depth + 1, "",
+					    head);
+			esdm_status_txt_obj(txt, elem, depth + 2, true);
+		} else {
+			esdm_status_txt_member(txt, head, elem, depth + 1);
+		}
+	}
+}
+
+/* @headed: the ID and the name are in the heading, see esdm_status_heading() */
+static void esdm_status_txt_obj(struct esdm_status_txt *txt,
+				struct json_object *obj, int depth,
+				bool headed)
+{
+	json_object_object_foreach(obj, key, val)
+	{
+		char label[128];
+
+		if (headed && (!strcmp(key, "id") || !strcmp(key, "name")))
+			continue;
+
+		esdm_status_label(key, label, sizeof(label));
+		esdm_status_txt_member(txt, label, val, depth);
+	}
+}
+
+int esdm_status_text(struct json_object *doc, char *buf, size_t buflen)
+{
+	struct esdm_status_txt txt = { .buf = buf, .buflen = buflen };
+
+	buf[0] = '\0';
+	esdm_status_txt_obj(&txt, doc, 0, false);
+
+	if (txt.overflow) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ANY,
+			"Status report does not fit into the buffer of %zu bytes\n",
+			buflen);
+		return -EMSGSIZE;
+	}
+
+	return 0;
+}
+
+DSO_PUBLIC
+int esdm_status(char *buf, size_t buflen)
+{
+	struct json_object *root;
+	int ret;
+
+	if (!buf || !buflen) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+			    "Status information cannot be created\n");
+		return -EINVAL;
+	}
+	buf[0] = '\0';
+
+	root = esdm_status_obj();
+	if (!root)
+		return -ENOMEM;
+
+	ret = esdm_status_text(root, buf, buflen);
+	json_object_put(root);
 
 	return ret;
 }

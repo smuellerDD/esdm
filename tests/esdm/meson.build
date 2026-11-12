@@ -27,6 +27,15 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_status_text_test = executable(
+		'esdm_status_text_test',
+		[ 'esdm_status_text_test.c' ],
+		include_directories: [ include_dirs_server,
+				       include_directories('../common') ],
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_version_test = executable(
 		'esdm_version_test',
 		[ esdm_ipc_ns, 'esdm_version_test.c' ],
@@ -108,6 +117,7 @@ if get_option('esdm-server').enabled()
 	)
 
 	test('ESDM API call esdm_status', esdm_status_test, suite: 'core')
+	test('ESDM status text', esdm_status_text_test, suite: 'core')
 	test('ESDM API call esdm_version', esdm_version_test, suite: 'core')
 	test('ESDM API call esdm_get_random_bytes_full', esdm_get_random_bytes_full_test,
 		suite: 'core')

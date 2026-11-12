@@ -349,25 +349,7 @@ err:
 	eb_es->e_bits = 0;
 }
 
-static void esdm_irq_es_state(char *buf, size_t buflen)
-{
-	mutex_lock(&irq_mutex);
-
-	/* The status of a descriptor follows the rate configured on it */
-	if (esdm_irq_entropy_fd >= 0)
-		esdm_irq_set_entropy_rate_locked(esdm_irq_requested_bits_set);
-
-	esdm_kernel_state(buf, buflen, esdm_irq_entropy_fd,
-			  ESDM_IRQ_STATUS_JSON);
-
-	mutex_unlock(&irq_mutex);
-}
-
-/*
- * The kernel add-on renders its state as a JSON object itself
- * (ESDM_IRQ_STATUS_JSON), so the properties of this entropy source enter the
- * JSON status document without being derived from the status text.
- */
+/* The kernel add-on renders the state as JSON (ESDM_IRQ_STATUS_JSON) */
 static void esdm_irq_es_state_json(char *buf, size_t buflen)
 {
 	char status[ESDM_STATUS_JSON_BUFLEN];
@@ -445,7 +427,6 @@ struct esdm_es_cb esdm_es_irq = {
 	.get_ent = esdm_irq_get,
 	.curr_entropy = esdm_irq_entropylevel,
 	.max_entropy = esdm_irq_poolsize,
-	.state = esdm_irq_es_state,
 	.state_json = esdm_irq_es_state_json,
 	.reset = esdm_irq_reset,
 	.active = esdm_irq_active,

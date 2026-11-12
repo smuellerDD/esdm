@@ -27,29 +27,25 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "test_pertubation.h"
+#include "../es_state_check.h"
 
 static int es_jent_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_ext_es_jitter]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_ext_es_jitter]->state) {
-		printf("ES Jitter RNG - fail: state callback missing\n");
-		return 1;
-	}
-
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_ext_es_jitter]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Library version") ||
-	    !strstr(buf, "Available entropy")) {
+	if (!es_state_member(state, "library_version", json_type_int) ||
+	    !es_state_member(state, "available_entropy", json_type_int)) {
 		printf("ES Jitter RNG - fail: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES Jitter RNG - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
 
-	printf("ES Jitter RNG - pass: state information found:\n%s\n", buf);
-
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_jent_getdata(uint32_t expected_ent_level)

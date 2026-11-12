@@ -87,11 +87,10 @@ extern "C" {
 /*
  * Size of the rendered status report kept in the shared memory segment.
  *
- * esdm_status() appends one section per entropy source, truncates on overflow
- * and emits the auxiliary pool section last. A build with every source enabled
- * renders roughly 1900 bytes, so the previous 1536 silently cut that section
- * off and every reader (CUSE ioctl 42, the aux client) saw a report stopping
- * mid-way. Keep enough headroom that adding a source does not bring that back.
+ * esdm_status() renders one block per entropy source and truncates on
+ * overflow. With every source enabled it renders about 3.4 KiB; the former
+ * 1536 bytes cut the report off for every reader (CUSE ioctl 42, the aux
+ * client). Leave headroom for added sources.
  * Growing this changes the layout of struct esdm_shm_status, hence the version
  * bump above - an old client rejects the segment rather than misreading it.
  */

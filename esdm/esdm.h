@@ -213,8 +213,8 @@ ssize_t esdm_get_seed(uint64_t *buf, size_t nbytes,
 /**
  * @brief esdm_status() - Get status information on ESDM
  *
- * The report holds the ESDM properties, one section per entropy source and
- * one section per DRNG instance.
+ * The report is the document of esdm_status_json() rendered as text: the ESDM
+ * properties, one block per entropy source and one per DRNG instance.
  *
  * A report that does not fit into the buffer is not handed out as complete:
  * what was assembled stays in the buffer - half a report is still readable -

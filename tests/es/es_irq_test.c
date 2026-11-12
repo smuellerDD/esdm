@@ -47,6 +47,7 @@
 #include "esdm_es_irq.h"
 #include "helper.h"
 #include "test_pertubation.h"
+#include "../es_state_check.h"
 
 /*
  * Short sleeps arm hrtimers whose expiry raises timer interrupts and softirqs
@@ -64,76 +65,33 @@ static void create_irq_entropy(void)
 
 static int es_irq_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_int_es_irq]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_int_es_irq]->state) {
-		printf("ES Interrupt - fail: state callback missing\n");
-		return 1;
-	}
-
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_int_es_irq]->state(buf, sizeof(buf));
-
-	if (!strncmp(buf, " disabled", 9) || !strncmp(buf, "disabled", 8))
+	if (es_state_member(state, "disabled", json_type_string)) {
+		json_object_put(state);
 		return -ENOENT;
+	}
 
-	/*
-	 * The members come from the kernel module (esdm_irq_es_state_json()
-	 * of kernel/esdm_es/esdm_es_irq.c), their labels from
-	 * esdm_kernel_state(), so this pins the two together.
-	 */
-	if (!strstr(buf, "DRBG for operating entropy pool") ||
-	    !strstr(buf, "Available entropy") ||
-	    !strstr(buf, "per-CPU interrupt collection size") ||
-	    !strstr(buf, "Standards compliance") ||
-	    !strstr(buf, "High-resolution timer")) {
+	/* The members come from kernel/esdm_es/esdm_es_irq.c */
+	if (!es_state_member(state, "drbg_for_operating_entropy_pool",
+			     json_type_string) ||
+	    !es_state_member(state, "available_entropy", json_type_int) ||
+	    !es_state_member(state, "per_cpu_interrupt_collection_size",
+			     json_type_int) ||
+	    !es_state_member(state, "standards_compliance", json_type_string) ||
+	    !es_state_member(state, "high_resolution_timer",
+			     json_type_boolean)) {
 		printf("ES Interrupt - fail: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
-	}
-	printf("ES Interrupt - pass: state information found:\n%s\n", buf);
-
-	return 0;
-}
-
-/*
- * The JSON status is what the server embeds in its own status document, so a
- * malformed one is not visible until something parses it. Only the framing and
- * the member names are checked here - the values are the plain state's.
- */
-static int es_irq_getstate_json(void)
-{
-	char buf[ESDM_STATUS_JSON_BUFLEN];
-	size_t len;
-
-	if (!esdm_es[esdm_int_es_irq]->state_json) {
-		printf("ES Interrupt - fail: state_json callback missing\n");
-		return 1;
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES Interrupt - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
 
-	memset(buf, 0, sizeof(buf));
-	esdm_es[esdm_int_es_irq]->state_json(buf, sizeof(buf));
-
-	len = strlen(buf);
-	if (len < 2 || buf[0] != '{' || buf[len - 1] != '}') {
-		printf("ES Interrupt - fail: state_json is not a JSON object: %s\n",
-		       buf);
-		return 1;
-	}
-
-	if (!strstr(buf, "\"drbg_for_operating_entropy_pool\"") ||
-	    !strstr(buf, "\"available_entropy\"") ||
-	    !strstr(buf, "\"per_cpu_interrupt_collection_size\"") ||
-	    !strstr(buf, "\"high_resolution_timer\"")) {
-		printf("ES Interrupt - fail: state_json misses a member: %s\n",
-		       buf);
-		return 1;
-	}
-
-	printf("ES Interrupt - pass: state_json: %s\n", buf);
-
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_irq_getdata(void)
@@ -352,7 +310,6 @@ int main(int argc, char *argv[])
 		return 77;
 	}
 
-	ret += es_irq_getstate_json();
 	ret += es_irq_name();
 	ret += es_irq_poolsize();
 	ret += es_irq_getdata();

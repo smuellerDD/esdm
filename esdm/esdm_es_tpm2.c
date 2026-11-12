@@ -20,11 +20,12 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <json-c/json.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "bitshift.h"
@@ -422,8 +423,9 @@ err:
 	eb_es->e_bits = 0;
 }
 
-static void esdm_es_tpm2_es_state(char *buf, size_t buflen)
+static void esdm_es_tpm2_es_state_json(char *buf, size_t buflen)
 {
+	struct json_object *obj = json_object_new_object();
 #ifdef ESDM_TPM2_STIR
 	const bool stir = 1;
 #else
@@ -436,12 +438,16 @@ static void esdm_es_tpm2_es_state(char *buf, size_t buflen)
 	entropy_rate = esdm_es_tpm2_entropylevel_locked(256);
 	mutex_reader_unlock(&tpm2_mutex);
 
-	/* Assume the esdm_drng_init lock is taken by caller */
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n"
-		 " Stir: %u\n",
-		 poolsize, entropy_rate, stir);
+	if (obj) {
+		json_object_object_add(obj, "available_entropy",
+				       json_object_new_int64(poolsize));
+		json_object_object_add(obj, "entropy_rate_per_256_data_bits",
+				       json_object_new_int64(entropy_rate));
+		json_object_object_add(obj, "stir",
+				       json_object_new_int64(stir));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_es_tpm2_active(void)
@@ -475,7 +481,7 @@ struct esdm_es_cb esdm_es_tpm2 = {
 	.get_ent = esdm_es_tpm2_get,
 	.curr_entropy = esdm_es_tpm2_entropylevel,
 	.max_entropy = esdm_es_tpm2_poolsize,
-	.state = esdm_es_tpm2_es_state,
+	.state_json = esdm_es_tpm2_es_state_json,
 	.reset = NULL,
 	.active = esdm_es_tpm2_active,
 	.selftest = esdm_es_tpm2_selftest,

@@ -481,7 +481,6 @@ static void test_names(void)
 	};
 	struct json_object *state;
 	unsigned int i;
-	char txt[4096];
 
 	test_connect(test_good);
 	CHECK_EQ(test_get(BITS, NULL), BITS);
@@ -490,9 +489,6 @@ static void test_names(void)
 		      es_state_str_is(state, "instance", EXTSOCK_NAME),
 	      "not shown under the name declared: %s", es_state_print(state));
 	json_object_put(state);
-	ES->state(txt, sizeof(txt));
-	CHECK(strstr(txt, " Declared name: " ES_EXT_TEST_NAME "\n"),
-	      "the text has no declared name: %s", txt);
 
 	test_connect(test_evil);
 	CHECK_EQ(test_get(BITS, NULL), 8);
@@ -562,11 +558,9 @@ static void test_status(void)
 		      es_state_member(provider, "plugin", json_type_object),
 	      "no status of the provider: %s", es_state_print(state));
 	json_object_put(state);
-	ES->state(txt, sizeof(txt));
+	/* Asked once per interval, not once per state */
+	ES->state_json(txt, sizeof(txt));
 	CHECK_EQ(ctl->status_calls, calls + 1);
-	CHECK(strstr(txt, "\n Provider status: {\"server\":{") &&
-		      strstr(txt, "\"plugin\":" ES_EXT_TEST_STATUS "}\n"),
-	      "the text has no status of the provider: %s", txt);
 
 	test_connect(test_evil);
 	CHECK_EQ(test_get(BITS, NULL), 8);

@@ -1384,7 +1384,8 @@ static void test_esdm_status(void)
 	CHECK(len > 0 && text && strlen(text) == len,
 	      "the status of %u bytes is no text of that length", len);
 	CHECK(text && strstr(text, "DRNG name: ") &&
-		      strstr(text, "Entropy Source 0 properties:"),
+		      strstr(text, "\nEntropy sources:\n ") &&
+		      strstr(text, " (ID 0):\n"),
 	      "the status lacks its sections: %.200s", text ? text : "");
 	free(text);
 	text = NULL;

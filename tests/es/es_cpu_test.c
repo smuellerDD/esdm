@@ -25,29 +25,25 @@
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "../es_state_check.h"
 
 static int es_cpu_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_ext_es_cpu]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_ext_es_cpu]->state) {
-		printf("ES CPU - fail: state callback missing\n");
-		return 1;
+	if (!es_state_member(state, "available_entropy", json_type_int) ||
+	    !es_state_member(state, "data_multiplier", json_type_int)) {
+		printf("ES CPU - fail: state information contains unexpected content: %s\n",
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES CPU - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
 
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_ext_es_cpu]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Hash for compressing data") ||
-	    !strstr(buf, "Available entropy") ||
-	    !strstr(buf, "Data multiplier")) {
-		printf("ES CPU: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
-	}
-	printf("ES CPU - pass: state information found:\n%s\n", buf);
-
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_cpu_getdata(uint32_t expected_ent_level)
@@ -132,20 +128,19 @@ static int es_cpu_poolsize(uint32_t expected_ent_level)
 }
 
 /*
- * The state string is written with snprintf into whatever the caller offers,
- * and the JSON status document hands it a share of a fixed buffer. Check that a
- * buffer too small for the full text is truncated rather than run over, and
- * that what is written stays a NUL terminated string.
+ * The status document hands the state a share of a fixed buffer. Check that a
+ * state too large for it is not run over, and that it leaves an empty string -
+ * half a JSON object is none.
  */
 static int es_cpu_getstate_truncated(void)
 {
-	char buf[sizeof(" Hash for compressing data: ") + 8];
+	char buf[sizeof("{\"available_entropy\":") + 16];
 	char canary[16];
 
 	memset(buf, 0x5a, sizeof(buf));
 	memset(canary, 0x5a, sizeof(canary));
 
-	esdm_es[esdm_ext_es_cpu]->state(buf, sizeof(buf) - sizeof(canary));
+	esdm_es[esdm_ext_es_cpu]->state_json(buf, sizeof(buf) - sizeof(canary));
 
 	if (memcmp(buf + sizeof(buf) - sizeof(canary), canary,
 		   sizeof(canary))) {
@@ -153,12 +148,12 @@ static int es_cpu_getstate_truncated(void)
 		return 1;
 	}
 
-	if (buf[sizeof(buf) - sizeof(canary) - 1] != '\0') {
-		printf("ES CPU - fail: state did not terminate the truncated string\n");
+	if (buf[0] != '\0') {
+		printf("ES CPU - fail: state left part of an object behind\n");
 		return 1;
 	}
 
-	printf("ES CPU - pass: state truncates into a short buffer: %s\n", buf);
+	printf("ES CPU - pass: state too large for the buffer leaves none\n");
 
 	return 0;
 }
