@@ -57,6 +57,7 @@
 #include "esdm_rpc_server.h"
 #include "esdm_rpc_service.h"
 #include "helper.h"
+#include "linux_support.h"
 #include "math_helper.h"
 #include "esdm_logger.h"
 #include "memset_secure.h"
@@ -1517,6 +1518,14 @@ int esdm_rpc_server_init(const char *username, const char *groupname)
 	int ret = 0;
 
 	pthread_setname_np(pthread_self(), "ESDM master");
+
+	/*
+	 * Jail the process before its first thread exists: unshare() moves only
+	 * the calling thread, and threads inherit their creator's namespaces.
+	 * Binding the sockets later from inside works: the mount namespace is a
+	 * copy and Unix path sockets are not tied to a network namespace.
+	 */
+	CKINT(linux_isolate_namespace());
 
 	/* Main ESDM Init DRNG state, ES', ... */
 	CKINT(esdm_init());
