@@ -921,15 +921,20 @@ struct esdm_cuse_poll {
 static struct esdm_cuse_poll *esdm_cuse_poll_list;
 static DEFINE_MUTEX_W_UNLOCKED(esdm_cuse_ph_lock);
 
-/* Unlink and free every registration for fh; caller holds esdm_cuse_ph_lock. */
-static void esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
+/*
+ * Unlink and free every registration for fh, returning the events they waited
+ * for; caller holds esdm_cuse_ph_lock.
+ */
+static uint32_t esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
 {
 	struct esdm_cuse_poll **pp = &esdm_cuse_poll_list;
+	uint32_t events = 0;
 
 	while (*pp) {
 		struct esdm_cuse_poll *node = *pp;
 
 		if (node->fh == fh) {
+			events |= node->poll_events;
 			if (notify)
 				fuse_notify_poll(node->ph);
 			fuse_pollhandle_destroy(node->ph);
@@ -939,6 +944,8 @@ static void esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
 			pp = &node->next;
 		}
 	}
+
+	return events;
 }
 
 static void esdm_cuse_get_pollmask(unsigned int *outmask)
@@ -991,7 +998,8 @@ static void esdm_cuse_set_pollmask(unsigned int request_events,
 void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		    struct fuse_pollhandle *ph)
 {
-	unsigned int mask;
+	unsigned int sysmask, mask;
+	uint32_t events;
 	int err_code;
 
 	if (!fi->poll_events) {
@@ -1003,15 +1011,23 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	 * Check current status and return it if it complies with requested
 	 * status.
 	 */
-	esdm_cuse_get_pollmask(&mask);
+	esdm_cuse_get_pollmask(&sysmask);
+	mask = sysmask;
 	esdm_cuse_set_pollmask(fi->poll_events, &mask);
 	fuse_reply_poll(req, mask);
 
 	/* cleanup first, as we may have an interrupted poll/select */
 	mutex_w_lock(&esdm_cuse_ph_lock);
 	{
-		/* Drop any stale registration for this fh. */
-		esdm_cuse_poll_remove_fh(fi->fh, false);
+		/*
+		 * Replace any registration of this fh (the kernel has one poll
+		 * handle per file, waking all its pollers) but keep its events:
+		 * another thread may poll the file for other events.
+		 */
+		events = fi->poll_events |
+			 esdm_cuse_poll_remove_fh(fi->fh, false);
+		mask = sysmask;
+		esdm_cuse_set_pollmask(events, &mask);
 
 		if (mask) {
 			/* Event already available (replied above). */
@@ -1033,7 +1049,7 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 
 				node->fh = fi->fh;
 				node->ph = ph;
-				node->poll_events = fi->poll_events;
+				node->poll_events = events;
 				node->next = esdm_cuse_poll_list;
 				esdm_cuse_poll_list = node;
 
@@ -1044,7 +1060,7 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 				 * instead of waiting for the next state change.
 				 */
 				esdm_cuse_get_pollmask(&recheck);
-				esdm_cuse_set_pollmask(fi->poll_events, &recheck);
+				esdm_cuse_set_pollmask(events, &recheck);
 				if (recheck) {
 					fuse_notify_poll(node->ph);
 					fuse_pollhandle_destroy(node->ph);

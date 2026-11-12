@@ -627,13 +627,18 @@ static void test_poll_registration(void)
 
 	/*
 	 * A second poll on the same descriptor replaces the first
-	 * registration rather than adding to it.
+	 * registration rather than adding to it, but keeps its events: another
+	 * thread may poll the same file for other ones and must still wake.
 	 */
 	reply_reset();
+	fi.poll_events = POLLOUT;
 	esdm_cuse_poll(TEST_REQ, &fi, TEST_PH);
 	CHECK_EQ(destroy_calls, 1);
 	CHECK(esdm_cuse_poll_list && !esdm_cuse_poll_list->next,
 	      "the stale registration was kept alongside the new one");
+	CHECK(esdm_cuse_poll_list &&
+		      esdm_cuse_poll_list->poll_events == (POLLIN | POLLOUT),
+	      "the events of the replaced registration were dropped");
 
 	/* The release takes it with it */
 	reply_reset();
