@@ -167,6 +167,9 @@ struct esdm_egd_conn {
 	uint32_t insert_left;
 	int32_t insert_status;
 
+	/* The client is gone, see esdm_egd_hangup(). */
+	bool hangup;
+
 	TAILQ_ENTRY(esdm_egd_conn) tailq;
 };
 TAILQ_HEAD(esdm_egd_conn_list, esdm_egd_conn);
@@ -493,6 +496,23 @@ static void esdm_egd_out_clear(struct esdm_egd_conn *conn)
 }
 
 /*
+ * The client is gone, but what it sent may still be unread: a write request
+ * has no response, so closing right after it is how a client hands over its
+ * data. The input is processed to its end, which closes the connection, but
+ * not answered; a deferred request is dropped rather than waited for.
+ */
+static void esdm_egd_hangup(struct esdm_egd_conn *conn)
+{
+	conn->hangup = true;
+	esdm_egd_out_clear(conn);
+
+	conn->deferred = 0;
+	conn->deferred_pr = false;
+	memset_secure(conn->answer, 0, sizeof(conn->answer));
+	conn->answer_len = 0;
+}
+
+/*
  * Push out what is left of the response.
  *
  * A socket that cannot take it all is not waited for: the rest stays in the
@@ -505,6 +525,12 @@ static void esdm_egd_out_clear(struct esdm_egd_conn *conn)
  */
 static int esdm_egd_flush(struct esdm_egd_conn *conn)
 {
+	/* Nobody to deliver to, see esdm_egd_hangup() */
+	if (conn->hangup) {
+		esdm_egd_out_clear(conn);
+		return 0;
+	}
+
 	while (esdm_egd_out_pending(conn)) {
 		/*
 		 * MSG_NOSIGNAL: a client closing its end between asking and
@@ -531,6 +557,12 @@ static int esdm_egd_flush(struct esdm_egd_conn *conn)
 		/* The client has not made room yet - EPOLLOUT tells us when. */
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 			return 0;
+
+		/* Its input may still hold what it sent before going. */
+		if (ret < 0 && (errno == EPIPE || errno == ECONNRESET)) {
+			esdm_egd_hangup(conn);
+			return 0;
+		}
 
 		return ret < 0 ? -errno : -EIO;
 	}
@@ -1049,6 +1081,23 @@ out:
 	return esdm_egd_write(conn, resp, sizeof(resp));
 }
 
+/* Does the command change anything beyond producing its response? */
+static bool esdm_egd_cmd_has_effect(uint8_t cmd)
+{
+	switch (cmd) {
+	case ESDM_EGD_CMD_WRITE_ENTROPY:
+	case ESDM_EGD_CMD_ESDM_ADD_TO_ENT_CNT:
+	case ESDM_EGD_CMD_ESDM_CLEAR_POOL:
+	case ESDM_EGD_CMD_ESDM_RESEED:
+	case ESDM_EGD_CMD_ESDM_SET_WRITE_WAKEUP:
+	case ESDM_EGD_CMD_ESDM_SET_MIN_RESEED_SECS:
+	case ESDM_EGD_CMD_ESDM_BULK_INSERT:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /* Serve a deferred blocking read request, if there is one. */
 static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
 {
@@ -1076,8 +1125,8 @@ static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
  * A connection with a deferred request is watched for neither, since nothing of
  * it is read (see esdm_egd_read()) and a level-triggered EPOLLIN would spin the
  * worker on a pipelined client's unread bytes for as long as the request waits.
- * EPOLLERR and EPOLLHUP are reported regardless, so an unwatched connection is
- * still torn down when its peer goes away.
+ * EPOLLERR and EPOLLHUP are reported regardless, so an unwatched connection
+ * still learns that its peer went away, see esdm_egd_hangup().
  */
 static void esdm_egd_conn_arm(int epfd, struct esdm_egd_conn *conn)
 {
@@ -1208,6 +1257,12 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 			return -EPROTO;
 		}
 
+		/* Nobody to answer, see esdm_egd_hangup() */
+		if (conn->hangup && !esdm_egd_cmd_has_effect(conn->in[0])) {
+			ret = 0;
+			goto next;
+		}
+
 		/* The socket selects the generator, or the ESDM's own command */
 		pr = conn->listener->prediction_resistance ||
 		     conn->in[0] == ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK ||
@@ -1285,6 +1340,7 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 			break;
 		}
 
+	next:
 		/* Do not leave client supplied entropy data in the buffer. */
 		memset_secure(conn->in, 0, cmd_len);
 		esdm_egd_consume(conn, cmd_len);
@@ -1627,9 +1683,11 @@ static int esdm_egd_handler(void __unused *args)
 
 			conn = events[i].data.ptr;
 
+			/* Gone, but its input is still to be processed */
 			if (events[i].events & (EPOLLERR | EPOLLHUP))
-				ret = -EPIPE;
-			else if (esdm_egd_out_pending(conn))
+				esdm_egd_hangup(conn);
+
+			if (esdm_egd_out_pending(conn))
 				/* Room was made - deliver the rest and go on. */
 				ret = esdm_egd_process(conn);
 			else

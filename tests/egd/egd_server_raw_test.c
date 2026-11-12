@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <json-c/json.h>
+#include <linux/sockios.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -46,6 +47,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -1854,6 +1856,78 @@ static void test_esdm_split_command(void)
 	close(fd);
 }
 
+/****************************
+ * Robustness
+ ****************************/
+
+/*
+ * A client may send data and leave at once - an insertion has no response -
+ * and what it sent must still be processed. A socket closed with unread data
+ * resets its peer, so the client shuts down rather than closes its end and
+ * waits for its data to be taken. It first stalls the server on an unread
+ * answer, so the server cannot have read everything before the hangup.
+ */
+static void test_hangup_input(void)
+{
+	uint8_t read_cmd[6] = { ESDM_EGD_CMD_ESDM_BULK_READ,
+				ESDM_EGD_CMD_READ_NONBLOCK };
+	uint8_t data[ESDM_EGD_MAX_TRANSFER], hdr[5];
+	socklen_t errlen = sizeof(int);
+	unsigned int i;
+	int err = 0, outq = -1, fd;
+
+	printf("EGD raw: the input of a client that hung up\n");
+
+	for (i = 0; i < sizeof(data); i++)
+		data[i] = (uint8_t)(i ^ 0x5a);
+
+	fd = test_connect();
+	if (fd < 0) {
+		CHECK(0, "cannot connect to %s: %s", sockpath, strerror(errno));
+		return;
+	}
+
+	/*
+	 * A few request bytes asking for far more than a socket buffer holds:
+	 * the server stalls on an answer, the client still has room to send.
+	 */
+	test_put_be32(read_cmd + 2, ESDM_EGD_MAX_BULK);
+	for (i = 0; i < 16; i++) {
+		if (test_send(fd, read_cmd, sizeof(read_cmd))) {
+			CHECK(0, "the read requests could not be sent");
+			close(fd);
+			return;
+		}
+	}
+	test_sleep_ms(200);
+
+	/* An insertion, and a bulk one taking several reads */
+	hdr[0] = ESDM_EGD_CMD_ESDM_BULK_INSERT;
+	test_put_be32(hdr + 1, 16 * sizeof(data));
+	CHECK(test_cmd_write_entropy(fd, data, sizeof(data), 0) == 0 &&
+		      test_send(fd, hdr, sizeof(hdr)) == 0,
+	      "the insertions could not be sent");
+	for (i = 0; i < 16; i++)
+		CHECK(test_send(fd, data, sizeof(data)) == 0,
+		      "the bulk insertion could not be sent");
+
+	shutdown(fd, SHUT_RDWR);
+
+	for (i = 0; i < TEST_RESPONSE_MS / 10; i++) {
+		if (ioctl(fd, SIOCOUTQ, &outq) < 0 || !outq)
+			break;
+		test_sleep_ms(10);
+	}
+	CHECK(outq == 0, "%d bytes of a client that hung up were not taken",
+	      outq);
+	CHECK(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen) == 0 &&
+		      err == 0,
+	      "the server dropped what a client sent before it hung up: %s",
+	      strerror(err));
+
+	close(fd);
+}
+
 int main(int argc, char *argv[])
 {
 	struct stat sb;
@@ -1952,6 +2026,7 @@ int main(int argc, char *argv[])
 	test_unread_responses();
 	test_vanishing_client();
 	test_unknown_command();
+	test_hangup_input();
 
 	/* Nothing anywhere above may have signalled the process. */
 	CHECK(!test_sigpipe, "the server raised SIGPIPE");
