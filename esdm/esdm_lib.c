@@ -133,9 +133,6 @@ out:
 DSO_PUBLIC
 void esdm_fini(void)
 {
-	/* Clear up the SHM information */
-	esdm_shm_status_exit();
-
 	/*
 	 * Stop the asynchronous reseed worker before the entropy source manager
 	 * joins the threads: the worker waits between its passes and only this
@@ -152,6 +149,13 @@ void esdm_fini(void)
 
 	/* Finalize the entropy source manager and all its entropy sources. */
 	esdm_es_mgr_finalize();
+
+	/*
+	 * Clear up the SHM information only after the threads are joined:
+	 * every seeding updates it, see esdm_writer_wakeup(), and the reseed
+	 * worker, self test worker and ES monitor seed until here.
+	 */
+	esdm_shm_status_exit();
 
 	/* Terminate the DRNG manager after the ES are all silenced. */
 	esdm_drng_mgr_finalize();
