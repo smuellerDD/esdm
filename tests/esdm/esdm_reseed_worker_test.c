@@ -3,13 +3,11 @@
  *
  * Its jobs are observed here, all without a single request being made: a DRNG
  * that never reached the fully seeded level is brought up - nothing else does
- * that for an instance no request lands on - the prediction resistance
- * instance, which sits on the seed of the request it last served, is reseeded
- * before that seed ages, once nothing is due the worker waits for the reseed
- * it knows is coming instead of looking again every second, and a reseed
- * interval set while it waits reaches it there. A reseed interval of zero
- * seconds sends the worker home, since the requests reseed themselves then,
- * and an interval that grows again brings one back.
+ * that for an instance no request lands on - while the prediction resistance
+ * instance, seeded only for a request, is left alone. With nothing due, the
+ * worker sleeps until the reseed it knows of, and a reseed interval set
+ * meanwhile reaches it. An interval of zero sends the worker home, as requests
+ * reseed themselves then; one that grows again brings it back.
  *
  * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
  *
@@ -73,7 +71,10 @@ struct rsd_state {
 	/* The prediction resistance instance */
 	bool pr_found;
 	long long pr_seed_generation;
-	/* The earliest reseed any of them reports */
+	/*
+	 * The earliest reseed of the instances serving ordinary requests; the
+	 * prediction resistance one reseeds for every request
+	 */
 	long long soonest_reseed;
 };
 
@@ -81,14 +82,14 @@ static void rsd_state_cb(const struct esdm_drng_stats *stats, void *priv)
 {
 	struct rsd_state *state = (struct rsd_state *)priv;
 
-	if (stats->seconds_until_reseed < state->soonest_reseed)
-		state->soonest_reseed = stats->seconds_until_reseed;
-
 	if (!strcmp(stats->type, "prediction resistance")) {
 		state->pr_found = true;
 		state->pr_seed_generation = stats->seed_generation;
 		return;
 	}
+
+	if (stats->seconds_until_reseed < state->soonest_reseed)
+		state->soonest_reseed = stats->seconds_until_reseed;
 
 	state->nodes++;
 	if (!stats->fully_seeded)
@@ -319,8 +320,7 @@ static int esdm_reseed_worker_test(void)
 	 */
 	for (i = 0; i < ESDM_RSD_SLICES; i++) {
 		after = rsd_state_get();
-		if (!after.nodes_unseeded &&
-		    after.pr_seed_generation > before.pr_seed_generation)
+		if (!after.nodes_unseeded)
 			break;
 		rsd_sleep_slice();
 	}
@@ -341,15 +341,19 @@ static int esdm_reseed_worker_test(void)
 		printf("every DRNG instance was already seeded at start up\n");
 	}
 
-	/* And the prediction resistance instance is kept fresh */
-	if (after.pr_seed_generation <= before.pr_seed_generation) {
-		printf("the prediction resistance DRNG was not reseeded: seed generation %lld\n",
-		       after.pr_seed_generation);
+	/*
+	 * And the prediction resistance instance is not seeded ahead of a
+	 * request: a state compromise between two requests would predict the
+	 * next output from such a seed.
+	 */
+	if (after.pr_seed_generation != before.pr_seed_generation) {
+		printf("the prediction resistance DRNG was seeded without a request: seed generation %lld -> %lld\n",
+		       before.pr_seed_generation, after.pr_seed_generation);
 		goto err;
 	}
 
-	printf("the prediction resistance DRNG was reseeded without a request: seed generation %lld -> %lld\n",
-	       before.pr_seed_generation, after.pr_seed_generation);
+	printf("the prediction resistance DRNG was left without a request: seed generation %lld\n",
+	       after.pr_seed_generation);
 
 	/* With every instance seeded, what does the worker do next? */
 	if (rsd_idle_check())
