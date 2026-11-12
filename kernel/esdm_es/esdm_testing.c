@@ -25,6 +25,11 @@
 
 #include "esdm_testing.h"
 
+/*
+ * The scheduler hook runs with rq->lock held, where waking up a reader would
+ * deadlock: with its files built, the readers poll instead. The Makefile
+ * builds them only with the scheduler ES.
+ */
 #if defined(CONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY) ||                            \
 	defined(CONFIG_ESDM_SCHED_PERF)
 #define ESDM_TESTING_USE_BUSYLOOP
