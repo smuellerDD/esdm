@@ -2267,7 +2267,7 @@
           lib.nameValuePair "esdm_es_${name}" (
             pkgs.callPackage ./kernel/esdm_es {
               inherit (pkgs) lib;
-              inherit (kernel) kernel;
+              inherit (kernel) kernel kernelModuleMakeFlags;
               enableTesting = true;
               werror = true;
             }
@@ -2281,7 +2281,7 @@
           lib.nameValuePair "esdm_cdev_${name}" (
             pkgs.callPackage ./kernel/esdm_cdev {
               inherit (pkgs) lib;
-              inherit (kernel) kernel;
+              inherit (kernel) kernel kernelModuleMakeFlags;
               werror = true;
             }
           )
@@ -2324,6 +2324,8 @@
               bpftop
               bpftools
               bpftrace
+              # clangd, clang-format, clang-tidy; same LLVM as clang above
+              clang-tools
               sp800-90b-entropyassessment
             ];
           };

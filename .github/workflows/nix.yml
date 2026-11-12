@@ -140,9 +140,10 @@ jobs:
       - name: Build esdm_cdev
         run: |
           nix build --no-link --print-build-logs ".#esdm_cdev_${KERNEL}"
-          # The kernel's modules_install may compress it (esdm_cdev.ko.xz).
+          # The kernel's modules_install may compress it (esdm_cdev.ko.xz), and
+          # writes the certificate esdm_cdev.ko.cer next to it.
           ko=$(find "$(nix path-info ".#esdm_cdev_${KERNEL}")" \
-            -name 'esdm_cdev.ko*' | head -n 1)
+            -name 'esdm_cdev.ko*' ! -name '*.cer' | head -n 1)
           if [ -z "$ko" ]; then
             echo "::error::no esdm_cdev.ko in esdm_cdev_${KERNEL}"
             exit 1
@@ -168,7 +169,7 @@ jobs:
         run: |
           nix build --no-link --print-build-logs ".#esdm_es_${KERNEL}"
           ko=$(find "$(nix path-info ".#esdm_es_${KERNEL}")" \
-            -name 'esdm_es.ko*' | head -n 1)
+            -name 'esdm_es.ko*' ! -name '*.cer' | head -n 1)
           if [ -z "$ko" ]; then
             echo "::error::no esdm_es.ko in esdm_es_${KERNEL}"
             exit 1
@@ -215,7 +216,7 @@ jobs:
         run: |
           nix build --no-link --print-build-logs ".#esdm_cdev_${KERNEL}"
           ko=$(find "$(nix path-info ".#esdm_cdev_${KERNEL}")" \
-            -name 'esdm_cdev.ko*' | head -n 1)
+            -name 'esdm_cdev.ko*' ! -name '*.cer' | head -n 1)
           if [ -z "$ko" ]; then
             echo "::error::no esdm_cdev.ko in esdm_cdev_${KERNEL}"
             exit 1
@@ -228,7 +229,7 @@ jobs:
         run: |
           nix build --no-link --print-build-logs ".#esdm_es_${KERNEL}"
           ko=$(find "$(nix path-info ".#esdm_es_${KERNEL}")" \
-            -name 'esdm_es.ko*' | head -n 1)
+            -name 'esdm_es.ko*' ! -name '*.cer' | head -n 1)
           if [ -z "$ko" ]; then
             echo "::error::no esdm_es.ko in esdm_es_${KERNEL}"
             exit 1
