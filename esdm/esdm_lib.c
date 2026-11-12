@@ -17,6 +17,8 @@
  * DAMAGE.
  */
 
+#include <errno.h>
+
 #include "config.h"
 #include "esdm.h"
 #include "esdm_config_internal.h"
@@ -31,10 +33,27 @@
 #include "threading_support.h"
 #include "visibility.h"
 
+/*
+ * esdm_fini() is final: its termination flags and freed states stay, and the
+ * entropy sources cannot be brought up again. Refuse a second initialization
+ * rather than return success with DRNGs that never seed.
+ */
+static int esdm_finalized(void)
+{
+	if (!esdm_drng_mgr_terminating())
+		return 0;
+
+	esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+		    "The ESDM cannot be initialized again after esdm_fini()\n");
+	return -ESHUTDOWN;
+}
+
 DSO_PUBLIC
 int esdm_init(void)
 {
 	int ret = 0;
+
+	CKINT(esdm_finalized());
 
 #ifdef ESDM_OVERSAMPLE_ENTROPY_SOURCES
 	/* Enable oversampling of entropy sources if selected at compile time */
@@ -85,6 +104,8 @@ int esdm_reinit(void)
 	 * path via the out label.
 	 */
 	esdm_es_mgr_monitor_pause();
+
+	CKINT(esdm_finalized());
 
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_reinit());

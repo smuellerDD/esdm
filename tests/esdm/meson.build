@@ -213,4 +213,17 @@ if get_option('esdm-server').enabled()
 
 	test('ESDM aux pool XOF failure', esdm_aux_xof_failure_test,
 		suite: 'core')
+
+	esdm_lifecycle_test = executable(
+		'esdm_lifecycle_test',
+		[ esdm_ipc_ns, 'esdm_lifecycle_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
+	test('ESDM re-init',
+		esdm_lifecycle_test,
+		timeout: 120,
+		suite: 'core')
 endif

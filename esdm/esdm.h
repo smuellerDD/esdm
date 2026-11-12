@@ -27,6 +27,8 @@
 /**
  * @brief esdm_init() - initialize the ESDM library
  *
+ * Once per process: after esdm_fini() it fails with -ESHUTDOWN.
+ *
  * @return: 0 on success, < 0 on error
  */
 int esdm_init(void);
