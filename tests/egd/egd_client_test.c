@@ -590,6 +590,52 @@ static int test_descriptor_identity(void)
 }
 
 /*
+ * The kernel reports the peer by the path the server bound, not the configured
+ * one (/var/run is mostly a symlink to /run). That must not read as a foreign
+ * descriptor: every operation would reconnect, which a sandbox cannot.
+ */
+static int test_symlinked_path(void)
+{
+	char link[sizeof(((struct sockaddr_un *)0)->sun_path)];
+	struct egd_peer *peer;
+	struct esdm_egd_client *client = NULL;
+	uint32_t bits = 0;
+	uint8_t buf[16];
+	int ret = 0;
+
+	if (egd_peer_start(&peer, test_socket("target"), EGD_PEER_NORMAL))
+		return 1;
+
+	snprintf(link, sizeof(link), "%s/link.sock", tmpdir);
+	if (symlink(test_socket("target"), link)) {
+		egd_peer_stop(peer);
+		return 1;
+	}
+
+	if (esdm_egd_client_alloc(&client, link, TEST_TIMEOUT_MS)) {
+		unlink(link);
+		egd_peer_stop(peer);
+		return 1;
+	}
+
+	CHECK(esdm_egd_client_entropy_count(client, &bits) == 0,
+	      "the entropy count failed");
+	CHECK(esdm_egd_client_get_random(client, buf, sizeof(buf)) == 0,
+	      "the blocking read failed");
+	CHECK(esdm_egd_client_entropy_count(client, &bits) == 0,
+	      "the entropy count failed");
+	CHECK(egd_peer_connections(peer) == 1,
+	      "%u connections, expected the client to keep its first one",
+	      egd_peer_connections(peer));
+
+	esdm_egd_client_free(client);
+	unlink(link);
+	egd_peer_stop(peer);
+
+	return ret;
+}
+
+/*
  * Two processes issuing commands on one connection would desynchronize the
  * stream, so a child must not inherit the parent's. It gets one of its own,
  * and the parent's keeps working.
@@ -707,6 +753,7 @@ int main(int argc, char *argv[])
 		{ "reconnect after a hangup", test_reconnect },
 		{ "buffer cleansing on failure", test_failure_wipes_buffer },
 		{ "descriptor identity", test_descriptor_identity },
+		{ "socket path through a symlink", test_symlinked_path },
 		{ "fork", test_fork },
 		{ "peer arriving late", test_late_peer },
 	};

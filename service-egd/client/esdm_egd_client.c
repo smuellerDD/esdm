@@ -101,6 +101,14 @@ struct esdm_egd_client {
 	 */
 	pid_t owner_pid;
 
+	/*
+	 * Peer address of @fd as getpeername(2) reported it after the connect,
+	 * see esdm_egd_client_fd_is_ours_locked(): the path the server bound,
+	 * which may differ from socket_path, e.g. through a /var/run symlink.
+	 */
+	struct sockaddr_un peer_addr;
+	socklen_t peer_addrlen;
+
 	/* Registry entry, see esdm_egd_client_atfork_child(). */
 	TAILQ_ENTRY(esdm_egd_client) tailq;
 };
@@ -423,6 +431,19 @@ static int esdm_egd_client_connect_locked(struct esdm_egd_client *client)
 		return -errsv;
 	}
 
+	memset(&client->peer_addr, 0, sizeof(client->peer_addr));
+	client->peer_addrlen = sizeof(client->peer_addr);
+	if (getpeername(fd, (struct sockaddr *)&client->peer_addr,
+			&client->peer_addrlen) < 0) {
+		errsv = errno;
+		close(fd);
+		return -errsv;
+	}
+	if (client->peer_addrlen > sizeof(client->peer_addr)) {
+		close(fd);
+		return -EPROTO;
+	}
+
 	client->fd = fd;
 	client->owner_pid = getpid();
 
@@ -441,6 +462,9 @@ static int esdm_egd_client_connect_locked(struct esdm_egd_client *client)
  * for reuse, and reading "random" data out of whatever took its place would be
  * a silent and serious failure. getpeername(2) is permitted even inside
  * OpenSSH's pre-auth sandbox, so confirming costs one allowed syscall.
+ *
+ * The answer is compared with the one at connect time rather than with the
+ * configured path: the kernel reports the path as the server spelled it.
  */
 static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client)
 {
@@ -454,11 +478,8 @@ static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client)
 		return false;
 
 	/* Some other socket took the number. */
-	if (addr.sun_family != AF_UNIX || addrlen > sizeof(addr))
-		return false;
-
-	return strncmp(addr.sun_path, client->socket_path,
-		       sizeof(addr.sun_path)) == 0;
+	return addrlen <= sizeof(addr) && addrlen == client->peer_addrlen &&
+	       memcmp(&addr, &client->peer_addr, addrlen) == 0;
 }
 
 /* Caller holds the lock. */
