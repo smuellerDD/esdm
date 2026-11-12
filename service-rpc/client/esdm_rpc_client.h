@@ -39,6 +39,9 @@ extern "C" {
  * allows a consuming application to notify the ESDM library whether it shall
  * interrupt an ongoing RPC connection.
  *
+ * Without interruption, a request fails with -ETIMEDOUT after a few seconds
+ * of server silence; calls that wait for seeding wait only while it answers.
+ *
  * @param [in] interrupt_data This data is opaque to ESDM. It is provided by
  *			      the consuming application when using the different
  *			      *_int functions listed below.

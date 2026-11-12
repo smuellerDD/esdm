@@ -35,7 +35,8 @@ and
 .BR __real_getentropy ()
 available for the original kernel behaviour.
 .PP
-Should the ESDM be unreachable, the call falls back to the
+Should the ESDM be unreachable or not answer within a few seconds, the call
+falls back to the
 .BR getrandom (2)
 system call, so preloading the library cannot leave a program without random
 data.

@@ -1,0 +1,144 @@
+/*
+ * Copyright (C) 2026, Stephan Mueller <smueller@chronox.de>
+ *
+ * License: see LICENSE file in root directory
+ *
+ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, ALL OF
+ * WHICH ARE HEREBY DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+ * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+ * USE OF THIS SOFTWARE, EVEN IF NOT ADVISED OF THE POSSIBILITY OF SUCH
+ * DAMAGE.
+ */
+
+/*
+ * The RPC client against a server that accepts connections but never answers:
+ * every call has to give up within a few seconds, so that callers without an
+ * interrupt function get to their fallbacks.
+ *
+ * Runs unprivileged: the namespaces of tests/test_ipc_ns.c give it a /tmp of
+ * its own to bind the socket in.
+ */
+
+#define _GNU_SOURCE
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
+
+#include "../test_namespace.h"
+#include "esdm_rpc_client.h"
+#include "esdm_rpc_service.h"
+
+/* What the client may take at most, with ample slack for a loaded machine */
+#define TEST_MAX_SECONDS 20
+
+static double test_now(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+/* A server that is there, but stuck: it never accepts, let alone answers */
+static int test_stuck_server(void)
+{
+	struct sockaddr_un addr = { .sun_family = AF_UNIX };
+	int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+
+	if (fd < 0)
+		return -errno;
+
+	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s",
+		 ESDM_RPC_UNPRIV_SOCKET);
+	unlink(ESDM_RPC_UNPRIV_SOCKET);
+	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ||
+	    listen(fd, 64) < 0) {
+		int ret = -errno;
+
+		close(fd);
+		return ret;
+	}
+
+	return fd;
+}
+
+struct test_call {
+	ssize_t ret;
+	double seconds;
+};
+
+static void *test_get_full(void *arg)
+{
+	struct test_call *call = arg;
+	uint8_t buf[32];
+	double start = test_now();
+
+	call->ret = esdm_rpcc_get_random_bytes_full(buf, sizeof(buf));
+	call->seconds = test_now() - start;
+
+	return NULL;
+}
+
+static int test_check(const char *what, const struct test_call *call)
+{
+	printf("%s: returned %zd after %.1f s\n", what, call->ret,
+	       call->seconds);
+
+	if (call->ret >= 0) {
+		printf("%s: a server that never answers delivered data\n",
+		       what);
+		return 1;
+	}
+	if (call->seconds > TEST_MAX_SECONDS) {
+		printf("%s: took longer than %d s\n", what, TEST_MAX_SECONDS);
+		return 1;
+	}
+
+	return 0;
+}
+
+int main(void)
+{
+	struct test_call call = { 0 };
+	int fd, ret;
+
+	ret = test_isolate_namespaces();
+	if (ret) {
+		printf("Cannot isolate the test namespaces: %s\n",
+		       strerror(-ret));
+		return 77;
+	}
+
+	fd = test_stuck_server();
+	if (fd < 0) {
+		printf("Cannot set up the server socket: %s\n", strerror(-fd));
+		return 77;
+	}
+
+	if (esdm_rpcc_init_unpriv_service(NULL)) {
+		printf("Cannot initialize the RPC client\n");
+		ret = 1;
+		goto out;
+	}
+
+	/* No interrupt function - only the client's own bound ends the call */
+	test_get_full(&call);
+	ret = test_check("calling thread", &call);
+
+	esdm_rpcc_fini_unpriv_service();
+out:
+	close(fd);
+	unlink(ESDM_RPC_UNPRIV_SOCKET);
+	return ret;
+}

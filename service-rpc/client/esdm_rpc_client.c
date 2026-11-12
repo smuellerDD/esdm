@@ -71,6 +71,45 @@ static __thread uint8_t esdm_rpcc_reqbuf[ESDM_RPC_MAX_MSG_SIZE]
  */
 static __thread uint8_t esdm_rpcc_unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
 
+/*
+ * Bound of one esdm_client_invoke(), so a server that never answers cannot
+ * keep callers without an interrupt function (getrandom library, OpenSSL
+ * provider, kernel seeder) from their fallbacks. Three read budgets cover a
+ * slow connect and one re-submission.
+ */
+#define ESDM_CLIENT_INVOKE_TIMEOUT_NS                                          \
+	(3ULL * (ESDM_MAX_RX_TX_RETRIES + 1) *                                 \
+	 (1ULL << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT))
+
+static void esdm_rpcc_arm_deadline(esdm_rpc_client_connection_t *rpc_conn)
+{
+	struct timespec *deadline = &rpc_conn->deadline;
+
+	clock_gettime(CLOCK_MONOTONIC, deadline);
+	deadline->tv_sec +=
+		(time_t)(ESDM_CLIENT_INVOKE_TIMEOUT_NS / 1000000000);
+	deadline->tv_nsec += (long)(ESDM_CLIENT_INVOKE_TIMEOUT_NS % 1000000000);
+	if (deadline->tv_nsec >= 1000000000) {
+		deadline->tv_sec++;
+		deadline->tv_nsec -= 1000000000;
+	}
+}
+
+/* Has CLOCK_MONOTONIC reached @ts? */
+static bool esdm_rpcc_passed(const struct timespec *ts)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return now.tv_sec > ts->tv_sec ||
+	       (now.tv_sec == ts->tv_sec && now.tv_nsec >= ts->tv_nsec);
+}
+
+static bool esdm_rpcc_expired(const esdm_rpc_client_connection_t *rpc_conn)
+{
+	return esdm_rpcc_passed(&rpc_conn->deadline);
+}
+
 static void register_fork_handler(void);
 
 static void reset_conn_socket(esdm_rpc_client_connection_t *rpc_conn)
@@ -175,27 +214,33 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		return -errsv;
 	}
 
-	do {
-		/* If we have another attempt, try to wait a bit */
-		if (attempts)
-			nanosleep(&ts, NULL);
-
-		if (connect(rpc_conn->fd, (struct sockaddr *)&addr,
-			    sizeof(addr)) < 0) {
-			errsv = errno;
-
-			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-				    "Error connecting socket: %s\n",
-				    strerror(errsv));
-			attempts++;
-		} else {
+	for (;;) {
+		if (!connect(rpc_conn->fd, (struct sockaddr *)&addr,
+			     sizeof(addr))) {
 			errsv = 0;
+			break;
 		}
-	} while (attempts < (ESDM_CLIENT_RECONNECT_ATTEMPTS) &&
-		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR ||
-		  errsv == EINPROGRESS));
 
-	if (errsv || attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS) {
+		errsv = errno;
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Error connecting socket: %s\n", strerror(errsv));
+
+		if (++attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS ||
+		    !(errsv == EAGAIN || errsv == ECONNREFUSED ||
+		      errsv == EINTR || errsv == EINPROGRESS))
+			break;
+
+		/* The bound of the invoke is not outwaited */
+		if (esdm_rpcc_expired(rpc_conn)) {
+			errsv = ETIMEDOUT;
+			break;
+		}
+
+		/* Try to wait a bit before the next attempt */
+		nanosleep(&ts, NULL);
+	}
+
+	if (errsv) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Connection attempt using socket %s failed\n",
 			    socketname);
@@ -250,6 +295,8 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 			 * EPIPE is due to the server was restarted -> reconnect
 			 */
 			if (pret == 0) {
+				if (esdm_rpcc_expired(rpc_conn))
+					return -ETIMEDOUT;
 				continue;
 			}
 
@@ -429,9 +476,12 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				 * would produce the answer twice and leave the
 				 * first one queued as the reply to the next
 				 * call, as responses are matched by order. The
-				 * retry budget bounds the wait; re-submission
-				 * stays available once it is exhausted, below.
+				 * retry budget and the invoke bound limit the
+				 * wait; re-submission remains once the budget
+				 * is spent, below.
 				 */
+				if (esdm_rpcc_expired(rpc_conn))
+					break;
 				continue;
 			}
 
@@ -580,7 +630,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
-	} else {
+	} else if (ret != -EAGAIN) {
+		/* -EAGAIN is asked again by esdm_client_invoke() */
 		ProtobufCMessage *msg;
 
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
@@ -628,6 +679,7 @@ int esdm_rpcc_fuzz_response(const ProtobufCMessageDescriptor *message_desc,
 
 	memset(&rpc_conn, 0, sizeof(rpc_conn));
 	rpc_conn.fd = sockets[0];
+	esdm_rpcc_arm_deadline(&rpc_conn);
 
 	ret = esdm_rpc_client_read_handler(&rpc_conn, message_desc, closure,
 					   closure_data);
@@ -667,6 +719,8 @@ static void esdm_client_invoke(ProtobufCService *service,
 
 	rpc_conn->last_error = 0;
 
+	esdm_rpcc_arm_deadline(rpc_conn);
+
 	do {
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
 		used_before_ns =
@@ -702,15 +756,27 @@ static void esdm_client_invoke(ProtobufCService *service,
 				    "Receiving of data failed: %d\n", ret);
 		}
 
+		if (ret != -EAGAIN)
+			break;
+
 		/*
 		 * Re-submitting gives up on the answer to the request just
 		 * sent. Drop the socket so it cannot arrive afterwards:
 		 * responses are matched purely by order, so a late one would be
 		 * handed out as the reply to the next call.
 		 */
-		if (ret == -EAGAIN)
-			reset_conn_socket(rpc_conn);
-	} while (ret == -EAGAIN);
+		reset_conn_socket(rpc_conn);
+
+		/*
+		 * Ask again only within bounds: a server that never answers
+		 * must not keep callers without an interrupt function from
+		 * falling back.
+		 */
+		if (esdm_rpcc_expired(rpc_conn)) {
+			ret = -ETIMEDOUT;
+			break;
+		}
+	} while (1);
 
 out:
 	/*

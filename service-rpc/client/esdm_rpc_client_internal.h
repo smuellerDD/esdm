@@ -84,6 +84,9 @@ struct esdm_rpc_client_connection {
 	mutex_w_t ref_cnt;
 	atomic_int state;
 
+	/* Bound of the request in flight - see esdm_client_invoke() */
+	struct timespec deadline;
+
 	/*
 	 * The request/response and unpack scratch buffers are not stored per
 	 * connection but per calling thread (see esdm_rpcc_reqbuf /
