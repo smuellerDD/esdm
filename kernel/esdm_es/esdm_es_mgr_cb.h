@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 
 #include "esdm_definitions.h"
+#include "esdm_es_ioctl.h"
 
 enum esdm_internal_es {
 	esdm_int_es_irq, /* Interrupt entropy source */
@@ -26,6 +27,16 @@ struct entropy_buf {
 /* The IOCTLs reading the entropy buffer, see kernel/shared/esdm_es_ioctl.h */
 #define ESDM_IRQ_ENT_BUF ESDM_IRQ_ENT_BUF_IOCTL(struct entropy_buf)
 #define ESDM_SCHED_ENT_BUF ESDM_SCHED_ENT_BUF_IOCTL(struct entropy_buf)
+
+/*
+ * A /dev/esdm_es IOCTL argument in kernel memory, copied from and to user
+ * space outside of the IOCTL lock, see esdm_cdev_ioctl().
+ */
+union esdm_es_ioctl_arg {
+	u32 words[2];
+	struct entropy_buf eb;
+	char status_json[ESDM_STATUS_JSON_BUFLEN];
+};
 
 void esdm_reset_state(enum esdm_internal_es es);
 
