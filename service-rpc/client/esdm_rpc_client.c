@@ -148,6 +148,37 @@ static struct esdm_rpcc_tbuf *esdm_rpcc_tbuf_get(void)
 /* Connection resets after which an invoke gives up */
 #define ESDM_CLIENT_RESET_RETRIES 2
 
+/*
+ * How long after a server last served this process a refused connect is taken
+ * for a restart worth waiting for - see esdm_connect_proto_service().
+ */
+#define ESDM_CLIENT_RESTART_GRACE_SEC 10
+
+/* ESDM_CLOCK_COARSE second of the last accepted connect or answer, 0: none */
+static _Atomic int64_t esdm_rpcc_last_served = 0;
+
+static void esdm_rpcc_served(const struct timespec *now)
+{
+	/* Once a second at most: the threads of a busy client share it */
+	if (atomic_load_explicit(&esdm_rpcc_last_served,
+				 memory_order_relaxed) != now->tv_sec)
+		atomic_store_explicit(&esdm_rpcc_last_served, now->tv_sec,
+				      memory_order_relaxed);
+}
+
+static bool esdm_rpcc_served_recently(void)
+{
+	int64_t last = atomic_load_explicit(&esdm_rpcc_last_served,
+					    memory_order_relaxed);
+	struct timespec now;
+
+	if (!last)
+		return false;
+
+	clock_gettime(ESDM_CLOCK_COARSE, &now);
+	return now.tv_sec - last <= ESDM_CLIENT_RESTART_GRACE_SEC;
+}
+
 static void esdm_rpcc_arm_deadline(esdm_rpc_client_connection_t *rpc_conn)
 {
 	struct timespec *deadline = &rpc_conn->deadline;
@@ -348,9 +379,26 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		}
 
 		/*
-		 * Try to wait a bit before the next attempt - not after a full
-		 * backlog, which the connect waited for already, see
-		 * esdm_rpcc_set_timeouts().
+		 * Nobody listens. Only shortly after a server served us is that
+		 * a restart worth waiting for; otherwise the socket file is
+		 * stale and every call, even a GRND_NONBLOCK getrandom(), would
+		 * wait out all attempts before its fallback. One short retry
+		 * covers a server between bind() and listen().
+		 */
+		if (errsv == ECONNREFUSED && !esdm_rpcc_served_recently()) {
+			static const struct timespec listen_ts = {
+				.tv_nsec = 1000000
+			};
+
+			if (attempts > 1)
+				break;
+			nanosleep(&listen_ts, NULL);
+			continue;
+		}
+
+		/*
+		 * Pause before the next attempt, unless the connect already
+		 * waited for a full backlog, see esdm_rpcc_set_timeouts().
 		 */
 		if (errsv != EAGAIN)
 			nanosleep(&ts, NULL);
@@ -364,6 +412,7 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	} else {
 		/* only update this time on a successful connection */
 		clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
+		esdm_rpcc_served(&rpc_conn->last_used);
 	}
 
 	return -errsv;
@@ -717,6 +766,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 					      tlh.consumed);
 		}
 		clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
+		esdm_rpcc_served(&rpc_conn->last_used);
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
 
