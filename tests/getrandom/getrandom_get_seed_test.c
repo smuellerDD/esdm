@@ -23,21 +23,45 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "env.h"
 #include "getrandom.h"
 
+/*
+ * A non-blocking seed request answers EAGAIN while the freshly started ESDM
+ * seeds its DRNGs and the entropy pool is busy: retry for up to 30 seconds.
+ */
+static ssize_t getrandom_seed_retry(uint8_t *buffer, size_t bufferlen,
+				    unsigned int flags)
+{
+	const struct timespec pause = { .tv_sec = 0, .tv_nsec = 100000000 };
+	unsigned int i;
+	ssize_t ret = -1;
+
+	for (i = 0; i < 300; i++) {
+		ret = __getrandom(buffer, bufferlen, flags);
+		if (ret >= 0 || errno != EAGAIN)
+			break;
+		nanosleep(&pause, NULL);
+	}
+
+	return ret;
+}
+
 static inline ssize_t getrandom_seed_initial_n(uint8_t *buffer,
 					       size_t bufferlen)
 {
-	return __getrandom(buffer, bufferlen, GRND_SEED | GRND_NONBLOCK);
+	return getrandom_seed_retry(buffer, bufferlen,
+				    GRND_SEED | GRND_NONBLOCK);
 }
 
 static inline ssize_t getrandom_seed_n(uint8_t *buffer, size_t bufferlen)
 {
-	return __getrandom(buffer, bufferlen,
-			   GRND_SEED | GRND_FULLY_SEEDED | GRND_NONBLOCK);
+	return getrandom_seed_retry(buffer, bufferlen,
+				    GRND_SEED | GRND_FULLY_SEEDED |
+					    GRND_NONBLOCK);
 }
 
 int main(int argc, char *argv[])

@@ -513,6 +513,15 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 		esdm_cuse_unpriv_call_end();
 
 		/*
+		 * The ESDM is operational, but every DRNG awaits its reseed:
+		 * the waiting getter finishes, waiting for that reseed only.
+		 */
+		if (ret == -EAGAIN && get == esdm_rpcc_get_random_bytes_int) {
+			get = esdm_rpcc_get_random_bytes_full_int;
+			continue;
+		}
+
+		/*
 		 * If call to the ESDM server failed, let us fall back to the
 		 * fallback file descriptor. Yet, we do not cover for short
 		 * reads as this entire CUSE handling is prone to short reads

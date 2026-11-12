@@ -165,6 +165,20 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	 * acceptable and matches the interface being emulated.
 	 */
 	esdm_invoke(esdm_rpcc_get_random_bytes(uuid, sizeof(uuid)));
+	/*
+	 * Short or -EAGAIN: operational, every DRNG awaiting its reseed, which
+	 * the waiting getter waits for.
+	 */
+	if (ret == -EAGAIN)
+		ret = 0;
+	if (ret >= 0 && ret < (ssize_t)sizeof(uuid)) {
+		size_t done = (size_t)ret;
+
+		esdm_invoke(esdm_rpcc_get_random_bytes_full(
+			uuid + done, sizeof(uuid) - done));
+		if (ret >= 0)
+			ret += (ssize_t)done;
+	}
 	if (ret < 0) {
 		esdm_proc_empty_file(file);
 		return 0;
