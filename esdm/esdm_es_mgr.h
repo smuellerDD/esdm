@@ -47,7 +47,7 @@ bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 		       struct entropy_buf *eb);
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb);
 void esdm_unset_fully_seeded(struct esdm_drng *drng);
-void esdm_init_ops(struct entropy_buf *eb);
+void esdm_init_ops(uint32_t seed_bits);
 /*
  * Collect from the entropy sources in one pass, splitting the result over the
  * two buffers a reseed needs: @seedbuf takes the sources that may be credited

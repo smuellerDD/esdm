@@ -750,7 +750,8 @@ static bool esdm_drng_inject(struct esdm_drng *drng, const uint8_t *inbuf,
 
 /*
  * Perform the seeding of the DRNG with data from entropy source.
- * The function returns the entropy injected into the DRNG in bits.
+ * The function returns the entropy injected into the DRNG in bits - none of
+ * what a failed injection collected.
  *
  * The caller must hold the DRNG lock.
  */
@@ -760,7 +761,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
 			   addtl __aligned(ESDM_KCAPI_ALIGN),
 		collected_seedbuf;
-	uint32_t requested_bits, collected_entropy = 0;
+	uint32_t requested_bits, collected_entropy = 0, injected_entropy = 0;
 	unsigned int i, num_es_delivered = 0;
 	bool seeded = false;
 	bool pr = (drng == &esdm_drng_pr);
@@ -791,6 +792,7 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		es_delivered_threshold = 2;
 
 	do {
+		uint32_t seed_entropy;
 		bool fully_seeded;
 
 		/* Count the number of ES which delivered entropy */
@@ -816,7 +818,8 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 		 */
 		esdm_get_seed_buffers(&seedbuf, &addtl, requested_bits, forced);
 
-		collected_entropy += esdm_entropy_rate_eb(&seedbuf);
+		seed_entropy = esdm_entropy_rate_eb(&seedbuf);
+		collected_entropy += seed_entropy;
 
 		/* Sum iterations up. */
 		for_each_esdm_es (i) {
@@ -848,15 +851,12 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 					  &collected_seedbuf) &&
 			(!pr || do_full_init ||
 			 collected_entropy >= requested_bits);
-		seeded |= esdm_drng_inject(
-			drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
-			(uint8_t *)&addtl, sizeof(addtl), fully_seeded,
-			"regular");
-
-		/*
-		 * Set the seeding state of the ESDM
-		 */
-		esdm_init_ops(&collected_seedbuf);
+		if (esdm_drng_inject(drng, (uint8_t *)&seedbuf, sizeof(seedbuf),
+				     (uint8_t *)&addtl, sizeof(addtl),
+				     fully_seeded, drng_type)) {
+			seeded = true;
+			injected_entropy += seed_entropy;
+		}
 
 		/*
 	 * Emergency reseeding: If we reached the min seed threshold now
@@ -880,13 +880,22 @@ static uint32_t esdm_drng_seed_es_nolock(struct esdm_drng *drng,
 	 * DRNG is locked throughout and produces nothing in between: that is
 	 * one seeding operation to the outside and hence one generation.
 	 */
-	if (seeded)
+	if (seeded) {
 		atomic_fetch_add(&drng->seed_generation, 1);
+
+		/*
+		 * The operational state of the ESDM follows the initial DRNG,
+		 * and only an injection that took can have seeded it.
+		 */
+		if (drng == esdm_drng_init_instance() &&
+		    atomic_load(&drng->fully_seeded))
+			esdm_init_ops(injected_entropy);
+	}
 
 	memset_secure(&seedbuf, 0, sizeof(seedbuf));
 	memset_secure(&addtl, 0, sizeof(addtl));
 
-	return collected_entropy;
+	return injected_entropy;
 }
 
 static void esdm_drng_seed_nolock(struct esdm_drng *drng)
@@ -1989,6 +1998,17 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr,
 	return ret;
 }
 
+/* Reset one DRNG under its lock */
+static void esdm_drng_reset_locked(struct esdm_drng *drng)
+{
+	mutex_w_lock(&drng->lock);
+	esdm_drng_reset(drng);
+	/* The operational state goes with the initial DRNG, under its lock */
+	if (drng == esdm_drng_init_instance())
+		esdm_unset_fully_seeded(drng);
+	mutex_w_unlock(&drng->lock);
+}
+
 /*
  * Reset ESDM such that all existing entropy is gone.
  */
@@ -1997,9 +2017,7 @@ void esdm_reset(void)
 	struct esdm_drng **esdm_drng = esdm_drng_get_instances();
 
 	if (!esdm_drng) {
-		mutex_w_lock(&esdm_drng_init.lock);
-		esdm_drng_reset(&esdm_drng_init);
-		mutex_w_unlock(&esdm_drng_init.lock);
+		esdm_drng_reset_locked(&esdm_drng_init);
 	} else {
 		uint32_t cpu;
 
@@ -2009,17 +2027,13 @@ void esdm_reset(void)
 
 			if (!drng)
 				continue;
-			mutex_w_lock(&drng->lock);
-			esdm_drng_reset(drng);
-			mutex_w_unlock(&drng->lock);
+			esdm_drng_reset_locked(drng);
 		}
 	}
 
 	esdm_drng_put_instances();
 
-	mutex_w_lock(&esdm_drng_pr.lock);
-	esdm_drng_reset(&esdm_drng_pr);
-	mutex_w_unlock(&esdm_drng_pr.lock);
+	esdm_drng_reset_locked(&esdm_drng_pr);
 
 	esdm_set_entropy_thresh(ESDM_FULL_SEED_ENTROPY_BITS);
 

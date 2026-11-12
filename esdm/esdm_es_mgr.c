@@ -568,8 +568,10 @@ void esdm_reset_state(void)
 		if (esdm_es[i]->reset)
 			esdm_es[i]->reset();
 	}
-	atomic_store(&esdm_state.esdm_operational, false);
-	atomic_store(&esdm_state.esdm_fully_seeded, false);
+	/*
+	 * Not the operational state: that follows the initial DRNG and is
+	 * cleared with it, under its lock - see esdm_unset_fully_seeded().
+	 */
 	atomic_store(&esdm_state.all_online_nodes_seeded, false);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
@@ -705,10 +707,10 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 /*
  * Mark one DRNG as not fully seeded.
  *
- * Nothing is seeded here and no lock is taken, so a non-blocking request can
- * call this, and so can one holding the lock of @drng. Bringing the DRNG up
- * again is left to the caller, which knows whether it may wait for the entropy
- * pool, to the ES monitor woken here and to the reseed worker.
+ * Seeds nothing and takes no lock, so non-blocking requests and holders of the
+ * lock of @drng may call it - the operational state changes with the initial
+ * DRNG under its lock, see esdm_init_ops(). Reseeding is left to the caller
+ * (which knows whether it may wait), the ES monitor and the reseed worker.
  */
 void esdm_unset_fully_seeded(struct esdm_drng *drng)
 {
@@ -727,10 +729,10 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 	 * insufficiently seeded. Thus, we mark the entire ESDM as
 	 * non-operational if the initial DRNG becomes not fully seeded.
 	 */
-	if (drng == esdm_drng_init_instance() && esdm_state_operational()) {
+	if (drng == esdm_drng_init_instance() &&
+	    atomic_exchange(&esdm_state.esdm_operational, false)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "ESDM set to non-operational\n");
-		atomic_store(&esdm_state.esdm_operational, false);
 		atomic_store(&esdm_state.esdm_fully_seeded, false);
 
 		esdm_shm_status_set_operational(false);
@@ -835,54 +837,29 @@ static uint32_t esdm_init_entropy_level(bool fully_seeded)
 }
 
 /**
- * esdm_init_ops() - Set seed stages of ESDM
+ * esdm_init_ops() - The initial DRNG is fully seeded
  *
- * Set the slow noise source reseed trigger threshold. The initial threshold
- * is set to the minimum data size that can be read from the pool: a word. Upon
- * reaching this value, the next seed threshold of 128 bits is set followed
- * by 256 bits.
+ * The ESDM is operational exactly while the initial DRNG is fully seeded, as
+ * every request falls back on it. Called with that DRNG's lock held once an
+ * injection left it fully seeded; esdm_unset_fully_seeded() clears the state
+ * under the same lock, so the two cannot disagree.
  *
- * @param [in] eb buffer containing the size of entropy currently injected into
- *		  DRNG - if NULL, the function obtains the available entropy
- *		  from the ES.
+ * @param [in] seed_bits entropy injected by the seeding, for the log
  */
-void esdm_init_ops(struct entropy_buf *eb)
+void esdm_init_ops(uint32_t seed_bits)
 {
 	struct esdm_state *state = &esdm_state;
-	uint32_t i, requested_bits, seed_bits = 0;
 
+	/* A reseed of the initial DRNG while it is fully seeded changes none */
 	if (atomic_load(&state->esdm_operational))
 		return;
 
-	requested_bits = esdm_init_entropy_level(
-		atomic_load(&state->all_online_nodes_seeded));
-
-	if (eb) {
-		seed_bits = esdm_entropy_rate_eb(eb);
-	} else {
-		uint32_t ent_thresh = esdm_avail_entropy_thresh();
-
-		for_each_esdm_es (i)
-			seed_bits += esdm_es[i]->curr_entropy(ent_thresh);
-	}
-
-	/* DRNG is already seeded with full security strength */
-	if (atomic_load(&state->esdm_fully_seeded)) {
-		esdm_set_operational();
-		esdm_set_entropy_thresh(requested_bits);
-		return;
-	}
-
-	if (esdm_fully_seeded(!atomic_load(&state->all_online_nodes_seeded),
-			      seed_bits, eb)) {
-		atomic_store(&state->esdm_fully_seeded, true);
-		esdm_set_operational();
-		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			    "ESDM fully seeded with %u bits of entropy\n",
-			    seed_bits);
-		esdm_set_entropy_thresh(requested_bits);
-		esdm_init_wakeup();
-	}
+	atomic_store(&state->esdm_fully_seeded, true);
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		    "ESDM fully seeded with %u bits of entropy\n", seed_bits);
+	esdm_set_entropy_thresh(esdm_init_entropy_level(
+		atomic_load(&state->all_online_nodes_seeded)));
+	esdm_set_operational();
 }
 
 int esdm_es_mgr_reinitialize(void)
