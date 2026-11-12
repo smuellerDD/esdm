@@ -1827,6 +1827,37 @@
               );
           });
 
+          # leancrypto, not in nixpkgs, built as the CI builds it. The patch
+          # (not upstream yet) keeps lc_free() from passing memfd_secret memory
+          # to free() after an EMFILE cleared the process-wide flag.
+          leancrypto = withFipsHmac (
+            pkgs.stdenv.mkDerivation (finalAttrs: {
+              pname = "leancrypto";
+              version = "1.8.0";
+              src = pkgs.fetchFromGitHub {
+                owner = "smuellerDD";
+                repo = "leancrypto";
+                tag = "v${finalAttrs.version}";
+                hash = "sha256-76qzK2gDFqfIT2CJkHHmVYcM/bPCQsjUaW8kxqiK9nM=";
+              };
+              patches = [ ./nix/leancrypto-memfd-secret-free.patch ];
+              # The header generation and checks the build runs
+              postPatch = ''
+                patchShebangs addon
+              '';
+              nativeBuildInputs = [
+                pkgs.meson
+                pkgs.ninja
+                pkgs.pkg-config
+              ];
+              mesonBuildType = "release";
+              mesonFlags = [
+                "-Dtests=disabled"
+                "-Dapps=disabled"
+              ];
+            })
+          );
+
           # this currently defaults to the botan crypto backend
           esdm =
             (pkgs.esdm.override {
@@ -1942,6 +1973,19 @@
           # enough, es_jent_ntg1 makes a 3.7.0+ jitter RNG NTG.1 conformant on
           # its own (the jitterentropy pinned above is 3.7.1) and one source
           # then suffices.
+          # The ESDM with the leancrypto crypto backend in place of Botan
+          esdm-leancrypto = self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-leancrypto";
+            buildInputs =
+              builtins.filter (p: (p.pname or "") != "botan") prev.buildInputs
+              ++ [ self.packages.${system}.leancrypto ];
+            mesonFlags =
+              (builtins.filter (
+                x: (!lib.hasInfix "crypto_backend" x) && (!lib.hasInfix "botan_drng_type" x)
+              ) prev.mesonFlags)
+              ++ [ "-Dcrypto_backend=leancrypto" ];
+          });
+
           esdm-ais2031 = self.packages.${system}.esdm.overrideAttrs (prev: {
             mesonFlags =
               (builtins.filter (x: !lib.hasInfix "ais2031" x) prev.mesonFlags)
@@ -2318,6 +2362,7 @@
               fuse3
               gnutls
               self.packages.${system}.json_c
+              self.packages.${system}.leancrypto
               libbpf
               libkcapi
               libselinux

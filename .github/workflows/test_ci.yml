@@ -24,7 +24,7 @@ env:
   # alone does not identify the artefact: without this a recipe change silently
   # keeps restoring the previously built - and now wrong - prefix from cache.
   BOTAN_BUILD_REV: "2"
-  LEANCRYPTO_BUILD_REV: "1"
+  LEANCRYPTO_BUILD_REV: "2"
   GNUTLS_BUILD_REV: "2"
   # One prefix and one cache per dependency. They must not share a cache key:
   # a botan job populates only Botan, so a leancrypto job restoring the same
@@ -171,6 +171,9 @@ jobs:
         wget -O leancrypto.tar.gz https://github.com/smuellerDD/leancrypto/archive/refs/tags/v${LEANCRYPTO_VERSION}.tar.gz
         tar xfz leancrypto.tar.gz
         cd leancrypto-${LEANCRYPTO_VERSION}
+        # lc_free() after a failed memfd_secret crashes the RPC server
+        # robustness test; not upstream yet, the flake applies it too.
+        patch -p1 < "${GITHUB_WORKSPACE}/nix/leancrypto-memfd-secret-free.patch"
         # ESDM only links the library: skip leancrypto's own test suite and its
         # helper apps, which dominate the build time here. The algorithm
         # self-tests (enable_selftests) stay on - those run inside the library.
