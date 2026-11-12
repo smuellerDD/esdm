@@ -153,13 +153,21 @@ static void esdm_egd_clients_lock_acquire(void)
  * Connection handling
  ****************************/
 
-/* Caller holds the lock. */
+static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client);
+
+/*
+ * Give up the connection. Caller holds the lock - or is the fork child, alone.
+ *
+ * Close the descriptor only if it still is the connection: one the application
+ * closed (closefrom()) and reused for a file of its own is not ours to close.
+ */
 static void esdm_egd_client_disconnect_locked(struct esdm_egd_client *client)
 {
 	if (client->fd < 0)
 		return;
 
-	close(client->fd);
+	if (esdm_egd_client_fd_is_ours_locked(client))
+		close(client->fd);
 	client->fd = -1;
 }
 
@@ -231,11 +239,7 @@ static void esdm_egd_client_atfork_child(void)
 	struct esdm_egd_client *client;
 
 	TAILQ_FOREACH (client, &esdm_egd_clients, tailq) {
-		if (client->fd >= 0) {
-			close(client->fd);
-			client->fd = -1;
-		}
-
+		esdm_egd_client_disconnect_locked(client);
 		esdm_egd_client_recreate_lock(&client->lock);
 	}
 

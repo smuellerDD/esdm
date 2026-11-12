@@ -32,6 +32,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -509,13 +510,22 @@ static int test_failure_wipes_buffer(void)
 	return ret;
 }
 
+/* Is @fd still the application's /dev/zero? */
+static bool test_is_dev_zero(int fd)
+{
+	struct stat st;
+
+	return fstat(fd, &st) == 0 && S_ISCHR(st.st_mode);
+}
+
 /*
  * An application may close descriptor ranges it did not open - OpenSSH does on
  * its way into the pre-authentication child - freeing the number for reuse.
  * Reading "random" data out of whatever took its place would be a silent and
- * serious failure, so the client has to notice. The check needs the client's
- * descriptor, which is the lowest free one at connect time; nothing else here
- * opens one in between, but that is verified rather than trusted.
+ * serious failure, so the client has to notice, and leave the descriptor alone
+ * on reconnect, fork and free. The check needs the client's descriptor, which
+ * is the lowest free one at connect time; nothing else here opens one in
+ * between, but that is verified rather than trusted.
  */
 static int test_descriptor_identity(void)
 {
@@ -525,7 +535,8 @@ static int test_descriptor_identity(void)
 	socklen_t addrlen = sizeof(addr);
 	uint8_t buf[16];
 	size_t i;
-	int fd, zero_fd, ret = 0;
+	pid_t child;
+	int fd, zero_fd, status, ret = 0;
 
 	if (egd_peer_start(&peer, test_socket("closefrom"), EGD_PEER_NORMAL))
 		return 1;
@@ -565,6 +576,14 @@ static int test_descriptor_identity(void)
 		return 0;
 	}
 
+	/* The fork handler gives up the client's connections in the child */
+	child = fork();
+	if (child == 0)
+		_exit(test_is_dev_zero(zero_fd) ? 0 : 1);
+	CHECK(child > 0 && waitpid(child, &status, 0) == child &&
+		      WIFEXITED(status) && WEXITSTATUS(status) == 0,
+	      "the fork child lost the application's descriptor");
+
 	/*
 	 * Reading from /dev/zero would succeed and deliver zeros. The client
 	 * has to reconnect instead and come back with the peer's data.
@@ -572,6 +591,8 @@ static int test_descriptor_identity(void)
 	memset(buf, 0xff, sizeof(buf));
 	CHECK(esdm_egd_client_get_random(client, buf, sizeof(buf)) == 0,
 	      "the blocking read failed");
+	CHECK(test_is_dev_zero(zero_fd),
+	      "the client closed the application's descriptor on reconnect");
 	for (i = 0; i < sizeof(buf); i++) {
 		if (buf[i] != egd_peer_data_byte(i)) {
 			CHECK(0,
@@ -584,8 +605,10 @@ static int test_descriptor_identity(void)
 	      "%u connections, expected the client to have reconnected",
 	      egd_peer_connections(peer));
 
-	close(zero_fd);
 	esdm_egd_client_free(client);
+	CHECK(test_is_dev_zero(zero_fd),
+	      "freeing the client closed the application's descriptor");
+	close(zero_fd);
 	egd_peer_stop(peer);
 
 	return ret;
