@@ -41,6 +41,7 @@ enum esdm_health_log_bit {
 	esdm_health_log_permanent_failure,
 	esdm_health_log_runtime_failure,
 	esdm_health_log_startup_failure,
+	esdm_health_log_panic,
 };
 
 /* Stuck Test */
@@ -108,6 +109,8 @@ struct esdm_health_es_state {
 /* The health test code must operate lock-less */
 struct esdm_health {
 	bool health_test_enabled;
+	/* Set by a permanent failure the irq_work is to panic for */
+	bool panic_pending;
 	struct esdm_health_es_state es_state[esdm_int_es_last];
 };
 
@@ -284,6 +287,9 @@ static void esdm_health_log_func(struct irq_work *work)
 		if (test_and_clear_bit(esdm_health_log_startup_failure, pending))
 			pr_err("SP800-90B startup test failure for internal entropy source %u - resetting\n",
 			       es);
+		if (test_bit(esdm_health_log_panic, pending))
+			panic("SP800-90B permanent health test failure for internal entropy source %u\n",
+			      es);
 	}
 }
 
@@ -388,12 +394,17 @@ static void esdm_sp80090b_permanent_failure(struct esdm_health *health,
 {
 	struct esdm_health_es_state *es_state = &health->es_state[es];
 
+	/*
+	 * No panic() here: printing can deadlock in the hooks (see deferred
+	 * logging above). The irq_work panics; esdm_health_test() drops all
+	 * events until then.
+	 */
 	if (esdm_enforce_panic_on_permanent_health_failure()) {
-		panic("SP800-90B permanent health test failure for internal entropy source %u\n",
-		      es);
+		WRITE_ONCE(health->panic_pending, true);
+		esdm_health_log(es, esdm_health_log_panic);
+	} else {
+		esdm_health_log(es, esdm_health_log_permanent_failure);
 	}
-
-	esdm_health_log(es, esdm_health_log_permanent_failure);
 	esdm_sp80090b_startup_restart(health, es);
 
 	esdm_rct_reset(&es_state->rct);
@@ -632,6 +643,10 @@ enum esdm_health_res esdm_health_test(u64 now_time, enum esdm_internal_es es)
 
 	if (!health->health_test_enabled)
 		return esdm_health_pass;
+
+	/* A permanent failure is about to panic */
+	if (unlikely(READ_ONCE(health->panic_pending)))
+		return esdm_health_fail_drop;
 
 	esdm_apt_insert(health, now_time, es);
 
