@@ -58,6 +58,19 @@ static atomic_bool esdm_cpu_selftest_failed = false;
 
 static int esdm_cpu_init(void)
 {
+	unsigned long probe;
+
+	/* No CPU RNG instruction (or RISC-V seed CSR access): no entropy */
+	if (cpu_es_get(&probe)) {
+		atomic_store(&esdm_cpu_read_failed, false);
+		atomic_store(&esdm_cpu_delivered, true);
+	} else {
+		atomic_store(&esdm_cpu_read_failed, true);
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "CPU ES: no CPU RNG usable on this system\n");
+	}
+	memset_secure(&probe, 0, sizeof(probe));
+
 	esdm_cpu_data_multiplier = cpu_es_multiplier();
 	if (!esdm_cpu_data_multiplier)
 		esdm_cpu_data_multiplier = 1;

@@ -22,11 +22,51 @@
 
 #if defined(__riscv)
 
+#include <pthread.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <stdbool.h>
 
 #define ESDM_CPU_ES_IMPLEMENTED
+
+/*
+ * The seed CSR traps unless the CPU has Zkr and M-mode firmware grants user
+ * access (mseccfg.USEED), which riscv_hwprobe(2) does not report; most boards
+ * trap. So it is probed once, catching SIGILL for the probe only.
+ */
+static sigjmp_buf riscv_seed_probe_env;
+static bool riscv_seed_usable = false;
+static pthread_once_t riscv_seed_once = PTHREAD_ONCE_INIT;
+
+static inline void riscv_seed_sigill(int sig)
+{
+	(void)sig;
+	siglongjmp(riscv_seed_probe_env, 1);
+}
+
+static inline void riscv_seed_probe(void)
+{
+	struct sigaction sa, old;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = riscv_seed_sigill;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGILL, &sa, &old))
+		return;
+
+	if (!sigsetjmp(riscv_seed_probe_env, 1)) {
+		unsigned long data;
+
+		__asm__ __volatile__("csrrw %0, 0x015, x0" : "=r"(data));
+		(void)data;
+		riscv_seed_usable = true;
+	}
+
+	sigaction(SIGILL, &old, NULL);
+}
 
 /*
  * Number of times to re-read the seed CSR while it reports WAIT (entropy not
@@ -69,6 +109,10 @@ static inline bool cpu_es_get(unsigned long *buf)
 {
 	uint16_t *out = (uint16_t *)buf;
 	unsigned int i;
+
+	pthread_once(&riscv_seed_once, riscv_seed_probe);
+	if (!riscv_seed_usable)
+		return false;
 
 	/*
 	 * Fill exactly one unsigned long with 16-bit ES16 entropy samples. The
