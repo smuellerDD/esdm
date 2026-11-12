@@ -40,6 +40,7 @@
 #include "esdm_egd_client.h"
 #include "esdm_egd_protocol.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "visibility.h"
@@ -278,7 +279,7 @@ static uint64_t esdm_egd_client_now_ms(void)
 {
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(ESDM_CLOCK_COARSE, &ts);
 
 	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)(ts.tv_nsec / 1000000);
 }

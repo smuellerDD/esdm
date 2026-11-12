@@ -790,14 +790,14 @@ static void thread_cancel(bool system_threads)
 	 * cancelled, at a cancellation point such as the sem_wait() of the CUSE
 	 * poll checker (deferred cancellation, see thread_worker()).
 	 */
-	clock_gettime(CLOCK_MONOTONIC, &deadline);
+	clock_gettime(ESDM_CLOCK_COARSE, &deadline);
 	deadline.tv_nsec += THREAD_CANCEL_GRACE_NS;
 	if (deadline.tv_nsec >= 1000000000L) {
 		deadline.tv_sec++;
 		deadline.tv_nsec -= 1000000000L;
 	}
 	while (!thread_cancel_all_left(join_me, upper)) {
-		clock_gettime(CLOCK_MONOTONIC, &now);
+		clock_gettime(ESDM_CLOCK_COARSE, &now);
 		if (now.tv_sec > deadline.tv_sec ||
 		    (now.tv_sec == deadline.tv_sec &&
 		     now.tv_nsec >= deadline.tv_nsec))

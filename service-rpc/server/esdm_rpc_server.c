@@ -594,7 +594,7 @@ static int esdm_rpcs_read(struct esdm_rpcs_connection *rpc_conn)
 	if (received < 0)
 		return -errno;
 
-	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+	clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
 
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ANY, "Read %zd bytes\n", received);
 
@@ -719,7 +719,7 @@ static int esdm_rpcs_accept(struct esdm_rpcs_worker *worker)
 	 * Start the idle clock now: the reaper otherwise sees a connection that
 	 * has not sent its first request yet as idle since boot.
 	 */
-	clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+	clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
 
 	ev.data.ptr = rpc_conn;
 	if (epoll_ctl(worker->epfd, EPOLL_CTL_ADD, fd, &ev) < 0) {
@@ -957,7 +957,7 @@ static int esdm_rpcs_handler(void *args)
 
 		if (do_cleanup) {
 			struct timespec timeout_threshold;
-			clock_gettime(CLOCK_MONOTONIC, &timeout_threshold);
+			clock_gettime(ESDM_CLOCK_COARSE, &timeout_threshold);
 			timeout_threshold.tv_sec -=
 				ESDM_RPC_IDLE_TIMEOUT_USEC / 1000000;
 

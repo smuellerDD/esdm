@@ -152,7 +152,7 @@ static void esdm_rpcc_arm_deadline(esdm_rpc_client_connection_t *rpc_conn)
 {
 	struct timespec *deadline = &rpc_conn->deadline;
 
-	clock_gettime(CLOCK_MONOTONIC, deadline);
+	clock_gettime(ESDM_CLOCK_COARSE, deadline);
 	deadline->tv_sec +=
 		(time_t)(ESDM_CLIENT_INVOKE_TIMEOUT_NS / 1000000000);
 	deadline->tv_nsec += (long)(ESDM_CLIENT_INVOKE_TIMEOUT_NS % 1000000000);
@@ -162,12 +162,12 @@ static void esdm_rpcc_arm_deadline(esdm_rpc_client_connection_t *rpc_conn)
 	}
 }
 
-/* Has CLOCK_MONOTONIC reached @ts? */
+/* Has ESDM_CLOCK_COARSE reached @ts? */
 static bool esdm_rpcc_passed(const struct timespec *ts)
 {
 	struct timespec now;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	clock_gettime(ESDM_CLOCK_COARSE, &now);
 	return now.tv_sec > ts->tv_sec ||
 	       (now.tv_sec == ts->tv_sec && now.tv_nsec >= ts->tv_nsec);
 }
@@ -329,7 +329,7 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		reset_conn_socket(rpc_conn);
 	} else {
 		/* only update this time on a successful connection */
-		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+		clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
 	}
 
 	return -errsv;
@@ -709,7 +709,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				memset_secure(esdm_rpcc_unpack_buf, 0,
 					      tlh.consumed);
 		}
-		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+		clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
 
@@ -829,7 +829,7 @@ static void esdm_client_invoke(ProtobufCService *service,
 	esdm_rpcc_arm_deadline(rpc_conn);
 
 	do {
-		clock_gettime(CLOCK_MONOTONIC, &current_time);
+		clock_gettime(ESDM_CLOCK_COARSE, &current_time);
 		used_before_ns =
 			((int64_t)current_time.tv_sec -
 			 (int64_t)rpc_conn->last_used.tv_sec) *

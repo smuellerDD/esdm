@@ -46,7 +46,7 @@ static long long esdm_rpcs_pr_now_ns(void)
 {
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(ESDM_CLOCK_COARSE, &ts);
 	return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 

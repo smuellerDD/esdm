@@ -37,9 +37,32 @@ extern "C" {
 #define member_to_struct(member, data_type, member_var)                        \
 	(data_type *)((char *)(member) - (char *)&((data_type *)0)->member_var)
 
-/* Whole seconds on CLOCK_MONOTONIC, 0 if the clock cannot be read */
-/* Nanoseconds on CLOCK_MONOTONIC, 0 if it cannot be read */
+/*
+ * Clock for timeouts, ages and intervals needing ms accuracy at most.
+ * CLOCK_MONOTONIC_COARSE comes from the vDSO without reading the clock
+ * source, which traps into the hypervisor in some VMs. It lags
+ * CLOCK_MONOTONIC by up to one tick (1 to 10 ms). Wait deadlines (pthread,
+ * semaphore and timerfd take no other monotonic clock) and measured
+ * durations stay on CLOCK_MONOTONIC.
+ */
+#ifdef CLOCK_MONOTONIC_COARSE
+#define ESDM_CLOCK_COARSE CLOCK_MONOTONIC_COARSE
+#else
+#define ESDM_CLOCK_COARSE CLOCK_MONOTONIC
+#endif
+
+/* Nanoseconds on ESDM_CLOCK_COARSE, 0 if it cannot be read */
 static inline uint64_t esdm_monotonic_now_ns(void)
+{
+	struct timespec now;
+
+	if (clock_gettime(ESDM_CLOCK_COARSE, &now))
+		return 0;
+	return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
+}
+
+/* Nanoseconds on CLOCK_MONOTONIC, for wait deadlines, 0 if it cannot be read */
+static inline uint64_t esdm_monotonic_wait_ns(void)
 {
 	struct timespec now;
 
@@ -48,17 +71,18 @@ static inline uint64_t esdm_monotonic_now_ns(void)
 	return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
 }
 
+/* Whole seconds on ESDM_CLOCK_COARSE, 0 if it cannot be read */
 static inline long long esdm_monotonic_now(void)
 {
 	struct timespec now;
 
-	if (clock_gettime(CLOCK_MONOTONIC, &now) == -1)
+	if (clock_gettime(ESDM_CLOCK_COARSE, &now) == -1)
 		return 0;
 
 	return (long long)now.tv_sec;
 }
 
-/* Seconds elapsed since timeout_sec (CLOCK_MONOTONIC), 0 if not yet reached */
+/* Seconds elapsed since timeout_sec (ESDM_CLOCK_COARSE), 0 if not reached */
 static inline time_t esdm_time_after_now(time_t timeout_sec)
 {
 	time_t curr = (time_t)esdm_monotonic_now();

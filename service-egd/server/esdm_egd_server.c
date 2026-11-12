@@ -468,7 +468,7 @@ static uint64_t esdm_egd_now_ms(void)
 {
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(ESDM_CLOCK_COARSE, &ts);
 
 	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)(ts.tv_nsec / 1000000);
 }

@@ -227,13 +227,14 @@ static struct json_object *test_provider(struct json_object **state)
 	return es_state_member(*state, "provider", json_type_object);
 }
 
-/* Sleep past the end of the retry interval the source recorded */
+/*
+ * Sleep past the end of the retry interval the source recorded, polling: its
+ * coarse clock lags by up to a tick
+ */
 static void test_wait_retry(void)
 {
-	uint64_t now = esdm_monotonic_now_ns();
-
-	if (extsock.retry_at > now)
-		es_ext_test_sleep_ms((long)((extsock.retry_at - now) / MS + 1));
+	while (esdm_monotonic_now_ns() < extsock.retry_at)
+		es_ext_test_sleep_ms(5);
 }
 
 static bool test_rate_is(uint32_t rate, const char *source)
