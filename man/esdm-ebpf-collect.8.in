@@ -123,7 +123,7 @@ default rate of 0 keeps the source uncredited until this measurement has been
 performed for the deployment environment.
 .PP
 The full procedure, including the SP800\-90B restart test, is described in
-.I addon/es_ebpf_testing/README.md
+.I tests/es_ebpf_testing/README.md
 of the ESDM source distribution.
 .SH SEE ALSO
 .BR esdm\-extractlsb (8),

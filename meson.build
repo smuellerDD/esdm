@@ -208,7 +208,7 @@ if get_option('es_ebpf_testing').enabled()
 	   get_option('es_irq_ebpf').disabled()
 		error('es_ebpf_testing requires es_sched_ebpf or es_irq_ebpf to be enabled')
 	endif
-	subdirs += [ 'addon/es_ebpf_testing' ]
+	subdirs += [ 'tests/es_ebpf_testing' ]
 endif
 
 if get_option('esdm-server').enabled()
@@ -308,7 +308,7 @@ if get_option('esdm-tool').enabled()
 endif
 
 if get_option('validation-helpers').enabled()
-	subdirs += [ 'addon/test' ]
+	subdirs += [ 'tests/validation-helpers' ]
 endif
 
 subdirs += [ 'man' ]

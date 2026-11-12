@@ -444,8 +444,8 @@ jobs:
           exit 1
         fi
 
-  # eBPF-based entropy sources plus the raw measurement addon
-  # (addon/es_ebpf_testing -> esdm-ebpf-collect). The eBPF programs are
+  # eBPF-based entropy sources plus the raw measurement tool
+  # (tests/es_ebpf_testing -> esdm-ebpf-collect). The eBPF programs are
   # compiled for the BPF target with clang and turned into libbpf skeletons by
   # bpftool, so this covers a toolchain the other jobs never touch.
   ebpf:
@@ -534,13 +534,13 @@ jobs:
     - name: Meson compile
       run: meson compile -C build
 
-    - name: Check that the measurement addon was built
+    - name: Check that the measurement tool was built
       run: |
-        # addon/es_ebpf_testing is only built with -Des_ebpf_testing=enabled;
+        # tests/es_ebpf_testing is only built with -Des_ebpf_testing=enabled;
         # make its absence an explicit failure rather than something the later
         # steps skip over silently.
-        test -x build/addon/es_ebpf_testing/esdm-ebpf-collect
-        build/addon/es_ebpf_testing/esdm-ebpf-collect --help
+        test -x build/tests/es_ebpf_testing/esdm-ebpf-collect
+        build/tests/es_ebpf_testing/esdm-ebpf-collect --help
 
     - name: Meson test
       run: meson test -v -C build
@@ -555,7 +555,7 @@ jobs:
 
     - name: Collect raw eBPF entropy events
       run: |
-        # Exercise addon/es_ebpf_testing for real: attach with raw sampling
+        # Exercise tests/es_ebpf_testing for real: attach with raw sampling
         # enabled - a code path none of the entropy source tests take and one
         # the verifier has to accept - and gather enough events for the
         # analysis steps below to work on.
@@ -579,7 +579,7 @@ jobs:
           # makes the collector stop and write out what it has, so a quiet
           # machine fails on the record count of the next step instead.
           if sudo timeout -s TERM 120 \
-                  build/addon/es_ebpf_testing/esdm-ebpf-collect \
+                  build/tests/es_ebpf_testing/esdm-ebpf-collect \
                   --source "${src}" --out "raw-${src}.txt" --events 20000 \
                   2> "collect-${src}.log"; then
             cat "collect-${src}.log"
@@ -613,7 +613,7 @@ jobs:
         # would show up as a short output file here.
         for src in sched; do
           lines=$(wc -l < "raw-${src}.txt")
-          build/addon/test/esdm-extractlsb "raw-${src}.txt" "raw-${src}.bin" \
+          build/tests/validation-helpers/esdm-extractlsb "raw-${src}.txt" "raw-${src}.bin" \
               "${lines}" FF
           bytes=$(stat -c %s "raw-${src}.bin")
           echo "${src}: ${lines} deltas -> ${bytes} bytes"

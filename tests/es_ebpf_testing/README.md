@@ -33,7 +33,7 @@ and the ESDM server itself never records raw data.
    assess them one at a time. Perform one collection on an idle system and
    one under load (e.g. `stress-ng --cpu N --io N`):
 
-       sudo ./build/addon/es_ebpf_testing/esdm-ebpf-collect \
+       sudo ./build/tests/es_ebpf_testing/esdm-ebpf-collect \
             --source sched --cpu 0 --events 1000000 --out sched_idle_cpu0.txt
 
    The output is one decimal time delta per line: the time between two
@@ -77,7 +77,7 @@ and the ESDM server itself never records raw data.
 
    Doing it by hand is two commands:
 
-       ./build/addon/test/esdm-extractlsb raw.txt raw-8.bin 1000000 FF
+       ./build/tests/validation-helpers/esdm-extractlsb raw.txt raw-8.bin 1000000 FF
        ea_non_iid raw-8.bin 8
 
    Repeat for every CPU that shall be credited and take the **minimum**

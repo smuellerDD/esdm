@@ -222,7 +222,7 @@ non-zero entropy rate.
 
 The default entropy rate of both sources is 0 (uncredited): determine the
 appropriate rate for a deployment environment with the measurement tooling
-in `addon/es_ebpf_testing/` before crediting the sources. See
+in `tests/es_ebpf_testing/` before crediting the sources. See
 `doc/esdm_es_ebpf.md` for the design description.
 
 ### External Entropy Sources
@@ -327,9 +327,9 @@ The ESDM consists of the following components:
 
   NOTE: If you run the `esdm-proc` tool on a system with SELinux in enforcing
   mode using the targeted policy, you need to create a new policy. A template
-  is provided in the `addons/esdm-proc-selinux` directory. Compile the policy
+  is provided in the `addon/esdm-proc-selinux` directory. Compile the policy
   with the provided `esdm_proc.sh` script. For details, see
-  `addons/esdm-proc-selinux/README.md`.
+  `addon/esdm-proc-selinux/README.md`.
 
 * `libesdm-getrandom.so`: The library provides a wrapper to the `getrandom` and
   `getentropy` libc library calls. To use the library for other consumers, use

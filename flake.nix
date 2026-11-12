@@ -332,7 +332,7 @@
         # analysis scripts drive the NIST SP800-90B non-IID estimator over them.
         # This tests the measurement tooling, NOT a validation grade assessment
         # - a claim must be measured on the deployment environment, which a qemu
-        # VM is not (see addon/es_ebpf_testing/README.md), so nothing is
+        # VM is not (see tests/es_ebpf_testing/README.md), so nothing is
         # asserted about the magnitude. Single kernel on purpose: the estimator
         # dominates the run time and nothing here is kernel specific.
         mkEbpfRawCheck =
@@ -348,7 +348,7 @@
             # The example scripts live next to the collector and are what this
             # check drives - the pipeline is only worth testing as the tooling
             # a user would actually run.
-            tools = lib.cleanSource ./addon/es_ebpf_testing;
+            tools = lib.cleanSource ./tests/es_ebpf_testing;
 
             # Deltas to collect from the one CPU this assesses - the CPUs are
             # separate noise sources, so a collection is never split across
@@ -1374,14 +1374,13 @@
 
                 # Turn the .gcda files into the report. gcovr is driven directly
                 # rather than through meson's coverage-html target, which offers
-                # no way to pass excludes: the tests themselves, the out-of-tree
-                # add-ons, esdm-tool's stress drivers and the generated libbpf
-                # skeletons all stay out of the report.
+                # no way to pass excludes: the tests and test helpers, esdm-tool's
+                # stress drivers and the generated libbpf skeletons all stay out
+                # of the report.
                 mkdir -p meson-logs/coveragereport
                 gcovr \
                   --root .. \
                   --exclude '.*/tests/.*' \
-                  --exclude '.*/addon/.*' \
                   --exclude '.*/frontends/tool/stress_.*' \
                   --exclude '.*\.skel\.h' \
                   --exclude-unreachable-branches \
@@ -1645,7 +1644,6 @@
                     --gcov-executable '${pkgs.stdenv.cc.cc}/bin/gcov' \
                     --root "$work/source" \
                     --exclude '.*/tests/.*' \
-                    --exclude '.*/addon/.*' \
                     --exclude '.*/frontends/tool/stress_.*' \
                     --exclude '.*\.skel\.h' \
                     --exclude-unreachable-branches \
