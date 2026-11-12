@@ -55,10 +55,12 @@
 static atomic_t esdm_cdev_operational = ATOMIC_INIT(0);
 static DECLARE_WAIT_QUEUE_HEAD(esdm_cdev_wait);
 
-/* Readers waiting for the ESDM to turn operational */
+/*
+ * Readers waiting for the ESDM to turn operational. Pollers need no count:
+ * poll_wait() queues them on esdm_cdev_wait before the kick, until their
+ * poll() ends (for epoll, while it watches).
+ */
 static atomic_t esdm_cdev_waiters = ATOMIC_INIT(0);
-/* A poller waits for it since it was last operational */
-static atomic_t esdm_cdev_pollers = ATOMIC_INIT(0);
 
 /* Poll interval of the watcher, and its longest one while unreachable */
 #define ESDM_CDEV_WATCH_MS 100
@@ -70,6 +72,8 @@ static atomic_t esdm_cdev_pollers = ATOMIC_INIT(0);
 static void esdm_cdev_watch(struct work_struct *work);
 static DECLARE_DELAYED_WORK(esdm_cdev_watch_work, esdm_cdev_watch);
 static unsigned int esdm_cdev_watch_ms = ESDM_CDEV_WATCH_MS;
+/* A kick runs the watcher no earlier than this, in jiffies */
+static unsigned long esdm_cdev_watch_next;
 static bool esdm_cdev_stopping;
 
 static void esdm_cdev_set_operational(bool operational)
@@ -78,14 +82,25 @@ static void esdm_cdev_set_operational(bool operational)
 	    !operational)
 		return;
 
-	atomic_set(&esdm_cdev_pollers, 0);
 	wake_up_interruptible_all(&esdm_cdev_wait);
 }
 
+/*
+ * Run the watcher, but not before its interval is up: any poll() of the
+ * world-accessible /dev/esdm_random kicks it, and each run is an ESDM request.
+ * The clamp guards against a last run so old that the jiffies wrapped.
+ */
 static void esdm_cdev_watch_kick(void)
 {
+	unsigned long now = jiffies, next = READ_ONCE(esdm_cdev_watch_next);
+	unsigned long delay = 0;
+
+	if (time_before(now, next))
+		delay = min(next - now,
+			    msecs_to_jiffies(ESDM_CDEV_WATCH_MAX_MS));
+
 	if (!READ_ONCE(esdm_cdev_stopping))
-		mod_delayed_work(esdm_cdev_wq, &esdm_cdev_watch_work, 0);
+		queue_delayed_work(esdm_cdev_wq, &esdm_cdev_watch_work, delay);
 }
 
 /*
@@ -99,7 +114,11 @@ static void esdm_cdev_watch_kick(void)
 static void esdm_cdev_watch(struct work_struct *work)
 {
 	u32 state[ESDM_EGD_STATE_NUM_FIELDS];
-	int ret = esdm_cdev_egd_get_state(state);
+	int ret;
+
+	WRITE_ONCE(esdm_cdev_watch_next,
+		   jiffies + msecs_to_jiffies(esdm_cdev_watch_ms));
+	ret = esdm_cdev_egd_get_state(state);
 
 	/* An ESDM that cannot be reached is asked less often */
 	esdm_cdev_watch_ms = ret ? min(esdm_cdev_watch_ms * 2,
@@ -111,8 +130,9 @@ static void esdm_cdev_watch(struct work_struct *work)
 	if (atomic_read(&esdm_cdev_operational))
 		return;
 
+	/* Until nobody waits any more, the pollers among them included */
 	if ((atomic_read(&esdm_cdev_waiters) ||
-	     atomic_read(&esdm_cdev_pollers)) &&
+	     wq_has_sleeper(&esdm_cdev_wait)) &&
 	    !READ_ONCE(esdm_cdev_stopping))
 		queue_delayed_work(esdm_cdev_wq, &esdm_cdev_watch_work,
 				   msecs_to_jiffies(esdm_cdev_watch_ms));
@@ -261,7 +281,6 @@ static __poll_t esdm_cdev_poll(struct file *file, poll_table *wait)
 		return EPOLLIN | EPOLLRDNORM;
 
 	/* The watcher tells the poller once that changes */
-	atomic_set(&esdm_cdev_pollers, 1);
 	esdm_cdev_watch_kick();
 
 	return EPOLLOUT | EPOLLWRNORM;
@@ -440,6 +459,7 @@ static int __init esdm_cdev_init(void)
 		goto err_random;
 
 	/* Learn the state of the ESDM, without waiting for it */
+	WRITE_ONCE(esdm_cdev_watch_next, jiffies);
 	esdm_cdev_watch_kick();
 
 	return 0;
