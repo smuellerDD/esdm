@@ -115,10 +115,14 @@ ssize_t esdm_rpcc_get_random_bytes_full_int(uint8_t *buf, size_t buflen,
 			continue;
 		} else if (buffer.ret == -EAGAIN || buffer.ret == 0) {
 			/*
-			 * Nothing produced is waited for like -EAGAIN, so an
-			 * empty answer cannot spin the loop.
+			 * Wait on an empty answer as on -EAGAIN so it cannot
+			 * spin, without holding the pooled connection.
 			 */
+			esdm_rpcc_put_unpriv_service(rpc_conn);
+			rpc_conn = NULL;
 			nanosleep(&esdm_client_poll_ts, NULL);
+			CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn,
+							   int_data));
 			continue;
 		} else if (buffer.ret < 0) {
 			ret = buffer.ret;

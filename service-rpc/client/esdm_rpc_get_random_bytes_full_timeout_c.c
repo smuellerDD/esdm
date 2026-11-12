@@ -224,6 +224,10 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 			struct timespec sleep_ts = esdm_client_poll_ts;
 			struct timespec cur_time;
 
+			/* Do not hold the pooled connection while waiting */
+			esdm_rpcc_timeout_put(rpc_conn, &timeout);
+			rpc_conn = NULL;
+
 			/* Sleep no further than to the deadline */
 			clock_gettime(CLOCK_MONOTONIC, &cur_time);
 			if (!esdm_time_after(&cur_time, &timeout.deadline)) {
@@ -243,6 +247,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 				nanosleep(&sleep_ts, NULL);
 			}
 
+			CKINT(esdm_rpcc_timeout_get(&rpc_conn, &timeout));
 			continue;
 		} else if (buffer.ret < 0) {
 			ret = buffer.ret;
