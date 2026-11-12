@@ -550,9 +550,15 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 			goto out;
 		}
 
-		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, NULL, 0)) {
+		/*
+		 * addtl (output of zero-credit sources) is the reseed's
+		 * additional input; each DRBG type takes up to 2^31 - 1 bytes.
+		 */
+		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, addtl,
+				     addtl ? addtllen : 0)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-				    "Failed to reseed DRBG\n");
+				    "Failed to reseed DRBG: %s\n",
+				    ERR_error_string(ERR_get_error(), NULL));
 			/*
 			 * In its error state (after a failed generate, or a
 			 * reseed of its own in a forked child), OpenSSL

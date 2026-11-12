@@ -56,6 +56,16 @@ xdrbg_tester = executable(
 	)
 test('XDRBG-256', xdrbg_tester, suite: 'crypto')
 
+# The DRNG of the crypto backend takes the additional input of a seed whole
+drng_addtl_tester = executable(
+		'drng_addtl_tester',
+		[ 'drng_addtl_tester.c' ],
+		dependencies: dependencies_server,
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+	)
+test('DRNG additional input', drng_addtl_tester, suite: 'crypto')
+
 if get_option('drng_hash_drbg').enabled()
 	hash_drbg_tester = executable(
 			'hash_drbg_tester',
