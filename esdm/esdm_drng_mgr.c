@@ -476,6 +476,7 @@ int esdm_drg4_compliant(void)
  */
 static uint64_t esdm_drng_reseed_in(struct esdm_drng *drng);
 static void esdm_drng_reseed_notify(void);
+static void esdm_drng_reseed_kick(void);
 
 DSO_PUBLIC
 uint32_t esdm_get_reseed_max_time(void)
@@ -1105,15 +1106,24 @@ static void esdm_drng_seed_work_locked(bool force)
 
 /*
  * The same for a caller that would rather do nothing than wait: a DRNG
- * another thread seeds is left to it.
+ * another thread seeds is left to it, and so is every seeding while no Jitter
+ * RNG collector is free - to the reseed worker, which is woken for it.
  * @return whether a DRNG is fully seeded by this call, or all are
  */
 bool esdm_drng_seed_work_try(void)
 {
-	struct esdm_drng **drngs = esdm_drng_get_instances();
-	bool ret = __esdm_drng_seed_work(drngs, false, false);
+	struct esdm_drng **drngs;
+	bool ret;
 
+	if (!esdm_jent_seed_admit()) {
+		esdm_drng_reseed_kick();
+		return false;
+	}
+
+	drngs = esdm_drng_get_instances();
+	ret = __esdm_drng_seed_work(drngs, false, false);
 	esdm_drng_put_instances();
+	esdm_jent_seed_done();
 
 	return ret;
 }
@@ -1810,6 +1820,17 @@ static void esdm_drng_reseed_notify(void)
 }
 
 /*
+ * The same for the possibly many callers leaving a seeding to the worker: a
+ * pending wakeup is not signalled again, taking the queue lock once per pass.
+ */
+static void esdm_drng_reseed_kick(void)
+{
+	if (esdm_drng_mgr_reseed_worker_running() &&
+	    !atomic_exchange(&esdm_drng_reseed_wakeup_pending, true))
+		thread_wake_all_locked(&esdm_drng_reseed_wait);
+}
+
+/*
  * Hand the reseed of @drng to the worker and return at once. The caller keeps
  * generating from the DRNG until the reseed lands, or until the DRNG runs into
  * the configured maximum without a full reseed - which the generate path
@@ -1884,21 +1905,31 @@ static void esdm_drng_get_reseed(struct esdm_drng *drng, bool nonblock)
 	}
 
 	/*
-	 * The DRNG is being seeded and the caller may not wait for it: reseed
-	 * next time and generate within the maximum meanwhile.
+	 * The DRNG is being seeded, or no Jitter RNG collector is free, and the
+	 * caller may not wait: reseed next time - the worker is woken for it -
+	 * and generate within the maximum meanwhile.
 	 */
-	if (nonblock && mutex_w_trylock(&drng->seed_lock)) {
-		atomic_store(&drng->force_reseed, true);
-		return;
+	if (nonblock) {
+		if (mutex_w_trylock(&drng->seed_lock)) {
+			atomic_store(&drng->force_reseed, true);
+			return;
+		}
+		if (!esdm_jent_seed_admit()) {
+			mutex_w_unlock(&drng->seed_lock);
+			atomic_store(&drng->force_reseed, true);
+			esdm_drng_reseed_kick();
+			return;
+		}
+	} else {
+		mutex_w_lock(&drng->seed_lock);
 	}
 
-	/* Perform synchronous reseed */
-	if (!nonblock)
-		mutex_w_lock(&drng->seed_lock);
 	/* Another path may have reseeded it in the meantime */
 	if (esdm_drng_must_reseed(drng, false))
 		esdm_drng_reseed_seed_locked(drng);
 	mutex_w_unlock(&drng->seed_lock);
+	if (nonblock)
+		esdm_jent_seed_done();
 }
 
 /**

@@ -59,15 +59,18 @@ struct esdm_jent_sync {
 	bool failed; /* Its last read failed, under lock */
 };
 static struct esdm_jent_sync *esdm_jent_sync = NULL;
-static unsigned int esdm_jent_num_sync = 0;
+/* Atomic for esdm_jent_seed_admit(), written under esdm_jent_lock alone */
+static atomic_uint esdm_jent_num_sync = 0;
 static atomic_uint esdm_jent_sync_next = 0;
 
+/* Reads holding or waiting for a collector; admitted seedings under way */
+static atomic_uint esdm_jent_sync_users = 0;
+static atomic_uint esdm_jent_seed_admitted = 0;
+
 /*
- * No entropy is claimed while a synchronous collector fails to read - after a
- * permanent health test failure, or the known answer tests bound to it - nor
- * while the self test fails. The former ends with the next read of that
- * collector that works, the latter with the next self test that passes, both
- * with a reinit.
+ * No entropy is claimed while a collector fails to read (permanent health test
+ * or bound KAT failure) or the self test fails, until the collector's next good
+ * read or the next passing self test respectively, or a reinit.
  */
 static atomic_uint esdm_jent_read_failures = 0;
 static atomic_bool esdm_jent_selftest_failed = false;
@@ -199,6 +202,7 @@ static struct esdm_jent_sync *esdm_jent_sync_get(bool wait)
 	if (!n)
 		return NULL;
 
+	atomic_fetch_add(&esdm_jent_sync_users, 1);
 	start = atomic_fetch_add(&esdm_jent_sync_next, 1);
 	for (i = 0; i < n; i++) {
 		sync = &esdm_jent_sync[(start + i) % n];
@@ -206,8 +210,10 @@ static struct esdm_jent_sync *esdm_jent_sync_get(bool wait)
 			return sync;
 	}
 
-	if (!wait)
+	if (!wait) {
+		atomic_fetch_sub(&esdm_jent_sync_users, 1);
 		return NULL;
+	}
 
 	sync = &esdm_jent_sync[start % n];
 	mutex_w_lock(&sync->lock);
@@ -226,6 +232,38 @@ static void esdm_jent_sync_read(struct esdm_jent_sync *sync,
 
 	esdm_jent_get(sync, eb_es, requested_bits);
 	mutex_w_unlock(&sync->lock);
+	atomic_fetch_sub(&esdm_jent_sync_users, 1);
+}
+
+/*
+ * Admit a seeding of a caller that may not wait (RPC or EGD worker) only while
+ * a collector is free, instead of queueing it behind seedings under way. Reads
+ * holding or waiting for a collector and admitted seedings count as taken, the
+ * latter's own read once more. Not strict: a read may still win the collector,
+ * costing the seeding one collection. esdm_jent_seed_done() ends an admission.
+ */
+bool esdm_jent_seed_admit(void)
+{
+	unsigned int n = atomic_load(&esdm_jent_num_sync);
+	unsigned int admitted = atomic_load(&esdm_jent_seed_admitted);
+
+	if (!n || !atomic_load(&esdm_jent_initialized)) {
+		atomic_fetch_add(&esdm_jent_seed_admitted, 1);
+		return true;
+	}
+
+	do {
+		if (atomic_load(&esdm_jent_sync_users) + admitted >= n)
+			return false;
+	} while (!atomic_compare_exchange_weak(&esdm_jent_seed_admitted,
+					       &admitted, admitted + 1));
+
+	return true;
+}
+
+void esdm_jent_seed_done(void)
+{
+	atomic_fetch_sub(&esdm_jent_seed_admitted, 1);
 }
 
 /* Free the synchronous collectors, under esdm_jent_lock taken alone */
