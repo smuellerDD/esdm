@@ -398,25 +398,42 @@ static void esdm_cuse_drop_privileges(void)
 		dropped = true;
 }
 
+/* Set with --pid_namespace, see esdm_cuse_client_privileged() */
+static bool esdm_cuse_pid_namespace = false;
+
 static bool esdm_cuse_client_privileged(fuse_req_t req)
 {
 	const struct fuse_ctx *ctx = fuse_req_ctx(req);
+	bool privileged;
+	int ret;
 
 	/*
-	 * We are not checking the GID as we expect a root user to use any
-	 * GID.
-	 *
-	 * WARNING: as documented for struct fuse_ctx, the CUSE daemon
-	 * MUST NOT run in a PID or user namespace.
+	 * In a PID namespace of its own the daemon sees callers as PID 0 and
+	 * cannot look them up. Fall back to root then, which unlike the
+	 * kernel's check admits root without CAP_SYS_ADMIN.
 	 */
-	if (ctx->uid == 0) {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-			    "CUSE caller privileged\n");
-		return true;
+	if (esdm_cuse_pid_namespace || !ctx->pid) {
+		privileged = !ctx->uid;
+		goto out;
 	}
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller unprivileged\n");
-	return false;
+	/*
+	 * Like the kernel, require CAP_SYS_ADMIN of the calling thread, not
+	 * root: the daemon acts with its own CAP_SYS_ADMIN, which a root
+	 * service without it must not reach. ctx->pid, blocked in the ioctl,
+	 * cannot be reused meanwhile; a failed lookup refuses the request.
+	 */
+	ret = linux_task_has_cap_sys_admin(ctx->pid);
+	if (ret < 0)
+		esdm_logger(LOGGER_WARN, LOGGER_C_CUSE,
+			    "Cannot check the capabilities of caller %d: %s\n",
+			    (int)ctx->pid, strerror(-ret));
+	privileged = (ret == 1);
+
+out:
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller %sprivileged\n",
+		    privileged ? "" : "un");
+	return privileged;
 }
 
 /*
@@ -1300,6 +1317,9 @@ int main_common(const char *_devname, const char *target, const char *semname,
 	if (param.syslog) {
 		esdm_logger_enable_syslog("esdm-cuse");
 	}
+
+	/* See esdm_cuse_client_privileged() */
+	esdm_cuse_pid_namespace = !!param.pid_namespace;
 
 	esdm_test_disable_fallback(param.disable_fallback);
 

@@ -21,12 +21,21 @@
 #define LINUX_SUPPORT_H
 
 #include <stddef.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 int linux_isolate_namespace(void);
+/**
+ * @brief Whether a task holds CAP_SYS_ADMIN in our user namespace.
+ *
+ * @param [in] pid Thread or process ID in the PID namespace of our /proc.
+ *
+ * @return 1 if it does, 0 if not, < 0 where that cannot be told.
+ */
+int linux_task_has_cap_sys_admin(pid_t pid);
 /**
  * @brief Fork the daemon into an isolating PID namespace.
  *

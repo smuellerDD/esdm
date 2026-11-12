@@ -20,12 +20,16 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
+#include <linux/capability.h>
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -201,6 +205,72 @@ int linux_isolate_namespace(void)
 		    "Successfully entered isolating namespaces\n");
 
 	return 0;
+}
+
+/* Whether @path reads the same as @ref, which a shorter read cannot */
+static int linux_same_content(const char *path, const char *ref)
+{
+	FILE *a = fopen(path, "re"), *b;
+	int ret = 1, ca, cb;
+
+	if (!a)
+		return -errno;
+	b = fopen(ref, "re");
+	if (!b) {
+		ret = -errno;
+		fclose(a);
+		return ret;
+	}
+
+	do {
+		ca = fgetc(a);
+		cb = fgetc(b);
+		if (ca != cb) {
+			ret = 0;
+			break;
+		}
+	} while (ca != EOF);
+
+	if (ferror(a) || ferror(b))
+		ret = -EIO;
+
+	fclose(a);
+	fclose(b);
+	return ret;
+}
+
+int linux_task_has_cap_sys_admin(pid_t pid)
+{
+	struct __user_cap_header_struct hdr = {
+		.version = _LINUX_CAPABILITY_VERSION_3,
+		.pid = pid,
+	};
+	struct __user_cap_data_struct data[_LINUX_CAPABILITY_U32S_3];
+	char path[64];
+	int ret;
+
+	if (pid <= 0)
+		return -EINVAL;
+
+	/*
+	 * capget(2), not CapEff of /proc/<pid>/status: like capable(), it
+	 * honors LSM denials, e.g. AppArmor's on Ubuntu user namespaces.
+	 */
+	if (syscall(SYS_capget, &hdr, data))
+		return -errno;
+	if (!(data[CAP_TO_INDEX(CAP_SYS_ADMIN)].effective &
+	      CAP_TO_MASK(CAP_SYS_ADMIN)))
+		return 0;
+
+	/*
+	 * Capabilities count only in the task's user namespace, which anybody
+	 * may create. A task in another user namespace sees another uid_map,
+	 * unless one privileged over all our uids created it.
+	 */
+	snprintf(path, sizeof(path), "/proc/%d/uid_map", (int)pid);
+	ret = linux_same_content(path, "/proc/self/uid_map");
+
+	return ret;
 }
 
 int linux_personalization_string(char **ptr, size_t *length)
