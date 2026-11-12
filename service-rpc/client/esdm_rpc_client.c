@@ -304,7 +304,15 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		      errsv == EINTR || errsv == EINPROGRESS))
 			break;
 
-		/* The bound of the invoke is not outwaited */
+		/*
+		 * Neither an interrupt request nor the bound of the invoke is
+		 * outwaited - an interruption surfaces as -EAGAIN as in the
+		 * write path.
+		 */
+		if (esdm_rpcc_interrupted(rpc_conn)) {
+			errsv = EAGAIN;
+			break;
+		}
 		if (esdm_rpcc_expired(rpc_conn)) {
 			errsv = ETIMEDOUT;
 			break;
@@ -922,6 +930,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	strncpy(rpc_conn->socketname, socketname, sizeof(rpc_conn->socketname));
 	rpc_conn->socketname[sizeof(rpc_conn->socketname) - 1] = '\0';
 	rpc_conn->interrupt_func = interrupt_func;
+	rpc_conn->interrupt_func_init = interrupt_func;
 
 	service->descriptor = descriptor;
 	service->invoke = esdm_client_invoke;
@@ -1187,7 +1196,7 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		 * silently disable the interrupt handling of its owner.
 		 */
 		if (interrupt_func &&
-		    interrupt_func != curr_conn_array->interrupt_func) {
+		    interrupt_func != curr_conn_array->interrupt_func_init) {
 			esdm_logger(
 				LOGGER_WARN, LOGGER_C_RPC,
 				"Interrupt function for socket %s ignored: the connections are already established\n",
@@ -1343,6 +1352,7 @@ static int esdm_rpcc_get_service(
 	}
 
 	*ret_rpc_conn = rpc_conn_p;
+	rpc_conn_p->interrupt_func = rpc_conn_p->interrupt_func_init;
 	rpc_conn_p->interrupt_data = int_data;
 
 out:

@@ -69,6 +69,11 @@ struct esdm_rpc_client_connection {
 	 */
 	esdm_rpcc_interrupt_func_t interrupt_func;
 	void *interrupt_data;
+	/*
+	 * The one registered, restored for every user: one chaining its own
+	 * in front may be cancelled before it takes it off again.
+	 */
+	esdm_rpcc_interrupt_func_t interrupt_func_init;
 
 	/*
 	 * Both are robust mutexes, so a caller killed while owning the
