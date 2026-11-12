@@ -386,17 +386,6 @@ static bool esdm_cuse_fips_enabled(void)
 #endif
 
 static const char *esdm_cuse_unprivileged_user = "nobody";
-static void esdm_cuse_drop_privileges(void)
-{
-	static bool dropped = false;
-
-	if (dropped)
-		return;
-
-	if (linux_isolate_namespace() == 0 &&
-	    drop_privileges_transient(esdm_cuse_unprivileged_user) == 0)
-		dropped = true;
-}
 
 /* Set with --pid_namespace, see esdm_cuse_client_privileged() */
 static bool esdm_cuse_pid_namespace = false;
@@ -1194,7 +1183,12 @@ void esdm_cuse_init_done(void *userdata)
 	CKINT(esdm_cuse_shm_status_create_sem());
 	CKINT(esdm_cuse_shm_status_create_shm());
 
-	esdm_cuse_drop_privileges();
+	/*
+	 * The transient raise for privileged ioctls exists to avoid serving at
+	 * euid 0, so a failed drop ends the daemon.
+	 */
+	CKINT_LOG(drop_privileges_transient(esdm_cuse_unprivileged_user),
+		  "Cannot drop privileges: %d\n", ret);
 
 	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL,
 			       ESDM_THREAD_CUSE_POLL_GROUP, NULL),
@@ -1383,6 +1377,15 @@ int main_common(const char *_devname, const char *target, const char *semname,
 	/* Enter PID namespace (opt-in via --pid_namespace) */
 	if (param.pid_namespace)
 		CKINT(linux_isolate_namespace_prefork(NULL));
+
+	/*
+	 * Before any thread exists, as unshare() moves the calling thread
+	 * only. The mount namespace stays the host's: the bind mount over the
+	 * kernel device has to be seen there, and removed from there again.
+	 */
+	if (linux_isolate_namespace_keep_mounts())
+		esdm_logger(LOGGER_WARN, LOGGER_C_CUSE,
+			    "Continuing without namespace isolation\n");
 
 	/* One thread group */
 	CKINT(thread_init(1));

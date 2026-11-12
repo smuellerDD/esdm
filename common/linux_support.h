@@ -34,6 +34,12 @@ extern "C" {
  */
 int linux_isolate_namespace(void);
 /**
+ * @brief As linux_isolate_namespace, but keeping the host's mount namespace.
+ *
+ * For a daemon that publishes mounts to the host, as the CUSE frontends do.
+ */
+int linux_isolate_namespace_keep_mounts(void);
+/**
  * @brief Whether a task holds CAP_SYS_ADMIN in our user namespace.
  *
  * @param [in] pid Thread or process ID in the PID namespace of our /proc.

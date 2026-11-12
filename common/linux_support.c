@@ -211,6 +211,11 @@ int linux_isolate_namespace(void)
 	return linux_unshare(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWNET);
 }
 
+int linux_isolate_namespace_keep_mounts(void)
+{
+	return linux_unshare(CLONE_NEWCGROUP | CLONE_NEWNET);
+}
+
 /* Whether @path reads the same as @ref, which a shorter read cannot */
 static int linux_same_content(const char *path, const char *ref)
 {
