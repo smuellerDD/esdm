@@ -143,6 +143,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 	struct esdm_get_random_bytes_full_timeout_buf buffer;
 	struct esdm_rpcc_timeout_int timeout = { .int_data = int_data };
 	size_t maxbuflen = buflen, orig_buflen = buflen;
+	unsigned int polls = 0;
 	ssize_t ret = 0;
 
 	CKNULL(ts, -EINVAL);
@@ -221,7 +222,7 @@ ssize_t esdm_rpcc_get_random_bytes_full_timeout_int(uint8_t *buf, size_t buflen,
 			maxbuflen = new_max;
 			continue;
 		} else if (buffer.ret == -EAGAIN) {
-			struct timespec sleep_ts = esdm_client_poll_ts;
+			struct timespec sleep_ts = esdm_client_poll_ts(&polls);
 			struct timespec cur_time;
 
 			/* Do not hold the pooled connection while waiting */

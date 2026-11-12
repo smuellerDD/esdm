@@ -145,9 +145,27 @@ esdm_rpcc_last_error(const esdm_rpc_client_connection_t *rpc_conn)
 	return (ret < 0 && ret != -EAGAIN) ? ret : 0;
 }
 
-/* Sleep time for poll operations */
-static const struct timespec esdm_client_poll_ts = { .tv_sec = 1,
-						     .tv_nsec = 0 };
+/*
+ * Wait before re-polling a request the server could not serve yet (all DRNGs
+ * await their reseed, which takes milliseconds): 1 ms, doubled per poll up to
+ * 16 ms, so short waits are not stretched and long ones do not busy poll.
+ * @polls counts the polls of the request.
+ */
+static inline struct timespec esdm_client_poll_ts(unsigned int *polls)
+{
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1000000L << *polls };
+
+	if (*polls < 4)
+		(*polls)++;
+	return ts;
+}
+
+static inline void esdm_client_poll_wait(unsigned int *polls)
+{
+	struct timespec ts = esdm_client_poll_ts(polls);
+
+	nanosleep(&ts, NULL);
+}
 
 #ifdef __cplusplus
 }

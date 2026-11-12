@@ -69,6 +69,7 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 	esdm_rpc_client_connection_t *rpc_conn = NULL;
 	struct esdm_get_random_bytes_pr_buf buffer;
 	size_t maxbuflen = buflen, orig_buflen = buflen;
+	unsigned int polls = 0;
 	ssize_t ret = 0;
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
@@ -132,7 +133,7 @@ ssize_t esdm_rpcc_get_random_bytes_pr_int(uint8_t *buf, size_t buflen,
 			 */
 			esdm_rpcc_put_unpriv_service(rpc_conn);
 			rpc_conn = NULL;
-			nanosleep(&esdm_client_poll_ts, NULL);
+			esdm_client_poll_wait(&polls);
 			CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn,
 							   int_data));
 			continue;
