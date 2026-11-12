@@ -523,6 +523,19 @@ static void test_read_fallback(void)
 	CHECK(reply.err != 0, "a read with nothing behind it reported success");
 
 	close(fd);
+
+	/* A failing fallback reports its own error, not its -1 read as EPERM */
+	fd = open("/dev/null", O_WRONLY | O_CLOEXEC);
+	if (fd >= 0) {
+		memset(&fi, 0, sizeof(fi));
+		reply_reset();
+		esdm_cuse_read_internal(
+			TEST_REQ, 32, 0, &fi,
+			esdm_rpcc_get_random_bytes_full_noblock_int, fd);
+		CHECK_EQ(reply.kind, REPLY_ERR);
+		CHECK_EQ(reply.err, EBADF);
+		close(fd);
+	}
 }
 
 /*
@@ -570,6 +583,17 @@ static void test_write_fallback(void)
 	CHECK(reply.err != 0, "a write with nothing behind it reported success");
 
 	close(fd);
+
+	/* A failing fallback reports its own error rather than EPERM */
+	fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+	if (fd >= 0) {
+		reply_reset();
+		esdm_cuse_write_internal(TEST_REQ, (const char *)buf,
+					 sizeof(buf), 0, &fi, fd);
+		CHECK_EQ(reply.kind, REPLY_ERR);
+		CHECK_EQ(reply.err, EBADF);
+		close(fd);
+	}
 }
 
 /*

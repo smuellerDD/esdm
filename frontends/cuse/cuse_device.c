@@ -534,6 +534,8 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 				"Use fallback to provide data due to RPC error code %zd\n",
 				ret);
 			ret = read(fallback_fd, tmpbuf_p + read_bytes, todo);
+			if (ret < 0)
+				ret = -errno;
 
 			/*
 			 * A 0-byte read (EOF - e.g. a regular-file fallback in
@@ -549,7 +551,9 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			goto out;
 		read_bytes += (size_t)ret;
 	}
-	ret = fuse_reply_buf(req, (const char *)tmpbuf_p, size);
+	/* The reply frees req, also when it fails: no second one below */
+	fuse_reply_buf(req, (const char *)tmpbuf_p, size);
+	ret = 0;
 
 out:
 	if (tmpbuf) {
@@ -611,6 +615,8 @@ err:
 			ret = write(fallback_fd, buf + written, size - written);
 			if (ret > 0)
 				written += (size_t)ret;
+			else if (ret < 0)
+				ret = -errno;
 		} while (ret > 0 && written < size);
 
 		/*
