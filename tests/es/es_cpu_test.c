@@ -22,9 +22,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "config.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "test_pertubation.h"
 #include "../es_state_check.h"
 
 static int es_cpu_getstate(void)
@@ -312,6 +314,46 @@ static bool es_cpu_data_available(void)
 	return eb_es.e_bits > 0;
 }
 
+#ifdef ESDM_TESTMODE
+/*
+ * A CPU RNG that stalls fails no self test: it is credited with nothing until
+ * a read works again.
+ */
+static int es_cpu_stalled(void)
+{
+	struct esdm_es_cb *es = esdm_es[esdm_ext_es_cpu];
+	struct entropy_es eb_es;
+	int ret = 0;
+
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	esdm_test_cpu_fail_reads(1);
+	if (es->selftest() ||
+	    es->curr_entropy(ESDM_DRNG_SECURITY_STRENGTH_BITS)) {
+		printf("ES CPU - fail: a stalled CPU RNG failed the self test or stayed credited\n");
+		ret = 1;
+	}
+
+	memset(&eb_es, 0, sizeof(eb_es));
+	es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (!eb_es.e_bits ||
+	    !es->curr_entropy(ESDM_DRNG_SECURITY_STRENGTH_BITS)) {
+		printf("ES CPU - fail: not credited after the CPU RNG delivered again\n");
+		ret = 1;
+	}
+	memset(&eb_es, 0, sizeof(eb_es));
+
+	if (!ret)
+		printf("ES CPU - pass: a stalled CPU RNG is a read failure\n");
+
+	return ret;
+}
+#else
+static int es_cpu_stalled(void)
+{
+	return 0;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 	uint32_t i;
@@ -348,6 +390,7 @@ int main(int argc, char *argv[])
 	ret += es_cpu_getdata_partial();
 	ret += es_cpu_getstate();
 	ret += es_cpu_getstate_truncated();
+	ret += es_cpu_stalled();
 
 	return ret;
 }

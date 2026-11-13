@@ -35,6 +35,7 @@
 #include "helper.h"
 #include "mutex.h"
 #include "ret_checkers.h"
+#include "test_pertubation.h"
 
 static uint32_t esdm_cpu_data_multiplier = 0;
 
@@ -57,12 +58,17 @@ static atomic_bool esdm_cpu_delivered = false;
  */
 static atomic_bool esdm_cpu_selftest_failed = false;
 
+static bool esdm_cpu_read(unsigned long *val)
+{
+	return !esdm_test_cpu_read_fails() && cpu_es_get(val);
+}
+
 static int esdm_cpu_init(void)
 {
 	unsigned long probe;
 
 	/* No CPU RNG instruction (or RISC-V seed CSR access): no entropy */
-	if (cpu_es_get(&probe)) {
+	if (esdm_cpu_read(&probe)) {
 		atomic_store(&esdm_cpu_read_failed, false);
 		atomic_store(&esdm_cpu_delivered, true);
 	} else {
@@ -102,6 +108,13 @@ static uint32_t esdm_cpu_poolsize(void)
 	return esdm_cpu_entropylevel(esdm_security_strength());
 }
 
+/* Not a CPU without a CPU RNG, which never delivered */
+static bool esdm_cpu_read_failed_get(void)
+{
+	return atomic_load(&esdm_cpu_read_failed) &&
+	       atomic_load(&esdm_cpu_delivered);
+}
+
 static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 {
 	uint32_t i;
@@ -119,7 +132,7 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 		 */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
-		if (!cpu_es_get((unsigned long *)(outbuf + i))) {
+		if (!esdm_cpu_read((unsigned long *)(outbuf + i))) {
 #pragma GCC diagnostic pop
 			atomic_store(&esdm_cpu_read_failed, true);
 			/*
@@ -309,31 +322,34 @@ static bool esdm_cpu_active(void)
 #endif
 }
 
-/* Two reads of the CPU RNG that have to succeed and have to differ. */
+/* Two reads of the CPU RNG that have to differ. */
 static int esdm_cpu_selftest(void)
 {
 #ifdef ESDM_CPU_ES_IMPLEMENTED
 	unsigned long first, second;
 
-	if (!cpu_es_get(&first) || !cpu_es_get(&second)) {
+	if (!esdm_cpu_read(&first) || !esdm_cpu_read(&second)) {
 		/*
-		 * A CPU that never delivered does not have the instruction the
-		 * build provides for - there is nothing to test, just as there
-		 * is nothing to test for a device that is not present.
+		 * Nothing to test: a CPU that never delivered lacks the
+		 * instruction, and one that stalls - RDSEED or RNDRRS starved
+		 * past the retry loop - is a read failure, credited with
+		 * nothing until a read works again, rather than a reason to
+		 * stop the ESDM.
 		 */
-		if (!atomic_load(&esdm_cpu_delivered)) {
+		if (atomic_load(&esdm_cpu_delivered)) {
+			atomic_store(&esdm_cpu_read_failed, true);
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"CPU ES: the CPU RNG did not deliver - no entropy until it does\n");
+		} else {
 			esdm_logger(
 				LOGGER_DEBUG, LOGGER_C_ES,
 				"CPU ES: no CPU RNG on this system - nothing to test\n");
-			return 0;
 		}
-
-		atomic_store(&esdm_cpu_read_failed, true);
-		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
-			    "CPU ES: the CPU RNG did not deliver\n");
-		return -EFAULT;
+		return 0;
 	}
 
+	atomic_store(&esdm_cpu_read_failed, false);
 	atomic_store(&esdm_cpu_delivered, true);
 
 	if (first == second) {
@@ -369,4 +385,5 @@ struct esdm_es_cb esdm_es_cpu = {
 	.reset = NULL,
 	.active = esdm_cpu_active,
 	.selftest = esdm_cpu_selftest,
+	.read_failed = esdm_cpu_read_failed_get,
 };

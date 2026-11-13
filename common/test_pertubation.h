@@ -47,6 +47,10 @@ int esdm_test_fallback_fd(int fd);
 void esdm_test_jent_fail_sync_reads(unsigned int reads);
 bool esdm_test_jent_sync_read_fails(void);
 
+/* Fail the next @reads reads of the CPU RNG */
+void esdm_test_cpu_fail_reads(unsigned int reads);
+bool esdm_test_cpu_read_fails(void);
+
 int esdm_test_shm_status_init(void);
 void esdm_test_shm_status_fini(void);
 void esdm_test_shm_status_reset(void);
@@ -60,6 +64,11 @@ size_t esdm_test_shm_status_get_rpc_server_written(void);
 #define TESTMODE_STR ""
 
 static inline bool esdm_test_jent_sync_read_fails(void)
+{
+	return false;
+}
+
+static inline bool esdm_test_cpu_read_fails(void)
 {
 	return false;
 }
