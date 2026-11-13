@@ -91,7 +91,10 @@ extern "C" {
  *		 terminated, of up to ESDM_ES_EXT_STATUS_MAX bytes - into @buf
  *		 of @buflen bytes: 0, -EMSGSIZE or another negative errno. The
  *		 ESDM shows it as "plugin" of the "provider" status of the
- *		 source, asked for at most every 5 seconds. May be NULL.
+ *		 source, asked for on every round of the ESDM's entropy
+ *		 source monitor. An answer taking more than 500 ms drops
+ *		 the connection, and the status is not asked for a minute.
+ *		 May be NULL.
  * @entropy_rate: The rate the source declares, 0 to
  *		  ESDM_ES_EXT_ENTROPY_RATE_MAX - a higher one is capped - or
  *		  ESDM_ES_EXT_PROTO_RATE_NONE for none, called once after

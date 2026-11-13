@@ -223,7 +223,6 @@ static bool test_state_has(const char *key, const char *what)
 static struct json_object *test_provider(struct json_object **state)
 {
 	/* The monitor asks the provider for it, the status only shows it */
-	extsock.status_at = 0;
 	test_monitor();
 	*state = es_state_get(ES);
 	return es_state_member(*state, "provider", json_type_object);
@@ -593,6 +592,9 @@ static void test_status(void)
 				      ESDM_EXT_TIMEOUT_MS * MS,
 		      "mode %d: %s", dropping[i], es_state_print(state));
 		json_object_put(state);
+		/* Not asked again for a while, the reconnect not dropped */
+		CHECK(extsock.status_at > esdm_monotonic_now_ns(),
+		      "mode %d: STATUS asked again at once", dropping[i]);
 		evil_status = EVIL_GOOD;
 		test_monitor();
 		CHECK_EQ(test_get(BITS, NULL), 0);
@@ -600,6 +602,8 @@ static void test_status(void)
 		test_monitor();
 		CHECK_EQ(test_get(BITS, NULL), 8);
 		CHECK_EQ(evil_conns, conns + 1);
+		/* For the next mode */
+		extsock.status_at = 0;
 	}
 }
 

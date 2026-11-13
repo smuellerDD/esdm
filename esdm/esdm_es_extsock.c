@@ -39,6 +39,10 @@
  *
  * Connecting and probing are left to the ES monitor: a seeding holds the DRNG
  * lock, and asks a credited connection only.
+ *
+ * A provider is audited and trusted: the status it reports is shown as it is,
+ * not sanitized. The connection to it has to be robust nevertheless - a slow,
+ * hung or misbehaving provider must not stall or crash the ESDM.
  */
 
 #define _GNU_SOURCE
@@ -51,6 +55,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "build_bug_on.h"
@@ -109,10 +114,11 @@ static struct {
 	/* Not to log the same failure to connect on every attempt */
 	enum extsock_event last_logged;
 
-	/* The status of the provider, NULL for none, and when it was asked */
+	/* The status of the provider, NULL for none */
 	struct json_object *status;
-	uint64_t status_at;
 	bool status_warned;
+	/* Monotonic ns: the next STATUS after one not answered */
+	uint64_t status_at;
 
 	/* The last message received and its decoding, wiped after use */
 	uint8_t msg[ESDM_ES_EXT_PROTO_MSG_MAX];
@@ -188,6 +194,22 @@ static void extsock_lock(void)
 	mutex_lock(&extsock.mutex);
 }
 
+/* The mutex within ESDM_EXT_TIMEOUT_MS: 0, or an errno */
+static int extsock_lock_timed(void)
+{
+	struct timespec ts;
+
+	if (clock_gettime(CLOCK_REALTIME, &ts))
+		return errno;
+	ts.tv_sec += ESDM_EXT_TIMEOUT_MS / 1000;
+	ts.tv_nsec += (long)(ESDM_EXT_TIMEOUT_MS % 1000) * 1000000;
+	if (ts.tv_nsec >= (long)EXTSOCK_NSEC) {
+		ts.tv_sec++;
+		ts.tv_nsec -= (long)EXTSOCK_NSEC;
+	}
+	return pthread_rwlock_timedwrlock(&extsock.mutex, &ts);
+}
+
 /* Release the mutex, publishing the state read without it */
 static void extsock_unlock(void)
 {
@@ -209,7 +231,6 @@ static void extsock_disconnect(void)
 	atomic_store(&extsock.credited, false);
 	json_object_put(extsock.status);
 	extsock.status = NULL;
-	extsock.status_at = 0;
 }
 
 /*
@@ -406,8 +427,6 @@ static bool extsock_connect(void)
 	extsock.was_connected = true;
 
 	extsock_selftest_locked();
-	/* Shown from the connection on, not only after the next monitor pass */
-	extsock_status_refresh();
 	return extsock.fd >= 0;
 
 err:
@@ -455,7 +474,7 @@ static bool extsock_ensure(void)
 static void extsock_reset_locked(void)
 {
 	extsock_disconnect();
-	extsock.retry_at = extsock.probe_at = 0;
+	extsock.retry_at = extsock.probe_at = extsock.status_at = 0;
 	extsock.last_logged = EXTSOCK_LOGGED_NONE;
 	extsock.was_connected = false;
 	extsock.read_failed = extsock.selftest_failed = false;
@@ -470,8 +489,8 @@ static int extsock_init(void)
 	extsock_lock();
 	extsock_reset_locked();
 	/* A provider not there yet is connected to by the ES monitor */
-	if (extsock_path()[0])
-		extsock_connect();
+	if (extsock_path()[0] && extsock_connect())
+		extsock_status_refresh();
 	extsock_unlock();
 
 	return 0;
@@ -515,7 +534,13 @@ static void extsock_get(struct entropy_es *eb_es, uint32_t requested_bits)
 	if (!len || len > sizeof(eb_es->e) || !atomic_load(&extsock.credited))
 		return;
 
-	extsock_lock();
+	/*
+	 * The seeding holds a seed lock: not waiting longer than a request may
+	 * take behind a reconnect, a self test or other seedings. Nothing
+	 * failed then, no entropy for this one.
+	 */
+	if (extsock_lock_timed())
+		return;
 	if (!extsock_alive() || !extsock_credited())
 		goto out;
 
@@ -569,31 +594,32 @@ static int extsock_monitor(void)
 	return 0;
 }
 
+/* Not asked for its status after a STATUS not answered */
+#define EXTSOCK_STATUS_BACKOFF_SEC 60
+
 /*
- * Ask the provider connected to for its status, at most every
- * ESDM_EXT_STATUS_INTERVAL_SEC: a seeding waits meanwhile, and whoever asks
- * for the ESDM status is not to make the seedings wait at will. No connection
- * is made for it.
+ * Ask the provider connected to for its status, on every monitor round - the
+ * ESDM status shows the last answer, so whoever asks for it does not make the
+ * seedings wait. No connection is made for it. A provider too slow for it
+ * keeps delivering entropy, without a status for a while.
  */
 static void extsock_status_refresh(void)
 {
-	uint64_t now = esdm_monotonic_now_ns();
 	int32_t status;
 
-	if (extsock.status_at &&
-	    now - extsock.status_at <
-		    ESDM_EXT_STATUS_INTERVAL_SEC * EXTSOCK_NSEC)
-		return;
 	json_object_put(extsock.status);
 	extsock.status = NULL;
-	extsock.status_at = now;
 
-	if (!extsock_alive())
+	if (!extsock_alive() || esdm_monotonic_now_ns() < extsock.status_at)
 		return;
 	if (extsock_call(ESDM_ES_EXT_PROTO_STATUS, ESDM_ES_EXT_PROTO_STATUS_MAX,
 			 ESDM_EXT_STATUS_TIMEOUT_MS)) {
-		extsock_log(LOGGER_WARN,
-			    "no valid answer to STATUS, disconnected\n");
+		extsock.status_at = esdm_monotonic_now_ns() +
+				    EXTSOCK_STATUS_BACKOFF_SEC * EXTSOCK_NSEC;
+		extsock_log(
+			LOGGER_WARN,
+			"no valid answer to STATUS, disconnected, not asked again for %u seconds\n",
+			EXTSOCK_STATUS_BACKOFF_SEC);
 		return;
 	}
 	status = extsock.rsp.status;

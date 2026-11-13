@@ -215,8 +215,8 @@ The status of the provider, a JSON object of up to 1024 bytes, is shown as
 .B Provider status
 line of
 .BR "esdm\-tool \-\-status" .
-It is asked for at most every 5 seconds, holding the source for up to half a
-second; a provider answering later is disconnected.
+It is asked for on every round of the entropy source monitor, holding the
+source for up to half a second; a provider answering later is disconnected.
 .SH SIGNALS
 .TP
 .BR SIGTERM ", " SIGINT ", " SIGQUIT ", " SIGHUP
