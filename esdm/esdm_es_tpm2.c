@@ -21,6 +21,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <json-c/json.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -34,12 +36,42 @@
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "esdm_es_reader.h"
 #include "esdm_es_tpm2.h"
 #include "helper.h"
+#include "math_helper.h"
 #include "mutex.h"
 
-static int tpm2_fd = -1;
+/*
+ * A TPM command blocks while the TPM is busy - a long command of another
+ * process (CreatePrimary: seconds to minutes) or, for good, a hung vTPM - and
+ * the TPM is read on the seeding path under the pool and DRNG locks. So a
+ * reader thread (esdm_es_reader.h) reads it, waited for until a deadline only.
+ * On a timeout or error the source fails: no entropy, no reads for seeding;
+ * the ES monitor probes it every ESDM_ES_TPM2_PROBE_INTERVAL_SEC at most until
+ * a probe delivers.
+ *
+ * The thread waits in the kernel uninterruptibly meanwhile, and a setuid() of
+ * the privilege drop, which signals every thread, waits for it. No mode of
+ * /dev/tpmrm0 avoids that: its poll and read take the same locks.
+ */
+#define ESDM_ES_TPM2_READ_TIMEOUT_MS 2000
+#define ESDM_ES_TPM2_PROBE_INTERVAL_SEC 10
+
+/* The reader of the TPM, NULL for none: under tpm2_mutex */
+static struct esdm_es_reader *tpm2_reader = NULL;
 static DEFINE_MUTEX_UNLOCKED(tpm2_mutex);
+
+/*
+ * Readable without waiting for a read in progress: TPM open, last read failed,
+ * last self test failed (sticky until one passes).
+ */
+static atomic_bool tpm2_present = false;
+static atomic_bool tpm2_read_failed = false;
+static atomic_bool tpm2_selftest_failed = false;
+
+/* Monotonic ns: the next probe of a failing TPM */
+static _Atomic uint64_t tpm2_probe_at = 0;
 
 /* session type */
 typedef uint16_t TPM2_ST;
@@ -75,15 +107,15 @@ struct TPM2ResponseHeader {
 } __attribute((__packed__));
 
 /*
- * Send a TPM 2.0 command and receive the response.
+ * Send a TPM 2.0 command to @fd and receive the response, retrying no more
+ * once @deadline_ns passed.
  *
  * Returns 0 on success, -1 on failure (I/O error or TPM error).
- * Caller must hold tpm2_mutex (write lock), since tpm2_fd may be reset on
- * I/O failure.
  *
  * rsp_buffer may be NULL only when rsp_buffer_len is 0.
  */
-static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
+static int esdm_es_tpm2_transceive(int fd, uint64_t deadline_ns,
+				   struct TPM2CommandHeader *cmd,
 				   uint8_t *cmd_buffer, uint32_t cmd_buffer_len,
 				   struct TPM2ResponseHeader *rsp,
 				   uint8_t *rsp_buffer, uint32_t rsp_buffer_len)
@@ -91,7 +123,7 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 	uint8_t buf[256];
 	static const int max_retries = 5;
 	int retries = 0;
-	int ret = -1;
+	int ret = -1, cancelstate;
 	ssize_t safe_ret = -1;
 
 	if (sizeof(struct TPM2CommandHeader) + cmd_buffer_len > sizeof(buf) ||
@@ -102,7 +134,8 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 	}
 
 	do {
-		retries++;
+		if (retries++ && esdm_monotonic_wait_ns() >= deadline_ns)
+			break;
 		memset(buf, 0, sizeof(buf));
 
 		/* Serialize command header as big-endian into buf */
@@ -117,22 +150,23 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 		memcpy(buf + sizeof(struct TPM2CommandHeader), cmd_buffer,
 		       cmd_buffer_len);
 
-		safe_ret = esdm_safe_write(tpm2_fd, buf,
+		/*
+		 * Not cancelled between command and response: a response
+		 * left unread makes the fd refuse the next command.
+		 */
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancelstate);
+		safe_ret = esdm_safe_write(fd, buf,
 					   sizeof(struct TPM2CommandHeader) +
 						   cmd_buffer_len);
-
-		if (safe_ret != (ssize_t)(sizeof(struct TPM2CommandHeader) +
-					  cmd_buffer_len)) {
-			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
-				    "TPM 2.0 command write failed\n");
-			close(tpm2_fd);
-			tpm2_fd = -1;
-			goto out;
-		}
-
-		safe_ret = esdm_safe_read(tpm2_fd, buf,
-					  sizeof(struct TPM2ResponseHeader) +
-						  rsp_buffer_len);
+		if (safe_ret == (ssize_t)(sizeof(struct TPM2CommandHeader) +
+					  cmd_buffer_len))
+			safe_ret = esdm_safe_read(
+				fd, buf,
+				sizeof(struct TPM2ResponseHeader) +
+					rsp_buffer_len);
+		else
+			safe_ret = -1;
+		pthread_setcancelstate(cancelstate, NULL);
 
 		/*
 		 * A response shorter than the header - including a 0-byte EOF
@@ -145,8 +179,6 @@ static int esdm_es_tpm2_transceive(struct TPM2CommandHeader *cmd,
 			esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 				    "TPM 2.0 response read failed: %zd\n",
 				    safe_ret);
-			close(tpm2_fd);
-			tpm2_fd = -1;
 			goto out;
 		}
 		/*
@@ -211,83 +243,9 @@ out:
 	return ret;
 }
 
-static void esdm_es_tpm2_finalize_locked(void)
-{
-	if (tpm2_fd < 0)
-		return;
-
-	close(tpm2_fd);
-	tpm2_fd = -1;
-}
-
-static void esdm_es_tpm2_finalize(void)
-{
-	mutex_lock(&tpm2_mutex);
-	esdm_es_tpm2_finalize_locked();
-	mutex_unlock(&tpm2_mutex);
-}
-
-static int esdm_es_tpm2_init(void)
-{
-	int ret;
-
-	mutex_lock(&tpm2_mutex);
-
-	/* Allow the init function to be called multiple times */
-	esdm_es_tpm2_finalize_locked();
-
-	ret = open(ESDM_TPM2_RM_PATH, O_RDWR | O_CLOEXEC);
-	if (ret < 0) {
-		esdm_logger(
-			LOGGER_WARN, LOGGER_C_ES,
-			"Disabling TPM 2.0 entropy source as it is not present, error: %s\n",
-			strerror(errno));
-	} else {
-		tpm2_fd = ret;
-	}
-
-	mutex_unlock(&tpm2_mutex);
-
-	return 0;
-}
-
-/* Caller must hold tpm2_mutex. */
-static uint32_t esdm_es_tpm2_entropylevel_locked(uint32_t requested_bits)
-{
-	if (tpm2_fd < 0)
-		return 0;
-
-	return esdm_fast_noise_entropylevel(esdm_config_es_tpm2_entropy_rate(),
-					    requested_bits);
-}
-
-static uint32_t esdm_es_tpm2_entropylevel(uint32_t requested_bits)
-{
-	uint32_t ret;
-
-	mutex_reader_lock(&tpm2_mutex);
-	ret = esdm_es_tpm2_entropylevel_locked(requested_bits);
-	mutex_reader_unlock(&tpm2_mutex);
-
-	return ret;
-}
-
-static uint32_t esdm_es_tpm2_poolsize(void)
-{
-	uint32_t ret;
-
-	mutex_reader_lock(&tpm2_mutex);
-	ret = esdm_es_tpm2_entropylevel_locked(esdm_security_strength());
-	mutex_reader_unlock(&tpm2_mutex);
-
-	return ret;
-}
-
-/*
- * Caller must hold tpm2_mutex (write lock).
- * len must be in [1, 32].
- */
-static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
+/* One TPM2_CC_GetRandom on @fd, len must be in [1, 32]. */
+static int esdm_es_tpm2_get_internal(int fd, uint64_t deadline_ns, uint8_t *buf,
+				     uint32_t len)
 {
 #ifdef ESDM_TPM2_STIR
 	struct timespec stir_clock_real;
@@ -338,8 +296,9 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 	memcpy(stir_buf + sizeof(uint16_t) + sizeof(stir_clock_real),
 	       &stir_clock_monotonic, sizeof(stir_clock_monotonic));
 
-	if (esdm_es_tpm2_transceive(&stirrandom_cmd, stir_buf, sizeof(stir_buf),
-				    &stirrandom_rsp, NULL, 0)) {
+	if (esdm_es_tpm2_transceive(fd, deadline_ns, &stirrandom_cmd, stir_buf,
+				    sizeof(stir_buf), &stirrandom_rsp, NULL,
+				    0)) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
 			    "TPM 2.0 stir random failed\n");
 		memset_secure(stir_buf, 0, sizeof(stir_buf));
@@ -348,7 +307,8 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 	memset_secure(stir_buf, 0, sizeof(stir_buf));
 #endif
 
-	if (esdm_es_tpm2_transceive(&getrandom_cmd, (uint8_t *)&bytes_requested,
+	if (esdm_es_tpm2_transceive(fd, deadline_ns, &getrandom_cmd,
+				    (uint8_t *)&bytes_requested,
 				    sizeof(bytes_requested), &getrandom_rsp,
 				    resp_buf, sizeof(resp_buf))) {
 		esdm_logger(LOGGER_WARN, LOGGER_C_ES,
@@ -382,67 +342,196 @@ static int esdm_es_tpm2_get_internal(uint8_t *buf, uint32_t len)
 	return 0;
 }
 
-static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits)
+/* Reader op: GetRandom yields 32 bytes at most, the parser nothing shorter */
+static int esdm_es_tpm2_read_op(int fd, uint8_t *buf, size_t len,
+				uint64_t deadline_ns)
 {
 	static const uint32_t tpm2_max_chunk_bytes = 32;
-	uint8_t buffer[32];
-	uint32_t done_bits = 0;
+	uint8_t chunk[32];
+	size_t done = 0;
+	int ret = 0;
 
-	/*
-	 * Use an exclusive lock: transceive may close and reset tpm2_fd on
-	 * I/O errors, which is a write to shared state.
-	 */
-	mutex_lock(&tpm2_mutex);
+	while (done < len) {
+		size_t n = min_size(tpm2_max_chunk_bytes, len - done);
 
-	if (tpm2_fd < 0)
-		goto err;
-
-	while (done_bits < requested_bits) {
-		uint32_t chunk_bits = min_uint32(tpm2_max_chunk_bytes << 3,
-						 requested_bits - done_bits);
-		uint32_t chunk_bytes = chunk_bits >> 3;
-
-		if (esdm_es_tpm2_get_internal(buffer, tpm2_max_chunk_bytes))
-			goto err;
-		memcpy(eb_es->e + (done_bits >> 3), buffer, chunk_bytes);
-		done_bits += chunk_bits;
+		if (esdm_monotonic_wait_ns() >= deadline_ns) {
+			ret = -ETIMEDOUT;
+			break;
+		}
+		if (esdm_es_tpm2_get_internal(fd, deadline_ns, chunk,
+					      tpm2_max_chunk_bytes)) {
+			ret = -EIO;
+			break;
+		}
+		memcpy(buf + done, chunk, n);
+		done += n;
 	}
 
-	eb_es->e_bits = esdm_es_tpm2_entropylevel_locked(requested_bits);
+	memset_secure(chunk, 0, sizeof(chunk));
+	return ret;
+}
+
+/*
+ * Read @len bytes from the TPM: 0, or a negative errno marking it failed,
+ * except -EBUSY. @wait: see esdm_es_reader_read().
+ */
+static int esdm_es_tpm2_read(uint8_t *buf, size_t len, uint64_t deadline_ns,
+			     bool wait)
+{
+	int ret = -ENODEV;
+
+	mutex_reader_lock(&tpm2_mutex);
+	if (tpm2_reader)
+		ret = esdm_es_reader_read(tpm2_reader, buf, len, deadline_ns,
+					  wait);
+	mutex_reader_unlock(&tpm2_mutex);
+
+	if (ret == -EBUSY)
+		return ret;
+	if (ret) {
+		if (!atomic_exchange(&tpm2_read_failed, true))
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"TPM2 ES: no data from the TPM: %s - no entropy until it delivers again\n",
+				strerror(-ret));
+	} else if (atomic_exchange(&tpm2_read_failed, false)) {
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "TPM2 ES: the TPM delivers again\n");
+	}
+
+	return ret;
+}
+
+static uint64_t esdm_es_tpm2_deadline(void)
+{
+	return esdm_monotonic_wait_ns() +
+	       ESDM_ES_TPM2_READ_TIMEOUT_MS * 1000000ULL;
+}
+
+/* Caller must hold tpm2_mutex (write lock). */
+static void esdm_es_tpm2_finalize_locked(void)
+{
+	atomic_store(&tpm2_present, false);
+	esdm_es_reader_free(tpm2_reader);
+	tpm2_reader = NULL;
+}
+
+static void esdm_es_tpm2_finalize(void)
+{
+	mutex_lock(&tpm2_mutex);
+	esdm_es_tpm2_finalize_locked();
+	mutex_unlock(&tpm2_mutex);
+}
+
+static int esdm_es_tpm2_init(void)
+{
+	int fd;
+
+	mutex_lock(&tpm2_mutex);
+
+	/* Allow the init function to be called multiple times */
+	esdm_es_tpm2_finalize_locked();
+
+	atomic_store(&tpm2_read_failed, false);
+	atomic_store(&tpm2_probe_at, 0);
+	fd = open(ESDM_TPM2_RM_PATH, O_RDWR | O_CLOEXEC);
+	if (fd < 0) {
+		esdm_logger(
+			LOGGER_WARN, LOGGER_C_ES,
+			"Disabling TPM 2.0 entropy source as it is not present, error: %s\n",
+			strerror(errno));
+	} else if (!esdm_es_reader_alloc(&tpm2_reader, fd, esdm_es_tpm2_read_op,
+					 "tpm2")) {
+		atomic_store(&tpm2_present, true);
+	}
+
+	mutex_unlock(&tpm2_mutex);
+
+	return 0;
+}
+
+/* Without a lock: a read in progress is not waited for */
+static uint32_t esdm_es_tpm2_entropylevel(uint32_t requested_bits)
+{
+	if (!atomic_load(&tpm2_present) || atomic_load(&tpm2_read_failed) ||
+	    atomic_load(&tpm2_selftest_failed))
+		return 0;
+
+	return esdm_fast_noise_entropylevel(esdm_config_es_tpm2_entropy_rate(),
+					    requested_bits);
+}
+
+static uint32_t esdm_es_tpm2_poolsize(void)
+{
+	return esdm_es_tpm2_entropylevel(esdm_security_strength());
+}
+
+/*
+ * A failing TPM is left to the ES monitor's probes. One credited with nothing
+ * is not waited for: it serves one command at a time, so seedings would queue
+ * for data adding no entropy.
+ */
+static void esdm_es_tpm2_get(struct entropy_es *eb_es, uint32_t requested_bits)
+{
+	eb_es->e_bits = 0;
+
+	if (atomic_load(&tpm2_read_failed) ||
+	    esdm_es_tpm2_read(eb_es->e, requested_bits >> 3,
+			      esdm_es_tpm2_deadline(),
+			      !!esdm_config_es_tpm2_entropy_rate()))
+		return;
+
+	eb_es->e_bits = esdm_es_tpm2_entropylevel(requested_bits);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "obtained %u bits of entropy from TPM 2.0 entropy source\n",
 		    eb_es->e_bits);
+}
 
-	mutex_unlock(&tpm2_mutex);
-	memset_secure(buffer, 0, sizeof(buffer));
-	return;
+static bool esdm_es_tpm2_active(void)
+{
+	return atomic_load(&tpm2_present);
+}
 
-err:
-	mutex_unlock(&tpm2_mutex);
-	memset_secure(buffer, 0, sizeof(buffer));
-	eb_es->e_bits = 0;
+/* Probes a failing TPM */
+static int esdm_es_tpm2_monitor(void)
+{
+	if (!esdm_es_tpm2_active())
+		return 0;
+
+	if (atomic_load(&tpm2_read_failed)) {
+		uint8_t probe[32];
+		uint64_t now = esdm_monotonic_now_ns();
+
+		if (now < atomic_load(&tpm2_probe_at))
+			return 0;
+		atomic_store(&tpm2_probe_at,
+			     now + ESDM_ES_TPM2_PROBE_INTERVAL_SEC *
+					     1000000000ULL);
+		(void)esdm_es_tpm2_read(probe, sizeof(probe),
+					esdm_es_tpm2_deadline(), true);
+		memset_secure(probe, 0, sizeof(probe));
+		return 0;
+	}
+
+	return 0;
 }
 
 static void esdm_es_tpm2_es_state_json(char *buf, size_t buflen)
 {
-	struct json_object *obj = json_object_new_object();
 #ifdef ESDM_TPM2_STIR
 	const bool stir = 1;
 #else
 	const bool stir = 0;
 #endif
-	uint32_t poolsize, entropy_rate;
-
-	mutex_reader_lock(&tpm2_mutex);
-	poolsize = esdm_es_tpm2_entropylevel_locked(esdm_security_strength());
-	entropy_rate = esdm_es_tpm2_entropylevel_locked(256);
-	mutex_reader_unlock(&tpm2_mutex);
+	struct json_object *obj = json_object_new_object();
 
 	if (obj) {
-		json_object_object_add(obj, "available_entropy",
-				       json_object_new_int64(poolsize));
-		json_object_object_add(obj, "entropy_rate_per_256_data_bits",
-				       json_object_new_int64(entropy_rate));
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_es_tpm2_poolsize()));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(esdm_es_tpm2_entropylevel(256)));
 		json_object_object_add(obj, "stir",
 				       json_object_new_int64(stir));
 	}
@@ -450,34 +539,62 @@ static void esdm_es_tpm2_es_state_json(char *buf, size_t buflen)
 	esdm_es_state_write(obj, buf, buflen);
 }
 
-static bool esdm_es_tpm2_active(void)
-{
-	bool ret;
-
-	mutex_reader_lock(&tpm2_mutex);
-	ret = tpm2_fd >= 0;
-	mutex_reader_unlock(&tpm2_mutex);
-
-	return ret;
-}
-
-/* The connection to the TPM is still there. */
+/*
+ * Two reads of the TPM that have to succeed and have to differ. A repetition
+ * is sticky: no entropy is credited until a later self test passes.
+ */
 static int esdm_es_tpm2_selftest(void)
 {
-	if (tpm2_fd < 0) {
+	uint8_t first[32], second[32];
+	uint64_t deadline_ns = esdm_es_tpm2_deadline();
+	int ret = 0;
+
+	if (!esdm_es_tpm2_active()) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "TPM2 ES: no device - nothing to test\n");
 		return 0;
 	}
 
-	return 0;
+	ret = esdm_es_tpm2_read(first, sizeof(first), deadline_ns, true);
+	if (!ret)
+		ret = esdm_es_tpm2_read(second, sizeof(second), deadline_ns,
+					true);
+	if (ret == -EBUSY) {
+		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
+			    "TPM2 ES: busy with another read - not tested\n");
+		ret = 0;
+		goto out;
+	}
+	if (ret) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "TPM2 ES: the TPM did not deliver\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (!memcmp(first, second, sizeof(first))) {
+		atomic_store(&tpm2_selftest_failed, true);
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "TPM2 ES: the TPM repeated its output\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (atomic_exchange(&tpm2_selftest_failed, false))
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "TPM2 ES: self test passed again\n");
+
+out:
+	memset_secure(first, 0, sizeof(first));
+	memset_secure(second, 0, sizeof(second));
+	return ret;
 }
 
 struct esdm_es_cb esdm_es_tpm2 = {
 	.name = "TPM2.0",
 	.init = esdm_es_tpm2_init,
 	.fini = esdm_es_tpm2_finalize,
-	.monitor_es = NULL,
+	.monitor_es = esdm_es_tpm2_monitor,
 	.get_ent = esdm_es_tpm2_get,
 	.curr_entropy = esdm_es_tpm2_entropylevel,
 	.max_entropy = esdm_es_tpm2_poolsize,

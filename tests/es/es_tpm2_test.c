@@ -257,6 +257,25 @@ static int es_tpm2_getdata_chunked(void)
 }
 
 /*
+ * The self test reads the TPM twice and requires two different answers - a
+ * working TPM passes, and stays credited.
+ */
+static int es_tpm2_selftest(void)
+{
+	int ret;
+
+	esdm_config_es_tpm2_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	ret = esdm_es[ES_IDX]->selftest();
+	if (ret || !esdm_es[ES_IDX]->max_entropy()) {
+		printf("ES %s - fail: self test returned %d, %u bits claimed\n",
+		       ES_NAME, ret, esdm_es[ES_IDX]->max_entropy());
+		return 1;
+	}
+	printf("ES %s - pass: self test\n", ES_NAME);
+	return 0;
+}
+
+/*
  * After fini() the device is gone as far as the source is concerned, and it has
  * to behave like a machine that never had one: no entropy claimed, no data
  * delivered, no use of the closed descriptor. This is the state the ES manager
@@ -348,6 +367,7 @@ int main(int argc, char *argv[])
 	ret += es_tpm2_getdata_rate(ESDM_DRNG_SECURITY_STRENGTH_BITS / 2);
 	ret += es_tpm2_getdata_rate(0);
 	ret += es_tpm2_getdata_chunked();
+	ret += es_tpm2_selftest();
 	ret += es_tpm2_absent_after_fini();
 
 out:
