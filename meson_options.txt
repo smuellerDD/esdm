@@ -686,10 +686,11 @@ option('ais2031_drg4', type: 'boolean', value: false,
 
 When enabling this option, the request size based reseeding
 limits are capped to the values required by DRG.4.10 of
-German AIS 20/31 3.0 from 2024: a DRNG instance loses its
-fully seeded state after 2**17 output bits without a
-successful reseed, and tries to reseed after three quarters
-of that at the latest.
+German AIS 20/31 3.0 from 2024: a DRNG instance starts no
+request after 2**17 output bits without a successful reseed
+- one started before is completed, in generate operations
+of 2**19 bits at most - and tries to reseed after three
+quarters of that at the latest.
 
 Smaller values configured through 'drng_reseed_threshold_bits'
 and 'drng_max_reseed_bits' are kept as they are.

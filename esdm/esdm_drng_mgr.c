@@ -947,6 +947,23 @@ static void esdm_drng_seed(struct esdm_drng *drng)
 
 static uint32_t esdm_drng_budget(struct esdm_drng *drng);
 
+/*
+ * Bytes per generate of a regular DRNG. With a cap between full reseeds, the
+ * SP800-90A / AIS 20/31 DRG.4.2 maximum request of 2^19 bits: a request then
+ * crosses the cap once at most, the reseed following it, see esdm_drng_get().
+ */
+#if ESDM_DRNG_MAX_RESEED_BITS != 0xffffffff
+#define ESDM_DRNG_CHUNK_BYTES (1 << 16)
+#else
+#define ESDM_DRNG_CHUNK_BYTES ESDM_DRNG_MAX_REQSIZE
+#endif
+
+/*
+ * Reseed @drng under its seed lock the caller holds. A fully seeded DRNG keeps
+ * serving during the collection, which takes milliseconds with a slow source,
+ * and is locked for the injection only. One being brought up is locked
+ * throughout: it serves nothing, and its emergency seeding adds up collections.
+ */
 static void esdm_drng_reseed_seed_locked(struct esdm_drng *drng)
 {
 	struct entropy_buf seedbuf __aligned(ESDM_KCAPI_ALIGN),
@@ -1990,6 +2007,7 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	size_t iterations = 0;
 	bool pr = (drng == &esdm_drng_pr) ? true : false;
 	bool exhausted = false;
+	uint32_t budget;
 	bool disable;
 
 	if (!outbuf || !outbuflen)
@@ -2019,7 +2037,9 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	/* Loop to collect random bits for the caller. */
 	while (outbuflen) {
 		uint32_t todo =
-			min_uint32((uint32_t)outbuflen, ESDM_DRNG_MAX_REQSIZE);
+			min_uint32((uint32_t)outbuflen,
+				   pr ? ESDM_DRNG_MAX_REQSIZE :
+					ESDM_DRNG_CHUNK_BYTES);
 		ssize_t ret;
 
 		if (pr) {
@@ -2064,12 +2084,10 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			mutex_w_lock(&drng->lock);
 
 			/*
-			 * Checked under the lock before every chunk, not once
-			 * per request: neither one large request nor a reseed
-			 * deferred to the worker - nor one that found the pool
-			 * busy - takes a DRNG past the limits, and a DRNG
-			 * another caller took out of the fully seeded state
-			 * serves no further chunk.
+			 * Checked under the lock before every chunk: no chunk
+			 * starts past the limits, in a large request or behind
+			 * a deferred reseed, and a DRNG another caller took out
+			 * of the fully seeded state serves no further chunk.
 			 */
 			if (!atomic_load(&drng->fully_seeded)) {
 				mutex_w_unlock(&drng->lock);
@@ -2085,7 +2103,19 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			 * esdm_drng_seed() may not have filled the DRNG with
 			 * sufficient entropy; if that persists, this applies.
 			 */
-			todo = min_uint32(todo, esdm_drng_budget(drng));
+			budget = esdm_drng_budget(drng);
+			/*
+			 * A chunk starting below the maximum is generated
+			 * whole: SP800-90C 5.2.3 and AIS 20/31 DRG.4.10 only
+			 * require the reseed before the next generate, which
+			 * this check enforces. The initial DRNG is held to its
+			 * budget: crossing it would stop the ESDM until a
+			 * reseed lands.
+			 */
+			if (drng == esdm_drng_init_instance())
+				todo = min_uint32(todo, budget);
+			else if (!budget)
+				todo = 0;
 			disable = esdm_drng_check_disable_threshold(drng);
 			if (!todo || disable) {
 				/*

@@ -23,14 +23,17 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "config.h"
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_config_internal.h"
+#include "esdm_drng_mgr.h"
 #include "esdm_es_mgr.h"
 #include "esdm_logger.h"
+#include "esdm_node.h"
 #include "es_rates.h"
 #include "ret_checkers.h"
 
@@ -107,6 +110,80 @@ err:
 	ret = 1;
 	goto out;
 }
+
+/*
+ * A request starting below the maximum of bits without a full reseed is served
+ * whole, crossing it (SP800-90C 5.2.3, AIS 20/31 DRG.4.10), and the DRNG serves
+ * nothing more before a reseed. A node DRNG: the initial one keeps within the
+ * maximum, see esdm_drng_get().
+ */
+static int esdm_drng_mgr_max_wo_reseed_bits_crossing(void)
+{
+	uint8_t buf[256];
+	struct esdm_drng *drng;
+	unsigned int i;
+	uint32_t used;
+	bool seeded;
+	ssize_t rc;
+	int ret;
+
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	esdm_config_es_jent_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	CKINT(esdm_init());
+
+	/* Until the node DRNG of this CPU serves */
+	for (i = 0; i < 100; i++) {
+		esdm_get_random_bytes(buf, sizeof(buf));
+		drng = esdm_drng_node_instance();
+		seeded = drng != esdm_drng_init_instance() &&
+			 atomic_load(&drng->fully_seeded);
+		esdm_drng_put_instances();
+		if (seeded)
+			break;
+		usleep(100000);
+	}
+	if (!seeded) {
+		printf("the node DRNG did not become fully seeded\n");
+		goto err;
+	}
+
+	/* 64 bytes left below the maximum, no entropy for a reseed */
+	drng = esdm_drng_node_instance();
+	used = atomic_read_u32(&drng->request_bits_since_fully_seeded);
+	esdm_config_drng_max_wo_reseed_bits_set(used + 64 * 8);
+	esdm_test_es_rates_zero();
+
+	rc = esdm_get_random_bytes(buf, sizeof(buf));
+	if (rc != (ssize_t)sizeof(buf)) {
+		printf("a request crossing the maximum got %zd of %zu bytes\n",
+		       rc, sizeof(buf));
+		goto err_put;
+	}
+	if (atomic_read_u32(&drng->request_bits_since_fully_seeded) <
+	    used + 64 * 8) {
+		printf("the request did not come from the node DRNG\n");
+		goto err_put;
+	}
+
+	/* The next one finds it spent, whoever serves it then */
+	esdm_get_random_bytes(buf, sizeof(buf));
+	if (atomic_load(&drng->fully_seeded)) {
+		printf("the node DRNG serves past the maximum before a reseed\n");
+		goto err_put;
+	}
+	esdm_drng_put_instances();
+
+out:
+	esdm_fini();
+	return ret;
+
+err_put:
+	esdm_drng_put_instances();
+err:
+	ret = 1;
+	goto out;
+}
 #endif
 
 int main(int argc, char *argv[])
@@ -116,8 +193,8 @@ int main(int argc, char *argv[])
 	unsigned long drng_instances;
 	int ret;
 
-	if (argc != 2) {
-		printf("Provide number of DRNG instances to be created\n");
+	if (argc != 2 && !(argc == 3 && !strcmp(argv[2], "crossing"))) {
+		printf("Provide number of DRNG instances to be created [crossing]\n");
 		return 1;
 	}
 
@@ -147,8 +224,13 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
-	ret = esdm_drng_mgr_max_wo_reseed_bits_test(drng_instances > 1 ? true :
-									 false);
+	if (argc == 3)
+		ret = drng_instances > 1 ?
+			      esdm_drng_mgr_max_wo_reseed_bits_crossing() :
+			      77;
+	else
+		ret = esdm_drng_mgr_max_wo_reseed_bits_test(
+			drng_instances > 1 ? true : false);
 
 	return ret;
 #else

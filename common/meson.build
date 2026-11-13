@@ -236,7 +236,9 @@ if not get_option('ais2031_drg3') and (get_option('sp80090c') or
 	max_reseed = get_option('drng_max_reseed_bits')
 
 	# SP800-90C and AIS 20/31 DRG.4.10 cap the bits a DRNG may produce
-	# without a full reseed at 2**17.
+	# without a full reseed at 2**17. A request starting below the cap is
+	# completed, in generate operations of 2**19 bits at most, and the
+	# reseed is due before the next one - see esdm_drng_get().
 	if max_reseed > 131072
 		max_reseed = 131072
 	endif

@@ -152,6 +152,9 @@ if get_option('esdm-server').enabled()
 	test('ESDM DRNG manager max w/o reseed bits - 2 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
 		args : [ '2' ],
 		suite: 'core')
+	test('ESDM DRNG manager max w/o reseed bits crossed by a request', esdm_drng_mgr_max_wo_reseed_bits_test,
+		args : [ '2', 'crossing' ],
+		suite: 'core')
 
 	# Serial: it reports a rate, and a rate measured while the rest of the
 	# suite has the machine says more about the suite than about the ESDM.
