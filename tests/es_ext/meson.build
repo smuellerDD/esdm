@@ -58,7 +58,8 @@ if get_option('esdm-es-ext').enabled()
 	if get_option('es_pkcs11').enabled()
 		es_pkcs11_shim = shared_module('esdm_es_pkcs11_shim',
 			'es_pkcs11_shim.c',
-			dependencies: [ dependency('dl') ],
+			# Not dependency('dl'), which meson knows from 0.62 on only
+			dependencies: [ cc.find_library('dl', required: false) ],
 		)
 		es_pkcs11_test = executable('es_pkcs11_test',
 			[ 'es_pkcs11_test.c', es_ext_proto_src ],
