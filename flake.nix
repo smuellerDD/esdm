@@ -1727,9 +1727,8 @@
                             # A software TPM, so the TPM 2.0 entropy source has
                             # a /dev/tpmrm0 to talk to. Without one its test
                             # only covers what the source does when the device
-                            # is absent, and the command exchange, the response
-                            # parsing and the block cache in front of it stay
-                            # unreached in the report.
+                            # is absent, and the command exchange and the
+                            # response parsing stay unreached in the report.
                             tpm.enable = true;
                             # meson runs the suite in parallel, and several
                             # tests spend their time waiting for entropy rather
@@ -1841,12 +1840,14 @@
                 mesonFlags =
                   # nixpkgs still knows the combined 'ais2031' option, which
                   # this tree split into 'ais2031_ntg1' and 'ais2031_drg4';
-                  # drop the flag it passes and set the successors below.
+                  # drop the flag it passes and set the successors below. Nor
+                  # does this tree buffer the Jitter RNG any more.
                   (builtins.filter (
                     x:
                     (!lib.hasInfix "max_threads" x)
                     && (!lib.hasInfix "term-on-signal" x)
                     && (!lib.hasInfix "ais2031" x)
+                    && (!lib.hasInfix "es_jent_entropy_blocks" x)
                   ) prev.mesonFlags)
                   ++ lib.optionals debugEsdm [
                     "-Db_sanitize=address,undefined"

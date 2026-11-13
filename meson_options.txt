@@ -74,58 +74,16 @@ this. With this option, the sum all caches up to L3 is taken
 into account.
 ''')
 
-# Option for: ESDM_JENT_ENTROPY_BLOCKS
-option('es_jent_entropy_blocks', type: 'integer', value: 128,
-       description:'''Jitter RNG entropy buffer size
-
-The Jitter RNG as an entropy buffer that is filled with a separate thread
-using the Jitter RNG. This shall ensure that data from the Jitter RNG is readily
-available when needed by the ESDM. When using this buffer is enabled via
-runtime option, the thread is started. Otherwise the Jitter RNG is asked to
-produce random numbers when the caller needs it.
-
-This option sets the size of the buffer in term of Jitter RNG blocks.
-
-This value must be a power of 2 which is checked during compilation!
-
-When set to zero, the Jitter RNG entropy buffer is not compiled which implies
-a synchronous generation of data from the Jitter RNG.
-''')
-
 # Option for: ESDM_JENT_INSTANCES
 option('es_jent_instances', type: 'integer', min: 1, max: 64, value: 1,
-       description:'''Jitter RNG instances refilling the entropy buffer
+       description:'''Jitter RNG collectors working side by side
 
-Each instance has a Jitter RNG collector of its own and refills the buffer of
-the Jitter RNG (es_jent_entropy_blocks) in a thread of its own, side by side
-with the others: the buffer refills about as many times faster as there are
-CPUs for them, at the cost of a collector's memory per instance. The default
-for esdm_config_es_jent_instances_set() and esdm-server --es_jent_instances.
-''')
-
-# Option for: ESDM_ES_BUF_FORCE
-option('es_buf_force', type: 'boolean', value: false,
-       description:'''Force-enable async entropy source buffering under SP800-90C
-
-By default the async per-entropy-source buffer (es_buf) is compiled out
-when the sp80090c option is enabled, regardless of the per-ES
-es_*_entropy_blocks settings. This avoids serving SP800-90C oversampled
-seed material from a pre-filled cache.
-
-Setting this option to true keeps the per-ES async buffer enabled even
-when sp80090c is set. The per-ES es_*_entropy_blocks values are honored
-as usual.
-''')
-
-# Option for: ESDM_ES_BUF_MAX_AGE
-option('es_buf_max_age', type: 'integer', min: 0, max: 86400, value: 30,
-       description:'''Seconds a block of the async entropy source buffer is kept
-
-A block the ES monitor filled ahead of a reseed and that has not been used
-within this time is retired instead of being served: wiped, and filled anew.
-The time is counted from the start of its fill. 0 keeps the blocks until they
-are used. Other than 0, it is 2 at the least: it is counted in whole seconds
-and has to outlive the ES monitor interval of about half a second.
+As many Jitter RNG collectors serve the seedings of the DRNGs side by side,
+each behind a lock of its own. Collecting is the bulk of the time a seeding
+takes, so the seedings, and with them the output of a build reseeding often
+(sp80090c, ais2031_drg4), scale with the CPUs there are for the collectors, at
+the cost of a collector's memory each. The default for
+esdm_config_es_jent_instances_set() and esdm-server --es_jent_instances.
 ''')
 
 ################################################################################
@@ -237,19 +195,6 @@ both have some dependencies. Thus it is not permissible to award both
 entropy sources an entropy rate greater than zero.
 ''')
 
-# Option for: ESDM_IRQ_ENTROPY_BLOCKS
-option('es_irq_entropy_blocks', type: 'integer', value: 64,
-       description:'''Interrupt entropy buffer size
-
-The interrupt entropy source can use an asynchronous block cache that is
-filled by a separate thread once the kernel reports enough entropy. This
-ensures that data is readily available when needed.
-
-This option sets the size of the cache in number of blocks. It must be a
-power of two and at least 4. When set to zero, the cache is disabled and
-the source delivers data synchronously.
-''')
-
 ################################################################################
 # Scheduler-based entropy source configuration
 ################################################################################
@@ -299,19 +244,6 @@ Note, this value caps the scheduler ES kernel module value!
 Note 2: The events for the interrupt-baased and scheduler-based ES
 both have some dependencies. Thus it is not permissible to award both
 entropy sources an entropy rate greater than zero.
-''')
-
-# Option for: ESDM_SCHED_ENTROPY_BLOCKS
-option('es_sched_entropy_blocks', type: 'integer', value: 64,
-       description:'''Scheduler entropy buffer size
-
-The scheduler entropy source can use an asynchronous block cache that is
-filled by a separate thread once the kernel reports enough entropy. This
-ensures that data is readily available when needed.
-
-This option sets the size of the cache in number of blocks. It must be a
-power of two and at least 4. When set to zero, the cache is disabled and
-the source delivers data synchronously.
 ''')
 
 ################################################################################
@@ -512,18 +444,6 @@ When configuring this value to 0, the CPU entropy source will provide
 256 bits of data without being credited to contain entropy.
 ''')
 
-# Option for: ESDM_HWRAND_ENTROPY_BLOCKS
-option('es_hwrand_entropy_blocks', type: 'integer', value: 64,
-       description:'''/dev/hwrng entropy buffer size
-
-The hwrng entropy source can use an asynchronous block cache that is filled
-by a separate thread. This ensures that data is readily available when needed.
-
-This option sets the size of the cache in number of blocks. It must be a power
-of two and at least 4. When set to zero, the cache is disabled and the source
-delivers data synchronously.
-''')
-
 ################################################################################
 # TPM 2.0 Entropy Source configuration options
 ################################################################################
@@ -560,18 +480,6 @@ enforces the limit that this value must be in the range between 0 and 256.
 
 When configuring this value to 0, the TPM 2.0 entropy source will provide
 256 bits of data without being credited to contain entropy.
-''')
-
-# Option for: ESDM_TPM2_ENTROPY_BLOCKS
-option('es_tpm2_entropy_blocks', type: 'integer', value: 64,
-       description:'''TPM 2.0 entropy buffer size
-
-The TPM 2.0 entropy source can use an asynchronous block cache that is filled
-by a separate thread. This ensures that data is readily available when needed.
-
-This option sets the size of the cache in number of blocks. It must be a power
-of two and at least 4. When set to zero, the cache is disabled and the source
-delivers data synchronously.
 ''')
 
 option('es_tpm2_rm_path', type: 'string', value: '/dev/tpmrm0',
@@ -659,24 +567,6 @@ When configuring this value to 0, the kernel jitter entropy source will provide
 256 bits of data without being credited to contain entropy.
 ''')
 
-# Option for: ESDM_JENT_KERNEL_ENTROPY_BLOCKS
-option('es_jent_kernel_entropy_blocks', type: 'integer', value: 64,
-       description:'''kernel-based jitter entropy source entropy buffer size
-
-The kernel-based jitter entropy source has an entropy buffer that is filled
-in the background by the ES manager monitor. This ensures that data from the
-kernel jitter RNG is readily available when needed by the ESDM, without having
-to perform a synchronous kernel call on the consumer path.
-
-This option sets the size of the buffer in terms of entropy blocks.
-
-This value must be a power of 2 and at least 4.
-
-When set to a value smaller than 4, the kernel jitter entropy buffer is not
-compiled which implies a synchronous generation of data from the kernel jitter
-entropy source.
-''')
-
 option('es_ext', type: 'feature', value: 'enabled',
        description: '''Enable the external entropy source.
 
@@ -710,15 +600,6 @@ option('es_ext_peer_uid', type: 'integer', min: -1, max: 4294967294, value: -1,
 Whoever can create the socket file could otherwise feed the ESDM data credited
 as entropy: a provider running as root is accepted, and one running as this
 uid; -1 accepts root only. esdm-server --es_ext_uid overrides it.
-''')
-
-# Option for: ESDM_EXT_ENTROPY_BLOCKS
-option('es_ext_entropy_blocks', type: 'integer', value: 16,
-       description:'''External entropy source buffer size
-
-The ES monitor fills a block cache from the provider between the requests, so
-that a reseed does not wait for a slow provider - a smart card, say. Its size
-in blocks: a power of two, at least 4; 0 disables it.
 ''')
 
 ################################################################################

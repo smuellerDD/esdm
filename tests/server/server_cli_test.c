@@ -125,8 +125,7 @@ static void test_options_accepted(void)
 	static const char *const long_form[] = {
 		"--verbose",     "--foreground",  "--force_irqes",
 		"--force_schedes", "--memlock",   "--small_memory",
-		"--keep_ipc",    "--jent_block_disable",
-		"--es_jent_instances", "4",
+		"--keep_ipc",    "--es_jent_instances", "4",
 		"--raise_sched_priority",
 		"--username",    "nobody",        "--groupname",
 		"nogroup",       NULL

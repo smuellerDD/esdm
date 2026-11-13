@@ -119,26 +119,7 @@ conf_data.set('ESDM_JENT_HASH_LOOP_COUNT',
 conf_data.set('ESDM_JENT_ALL_CACHES',
 	      get_option('es_jent_all_caches').enabled())
 
-# Async per-ES buffering (es_buf) is incompatible with SP800-90C oversampled
-# seeding by default. When sp80090c is set, zero out every ESDM_*_ENTROPY_BLOCKS
-# count so esdm_es_buf compiles out of all ES sources. The es_buf_force option
-# overrides this and keeps the per-ES counts honored.
-disable_es_buf = sp80090c and not get_option('es_buf_force')
-# Counted in whole seconds, it has to outlive the ES monitor interval of 2^29 ns
-if get_option('es_buf_max_age') == 1
-	error('es_buf_max_age must be 0 or at least 2')
-endif
-conf_data.set('ESDM_ES_BUF_MAX_AGE', get_option('es_buf_max_age'))
 conf_data.set('ESDM_JENT_INSTANCES', get_option('es_jent_instances'))
-
-# In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
-# need to result in a value larger than zero
-if get_option('es_jent_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS',
-		      get_option('es_jent_entropy_blocks'))
-else
-	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_CPU', get_option('es_cpu').enabled())
 conf_data.set('ESDM_CPU_ENTROPY_RATE',
@@ -149,12 +130,6 @@ conf_data.set('ESDM_CPU_FULL_ENT_MULTIPLIER',
 conf_data.set('ESDM_ES_IRQ', get_option('es_irq').enabled())
 conf_data.set('ESDM_IRQ_ENTROPY_RATE',
 	      get_option('es_irq_entropy_rate'))
-if get_option('es_irq_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS',
-		      get_option('es_irq_entropy_blocks'))
-else
-	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_KERNEL_RNG', get_option('es_kernel').enabled())
 conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
@@ -163,12 +138,6 @@ conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
 conf_data.set('ESDM_ES_SCHED', get_option('es_sched').enabled())
 conf_data.set('ESDM_SCHED_ENTROPY_RATE',
 	      get_option('es_sched_entropy_rate'))
-if get_option('es_sched_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS',
-		      get_option('es_sched_entropy_blocks'))
-else
-	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_SCHED_EBPF', get_option('es_sched_ebpf').enabled())
 conf_data.set('ESDM_SCHED_EBPF_ENTROPY_RATE',
@@ -187,24 +156,12 @@ conf_data.set('ESDM_ES_EBPF_TESTING', get_option('es_ebpf_testing').enabled())
 conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
 conf_data.set('ESDM_HWRAND_ENTROPY_RATE',
 	      get_option('es_hwrand_entropy_rate'))
-if get_option('es_hwrand_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_HWRAND_ENTROPY_BLOCKS',
-		      get_option('es_hwrand_entropy_blocks'))
-else
-	conf_data.set('ESDM_HWRAND_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_TPM2', get_option('es_tpm2').enabled())
 conf_data.set('ESDM_TPM2_ENTROPY_RATE',
 	      get_option('es_tpm2_entropy_rate'))
 conf_data.set('ESDM_TPM2_STIR', get_option('es_tpm2_stir').enabled())
 conf_data.set_quoted('ESDM_TPM2_RM_PATH', get_option('es_tpm2_rm_path'))
-if get_option('es_tpm2_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS',
-		      get_option('es_tpm2_entropy_blocks'))
-else
-	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS', 0)
-endif
 
 # The defaults of esdm-es-pkcs11, see es-ext/meson.build
 conf_data.set('ESDM_PKCS11_ENTROPY_RATE',
@@ -218,12 +175,6 @@ conf_data.set('ESDM_ES_EXT', get_option('es_ext').enabled())
 conf_data.set_quoted('ESDM_EXT_PATH', get_option('es_ext_path'))
 conf_data.set('ESDM_EXT_ENTROPY_RATE', get_option('es_ext_entropy_rate'))
 conf_data.set('ESDM_EXT_PEER_UID', get_option('es_ext_peer_uid'))
-if get_option('es_ext_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_EXT_ENTROPY_BLOCKS',
-		      get_option('es_ext_entropy_blocks'))
-else
-	conf_data.set('ESDM_EXT_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 if get_option('es_jent_kernel_name') == '' or get_option('es_jent_kernel_name').contains('"')
@@ -232,12 +183,6 @@ endif
 conf_data.set_quoted('ESDM_JENT_KERNEL_NAME', get_option('es_jent_kernel_name'))
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))
-if get_option('es_jent_kernel_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS',
-		      get_option('es_jent_kernel_entropy_blocks'))
-else
-	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS', 0)
-endif
 
 timing_es_credited = 0
 foreach timing_es_rate_option : [ 'es_irq_entropy_rate',

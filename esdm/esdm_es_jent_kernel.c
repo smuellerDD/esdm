@@ -29,7 +29,6 @@
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_buf.h"
 #include "esdm_es_jent_kernel.h"
 #include "helper.h"
 #include "mutex.h"
@@ -45,25 +44,6 @@ static DEFINE_MUTEX_UNLOCKED(jent_rng_mutex);
 static char *jent_kernel_runtime_name = NULL;
 /* Between init and fini - a new name is opened at once then */
 static bool jent_kernel_initialized = false;
-
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-static struct esdm_es_buf jent_kernel_buf;
-static bool jent_kernel_buf_alloced = false;
-
-/*
- * What a block of @requested_bits is credited with at present: the configured
- * rate. Unlike esdm_jent_kernel_entropylevel() it does not ask whether the
- * handle is open now - a block cached before was read from an RNG that
- * delivered.
- */
-static uint32_t esdm_jent_kernel_buf_credit(uint32_t requested_bits)
-{
-	return esdm_fast_noise_entropylevel(
-		esdm_config_es_jent_kernel_entropy_rate(), requested_bits);
-}
-#endif
-
-static bool esdm_jent_kernel_active(void);
 
 /* Caller must hold jent_rng_mutex. */
 static const char *esdm_jent_kernel_name_locked(void)
@@ -87,13 +67,6 @@ static void esdm_jent_kernel_finalize(void)
 	esdm_jent_kernel_finalize_locked();
 	jent_kernel_initialized = false;
 	mutex_unlock(&jent_rng_mutex);
-
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-	if (jent_kernel_buf_alloced) {
-		esdm_es_buf_free(&jent_kernel_buf);
-		jent_kernel_buf_alloced = false;
-	}
-#endif
 }
 
 /*
@@ -132,18 +105,6 @@ static int esdm_jent_kernel_init(void)
 
 	mutex_unlock(&jent_rng_mutex);
 
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-	if (jent_kernel_buf_alloced) {
-		esdm_es_buf_reset(&jent_kernel_buf);
-	} else if (!esdm_es_buf_alloc(&jent_kernel_buf,
-				      ESDM_JENT_KERNEL_ENTROPY_BLOCKS,
-				      "KernelJitterRNG",
-				      esdm_config_es_jent_kernel_entropy_rate,
-				      esdm_jent_kernel_buf_credit)) {
-		jent_kernel_buf_alloced = true;
-	}
-#endif
-
 	return 0;
 }
 
@@ -181,12 +142,10 @@ static uint32_t esdm_jent_kernel_poolsize(void)
 
 /*
  * Use an exclusive lock: the underlying kcapi handle wraps a single AF_ALG
- * socket and is not safe for concurrent kcapi_rng_generate() calls. The async
- * monitor and a synchronous consumer fallback must serialise through this
- * lock.
+ * socket and is not safe for concurrent kcapi_rng_generate() calls.
  */
-static void esdm_jent_kernel_get_sync(struct entropy_es *eb_es,
-				      uint32_t requested_bits)
+static void esdm_jent_kernel_get(struct entropy_es *eb_es,
+				 uint32_t requested_bits)
 {
 	mutex_lock(&jent_rng_mutex);
 
@@ -219,54 +178,6 @@ err:
 	mutex_unlock(&jent_rng_mutex);
 	eb_es->e_bits = 0;
 }
-
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-
-static void esdm_jent_kernel_buf_fill(struct entropy_es *eb_es,
-				      uint32_t requested_bits, void *ctx)
-{
-	(void)ctx;
-	esdm_jent_kernel_get_sync(eb_es, requested_bits);
-}
-
-static int esdm_jent_kernel_monitor(void)
-{
-	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
-
-	if (!esdm_jent_kernel_active())
-		return 0;
-
-	return esdm_es_buf_monitor(&jent_kernel_buf, requested_bits,
-				   esdm_jent_kernel_buf_fill, NULL);
-}
-
-/* A block of the cache only, see struct esdm_es_cb.get_cached */
-static bool esdm_jent_kernel_get_cached(struct entropy_es *eb_es,
-					uint32_t requested_bits)
-{
-	return esdm_es_buf_try_get(&jent_kernel_buf, eb_es, requested_bits,
-				   !!esdm_config_es_jent_kernel_entropy_rate());
-}
-
-static void esdm_jent_kernel_get(struct entropy_es *eb_es,
-				 uint32_t requested_bits, bool allow_cached)
-{
-	if (allow_cached && esdm_jent_kernel_get_cached(eb_es, requested_bits))
-		return;
-
-	esdm_jent_kernel_get_sync(eb_es, requested_bits);
-}
-
-#else /* ESDM_JENT_KERNEL_ENTROPY_BLOCKS == 0 */
-
-static void esdm_jent_kernel_get(struct entropy_es *eb_es,
-				 uint32_t requested_bits,
-				 bool __unused allow_cached)
-{
-	esdm_jent_kernel_get_sync(eb_es, requested_bits);
-}
-
-#endif
 
 static void esdm_jent_kernel_es_state(char *buf, size_t buflen)
 {
@@ -347,7 +258,6 @@ int esdm_es_jent_kernel_set_name(const char *name)
 {
 	char *new_copy = NULL;
 	char *old;
-	bool reopened;
 	int ret = 0;
 
 	if (!name || strlen(name) >= CRYPTO_MAX_ALG_NAME_ESDM)
@@ -368,17 +278,10 @@ int esdm_es_jent_kernel_set_name(const char *name)
 	 * Set before esdm_init(), as the server does, the RNG is opened by the
 	 * init of the source. Once the source runs, it is replaced right away.
 	 */
-	reopened = jent_kernel_initialized;
-	if (reopened)
+	if (jent_kernel_initialized)
 		ret = esdm_jent_kernel_open_locked();
 
 	mutex_unlock(&jent_rng_mutex);
-
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-	/* What the old RNG delivered is not credited for the new one */
-	if (reopened && jent_kernel_buf_alloced)
-		esdm_es_buf_reset(&jent_kernel_buf);
-#endif
 
 	free(old);
 
@@ -389,15 +292,8 @@ struct esdm_es_cb esdm_es_jent_kernel = {
 	.name = "KernelJitterRNG",
 	.init = esdm_jent_kernel_init,
 	.fini = esdm_jent_kernel_finalize,
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-	.monitor_es = esdm_jent_kernel_monitor,
-#else
 	.monitor_es = NULL,
-#endif
 	.get_ent = esdm_jent_kernel_get,
-#if (ESDM_JENT_KERNEL_ENTROPY_BLOCKS != 0)
-	.get_cached = esdm_jent_kernel_get_cached,
-#endif
 	.curr_entropy = esdm_jent_kernel_entropylevel,
 	.max_entropy = esdm_jent_kernel_poolsize,
 	.state = esdm_jent_kernel_es_state,

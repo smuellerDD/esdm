@@ -60,7 +60,6 @@ struct esdm_config {
 
 	_Atomic bool esdm_es_irq_retry;
 	_Atomic bool esdm_es_sched_retry;
-	_Atomic bool esdm_jent_entropy_async_enable;
 	_Atomic uint32_t esdm_jent_instances;
 	_Atomic bool esdm_ipc_cleanup;
 };
@@ -157,8 +156,6 @@ static struct esdm_config esdm_config = {
 	/* Retry to access the Sched ES during initialization */
 	.esdm_es_sched_retry = false,
 
-	/* Enable the Jitter RNG buffer filling */
-	.esdm_jent_entropy_async_enable = true,
 	.esdm_jent_instances = ESDM_JENT_INSTANCES,
 
 	/* Remove RPC sockets, status SHM segment and semaphores at shutdown */
@@ -220,18 +217,6 @@ void esdm_config_es_jent_entropy_rate_set(uint32_t ent)
 	esdm_config.esdm_es_jent_entropy_rate_bits =
 		esdm_config_entropy_rate_max(ent);
 	esdm_es_add_entropy();
-}
-
-DSO_PUBLIC
-uint32_t esdm_config_es_jent_async_enabled(void)
-{
-	return esdm_config.esdm_jent_entropy_async_enable;
-}
-
-DSO_PUBLIC
-void esdm_config_es_jent_async_enabled_set(int setting)
-{
-	esdm_config.esdm_jent_entropy_async_enable = !!setting;
 }
 
 DSO_PUBLIC

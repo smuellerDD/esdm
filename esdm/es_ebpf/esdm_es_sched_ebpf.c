@@ -274,7 +274,7 @@ static uint32_t esdm_sched_ebpf_poolsize(void)
 }
 
 static void esdm_sched_ebpf_get(struct entropy_es *eb_es,
-				uint32_t requested_bits, bool __unused unused)
+				uint32_t requested_bits)
 {
 	mutex_lock(&sched_ebpf_mutex);
 	esdm_ebpf_get_ent(&esdm_sched_ebpf_es, eb_es, requested_bits);

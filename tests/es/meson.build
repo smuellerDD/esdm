@@ -148,26 +148,6 @@ if get_option('es_irq').enabled() or get_option('es_sched').enabled()
 	     timeout: 120)
 endif
 
-# The interrupt and the scheduler source compiled into the test, which fills
-# their block cache by hand - see the file header. No kernel support needed.
-foreach es_reset : [ [ 'es_irq', 'interrupt', [] ],
-		     [ 'es_sched', 'scheduler', [ '-DTEST_ES_SCHED' ] ] ]
-	if get_option(es_reset[0]).enabled()
-		es_reset_tester = executable(
-			es_reset[0] + '_cache_reset_tester',
-			[ 'es_kernel_cache_reset_test.c' ],
-			c_args: es_reset[2],
-			include_directories: [ include_dirs_server,
-					       include_directories('../common') ],
-			dependencies: dependencies_server,
-			link_with: esdm_static_lib,
-		)
-
-		test('ES ' + es_reset[1] + ' cache reset', es_reset_tester,
-		     suite: 'es')
-	endif
-endforeach
-
 # The following hardware/service-backed sources may be absent on the test
 # machine; their tests are structural / graceful-absence checks (see the file
 # headers) and pass whether or not the device is present.
@@ -192,9 +172,8 @@ if get_option('es_tpm2').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	# With a TPM behind it the test drives the device itself, including a
-	# full fill of the block cache - one command exchange per block, and a
-	# software TPM in an emulated machine is not quick about them.
+	# With a TPM behind it the test drives the device itself, and a software
+	# TPM in an emulated machine is not quick about it.
 	test('ES TPM 2.0', es_tpm2_tester, timeout: 120, suite: 'es')
 endif
 

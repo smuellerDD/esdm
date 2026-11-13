@@ -118,7 +118,7 @@ static int es_irq_ebpf_getdata(void)
 		create_irq_events();
 		consume_events();
 		esdm_es[esdm_int_es_irq_ebpf]->get_ent(
-			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 		if (!memcmp(eb_es.e, zero, ESDM_DRNG_INIT_SEED_SIZE_BYTES)) {
 			printf("ES InterruptEBPF - fail: get_ent did not deliver data for iteration %u\n",

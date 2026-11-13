@@ -103,7 +103,7 @@ static int es_hwrand_getdata(void)
 		return 0;
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	/*
 	 * With no device present, get_ent must gracefully return 0 credited

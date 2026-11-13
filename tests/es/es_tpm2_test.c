@@ -31,10 +31,9 @@
  *   no TPM.
  *
  * - With a TPM, the command exchange, the response parsing, the chunking of a
- *   request across the 32 byte maximum of TPM2_CC_GetRandom, the entropy
- *   accounting and the block cache in front of it are all reachable and are
- *   driven here. A software TPM is enough for that, which is what the VM based
- *   runs of this suite provide.
+ *   request across the 32 byte maximum of TPM2_CC_GetRandom and the entropy
+ *   accounting are all driven here. A software TPM is enough for that, which
+ *   is what the VM based runs of this suite provide.
  *
  * Whether a TPM is present is asked of the source itself: ->active() reports
  * whether init() got the device open, which is exactly the distinction the two
@@ -118,7 +117,7 @@ static int es_tpm2_getdata(void)
 		return 0;
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	/*
 	 * With no device present, get_ent must gracefully return 0 credited
@@ -149,9 +148,8 @@ static bool buf_is_zero(const uint8_t *buf, size_t len)
 
 /*
  * init() is called again on every esdm_reinit(), so it has to be repeatable:
- * it closes the device it holds before opening it anew, and resets rather than
- * reallocates the block cache. Leaking the descriptor or losing the cache here
- * would only show up after a reinit in a long running daemon.
+ * it closes the device it holds before opening it anew. Leaking the descriptor
+ * here would only show up after a reinit in a long running daemon.
  */
 static int es_tpm2_reinit(void)
 {
@@ -190,7 +188,7 @@ static int es_tpm2_getdata_rate(uint32_t rate)
 	esdm_config_es_tpm2_entropy_rate_set(rate);
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	if (eb_es.e_bits != expected) {
 		printf("ES %s - fail: rate %u credited %u bits, expected %u\n",
@@ -234,8 +232,8 @@ static int es_tpm2_getdata_chunked(void)
 		memset(&first, 0, sizeof(first));
 		memset(&second, 0, sizeof(second));
 
-		esdm_es[ES_IDX]->get_ent(&first, sizes[i], true);
-		esdm_es[ES_IDX]->get_ent(&second, sizes[i], true);
+		esdm_es[ES_IDX]->get_ent(&first, sizes[i]);
+		esdm_es[ES_IDX]->get_ent(&second, sizes[i]);
 
 		if (buf_is_zero(first.e, bytes) ||
 		    buf_is_zero(second.e, bytes)) {
@@ -256,62 +254,6 @@ static int es_tpm2_getdata_chunked(void)
 	}
 
 	return ret;
-}
-
-/*
- * The cache in front of the device, filled by the ES manager monitor so a
- * consumer does not wait for the TPM. The first monitor run after an init is
- * skipped by design to keep ESDM startup responsive, so it takes two to fill
- * anything - and a request served from a filled cache must be credited and
- * populated exactly as the synchronous path is.
- */
-static int es_tpm2_buffered(void)
-{
-	struct entropy_es eb_es;
-	uint32_t expected;
-	int ret;
-
-	if (!esdm_es[ES_IDX]->monitor_es) {
-		printf("ES %s: built without a block cache, monitor not tested\n",
-		       ES_NAME);
-		return 0;
-	}
-
-	esdm_config_es_tpm2_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
-
-	/* Skipped run */
-	ret = esdm_es[ES_IDX]->monitor_es();
-	if (ret) {
-		printf("ES %s - fail: first monitor run returned %d\n", ES_NAME,
-		       ret);
-		return 1;
-	}
-
-	/* Filling run */
-	ret = esdm_es[ES_IDX]->monitor_es();
-	if (ret) {
-		printf("ES %s - fail: monitor run returned %d\n", ES_NAME, ret);
-		return 1;
-	}
-
-	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
-
-	expected =
-		esdm_fast_noise_entropylevel(esdm_config_es_tpm2_entropy_rate(),
-					     ESDM_DRNG_INIT_SEED_SIZE_BITS);
-	if (eb_es.e_bits != expected) {
-		printf("ES %s - fail: cached block credited %u bits, expected %u\n",
-		       ES_NAME, eb_es.e_bits, expected);
-		return 1;
-	}
-
-	if (buf_is_zero(eb_es.e, ESDM_DRNG_INIT_SEED_SIZE_BYTES)) {
-		printf("ES %s - fail: cached block carries no data\n", ES_NAME);
-		return 1;
-	}
-	printf("ES %s - pass: block cache filled and served\n", ES_NAME);
-	return 0;
 }
 
 /*
@@ -343,7 +285,7 @@ static int es_tpm2_absent_after_fini(void)
 	}
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits) {
 		printf("ES %s - fail: get_ent credited %u bits after fini\n",
 		       ES_NAME, eb_es.e_bits);
@@ -406,7 +348,6 @@ int main(int argc, char *argv[])
 	ret += es_tpm2_getdata_rate(ESDM_DRNG_SECURITY_STRENGTH_BITS / 2);
 	ret += es_tpm2_getdata_rate(0);
 	ret += es_tpm2_getdata_chunked();
-	ret += es_tpm2_buffered();
 	ret += es_tpm2_absent_after_fini();
 
 out:

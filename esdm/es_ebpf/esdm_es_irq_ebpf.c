@@ -276,8 +276,7 @@ static uint32_t esdm_irq_ebpf_poolsize(void)
 	return ent;
 }
 
-static void esdm_irq_ebpf_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			      bool __unused unused)
+static void esdm_irq_ebpf_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	mutex_lock(&irq_ebpf_mutex);
 	esdm_ebpf_get_ent(&esdm_irq_ebpf_es, eb_es, requested_bits);

@@ -561,7 +561,7 @@ static uint32_t esdm_aux_get_pool(struct esdm_pool *pool, uint8_t *outbuf,
 }
 
 static void esdm_aux_get_backtrack(struct entropy_es *eb_es,
-				   uint32_t requested_bits, bool __unused u)
+				   uint32_t requested_bits)
 {
 	size_t i, pool_with_max_entropy = 0;
 	uint32_t max_entropy = 0;

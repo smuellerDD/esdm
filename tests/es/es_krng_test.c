@@ -67,7 +67,7 @@ static int es_krng_getdata(uint32_t expected_ent_level)
 	memset(&zero, 0, sizeof(zero));
 
 	esdm_es[esdm_ext_es_krng]->get_ent(&eb_es,
-					   ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+					   ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(esdm_config_es_krng_entropy_rate(),
 					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {

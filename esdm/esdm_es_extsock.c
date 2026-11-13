@@ -57,7 +57,6 @@
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_buf.h"
 #include "esdm_es_ext_json.h"
 #include "esdm_es_extsock.h"
 #include "esdm_es_mgr.h"
@@ -123,12 +122,6 @@ static struct {
 	atomic_bool configured;
 	atomic_bool credited;
 	atomic_uint published_rate;
-
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	/* Filled by the ES monitor: a slow provider holds up no reseed */
-	struct esdm_es_buf buf;
-	bool buf_alloced;
-#endif
 } extsock = {
 	.mutex = MUTEX_UNLOCKED,
 	.peer_uid = ESDM_EXT_PEER_UID,
@@ -189,14 +182,6 @@ static uint32_t extsock_level(bool credited, uint32_t declared,
 			       extsock_rate(declared, NULL), requested_bits) :
 		       0;
 }
-
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-/* The rate of the provider as published, see esdm_es_buf_alloc() */
-static uint32_t extsock_buf_rate(void)
-{
-	return extsock_rate(atomic_load(&extsock.published_rate), NULL);
-}
-#endif
 
 static void extsock_lock(void)
 {
@@ -307,19 +292,7 @@ static int extsock_call(uint16_t type, uint32_t length, unsigned int timeout_ms)
 	return 0;
 }
 
-/* The blocks collected before are not to be served any more */
-static void extsock_es_reset(void)
-{
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock.buf_alloced)
-		esdm_es_buf_reset(&extsock.buf);
-#endif
-}
-
-/*
- * 0 if the provider passed, -EFAULT otherwise. A failure discards the blocks
- * cached: they were made just before it.
- */
+/* 0 if the provider passed, -EFAULT otherwise */
 static int extsock_selftest_locked(void)
 {
 	int32_t status;
@@ -336,7 +309,6 @@ static int extsock_selftest_locked(void)
 	if (status) {
 		extsock_log(LOGGER_ERR, "self test failed: %s\n",
 			    strerror(-status));
-		extsock_es_reset();
 		return -EFAULT;
 	}
 	return 0;
@@ -489,9 +461,6 @@ static void extsock_reset_locked(void)
 	extsock.status_warned = false;
 }
 
-/* The cap of the cache, see esdm_es_buf_alloc() */
-static uint32_t extsock_entropylevel(uint32_t requested_bits);
-
 static int extsock_init(void)
 {
 	extsock_lock();
@@ -501,15 +470,6 @@ static int extsock_init(void)
 		extsock_connect();
 	extsock_unlock();
 
-	extsock_es_reset();
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (!extsock.buf_alloced &&
-	    !esdm_es_buf_alloc(&extsock.buf, ESDM_EXT_ENTROPY_BLOCKS,
-			       EXTSOCK_NAME, extsock_buf_rate,
-			       extsock_entropylevel))
-		extsock.buf_alloced = true;
-#endif
-
 	return 0;
 }
 
@@ -518,13 +478,6 @@ static void extsock_fini(void)
 	extsock_lock();
 	extsock_reset_locked();
 	extsock_unlock();
-
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock.buf_alloced) {
-		esdm_es_buf_free(&extsock.buf);
-		extsock.buf_alloced = false;
-	}
-#endif
 }
 
 /* As published: a request in progress is not waited for */
@@ -586,49 +539,9 @@ out:
 	extsock_unlock();
 }
 
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-
-static void extsock_buf_fill(struct entropy_es *eb_es, uint32_t requested_bits,
-			     void *ctx)
-{
-	(void)ctx;
-	extsock_get(eb_es, requested_bits);
-}
-
-/*
- * A block of the cache only, see struct esdm_es_cb.get_cached - none while the
- * provider is not credited. A block without entropy from a source credited at
- * a rate is a miss: one of a failed request, or claimed with nothing.
- */
-static bool extsock_get_cached(struct entropy_es *eb_es,
-			       uint32_t requested_bits)
-{
-	if (!extsock.buf_alloced || !atomic_load(&extsock.credited))
-		return false;
-
-	return esdm_es_buf_try_get(&extsock.buf, eb_es, requested_bits,
-				   !!extsock_entropylevel(requested_bits));
-}
-
-#endif
-
-static void extsock_get_ent(struct entropy_es *eb_es, uint32_t requested_bits,
-			    bool allow_cached)
-{
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (allow_cached && extsock_get_cached(eb_es, requested_bits))
-		return;
-#else
-	(void)allow_cached;
-#endif
-	extsock_get(eb_es, requested_bits);
-}
-
 /*
  * The monitor connects to the provider, and probes a failing one with data it
- * discards. It fills the block cache from a credited one, starting no request
- * after one timeout: a slow provider is not to hold up the pass of every
- * source, nor a reinitialization waiting for it.
+ * discards.
  */
 static int extsock_monitor(void)
 {
@@ -647,14 +560,6 @@ static int extsock_monitor(void)
 	}
 	extsock_unlock();
 
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock.buf_alloced && atomic_load(&extsock.credited))
-		esdm_es_buf_monitor_until(
-			&extsock.buf, esdm_get_seed_entropy_osr(false, true),
-			extsock_buf_fill, NULL,
-			esdm_monotonic_now_ns() +
-				ESDM_EXT_TIMEOUT_MS * 1000000ULL);
-#endif
 	return 0;
 }
 
@@ -862,15 +767,11 @@ int esdm_es_ext_set_path(const char *path)
 	if (path[0] && !(copy = strdup(path)))
 		return -ENOMEM;
 
-	/* Nor is what the provider of the old path delivered served */
-	esdm_es_mgr_monitor_pause();
 	extsock_lock();
 	free(extsock.path);
 	extsock.path = copy;
 	extsock_reset_locked();
 	extsock_unlock();
-	extsock_es_reset();
-	esdm_es_mgr_monitor_resume();
 	return 0;
 }
 
@@ -892,15 +793,12 @@ struct esdm_es_cb esdm_es_extsock = {
 	.init = extsock_init,
 	.fini = extsock_fini,
 	.monitor_es = extsock_monitor,
-	.get_ent = extsock_get_ent,
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	.get_cached = extsock_get_cached,
-#endif
+	.get_ent = extsock_get,
 	.curr_entropy = extsock_entropylevel,
 	.max_entropy = extsock_poolsize,
 	.state = extsock_es_state,
 	.state_json = extsock_es_state_json,
-	.reset = extsock_es_reset,
+	.reset = NULL,
 	.active = extsock_active,
 	.selftest = extsock_selftest,
 };

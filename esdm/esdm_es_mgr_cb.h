@@ -111,18 +111,8 @@ struct entropy_buf {
  * @fini: Deinitialize the entropy source - may be NULL
  * @get_ent: Fetch entropy into the entropy_buf. The ES shall only deliver
  *	     data if its internal initialization is complete, including any
- *	     SP800-90B startup testing or similar.
- *
- *	     allow_cached tells whether the request may be served from a block
- *	     the ES collected ahead of it, e.g. by its ES monitor. False asks
- *	     for entropy collected for this very request - the seeding of the
- *	     prediction resistance DRNG, whose contract is just that - and an
- *	     ES with such a cache then takes its synchronous path.
- * @get_cached: Fetch a block the ES collected ahead of the request, if one is
- *		ready, and return true - or return false and leave @eb alone.
- *		Never collects itself: a reseed asks this first and leaves out
- *		an ES without a block when the others deliver the entropy, see
- *		esdm_get_reseed_buffers(). NULL for an ES without a cache.
+ *	     SP800-90B startup testing or similar. The entropy is collected
+ *	     for this very request, none is buffered ahead of it.
  * @curr_entropy: Return amount of currently available entropy in bits.
  * @max_entropy: Maximum amount of entropy the entropy source is able to
  *		 maintain.
@@ -150,9 +140,7 @@ struct esdm_es_cb {
 	int (*init)(void);
 	int (*monitor_es)(void);
 	void (*fini)(void);
-	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits,
-			bool allow_cached);
-	bool (*get_cached)(struct entropy_es *eb, uint32_t requested_bits);
+	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits);
 	uint32_t (*curr_entropy)(uint32_t requested_bits);
 	uint32_t (*max_entropy)(void);
 	void (*state)(char *buf, size_t buflen);

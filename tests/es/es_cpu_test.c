@@ -64,8 +64,7 @@ static int es_cpu_getdata(uint32_t expected_ent_level)
 
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(&zero, 0, sizeof(zero));
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(expected_ent_level,
 					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
@@ -179,10 +178,9 @@ static int es_cpu_getdata_differs(void)
 	memset(&first, 0, sizeof(first));
 	memset(&second, 0, sizeof(second));
 
-	esdm_es[esdm_ext_es_cpu]->get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	esdm_es[esdm_ext_es_cpu]->get_ent(&second,
-					  ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+					  ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	if (!memcmp(first.e, second.e, ESDM_DRNG_INIT_SEED_SIZE_BYTES)) {
 		printf("ES CPU - fail: two successive pulls delivered identical data\n");
@@ -209,7 +207,7 @@ static int es_cpu_getdata_partial(void)
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(zero, 0, sizeof(zero));
 
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, requested, true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, requested);
 
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(ESDM_DRNG_SECURITY_STRENGTH_BITS,
@@ -314,8 +312,7 @@ static bool es_cpu_data_available(void)
 	 */
 	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	return eb_es.e_bits > 0;
 }

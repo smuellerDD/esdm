@@ -98,7 +98,7 @@ static double test_time_es(struct esdm_es_cb *es, uint32_t *first_bits)
 		memset(&eb_es, 0, sizeof(eb_es));
 
 		start = test_now();
-		es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS, true);
+		es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS);
 		duration = test_now() - start;
 
 		if (duration > TEST_STUCK_SECONDS) {

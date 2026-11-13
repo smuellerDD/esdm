@@ -2,26 +2,9 @@
 # machine-global System V names - see tests/test_ipc_ns.c.
 esdm_ipc_ns = files('../test_ipc_ns.c')
 
-# The per-ES block cache is exercised on its own: the ES manager entry points it
-# calls out to are stubbed in the test, which is what makes the cooperative
-# shutdown of the monitor loop and the wakeup accounting observable at all. It
-# therefore compiles the unit under test rather than linking the ESDM library,
-# and needs neither a server nor an initialized DRNG.
-esdm_es_buf_test = executable(
-	'esdm_es_buf_test',
-	[ files('../../esdm/esdm_es_buf.c'), 'esdm_es_buf_test.c' ],
-	include_directories: [ include_dirs_server,
-			       include_directories('../common') ],
-	dependencies: dependencies_server,
-	link_with: esdm_common_static_lib,
-)
-
-test('ESDM per-ES block cache', esdm_es_buf_test, suite: 'core')
-
-# fips.c only exists in a FIPS build. Like the block cache above it is compiled
-# into the test rather than linked from the library, so the configuration probe
-# its constructor calls can be stubbed out - a failing power-on self test would
-# exit() the process before main() runs.
+# fips.c only exists in a FIPS build. It is compiled into the test rather than
+# linked, so the configuration probe of its constructor can be stubbed out: a
+# failing power-on self test would exit() before main() runs.
 if get_option('fips140')
 	esdm_fips_test = executable(
 		'esdm_fips_test',
@@ -71,14 +54,6 @@ if get_option('esdm-server').enabled()
 	esdm_drng_mgr_max_wo_reseed_test = executable(
 		'esdm_drng_mgr_max_wo_reseed_test',
 		[ esdm_ipc_ns, 'esdm_drng_mgr_max_wo_reseed_test.c' ],
-		include_directories: include_dirs_server,
-		link_with: esdm_static_lib,
-		dependencies: dependencies_server,
-	)
-
-	esdm_reseed_cached_test = executable(
-		'esdm_reseed_cached_test',
-		[ esdm_ipc_ns, 'esdm_reseed_cached_test.c' ],
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
 		dependencies: dependencies_server,
@@ -217,8 +192,6 @@ if get_option('esdm-server').enabled()
 		timeout: 120,
 		suite: 'core')
 
-	test('ESDM reseed leaves out an empty cache', esdm_reseed_cached_test,
-		suite: 'core')
 
 	esdm_aux_xdrbg_test = executable(
 		'esdm_aux_xdrbg_test',

@@ -27,7 +27,6 @@
 
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_buf.h"
 #include "esdm_es_irq.h"
 #include "esdm_es_mgr.h"
 #include "helper.h"
@@ -42,18 +41,10 @@ static enum esdm_es_data_size esdm_irq_data_size = esdm_es_data_equal;
 /*
  * Serialises access to the kernel /dev/esdm_es fd and its per-fd state
  * (esdm_irq_requested_bits_set, esdm_irq_data_size). Held during the
- * configure-then-read pair in esdm_irq_get_sync so the async monitor cannot
- * race a consumer fallback.
+ * configure-then-read pair in esdm_irq_get() so that two reads cannot
+ * interleave.
  */
 static DEFINE_MUTEX_UNLOCKED(irq_mutex);
-
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-static struct esdm_es_buf irq_buf;
-static bool irq_buf_alloced = false;
-
-static void esdm_irq_buf_fill(struct entropy_es *eb_es,
-			      uint32_t requested_bits, void *ctx);
-#endif
 
 /* Caller must hold irq_mutex (write lock). */
 static void esdm_irq_finalize_locked(void)
@@ -68,13 +59,6 @@ static void esdm_irq_finalize(void)
 	mutex_lock(&irq_mutex);
 	esdm_irq_finalize_locked();
 	mutex_unlock(&irq_mutex);
-
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-	if (irq_buf_alloced) {
-		esdm_es_buf_free(&irq_buf);
-		irq_buf_alloced = false;
-	}
-#endif
 }
 
 bool esdm_irq_enabled(void)
@@ -246,44 +230,16 @@ static int esdm_irq_initialize(void)
 	esdm_config_es_krng_entropy_rate_set(
 		ESDM_ES_IRQ_MAX_KERNEL_RNG_ENTROPY);
 
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-	/*
-	 * No cap (see esdm_es_buf_alloc()): the kernel credits a block with the
-	 * events it collected, which the rate alone does not tell.
-	 */
-	if (irq_buf_alloced) {
-		esdm_es_buf_reset(&irq_buf);
-	} else if (esdm_es_buf_alloc(
-			   &irq_buf, ESDM_IRQ_ENTROPY_BLOCKS, "Interrupt",
-			   esdm_config_es_irq_entropy_rate, NULL) == 0) {
-		irq_buf_alloced = true;
-	}
-#endif
-
 	esdm_es_add_entropy();
 
 	return 0;
 }
 
-/* The kernel holds what the monitor waits for before it fills the cache */
+/* The kernel holds what the monitor waits for */
 static bool esdm_irq_full(uint32_t ent)
 {
 	return ent >= esdm_config_es_irq_entropy_rate();
 }
-
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-/*
- * Each fill drains the kernel. Without asking again before each slot, the
- * first fill took what the kernel held and the others the few bits collected
- * since - hits credited with next to nothing, where a miss would have read the
- * kernel at the seeding.
- */
-static bool esdm_irq_buf_ready(void *ctx)
-{
-	(void)ctx;
-	return esdm_irq_full(esdm_irq_entropylevel(esdm_security_strength()));
-}
-#endif
 
 static int esdm_irq_seed_monitor(void)
 {
@@ -333,20 +289,7 @@ static int esdm_irq_seed_monitor(void)
 	if (esdm_irq_full(ent)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Full entropy of interrupt ES detected\n");
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-		if (irq_buf_alloced) {
-			uint32_t requested_bits =
-				esdm_get_seed_entropy_osr(false, true);
-
-			esdm_es_buf_monitor_ready(&irq_buf, requested_bits,
-						  esdm_irq_buf_fill,
-						  esdm_irq_buf_ready, NULL);
-		} else {
-			esdm_es_add_entropy();
-		}
-#else
 		esdm_es_add_entropy();
-#endif
 		esdm_test_seed_entropy(ent);
 	}
 
@@ -365,12 +308,12 @@ static uint32_t esdm_irq_poolsize(void)
  * @requested_bits: requested entropy in bits
  *
  * Use an exclusive lock around the configure-then-read pair: the per-fd
- * requested-bits configuration written by esdm_irq_set_requested_bits_locked
- * is consumed by the subsequent esdm_kernel_read ioctl. Without this lock the
- * async monitor and a consumer fallback could interleave and read with the
- * other thread's configuration in effect.
+ * requested-bits configuration written by
+ * esdm_irq_set_requested_bits_locked() is consumed by the subsequent
+ * esdm_kernel_read() ioctl. Without this lock two reads could interleave and
+ * read with the other thread's configuration in effect.
  */
-static void esdm_irq_get_sync(struct entropy_es *eb_es, uint32_t requested_bits)
+static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	unsigned int ioctl_cmd;
 
@@ -405,42 +348,6 @@ err:
 	mutex_unlock(&irq_mutex);
 	eb_es->e_bits = 0;
 }
-
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-
-static void esdm_irq_buf_fill(struct entropy_es *eb_es,
-			      uint32_t requested_bits, void *ctx)
-{
-	(void)ctx;
-	esdm_irq_get_sync(eb_es, requested_bits);
-}
-
-/* A block of the cache only, see struct esdm_es_cb.get_cached */
-static bool esdm_irq_get_cached(struct entropy_es *eb_es,
-				uint32_t requested_bits)
-{
-	return esdm_es_buf_try_get(&irq_buf, eb_es, requested_bits,
-				   !!esdm_config_es_irq_entropy_rate());
-}
-
-static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool allow_cached)
-{
-	if (allow_cached && esdm_irq_get_cached(eb_es, requested_bits))
-		return;
-
-	esdm_irq_get_sync(eb_es, requested_bits);
-}
-
-#else /* ESDM_IRQ_ENTROPY_BLOCKS == 0 */
-
-static void esdm_irq_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool __unused allow_cached)
-{
-	esdm_irq_get_sync(eb_es, requested_bits);
-}
-
-#endif
 
 static void esdm_irq_es_state(char *buf, size_t buflen)
 {
@@ -504,17 +411,6 @@ static void esdm_irq_reset(void)
 		}
 	}
 	mutex_unlock(&irq_mutex);
-
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-	/*
-	 * The cached blocks were taken from the kernel before the reset and
-	 * carry the entropy it credited them with: the reset discards them
-	 * along with what the kernel still held, or they would be credited at
-	 * the next seeding as if collected since. After the kernel reset, so a
-	 * fill the cache reset lets through reads from the reset kernel.
-	 */
-	esdm_es_buf_reset(&irq_buf);
-#endif
 }
 
 static bool esdm_irq_active(void)
@@ -547,9 +443,6 @@ struct esdm_es_cb esdm_es_irq = {
 	.monitor_es = esdm_irq_seed_monitor,
 	.fini = esdm_irq_finalize,
 	.get_ent = esdm_irq_get,
-#if (ESDM_IRQ_ENTROPY_BLOCKS != 0)
-	.get_cached = esdm_irq_get_cached,
-#endif
 	.curr_entropy = esdm_irq_entropylevel,
 	.max_entropy = esdm_irq_poolsize,
 	.state = esdm_irq_es_state,

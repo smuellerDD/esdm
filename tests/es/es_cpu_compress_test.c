@@ -107,8 +107,8 @@ static void check_get_ent(uint32_t rate)
 	memset(&first, 0, sizeof(first));
 	memset(&second, 0, sizeof(second));
 
-	esdm_es_cpu.get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
-	esdm_es_cpu.get_ent(&second, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es_cpu.get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS);
+	esdm_es_cpu.get_ent(&second, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	CHECK_EQ(first.e_bits, expected);
 	CHECK_EQ(second.e_bits, expected);
@@ -211,7 +211,7 @@ int main(int argc, char *argv[])
 	 */
 	memset(&probe, 0, sizeof(probe));
 	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
-	esdm_es_cpu.get_ent(&probe, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es_cpu.get_ent(&probe, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (!probe.e_bits) {
 		printf("ES CPU compress: CPU delivers no random numbers on this platform, skipping test\n");
 		return 77;

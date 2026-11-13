@@ -100,8 +100,7 @@ static uint32_t esdm_krng_poolsize(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			  bool __unused unused)
+static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	uint32_t ent_bits = esdm_krng_entropylevel(requested_bits);
 	ssize_t ret =

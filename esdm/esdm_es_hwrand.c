@@ -32,7 +32,6 @@
 #include "esdm_crypto.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_buf.h"
 #include "esdm_es_hwrand.h"
 #include "esdm_es_mgr.h"
 #include "esdm_node.h"
@@ -64,20 +63,6 @@ static int esdm_hwrand_fd = -1;
 static bool esdm_hwrand_read_failed = false;
 static DEFINE_MUTEX_UNLOCKED(hwrand_mutex);
 
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-static struct esdm_es_buf hwrand_buf;
-static bool hwrand_buf_alloced = false;
-
-/* What a block of @requested_bits is credited with at present */
-static uint32_t esdm_hwrand_buf_credit(uint32_t requested_bits)
-{
-	return esdm_fast_noise_entropylevel(
-		esdm_config_es_hwrand_entropy_rate(), requested_bits);
-}
-#endif
-
-static bool esdm_hwrand_active(void);
-
 /* Caller must hold hwrand_mutex (write lock). */
 static void esdm_hwrand_finalize_locked(void)
 {
@@ -91,13 +76,6 @@ static void esdm_hwrand_finalize(void)
 	mutex_lock(&hwrand_mutex);
 	esdm_hwrand_finalize_locked();
 	mutex_unlock(&hwrand_mutex);
-
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-	if (hwrand_buf_alloced) {
-		esdm_es_buf_free(&hwrand_buf);
-		hwrand_buf_alloced = false;
-	}
-#endif
 }
 
 static int esdm_hwrand_init(void)
@@ -116,26 +94,10 @@ static int esdm_hwrand_init(void)
 			"Disabling /dev/hwrng-based entropy source as device not present, error opening %s: %s\n",
 			ESDM_ES_HWRAND_IF, strerror(errno));
 		mutex_unlock(&hwrand_mutex);
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-		/* What the device delivered before is credited no more */
-		if (hwrand_buf_alloced)
-			esdm_es_buf_reset(&hwrand_buf);
-#endif
 		return 0;
 	}
 
 	mutex_unlock(&hwrand_mutex);
-
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-	if (hwrand_buf_alloced) {
-		esdm_es_buf_reset(&hwrand_buf);
-	} else if (esdm_es_buf_alloc(&hwrand_buf, ESDM_HWRAND_ENTROPY_BLOCKS,
-				     "LinuxHWRand",
-				     esdm_config_es_hwrand_entropy_rate,
-				     esdm_hwrand_buf_credit) == 0) {
-		hwrand_buf_alloced = true;
-	}
-#endif
 
 	return 0;
 }
@@ -248,8 +210,7 @@ static ssize_t esdm_hwrand_read_bounded(int fd, uint8_t *buf, size_t buflen)
  * limit on a single read (e.g. 32 bytes for a TPM 2.0); chunking ensures
  * compatibility across all backends.
  */
-static void esdm_hwrand_get_sync(struct entropy_es *eb_es,
-				 uint32_t requested_bits)
+static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	static const size_t hwrng_chunk_len = 32;
 	uint8_t buffer[hwrng_chunk_len];
@@ -295,72 +256,6 @@ err:
 	memset_secure(buffer, 0, hwrng_chunk_len);
 	eb_es->e_bits = 0;
 }
-
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-
-static void esdm_hwrand_buf_fill(struct entropy_es *eb_es,
-				 uint32_t requested_bits, void *ctx)
-{
-	(void)ctx;
-	esdm_hwrand_get_sync(eb_es, requested_bits);
-}
-
-/*
- * Every failed fill costs the full read timeout under hwrand_mutex, so a
- * stalled device would hold the monitor for all empty slots. The round stops
- * instead; the synchronous read of the next seeding finds out whether the
- * device recovered.
- */
-static bool esdm_hwrand_buf_ready(void *ctx)
-{
-	bool ret;
-
-	(void)ctx;
-	mutex_reader_lock(&hwrand_mutex);
-	ret = esdm_hwrand_fd >= 0 && !esdm_hwrand_read_failed;
-	mutex_reader_unlock(&hwrand_mutex);
-
-	return ret;
-}
-
-static int esdm_hwrand_monitor(void)
-{
-	uint32_t requested_bits = esdm_get_seed_entropy_osr(false, true);
-
-	if (!esdm_hwrand_active())
-		return 0;
-
-	return esdm_es_buf_monitor_ready(&hwrand_buf, requested_bits,
-					 esdm_hwrand_buf_fill,
-					 esdm_hwrand_buf_ready, NULL);
-}
-
-/* A block of the cache only, see struct esdm_es_cb.get_cached */
-static bool esdm_hwrand_get_cached(struct entropy_es *eb_es,
-				   uint32_t requested_bits)
-{
-	return esdm_es_buf_try_get(&hwrand_buf, eb_es, requested_bits,
-				   !!esdm_config_es_hwrand_entropy_rate());
-}
-
-static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			    bool allow_cached)
-{
-	if (allow_cached && esdm_hwrand_get_cached(eb_es, requested_bits))
-		return;
-
-	esdm_hwrand_get_sync(eb_es, requested_bits);
-}
-
-#else /* ESDM_HWRAND_ENTROPY_BLOCKS == 0 */
-
-static void esdm_hwrand_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			    bool __unused allow_cached)
-{
-	esdm_hwrand_get_sync(eb_es, requested_bits);
-}
-
-#endif
 
 static void esdm_hwrand_es_state(char *buf, size_t buflen)
 {
@@ -411,15 +306,8 @@ struct esdm_es_cb esdm_es_hwrand = {
 	.name = "LinuxHWRand",
 	.init = esdm_hwrand_init,
 	.fini = esdm_hwrand_finalize,
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-	.monitor_es = esdm_hwrand_monitor,
-#else
 	.monitor_es = NULL,
-#endif
 	.get_ent = esdm_hwrand_get,
-#if (ESDM_HWRAND_ENTROPY_BLOCKS != 0)
-	.get_cached = esdm_hwrand_get_cached,
-#endif
 	.curr_entropy = esdm_hwrand_entropylevel,
 	.max_entropy = esdm_hwrand_poolsize,
 	.state = esdm_hwrand_es_state,

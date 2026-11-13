@@ -65,7 +65,7 @@ static int es_jent_getdata(uint32_t expected_ent_level)
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(&zero, 0, sizeof(zero));
 	esdm_es[esdm_ext_es_jitter]->get_ent(
-		&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+		&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(esdm_config_es_jent_entropy_rate(),
 					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {

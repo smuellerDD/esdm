@@ -153,7 +153,7 @@ static int es_irq_getdata(void)
 		memset(&eb_es, 0, sizeof(eb_es));
 		create_irq_entropy();
 		esdm_es[esdm_int_es_irq]->get_ent(
-			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 		if (eb_es.e_bits == 0) {
 			printf("ES Interrupt - pass: get_ent did not collect data\n");
 			if (memcmp(eb_es.e, zero,

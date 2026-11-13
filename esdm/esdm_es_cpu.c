@@ -233,8 +233,7 @@ static uint32_t esdm_cpu_multiplier(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool __unused unsused)
+static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	uint32_t ent_bits, multiplier = esdm_cpu_multiplier();
 

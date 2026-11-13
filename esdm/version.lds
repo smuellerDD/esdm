@@ -92,8 +92,6 @@ LIBESDM_1.0 {
 		esdm_config_es_irq_entropy_rate_set;
 		esdm_config_es_irq_retry;
 		esdm_config_es_irq_retry_set;
-		esdm_config_es_jent_async_enabled;
-		esdm_config_es_jent_async_enabled_set;
 		esdm_config_es_jent_instances;
 		esdm_config_es_jent_instances_set;
 		esdm_config_es_jent_entropy_rate;

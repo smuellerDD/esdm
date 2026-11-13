@@ -28,70 +28,50 @@
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_buf.h"
 #include "esdm_es_jent.h"
 #include "esdm_es_mgr.h"
 #include "helper.h"
 #include "esdm_logger.h"
+#include "mutex.h"
+#include "mutex_w.h"
 #include "ret_checkers.h"
 #include "threading_support.h"
 
 /*
- * This lock shall prevent a deallocation of the ESDM while a Jitter RNG
- * operation is ongoing. This lock, however, is not needed when the Jitter
- * RNG is called in monitor context, i.e. from esdm_jent_async_monitor
- * as the monitor is immediately killed when a termination signal arrives.
- * Thus, the lock only needs to be held for the synchronous case where
- * a signal handler operates.
+ * Keeps the collectors from being freed or replaced during a read: reads take
+ * it shared, init, teardown and self test exclusively. Writer-preferring, as
+ * reads are a steady stream under load.
  */
-static DEFINE_MUTEX_W_UNLOCKED(esdm_jent_lock);
+static mutex_t esdm_jent_lock = MUTEX_UNLOCKED_PREFER_WRITER;
 
 static atomic_int esdm_jent_initialized = 0;
-static struct rand_data *esdm_jent_state = NULL;
-
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-static struct esdm_es_buf esdm_jent_buf;
 
 /*
- * The instances refilling the cache, each with a collector of its own and,
- * once there are several, a thread of its own per monitor round - see
- * esdm_jent_async_monitor(). Their number is that of
- * esdm_config_es_jent_instances() at the first initialization.
+ * The synchronous collectors, each with its own lock: a read takes a free one,
+ * so seedings of different DRNGs collect in parallel - collecting dominates
+ * the seeding time. Their number is esdm_config_es_jent_instances() at init.
  */
-struct esdm_jent_instance {
+struct esdm_jent_sync {
+	mutex_w_t lock;
 	struct rand_data *ec;
-#if JENT_VERSION >= 3080000
-	/* The self test runs bound to ec so far, see esdm_jent_buf_fill() */
-	unsigned int runs_seen;
-#endif
-	int rc;
 };
-static struct esdm_jent_instance *esdm_jent_instances = NULL;
-static unsigned int esdm_jent_num_instances = 0;
-/*
- * Whether the async cache/collector are allocated. The async cache and the
- * async collector are read lock-free by the monitor thread (producer) and by
- * esdm_es_buf_try_get() (consumers), so they must NOT be freed/reallocated on
- * the reinit path while those readers can still run - that would be a
- * use-after-free. They are allocated once, reset in place on reinit, and freed
- * only in esdm_jent_finalize() (the .fini callback), which the ES manager
- * invokes after it has joined the monitor thread.
- */
-static bool esdm_jent_async_alloced = false;
-#endif
+static struct esdm_jent_sync *esdm_jent_sync = NULL;
+static unsigned int esdm_jent_num_sync = 0;
+static atomic_uint esdm_jent_sync_next = 0;
 
 int esdm_jent_status(char *buf, size_t buf_length)
 {
 	int ret = -ENOENT;
 
 #if JENT_VERSION >= 3070000
-	mutex_w_lock(&esdm_jent_lock);
-	if (atomic_load(&esdm_jent_initialized) && esdm_jent_state) {
-		ret = jent_status(esdm_jent_state, buf, buf_length);
+	/* The first collector stands for all, they run with the same settings */
+	mutex_lock(&esdm_jent_lock);
+	if (atomic_load(&esdm_jent_initialized) && esdm_jent_num_sync) {
+		ret = jent_status(esdm_jent_sync[0].ec, buf, buf_length);
 	} else {
 		ret = -EAGAIN;
 	}
-	mutex_w_unlock(&esdm_jent_lock);
+	mutex_unlock(&esdm_jent_lock);
 #else
 	snprintf(buf, buf_length, "{}");
 #endif
@@ -133,11 +113,12 @@ static uint32_t esdm_jent_poolsize(void)
 /*
  * esdm_get_jent() - Get Jitter RNG entropy
  *
+ * @sync: the synchronous collector to read with
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
-			  uint32_t requested_bits)
+static void esdm_jent_get(struct esdm_jent_sync *sync,
+			  struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	ssize_t ret;
 	uint32_t ent_bits;
@@ -145,8 +126,8 @@ static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
 	if (!atomic_load(&esdm_jent_initialized))
 		goto err;
 
-	ret = jent_read_entropy_safe(ec, (char *)eb_es->e, requested_bits >> 3);
-
+	ret = jent_read_entropy_safe(&sync->ec, (char *)eb_es->e,
+				     requested_bits >> 3);
 	if (ret < 0) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Jitter RNG failed with %zd\n", ret);
@@ -156,8 +137,9 @@ static void esdm_jent_get(struct rand_data **ec, struct entropy_es *eb_es,
 	ent_bits = esdm_jent_entropylevel((uint32_t)(ret << 3));
 	esdm_logger(
 		LOGGER_DEBUG, LOGGER_C_ES,
-		"obtained %u bits of entropy from %ssynchronous Jitter RNG noise source instance\n",
-		ent_bits, (*ec == esdm_jent_state) ? "" : "a");
+		"obtained %u bits of entropy from Jitter RNG collector %u of %u\n",
+		ent_bits, (unsigned int)(sync - esdm_jent_sync),
+		atomic_load(&esdm_jent_num_sync));
 
 	eb_es->e_bits = ent_bits;
 	return;
@@ -166,282 +148,112 @@ err:
 	eb_es->e_bits = 0;
 }
 
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-
-#if JENT_VERSION >= 3080000
 /*
- * Counts the self test runs of esdm_jent_selftest(). The async collectors are
- * read by the threads of their instances without esdm_jent_lock, and a
- * jent_selftest() bound to one must not run in parallel with its
- * jent_read_entropy_safe(), whose recovery frees and replaces the collector.
- * So the self test only counts, and each instance binds the test to its own
- * collector when it sees a new run.
+ * A synchronous collector, locked: a free one, otherwise - if the caller may
+ * @wait - the next in turn. The caller holds esdm_jent_lock shared.
  */
-static atomic_uint esdm_jent_selftest_runs = 0;
-#endif
-
-/* Fill a block with the collector of the instance @ctx */
-static void esdm_jent_buf_fill(struct entropy_es *eb_es,
-			       uint32_t requested_bits, void *ctx)
+static struct esdm_jent_sync *esdm_jent_sync_get(bool wait)
 {
-	struct esdm_jent_instance *inst = ctx;
-#if JENT_VERSION >= 3080000
-	/* Only the thread of the instance reads its collector */
-	unsigned int runs = atomic_load(&esdm_jent_selftest_runs);
+	unsigned int i, start, n = esdm_jent_num_sync;
+	struct esdm_jent_sync *sync;
 
-	/*
-	 * A failing test leaves the collector without output until a later
-	 * run bound to it passes - the next periodic one.
-	 */
-	if (runs != inst->runs_seen) {
-		inst->runs_seen = runs;
-		if (jent_selftest(inst->ec))
-			esdm_logger(
-				LOGGER_ERR, LOGGER_C_ES,
-				"JitterRNG ES: known answer tests of an asynchronous collector failed\n");
-	}
-#endif
+	if (!n)
+		return NULL;
 
-	esdm_jent_get(&inst->ec, eb_es, requested_bits);
-}
-
-/* One instance refilling the cache: the empty slots it claims first */
-static void *esdm_jent_instance_monitor(void *arg)
-{
-	struct esdm_jent_instance *inst = arg;
-
-	inst->rc = esdm_es_buf_monitor(&esdm_jent_buf,
-				       esdm_get_seed_entropy_osr(false, true),
-				       esdm_jent_buf_fill, inst);
-	return NULL;
-}
-
-/*
- * The instances refill the cache side by side, each in a thread of its own
- * for the round: a slot is claimed by the one that takes it out of the empty
- * state (esdm_es_buf_monitor_ready()), so they share the empty slots among
- * them, and the cache refills about as many times faster as there are CPUs
- * for them - collecting is the bulk of the time the Jitter RNG takes.
- */
-static int esdm_jent_async_monitor(void)
-{
-	unsigned int i;
-	int ret = 0;
-
-	if (!esdm_config_es_jent_async_enabled() || !esdm_jent_num_instances)
-		return 0;
-
-	if (esdm_jent_num_instances == 1) {
-		esdm_jent_instance_monitor(&esdm_jent_instances[0]);
-	} else {
-		thread_fork_join(esdm_jent_instance_monitor,
-				 esdm_jent_instances,
-				 sizeof(*esdm_jent_instances),
-				 esdm_jent_num_instances);
-	}
-
-	for (i = 0; i < esdm_jent_num_instances; i++)
-		ret |= esdm_jent_instances[i].rc;
-
-	return ret;
-}
-
-/*
- * A block of the cache only, see struct esdm_es_cb.get_cached: one in the
- * making is not waited for, as the reseed asking goes on without it should the
- * other sources cover it.
- */
-static bool esdm_jent_get_cached(struct entropy_es *eb_es,
-				 uint32_t requested_bits)
-{
-	return esdm_config_es_jent_async_enabled() &&
-	       esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits,
-				   !!esdm_jent_entropylevel(requested_bits));
-}
-
-static void esdm_jent_get_check(struct entropy_es *eb_es,
-				uint32_t requested_bits, bool allow_cached)
-{
-	/*
-	 * Serve small requests without initial oversampling from the async
-	 * cache; fall back to the synchronous Jitter RNG instance on miss or
-	 * when the request is too large for a single cached block - or when
-	 * the request asks for entropy collected for it.
-	 *
-	 * A block without entropy although the Jitter RNG is credited is one
-	 * the asynchronous collector failed to fill - e.g. after its known
-	 * answer tests failed - and counts as a miss as well: the synchronous
-	 * collector may well be serving.
-	 */
-	if (allow_cached && esdm_config_es_jent_async_enabled()) {
-		bool credited = !!esdm_jent_entropylevel(requested_bits);
-
-		if (esdm_es_buf_try_get(&esdm_jent_buf, eb_es, requested_bits,
-					credited))
-			return;
-
-		/*
-		 * A miss: the synchronous collector, if it is free, collects
-		 * the block itself. Only while it serves another reseed is a
-		 * block in the making waited for, which arrives sooner than
-		 * that collector would be free and done.
-		 */
-		if (!mutex_w_trylock(&esdm_jent_lock))
-			goto sync;
-
-		if (esdm_es_buf_try_get_wait(&esdm_jent_buf, eb_es,
-					     requested_bits, credited))
-			return;
-	}
-
-	mutex_w_lock(&esdm_jent_lock);
-sync:
-	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits);
-	mutex_w_unlock(&esdm_jent_lock);
-}
-
-/* Release the instances and the cache */
-static void esdm_jent_async_free(void)
-{
-	unsigned int i;
-
-	for (i = 0; i < esdm_jent_num_instances; i++)
-		jent_entropy_collector_free(esdm_jent_instances[i].ec);
-	free(esdm_jent_instances);
-	esdm_jent_instances = NULL;
-	esdm_jent_num_instances = 0;
-
-	esdm_es_buf_free(&esdm_jent_buf);
-}
-
-static int esdm_jent_async_init(unsigned int osr, unsigned int flags)
-{
-	unsigned int i, n;
-	int ret = 0;
-
-	/*
-	 * When the asynchronous Jitter RNG block collection is disabled (e.g.
-	 * the server's small-memory mode or --jent_block_disable), this second
-	 * collector instance and its block cache are never consumed - the
-	 * synchronous esdm_jent_state serves every request. Skip the allocation
-	 * to save a full Jitter RNG collector plus the ESDM_JENT_ENTROPY_BLOCKS
-	 * sized cache. esdm_jent_get_check() and esdm_jent_async_monitor()
-	 * already gate on esdm_config_es_jent_async_enabled() and
-	 * esdm_es_buf_try_get() tolerates the unallocated (NULL) buffer, so a
-	 * later runtime re-enable simply keeps using the synchronous path.
-	 */
-	if (!esdm_config_es_jent_async_enabled())
-		return 0;
-
-	/*
-	 * On a repeated init (reinit) reuse the existing collector and only
-	 * reset the cache in place: the monitor and lock-free consumers may
-	 * still be reading them, so they must not be freed/reallocated here (see
-	 * the esdm_jent_async_alloced comment). A reinit that changes the jent
-	 * flags therefore keeps the previously selected async collector flags;
-	 * the synchronous collector (re-created below under the lock) reflects
-	 * the new flags. This safety-over-exotic-reconfig tradeoff matches the
-	 * reset-on-reinit handling of the TPM2 cache.
-	 */
-	if (esdm_jent_async_alloced) {
-		esdm_es_buf_reset(&esdm_jent_buf);
-		return 0;
-	}
-
-	CKINT(esdm_es_buf_alloc(&esdm_jent_buf, ESDM_JENT_ENTROPY_BLOCKS,
-				"JitterRNG", esdm_config_es_jent_entropy_rate,
-				esdm_jent_entropylevel));
-
-	n = esdm_config_es_jent_instances();
-	esdm_jent_instances = calloc(n, sizeof(*esdm_jent_instances));
-	if (!esdm_jent_instances) {
-		esdm_es_buf_free(&esdm_jent_buf);
-		return -ENOMEM;
-	}
+	start = atomic_fetch_add(&esdm_jent_sync_next, 1);
 	for (i = 0; i < n; i++) {
-		esdm_jent_instances[i].ec =
-			jent_entropy_collector_alloc(osr, flags);
-		if (!esdm_jent_instances[i].ec) {
-			/* Undo what was allocated so it is not leaked. */
-			esdm_jent_num_instances = i;
-			esdm_jent_async_free();
-			return -EFAULT;
+		sync = &esdm_jent_sync[(start + i) % n];
+		if (!mutex_w_trylock(&sync->lock))
+			return sync;
+	}
+
+	if (!wait)
+		return NULL;
+
+	sync = &esdm_jent_sync[start % n];
+	mutex_w_lock(&sync->lock);
+	return sync;
+}
+
+/* Read with @sync of esdm_jent_sync_get() (none: no entropy), then free it */
+static void esdm_jent_sync_read(struct esdm_jent_sync *sync,
+				struct entropy_es *eb_es,
+				uint32_t requested_bits)
+{
+	if (!sync) {
+		eb_es->e_bits = 0;
+		return;
+	}
+
+	esdm_jent_get(sync, eb_es, requested_bits);
+	mutex_w_unlock(&sync->lock);
+}
+
+/* Free the synchronous collectors, under esdm_jent_lock taken alone */
+static void esdm_jent_sync_free(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < esdm_jent_num_sync; i++) {
+		jent_entropy_collector_free(esdm_jent_sync[i].ec);
+		mutex_w_destroy(&esdm_jent_sync[i].lock);
+	}
+	free(esdm_jent_sync);
+	esdm_jent_sync = NULL;
+	esdm_jent_num_sync = 0;
+}
+
+/* Allocate the synchronous collectors, under esdm_jent_lock taken alone */
+static int esdm_jent_sync_alloc(unsigned int osr, unsigned int flags)
+{
+	unsigned int i, n = esdm_config_es_jent_instances();
+
+	esdm_jent_sync = calloc(n, sizeof(*esdm_jent_sync));
+	if (!esdm_jent_sync)
+		return -ENOMEM;
+
+	for (i = 0; i < n; i++) {
+		if (mutex_w_init(&esdm_jent_sync[i].lock, 0, 0))
+			goto err;
+		esdm_jent_sync[i].ec = jent_entropy_collector_alloc(osr, flags);
+		if (!esdm_jent_sync[i].ec) {
+			mutex_w_destroy(&esdm_jent_sync[i].lock);
+			goto err;
 		}
 	}
-	esdm_jent_num_instances = n;
+	esdm_jent_num_sync = n;
 	if (n > 1)
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			    "JitterRNG ES: %u instances refill the cache\n", n);
-
-	esdm_jent_async_alloced = true;
-
-out:
-	return ret;
-}
-
-static void esdm_jent_async_fini(void)
-{
-	esdm_jent_async_free();
-	esdm_jent_async_alloced = false;
-}
-
-#else
-
-static void esdm_jent_get_check(struct entropy_es *eb_es,
-				uint32_t requested_bits,
-				bool __unused allow_cached)
-{
-	mutex_w_lock(&esdm_jent_lock);
-	esdm_jent_get(&esdm_jent_state, eb_es, requested_bits);
-	mutex_w_unlock(&esdm_jent_lock);
-}
-
-static inline int esdm_jent_async_init(unsigned int osr, unsigned int flags)
-{
-	(void)osr;
-	(void)flags;
+			    "JitterRNG ES: %u collectors serve side by side\n",
+			    n);
 
 	return 0;
+
+err:
+	/* Undo what was allocated so it is not leaked */
+	esdm_jent_num_sync = i;
+	esdm_jent_sync_free();
+	return -EFAULT;
 }
 
-static inline void esdm_jent_async_fini(void)
+static void esdm_jent_get_check(struct entropy_es *eb_es,
+				uint32_t requested_bits)
 {
+	mutex_reader_lock(&esdm_jent_lock);
+	esdm_jent_sync_read(esdm_jent_sync_get(true), eb_es, requested_bits);
+	mutex_reader_unlock(&esdm_jent_lock);
 }
 
-#endif
-
-/*
- * Tear down the Jitter RNG ES. free_async selects whether the async cache and
- * its collector are freed too:
- *   - true  (.fini / shutdown): the ES manager has already joined the monitor
- *            thread, so freeing the lock-free-accessed async objects is safe.
- *   - false (reinit, from esdm_jent_initialize): the monitor and consumers may
- *            still run, so the async cache/collector are left allocated (reset
- *            in place by the subsequent esdm_jent_async_init) and only the
- *            synchronous collector - which is accessed solely under
- *            esdm_jent_lock - is freed here.
- */
-static void esdm_jent_finalize_internal(bool free_async)
+static void esdm_jent_finalize(void)
 {
 	if (!atomic_load(&esdm_jent_initialized))
 		return;
 
 	atomic_store(&esdm_jent_initialized, 0);
-	esdm_es_mgr_monitor_wakeup();
 
-	mutex_w_lock(&esdm_jent_lock);
-
-	if (free_async)
-		esdm_jent_async_fini();
-
-	jent_entropy_collector_free(esdm_jent_state);
-	esdm_jent_state = NULL;
-	mutex_w_unlock(&esdm_jent_lock);
-}
-
-static void esdm_jent_finalize(void)
-{
-	esdm_jent_finalize_internal(true);
+	mutex_lock(&esdm_jent_lock);
+	esdm_jent_sync_free();
+	mutex_unlock(&esdm_jent_lock);
 }
 
 /* The flags the Jitter RNG is operated with. */
@@ -559,60 +371,25 @@ static int esdm_jent_initialize(void)
 	int ret;
 
 	/* Allow the init function to be called multiple times. */
-	esdm_jent_finalize_internal(false);
+	esdm_jent_finalize();
 
 	/*
-	 * esdm_jent_lock is statically initialized (DEFINE_MUTEX_W_UNLOCKED)
-	 * and left unlocked by esdm_jent_finalize() above, so just acquire it.
+	 * esdm_jent_lock is statically initialized and left unlocked by
+	 * esdm_jent_finalize() above, so just acquire it.
 	 */
-	mutex_w_lock(&esdm_jent_lock);
+	mutex_lock(&esdm_jent_lock);
 
 	CKINT(jent_entropy_init_ex(ESDM_JENT_OSR, flags));
 
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-	/*
-	 * Remember whether the async cache/collector already existed before this
-	 * call. On the reinit path they do, and lock-free consumers/the monitor
-	 * may still be reading them, so the sync-collector failure handler below
-	 * must not free them (that would be a use-after-free). Only a first init
-	 * - where this call itself allocates them and no consumers exist yet -
-	 * may tear them down on error.
-	 */
-	bool async_was_alloced = esdm_jent_async_alloced;
-#endif
-
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
-	CKINT(esdm_jent_async_init(ESDM_JENT_OSR, flags));
-
-	esdm_jent_state = jent_entropy_collector_alloc(ESDM_JENT_OSR, flags);
-	if (!esdm_jent_state) {
-		/*
-		 * When the async cache is compiled out, esdm_jent_async_fini()
-		 * is a no-op stub, so the call is unconditional there; otherwise
-		 * only free what this call itself allocated (see above).
-		 */
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-		if (!async_was_alloced && esdm_jent_async_alloced)
-#endif
-			esdm_jent_async_fini();
-		ret = -EFAULT;
-		goto out;
-	}
+	CKINT(esdm_jent_sync_alloc(ESDM_JENT_OSR, flags));
 
 	atomic_store(&esdm_jent_initialized, 1);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG working on current system\n");
 
 out:
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-	/*
-	 * The blocks cached before a failed reinit carry entropy the Jitter
-	 * RNG is no longer credited with.
-	 */
-	if (ret && esdm_jent_async_alloced)
-		esdm_es_buf_reset(&esdm_jent_buf);
-#endif
-	mutex_w_unlock(&esdm_jent_lock);
+	mutex_unlock(&esdm_jent_lock);
 
 	if (ret) {
 		esdm_config_es_jent_entropy_rate_set(0);
@@ -642,7 +419,7 @@ static void esdm_jent_es_state(char *buf, size_t buflen)
 
 static bool esdm_jent_active(void)
 {
-	return (esdm_jent_state != NULL);
+	return !!atomic_load(&esdm_jent_initialized);
 }
 
 /*
@@ -653,6 +430,9 @@ static bool esdm_jent_active(void)
  */
 static int esdm_jent_selftest(void)
 {
+#if JENT_VERSION >= 3080000
+	unsigned int i;
+#endif
 	int ret;
 
 	if (!atomic_load(&esdm_jent_initialized)) {
@@ -668,40 +448,31 @@ static int esdm_jent_selftest(void)
 	 * it, and a self test landing in the middle of a reinitialization would
 	 * be two of these at once.
 	 */
-	mutex_w_lock(&esdm_jent_lock);
+	mutex_lock(&esdm_jent_lock);
 
 #if JENT_VERSION >= 3080000
 	/*
-	 * The known answer tests of the conditioning component, bound to the
-	 * synchronous collector: should they fail, it serves nothing until a
-	 * later run passes. Its every read is under esdm_jent_lock, which
-	 * keeps jent_read_entropy_safe() from replacing it meanwhile.
+	 * The conditioning KATs, bound to each collector: one failing serves
+	 * nothing until a later run passes. Reads hold esdm_jent_lock, so no
+	 * jent_read_entropy_safe() replaces a collector meanwhile.
 	 */
-	if (esdm_jent_state && jent_selftest(esdm_jent_state)) {
+	ret = 0;
+	for (i = 0; i < esdm_jent_num_sync; i++) {
+		if (jent_selftest(esdm_jent_sync[i].ec))
+			ret = EHASH;
+	}
+	if (ret) {
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_ES,
 			"JitterRNG ES: known answer tests of the conditioning component failed\n");
-		ret = EHASH;
 	} else {
 		ret = jent_entropy_init_ex(ESDM_JENT_OSR, esdm_jent_flags());
 	}
-
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-	atomic_fetch_add(&esdm_jent_selftest_runs, 1);
-
-	/*
-	 * What the cache holds was collected before this run - not to be
-	 * handed out after a failed one. Under the lock, which keeps
-	 * esdm_jent_finalize() from freeing the cache meanwhile.
-	 */
-	if (ret)
-		esdm_es_buf_reset(&esdm_jent_buf);
-#endif
 #else
 	ret = jent_entropy_init_ex(ESDM_JENT_OSR, esdm_jent_flags());
 #endif
 
-	mutex_w_unlock(&esdm_jent_lock);
+	mutex_unlock(&esdm_jent_lock);
 
 	if (ret) {
 		esdm_logger(
@@ -718,15 +489,8 @@ struct esdm_es_cb esdm_es_jent = {
 	.name = "JitterRNG",
 	.init = esdm_jent_initialize,
 	.fini = esdm_jent_finalize,
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-	.monitor_es = esdm_jent_async_monitor,
-#else
 	.monitor_es = NULL,
-#endif
 	.get_ent = esdm_jent_get_check,
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-	.get_cached = esdm_jent_get_cached,
-#endif
 	.curr_entropy = esdm_jent_entropylevel,
 	.max_entropy = esdm_jent_poolsize,
 	.state = esdm_jent_es_state,

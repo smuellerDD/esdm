@@ -110,7 +110,7 @@ static int es_sched_getdata(void)
 		memset(&eb_es, 0, sizeof(eb_es));
 		create_sched_entropy();
 		esdm_es[esdm_int_es_sched]->get_ent(
-			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 		if (eb_es.e_bits == 0) {
 			printf("ES Scheduler - pass: get_ent did not collect data\n");
 			if (memcmp(eb_es.e, zero,
