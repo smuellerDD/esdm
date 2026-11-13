@@ -27,6 +27,9 @@
 
         kernelDebug = false;
         kernelFips = true;
+        # The one kernel booted with fips=1, which takes an image rebuilt with
+        # the module certificates (see baseModule); nixpkgs tests that here.
+        fipsKernel = "latest";
         debugEsdm = false;
         startEsdm = false;
         startCompat = false;
@@ -34,6 +37,7 @@
         baseModule =
           {
             kernel,
+            fips,
             lib,
             config,
             pkgs,
@@ -46,10 +50,27 @@
               "jitterentropy_rng"
               "esdm_es"
             ];
-            boot.kernelParams = [
-              "fips=1"
-            ];
+            boot.kernelParams = lib.optional fips "fips=1";
             boot.extraModulePackages = [ config.boot.kernelPackages.esdm_es.out ];
+
+            # fips=1 loads only modules with a verified signature, and nixpkgs
+            # leaves their certificates to us: rebuild the image over the tree.
+            system.systemBuilderCommands = lib.mkIf fips (
+              let
+                target =
+                  if pkgs.stdenv.hostPlatform.isAarch64 then
+                    "vmlinuz.efi"
+                  else
+                    config.boot.kernelPackages.kernel.target;
+                finalKernel = config.boot.kernelPackages.rebuildImage {
+                  inherit target;
+                  inherit (config.system) modulesTree;
+                };
+              in
+              lib.mkAfter ''
+                ln -sf -- ${lib.escapeShellArg "${finalKernel}/${target}"} $out/kernel
+              ''
+            );
 
             users.motd = ''
                _____ ____  ____  __  __   _____ _____ ____ _____  __     ____  __
@@ -97,7 +118,11 @@
           nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
-              { _module.args.kernel = kernel; }
+              {
+                _module.args.kernel = kernel;
+                # Boots the stock image, without the module certificates
+                _module.args.fips = false;
+              }
               baseModule
               (
                 {
@@ -452,8 +477,9 @@
           });
 
         mkCheck =
-          kernel:
+          name: kernel:
           let
+            fips = name == fipsKernel;
             esdm-irq = esdmCreditingKernelEs "irq";
             esdm-sched = esdmCreditingKernelEs "sched";
           in
@@ -468,6 +494,7 @@
                     { ... }:
                     {
                       _module.args.kernel = kernel;
+                      _module.args.fips = fips;
                     }
                   )
                   baseModule
@@ -527,12 +554,13 @@
               machine.succeed("esdm-tool --is-fully-seeded")
               machine.succeed("esdm-tool --status")
 
-              # The VM boots with fips=1, which the hardening of the unit must
-              # leave visible to the server - it reports FIPS 140 then.
-              machine.succeed(
-                  "esdm-tool --status-json | "
-                  "jq -e '.standards_compliance | index(\"FIPS 140\")'"
-              )
+              ${lib.optionalString fips ''
+                # The unit hardening must leave fips=1 visible to the server
+                machine.succeed(
+                    "esdm-tool --status-json | "
+                    "jq -e '.standards_compliance | index(\"FIPS 140\")'"
+                )
+              ''}
 
               # Draw random data over the RPC interface; 32 bytes are printed
               # hex-encoded, so expect at least 64 characters back.
@@ -1221,7 +1249,7 @@
         #   nix run .#checks.x86_64-linux.live_6_18.driverInteractive
         #   nix flake check
         checks =
-          lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck kernel)) kernels
+          lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck name kernel)) kernels
           // lib.mapAttrs' (name: kernel: lib.nameValuePair "ebpf_${name}" (mkEbpfCheck kernel)) stockKernels
           // lib.mapAttrs' (
             name: kernel: lib.nameValuePair "cdev_${name}" (mkEsdmCdevCheck kernel)
@@ -1710,7 +1738,11 @@
                   { ... }:
                   {
                     imports = [
-                      { _module.args.kernel = kernel; }
+                      {
+                        _module.args.kernel = kernel;
+                        # On fipsKernel, which the coverage runs take
+                        _module.args.fips = true;
+                      }
                       baseModule
                       (
                         { ... }:
