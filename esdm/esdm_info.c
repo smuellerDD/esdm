@@ -132,8 +132,6 @@ esdm_drng_status_obj(const struct esdm_drng_stats *stats)
 			       json_object_new_boolean(stats->initiated));
 	json_object_object_add(obj, "force_reseed",
 			       json_object_new_boolean(stats->force_reseed));
-	json_object_object_add(obj, "reseed_pending",
-			       json_object_new_boolean(stats->reseed_pending));
 	json_object_object_add(
 		obj, "requests_until_reseed",
 		json_object_new_int64(stats->requests_until_reseed));

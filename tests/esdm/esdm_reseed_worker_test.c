@@ -209,62 +209,39 @@ static int rsd_shorten_check(void)
 }
 
 /*
- * A reseed interval of zero seconds is the request that every generate
- * operation reseeds first - which leaves the worker nothing to do ahead of
- * them, so it goes home until the interval grows again.
+ * A reseed interval of zero seconds has every generate operation reseed
+ * first: the worker stays on duty, and takes up an interval set afterwards.
  */
 static int rsd_zero_interval_check(void)
 {
-	uint64_t passes, next;
+	uint64_t passes;
 	unsigned int i;
 
 	esdm_set_reseed_max_time(0);
-
-	for (i = 0; i < ESDM_RSD_WAKE_SLICES; i++) {
-		if (!esdm_drng_mgr_reseed_worker_running())
-			break;
-		rsd_sleep_slice();
-	}
-
-	if (esdm_drng_mgr_reseed_worker_running()) {
-		printf("the reseed worker stayed on duty over %u slice(s) of a reseed interval of zero seconds\n",
-		       ESDM_RSD_WAKE_SLICES);
+	rsd_sleep_slice();
+	if (!esdm_drng_mgr_reseed_worker_running()) {
+		printf("the reseed worker left at a reseed interval of zero seconds\n");
 		return 1;
 	}
 
-	printf("the reseed worker left after %u slice(s) when the reseed interval became zero\n",
-	       i + 1);
-
-	/* And it left nothing scheduled behind it */
-	if (esdm_drng_mgr_reseed_worker_next_pass(&next)) {
-		printf("a pass is still scheduled in %" PRIu64
-		       " seconds with no worker on duty\n",
-		       next);
-		return 1;
-	}
-
-	/* The interval grows again - and a worker is back on it */
 	passes = esdm_drng_mgr_reseed_worker_passes();
 	esdm_set_reseed_max_time(ESDM_RSD_INTERVAL);
 
 	for (i = 0; i < ESDM_RSD_WAKE_SLICES; i++) {
-		if (esdm_drng_mgr_reseed_worker_running() &&
-		    esdm_drng_mgr_reseed_worker_passes() > passes)
+		if (esdm_drng_mgr_reseed_worker_passes() > passes)
 			break;
 		rsd_sleep_slice();
 	}
 
-	if (!esdm_drng_mgr_reseed_worker_running() ||
-	    esdm_drng_mgr_reseed_worker_passes() <= passes) {
-		printf("no reseed worker took up the interval of %u second(s) again, still at pass %" PRIu64
+	if (esdm_drng_mgr_reseed_worker_passes() <= passes) {
+		printf("the reseed worker did not take up the interval of %u second(s), still at pass %" PRIu64
 		       "\n",
 		       ESDM_RSD_INTERVAL, passes);
 		return 1;
 	}
 
-	printf("a reseed worker is back on duty after %u slice(s), at pass %" PRIu64
-	       "\n",
-	       i + 1, esdm_drng_mgr_reseed_worker_passes());
+	printf("the reseed worker took up the interval of %u second(s) after %u slice(s)\n",
+	       ESDM_RSD_INTERVAL, i + 1);
 
 	return 0;
 }
