@@ -1503,9 +1503,16 @@ static void reinit_conns_after_fork(
 	 * them is what is needed here: a mutex left locked by a thread of the
 	 * parent has no owner in this process at all, so there is nobody for
 	 * the robustness protocol to hand it over to.
+	 *
+	 * Only close() the sockets: the parent still uses them, and a
+	 * shutdown() would end its connections as well.
 	 */
 	for (i = 0; i < num_conn; ++i) {
-		reset_conn_socket(&rpc_conn_array[i]);
+		if (rpc_conn_array[i].fd >= 0)
+			close(rpc_conn_array[i].fd);
+		rpc_conn_array[i].fd = -1;
+		memset(&rpc_conn_array[i].last_used, 0,
+		       sizeof(rpc_conn_array[i].last_used));
 		mutex_w_destroy(&rpc_conn_array[i].ref_cnt);
 		mutex_w_destroy(&rpc_conn_array[i].lock);
 		mutex_w_init(&rpc_conn_array[i].ref_cnt, 0, 1);

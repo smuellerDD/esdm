@@ -80,10 +80,10 @@ if get_option('esdm-server').enabled()
 			link_with: [ esdm_common_static_lib, esdm_rpc_client_lib ]
 		)
 
-	# Runs unprivileged in namespaces of its own, against a server that
-	# never answers. Testmode only - its socket lives in /tmp, which the
-	# test replaces, while the production path would be the one of the
-	# machine's server.
+	# Unprivileged in namespaces of their own: the client against a server
+	# that never answers and one served from a test thread. Testmode only:
+	# its socket lives in /tmp, which the test replaces, while the
+	# production path is the machine's server.
 	if get_option('testmode').enabled()
 		rpc_client_robustness_test = executable(
 				'rpc_client_robustness_test',
@@ -95,6 +95,20 @@ if get_option('esdm-server').enabled()
 					     esdm_rpc_client_lib ]
 			)
 		test('RPC client robustness', rpc_client_robustness_test,
+			timeout: 120, suite: 'rpc_client')
+
+		rpc_server_robustness_test = executable(
+				'rpc_server_robustness_test',
+				[ files('../test_ipc_ns.c'),
+				  'rpc_server_robustness_test.c',
+				  service_rpc_src, server_rpc_src,
+				  egd_server_src, client_rpc_src ],
+				include_directories: [ include_dirs_server,
+						       include_dirs_client ],
+				dependencies: [ dependencies_server ],
+				link_with: esdm_static_lib
+			)
+		test('RPC server robustness', rpc_server_robustness_test,
 			timeout: 120, suite: 'rpc_client')
 	endif
 
