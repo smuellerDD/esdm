@@ -30,12 +30,12 @@ defaults:
 jobs:
   list:
     name: list outputs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       kernels: ${{ steps.list.outputs.kernels }}
       kernels-aarch64: ${{ steps.list.outputs.kernels-aarch64 }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -94,7 +94,7 @@ jobs:
 
   kernel:
     name: x86_64-linux / ${{ matrix.kernel }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: list
     # Builds the ESDM patched kernel from source before esdm_es.
     timeout-minutes: 300
@@ -116,7 +116,7 @@ jobs:
                       /usr/local/.ghcup /opt/hostedtoolcache /usr/share/swift
           df -h /
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -205,7 +205,7 @@ jobs:
                       /usr/local/.ghcup /opt/hostedtoolcache /usr/share/swift
           df -h /
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
         with:
