@@ -58,6 +58,7 @@
 #include "esdm_es_ext_proto.h"
 #include "esdm_es_pkcs11.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "memset_secure.h"
 
 /* Several tokens choke on large C_GenerateRandom requests */
@@ -280,7 +281,7 @@ static void esdm_es_pkcs11_reacquire(void)
 {
 	struct timespec now = { 0 };
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	clock_gettime(ESDM_CLOCK_COARSE, &now);
 	if (pkcs11.slot || now.tv_sec < pkcs11.retry_at)
 		return;
 	pkcs11.retry_at = now.tv_sec + ESDM_PKCS11_RETRY_INTERVAL_SEC;

@@ -30,7 +30,6 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
-#include <link.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -433,73 +432,6 @@ static void test_post_integrity_obj(void)
 	      "attesting the running object created an HMAC file");
 }
 
-struct loaded_name {
-	char *buf;
-	size_t len;
-};
-
-static int first_loaded_cb(struct dl_phdr_info *info, size_t size, void *data)
-{
-	struct loaded_name *name = data;
-	const char *base;
-
-	(void)size;
-
-	/* The main executable, and the vdso, which has no file behind it */
-	if (!info->dlpi_name || !strchr(info->dlpi_name, '/'))
-		return 0;
-
-	base = strrchr(info->dlpi_name, '/') + 1;
-	snprintf(name->buf, name->len, "%s", base);
-
-	return 1;
-}
-
-/* File name of one shared object loaded into this process, empty if none is */
-static void first_loaded_object(char *out, size_t outlen)
-{
-	struct loaded_name name = { .buf = out, .len = outlen };
-
-	out[0] = '\0';
-	dl_iterate_phdr(first_loaded_cb, &name);
-}
-
-static void test_post_integrity_loaded(void)
-{
-	char base[256];
-	int ret;
-
-	/* Without a name there is nothing to look for */
-	CHECK_EQ(fips_post_integrity_loaded(NULL), -EINVAL);
-	CHECK_EQ(fips_post_integrity_loaded(""), -EINVAL);
-
-	/* An object that is not loaded is not attested, and not an error */
-	CHECK_EQ(fips_post_integrity_loaded("libnothing-esdm-test.so"), 0);
-
-	first_loaded_object(base, sizeof(base));
-	if (!base[0])
-		return; /* a fully static build has none to look at */
-
-	/*
-	 * One that is loaded is picked up and attested. The libraries of the
-	 * system have no reference value next to them, so the attempt says so -
-	 * which is what tells "found it and could not attest it" apart from
-	 * "found nothing", the answer a broken lookup would give.
-	 */
-	ret = fips_post_integrity_loaded(base);
-	CHECK(ret == -ENOENT || ret > 0,
-	      "the loaded object %s was not picked up (%d)", base, ret);
-
-	/* The same object is found through a prefix of its name */
-	base[strlen(base) / 2] = '\0';
-	if (base[0]) {
-		ret = fips_post_integrity_loaded(base);
-		CHECK(ret == -ENOENT || ret > 0,
-		      "the prefix %s did not match the object it names (%d)",
-		      base, ret);
-	}
-}
-
 static void cleanup(void)
 {
 	unlink(hmacfile);
@@ -526,7 +458,6 @@ int main(int argc, char *argv[])
 	test_overlong_pathname();
 	test_post_integrity_self();
 	test_post_integrity_obj();
-	test_post_integrity_loaded();
 
 	ret = common_test_result("fips_integrity");
 	cleanup();

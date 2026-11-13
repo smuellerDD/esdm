@@ -78,6 +78,14 @@ The same, bounded by a timeout.
 .BI "ssize_t esdm_rpcc_get_random_bytes_pr(uint8_t *" buf ", size_t " buflen ");"
 Random data with prediction resistance.
 .TP
+.BI "ssize_t esdm_rpcc_get_random_bytes_full_noblock(uint8_t *" buf ", size_t " buflen ");"
+.TQ
+.BI "ssize_t esdm_rpcc_get_random_bytes_pr_noblock(uint8_t *" buf ", size_t " buflen ");"
+One request without waiting: what the ESDM can deliver now, possibly fewer
+bytes than requested, or
+.B \-EAGAIN
+when it is not fully seeded or has no fresh entropy.
+.TP
 .BI "ssize_t esdm_rpcc_get_seed(uint8_t *" buf ", size_t " buflen ", unsigned int " flags ");"
 Seed material taken directly from the entropy sources, for callers seeding a
 DRNG of their own.

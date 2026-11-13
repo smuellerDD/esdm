@@ -27,6 +27,9 @@
 
         kernelDebug = false;
         kernelFips = true;
+        # The one kernel booted with fips=1, which takes an image rebuilt with
+        # the module certificates (see baseModule); nixpkgs tests that here.
+        fipsKernel = "latest";
         debugEsdm = false;
         startEsdm = false;
         startCompat = false;
@@ -34,6 +37,7 @@
         baseModule =
           {
             kernel,
+            fips,
             lib,
             config,
             pkgs,
@@ -46,10 +50,27 @@
               "jitterentropy_rng"
               "esdm_es"
             ];
-            boot.kernelParams = [
-              "fips=1"
-            ];
+            boot.kernelParams = lib.optional fips "fips=1";
             boot.extraModulePackages = [ config.boot.kernelPackages.esdm_es.out ];
+
+            # fips=1 loads only modules with a verified signature, and nixpkgs
+            # leaves their certificates to us: rebuild the image over the tree.
+            system.systemBuilderCommands = lib.mkIf fips (
+              let
+                target =
+                  if pkgs.stdenv.hostPlatform.isAarch64 then
+                    "vmlinuz.efi"
+                  else
+                    config.boot.kernelPackages.kernel.target;
+                finalKernel = config.boot.kernelPackages.rebuildImage {
+                  inherit target;
+                  inherit (config.system) modulesTree;
+                };
+              in
+              lib.mkAfter ''
+                ln -sf -- ${lib.escapeShellArg "${finalKernel}/${target}"} $out/kernel
+              ''
+            );
 
             users.motd = ''
                _____ ____  ____  __  __   _____ _____ ____ _____  __     ____  __
@@ -97,7 +118,11 @@
           nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
-              { _module.args.kernel = kernel; }
+              {
+                _module.args.kernel = kernel;
+                # Boots the stock image, without the module certificates
+                _module.args.fips = false;
+              }
               baseModule
               (
                 {
@@ -242,7 +267,7 @@
               # The programs have to load and attach on the stock kernel ...
               for source in ["SchedulerEBPF", "InterruptEBPF"]:
                   machine.wait_until_succeeds(
-                      f"${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A6 'Name: {source}' "
+                      f"${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A6 '^ {source} (ID' "
                       "| grep -q 'eBPF programs loaded: true'", 60
                   )
 
@@ -251,7 +276,7 @@
               # trickling in. Only the scheduler source is credited - the
               # interrupt source is built with an entropy rate of 0.
               machine.wait_until_succeeds(
-                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 'Name: SchedulerEBPF' "
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 '^ SchedulerEBPF (ID' "
                   "| grep -qE 'Available entropy: [1-9][0-9][0-9]'", 60
               )
 
@@ -261,14 +286,14 @@
               # oversampling surcharge, so capping at the digest alone would
               # clip the surcharge and leave it stuck below.
               machine.wait_until_succeeds(
-                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 'Name: SchedulerEBPF' "
+                  "${esdm-ebpf}/bin/esdm-tool -s 2>&1 | grep -A2 '^ SchedulerEBPF (ID' "
                   "| grep -q 'Available entropy: 512'", 60
               )
 
               def avail():
                   return int(machine.succeed(
                       "${esdm-ebpf}/bin/esdm-tool -s 2>&1 "
-                      "| grep -A2 'Name: SchedulerEBPF' "
+                      "| grep -A2 '^ SchedulerEBPF (ID' "
                       "| sed -n 's/.*Available entropy: //p'"
                   ))
 
@@ -332,7 +357,7 @@
         # analysis scripts drive the NIST SP800-90B non-IID estimator over them.
         # This tests the measurement tooling, NOT a validation grade assessment
         # - a claim must be measured on the deployment environment, which a qemu
-        # VM is not (see addon/es_ebpf_testing/README.md), so nothing is
+        # VM is not (see tests/es_ebpf_testing/README.md), so nothing is
         # asserted about the magnitude. Single kernel on purpose: the estimator
         # dominates the run time and nothing here is kernel specific.
         mkEbpfRawCheck =
@@ -348,7 +373,7 @@
             # The example scripts live next to the collector and are what this
             # check drives - the pipeline is only worth testing as the tooling
             # a user would actually run.
-            tools = lib.cleanSource ./addon/es_ebpf_testing;
+            tools = lib.cleanSource ./tests/es_ebpf_testing;
 
             # Deltas to collect from the one CPU this assesses - the CPUs are
             # separate noise sources, so a collection is never split across
@@ -452,8 +477,9 @@
           });
 
         mkCheck =
-          kernel:
+          name: kernel:
           let
+            fips = name == fipsKernel;
             esdm-irq = esdmCreditingKernelEs "irq";
             esdm-sched = esdmCreditingKernelEs "sched";
           in
@@ -468,6 +494,7 @@
                     { ... }:
                     {
                       _module.args.kernel = kernel;
+                      _module.args.fips = fips;
                     }
                   )
                   baseModule
@@ -526,6 +553,14 @@
               machine.succeed("esdm-tool --wait-until-seeded 60")
               machine.succeed("esdm-tool --is-fully-seeded")
               machine.succeed("esdm-tool --status")
+
+              ${lib.optionalString fips ''
+                # The unit hardening must leave fips=1 visible to the server
+                machine.succeed(
+                    "esdm-tool --status-json | "
+                    "jq -e '.standards_compliance | index(\"FIPS 140\")'"
+                )
+              ''}
 
               # Draw random data over the RPC interface; 32 bytes are printed
               # hex-encoded, so expect at least 64 characters back.
@@ -1053,7 +1088,7 @@
                   print(machine.succeed("cat /tmp/loop.log"))
                   machine.succeed("grep -q 'errors=0' /tmp/loop.log")
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
                   machine.succeed("${check} proc")
 
@@ -1070,7 +1105,7 @@
                   machine.succeed("pkill -f 'esdm-cdev-check [b]lock'")
                   machine.wait_until_fails("pgrep -f 'esdm-cdev-check [b]lock'", 30)
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
 
               with subtest("the ESDM unreachable: nothing served from elsewhere"):
@@ -1090,7 +1125,7 @@
               with subtest("the ESDM comes back"):
                   machine.succeed(f"systemctl start {esdm_units}")
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
                   machine.succeed("${check} reads")
                   machine.succeed("${check} ioctl-priv")
@@ -1126,7 +1161,7 @@
                   manual_esdm_stop()
                   machine.succeed(f"systemctl start {esdm_units}")
                   machine.wait_until_succeeds(
-                      "grep -q 'ESDM library version' /proc/esdm/status", 60
+                      "grep -q '^Library version' /proc/esdm/status", 60
                   )
 
               # The module against the fake EGD server of esdm-cdev-check, for
@@ -1214,7 +1249,7 @@
         #   nix run .#checks.x86_64-linux.live_6_18.driverInteractive
         #   nix flake check
         checks =
-          lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck kernel)) kernels
+          lib.mapAttrs' (name: kernel: lib.nameValuePair "live_${name}" (mkCheck name kernel)) kernels
           // lib.mapAttrs' (name: kernel: lib.nameValuePair "ebpf_${name}" (mkEbpfCheck kernel)) stockKernels
           // lib.mapAttrs' (
             name: kernel: lib.nameValuePair "cdev_${name}" (mkEsdmCdevCheck kernel)
@@ -1374,14 +1409,13 @@
 
                 # Turn the .gcda files into the report. gcovr is driven directly
                 # rather than through meson's coverage-html target, which offers
-                # no way to pass excludes: the tests themselves, the out-of-tree
-                # add-ons, esdm-tool's stress drivers and the generated libbpf
-                # skeletons all stay out of the report.
+                # no way to pass excludes: the tests and test helpers, esdm-tool's
+                # stress drivers and the generated libbpf skeletons all stay out
+                # of the report.
                 mkdir -p meson-logs/coveragereport
                 gcovr \
                   --root .. \
                   --exclude '.*/tests/.*' \
-                  --exclude '.*/addon/.*' \
                   --exclude '.*/frontends/tool/stress_.*' \
                   --exclude '.*\.skel\.h' \
                   --exclude-unreachable-branches \
@@ -1645,7 +1679,6 @@
                     --gcov-executable '${pkgs.stdenv.cc.cc}/bin/gcov' \
                     --root "$work/source" \
                     --exclude '.*/tests/.*' \
-                    --exclude '.*/addon/.*' \
                     --exclude '.*/frontends/tool/stress_.*' \
                     --exclude '.*\.skel\.h' \
                     --exclude-unreachable-branches \
@@ -1705,7 +1738,11 @@
                   { ... }:
                   {
                     imports = [
-                      { _module.args.kernel = kernel; }
+                      {
+                        _module.args.kernel = kernel;
+                        # On fipsKernel, which the coverage runs take
+                        _module.args.fips = true;
+                      }
                       baseModule
                       (
                         { ... }:
@@ -1727,9 +1764,8 @@
                             # A software TPM, so the TPM 2.0 entropy source has
                             # a /dev/tpmrm0 to talk to. Without one its test
                             # only covers what the source does when the device
-                            # is absent, and the command exchange, the response
-                            # parsing and the block cache in front of it stay
-                            # unreached in the report.
+                            # is absent, and the command exchange and the
+                            # response parsing stay unreached in the report.
                             tpm.enable = true;
                             # meson runs the suite in parallel, and several
                             # tests spend their time waiting for entropy rather
@@ -1815,6 +1851,52 @@
             };
           });
 
+          # json-c 0.19 with NDEBUG frees no non-empty object or array (the
+          # free sits inside assert()), leaking every status document. Fixed
+          # upstream after 0.19; drop the patch with the next release.
+          json_c = pkgs.json_c.overrideAttrs (prev: {
+            patches =
+              (prev.patches or [ ])
+              ++ lib.optional (prev.version == "0.19") (
+                pkgs.fetchpatch {
+                  name = "json-c-free-objects-outside-assert.patch";
+                  url = "https://github.com/json-c/json-c/commit/f291fa81c6f21d925ea771a8cca597f5886309cc.patch";
+                  hash = "sha256-ZffSw1pfEfOH2ylRpJShdx7sTQR2nmPM/JIj/26UrDM=";
+                }
+              );
+          });
+
+          # leancrypto, not in nixpkgs, built as the CI builds it. The patch
+          # (not upstream yet) keeps lc_free() from passing memfd_secret memory
+          # to free() after an EMFILE cleared the process-wide flag.
+          leancrypto = withFipsHmac (
+            pkgs.stdenv.mkDerivation (finalAttrs: {
+              pname = "leancrypto";
+              version = "1.8.0";
+              src = pkgs.fetchFromGitHub {
+                owner = "smuellerDD";
+                repo = "leancrypto";
+                tag = "v${finalAttrs.version}";
+                hash = "sha256-76qzK2gDFqfIT2CJkHHmVYcM/bPCQsjUaW8kxqiK9nM=";
+              };
+              patches = [ ./nix/leancrypto-memfd-secret-free.patch ];
+              # The header generation and checks the build runs
+              postPatch = ''
+                patchShebangs addon
+              '';
+              nativeBuildInputs = [
+                pkgs.meson
+                pkgs.ninja
+                pkgs.pkg-config
+              ];
+              mesonBuildType = "release";
+              mesonFlags = [
+                "-Dtests=disabled"
+                "-Dapps=disabled"
+              ];
+            })
+          );
+
           # this currently defaults to the botan crypto backend
           esdm =
             (pkgs.esdm.override {
@@ -1836,17 +1918,19 @@
               (prev: {
                 buildInputs = prev.buildInputs ++ [
                   pkgs.libp11
-                  pkgs.json_c
+                  self.packages.${system}.json_c
                 ];
                 mesonFlags =
                   # nixpkgs still knows the combined 'ais2031' option, which
                   # this tree split into 'ais2031_ntg1' and 'ais2031_drg4';
-                  # drop the flag it passes and set the successors below.
+                  # drop the flag it passes and set the successors below. Nor
+                  # does this tree buffer the Jitter RNG any more.
                   (builtins.filter (
                     x:
                     (!lib.hasInfix "max_threads" x)
                     && (!lib.hasInfix "term-on-signal" x)
                     && (!lib.hasInfix "ais2031" x)
+                    && (!lib.hasInfix "es_jent_entropy_blocks" x)
                   ) prev.mesonFlags)
                   ++ lib.optionals debugEsdm [
                     "-Db_sanitize=address,undefined"
@@ -1928,6 +2012,19 @@
           # enough, es_jent_ntg1 makes a 3.7.0+ jitter RNG NTG.1 conformant on
           # its own (the jitterentropy pinned above is 3.7.1) and one source
           # then suffices.
+          # The ESDM with the leancrypto crypto backend in place of Botan
+          esdm-leancrypto = self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-leancrypto";
+            buildInputs =
+              builtins.filter (p: (p.pname or "") != "botan") prev.buildInputs
+              ++ [ self.packages.${system}.leancrypto ];
+            mesonFlags =
+              (builtins.filter (
+                x: (!lib.hasInfix "crypto_backend" x) && (!lib.hasInfix "botan_drng_type" x)
+              ) prev.mesonFlags)
+              ++ [ "-Dcrypto_backend=leancrypto" ];
+          });
+
           esdm-ais2031 = self.packages.${system}.esdm.overrideAttrs (prev: {
             mesonFlags =
               (builtins.filter (x: !lib.hasInfix "ais2031" x) prev.mesonFlags)
@@ -1935,6 +2032,13 @@
                 "-Dais2031_ntg1=true"
                 "-Dais2031_drg4=true"
               ];
+          });
+
+          # The ESDM to AIS 20/31 3.0 (2024) DRG.3: the oversampling without
+          # the reseeding limits that fips140 caps in the package above.
+          esdm-drg3 = self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-drg3";
+            mesonFlags = prev.mesonFlags ++ [ "-Dais2031_drg3=true" ];
           });
 
 
@@ -2266,7 +2370,7 @@
           lib.nameValuePair "esdm_es_${name}" (
             pkgs.callPackage ./kernel/esdm_es {
               inherit (pkgs) lib;
-              inherit (kernel) kernel;
+              inherit (kernel) kernel kernelModuleMakeFlags;
               enableTesting = true;
               werror = true;
             }
@@ -2280,7 +2384,7 @@
           lib.nameValuePair "esdm_cdev_${name}" (
             pkgs.callPackage ./kernel/esdm_cdev {
               inherit (pkgs) lib;
-              inherit (kernel) kernel;
+              inherit (kernel) kernel kernelModuleMakeFlags;
               werror = true;
             }
           )
@@ -2303,7 +2407,8 @@
               self.packages.${system}.botan3
               fuse3
               gnutls
-              json_c
+              self.packages.${system}.json_c
+              self.packages.${system}.leancrypto
               libbpf
               libkcapi
               libselinux
@@ -2323,6 +2428,8 @@
               bpftop
               bpftools
               bpftrace
+              # clangd, clang-format, clang-tidy; same LLVM as clang above
+              clang-tools
               sp800-90b-entropyassessment
             ];
           };

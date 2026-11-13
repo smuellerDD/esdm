@@ -22,32 +22,30 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "config.h"
 #include "esdm_config.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "test_pertubation.h"
+#include "../es_state_check.h"
 
 static int es_cpu_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_ext_es_cpu]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_ext_es_cpu]->state) {
-		printf("ES CPU - fail: state callback missing\n");
-		return 1;
+	if (!es_state_member(state, "available_entropy", json_type_int) ||
+	    !es_state_member(state, "data_multiplier", json_type_int)) {
+		printf("ES CPU - fail: state information contains unexpected content: %s\n",
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES CPU - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
 
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_ext_es_cpu]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Hash for compressing data") ||
-	    !strstr(buf, "Available entropy") ||
-	    !strstr(buf, "Data multiplier")) {
-		printf("ES CPU: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
-	}
-	printf("ES CPU - pass: state information found:\n%s\n", buf);
-
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_cpu_getdata(uint32_t expected_ent_level)
@@ -64,8 +62,7 @@ static int es_cpu_getdata(uint32_t expected_ent_level)
 
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(&zero, 0, sizeof(zero));
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(expected_ent_level,
 					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
@@ -133,20 +130,19 @@ static int es_cpu_poolsize(uint32_t expected_ent_level)
 }
 
 /*
- * The state string is written with snprintf into whatever the caller offers,
- * and the JSON status document hands it a share of a fixed buffer. Check that a
- * buffer too small for the full text is truncated rather than run over, and
- * that what is written stays a NUL terminated string.
+ * The status document hands the state a share of a fixed buffer. Check that a
+ * state too large for it is not run over, and that it leaves an empty string -
+ * half a JSON object is none.
  */
 static int es_cpu_getstate_truncated(void)
 {
-	char buf[sizeof(" Hash for compressing data: ") + 8];
+	char buf[sizeof("{\"available_entropy\":") + 16];
 	char canary[16];
 
 	memset(buf, 0x5a, sizeof(buf));
 	memset(canary, 0x5a, sizeof(canary));
 
-	esdm_es[esdm_ext_es_cpu]->state(buf, sizeof(buf) - sizeof(canary));
+	esdm_es[esdm_ext_es_cpu]->state_json(buf, sizeof(buf) - sizeof(canary));
 
 	if (memcmp(buf + sizeof(buf) - sizeof(canary), canary,
 		   sizeof(canary))) {
@@ -154,12 +150,12 @@ static int es_cpu_getstate_truncated(void)
 		return 1;
 	}
 
-	if (buf[sizeof(buf) - sizeof(canary) - 1] != '\0') {
-		printf("ES CPU - fail: state did not terminate the truncated string\n");
+	if (buf[0] != '\0') {
+		printf("ES CPU - fail: state left part of an object behind\n");
 		return 1;
 	}
 
-	printf("ES CPU - pass: state truncates into a short buffer: %s\n", buf);
+	printf("ES CPU - pass: state too large for the buffer leaves none\n");
 
 	return 0;
 }
@@ -179,10 +175,9 @@ static int es_cpu_getdata_differs(void)
 	memset(&first, 0, sizeof(first));
 	memset(&second, 0, sizeof(second));
 
-	esdm_es[esdm_ext_es_cpu]->get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&first, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	esdm_es[esdm_ext_es_cpu]->get_ent(&second,
-					  ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+					  ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	if (!memcmp(first.e, second.e, ESDM_DRNG_INIT_SEED_SIZE_BYTES)) {
 		printf("ES CPU - fail: two successive pulls delivered identical data\n");
@@ -209,7 +204,7 @@ static int es_cpu_getdata_partial(void)
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(zero, 0, sizeof(zero));
 
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, requested, true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, requested);
 
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(ESDM_DRNG_SECURITY_STRENGTH_BITS,
@@ -314,11 +309,50 @@ static bool es_cpu_data_available(void)
 	 */
 	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
 
-	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS,
-					  true);
+	esdm_es[esdm_ext_es_cpu]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	return eb_es.e_bits > 0;
 }
+
+#ifdef ESDM_TESTMODE
+/*
+ * A CPU RNG that stalls fails no self test: it is credited with nothing until
+ * a read works again.
+ */
+static int es_cpu_stalled(void)
+{
+	struct esdm_es_cb *es = esdm_es[esdm_ext_es_cpu];
+	struct entropy_es eb_es;
+	int ret = 0;
+
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	esdm_test_cpu_fail_reads(1);
+	if (es->selftest() ||
+	    es->curr_entropy(ESDM_DRNG_SECURITY_STRENGTH_BITS)) {
+		printf("ES CPU - fail: a stalled CPU RNG failed the self test or stayed credited\n");
+		ret = 1;
+	}
+
+	memset(&eb_es, 0, sizeof(eb_es));
+	es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (!eb_es.e_bits ||
+	    !es->curr_entropy(ESDM_DRNG_SECURITY_STRENGTH_BITS)) {
+		printf("ES CPU - fail: not credited after the CPU RNG delivered again\n");
+		ret = 1;
+	}
+	memset(&eb_es, 0, sizeof(eb_es));
+
+	if (!ret)
+		printf("ES CPU - pass: a stalled CPU RNG is a read failure\n");
+
+	return ret;
+}
+#else
+static int es_cpu_stalled(void)
+{
+	return 0;
+}
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -356,6 +390,7 @@ int main(int argc, char *argv[])
 	ret += es_cpu_getdata_partial();
 	ret += es_cpu_getstate();
 	ret += es_cpu_getstate_truncated();
+	ret += es_cpu_stalled();
 
 	return ret;
 }

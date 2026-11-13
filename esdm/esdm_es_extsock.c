@@ -39,6 +39,10 @@
  *
  * Connecting and probing are left to the ES monitor: a seeding holds the DRNG
  * lock, and asks a credited connection only.
+ *
+ * A provider is audited and trusted: the status it reports is shown as it is,
+ * not sanitized. The connection to it has to be robust nevertheless - a slow,
+ * hung or misbehaving provider must not stall or crash the ESDM.
  */
 
 #define _GNU_SOURCE
@@ -51,13 +55,13 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "build_bug_on.h"
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
-#include "esdm_es_buf.h"
 #include "esdm_es_ext_json.h"
 #include "esdm_es_extsock.h"
 #include "esdm_es_mgr.h"
@@ -66,6 +70,7 @@
 #include "memset_secure.h"
 #include "mutex.h"
 #include "visibility.h"
+#include "esdm_ppoll.h"
 
 #define EXTSOCK_NAME "ExternalSocket"
 #define EXTSOCK_NSEC 1000000000ULL
@@ -110,10 +115,11 @@ static struct {
 	/* Not to log the same failure to connect on every attempt */
 	enum extsock_event last_logged;
 
-	/* The status of the provider, NULL for none, and when it was asked */
+	/* The status of the provider, NULL for none */
 	struct json_object *status;
-	uint64_t status_at;
 	bool status_warned;
+	/* Monotonic ns: the next STATUS after one not answered */
+	uint64_t status_at;
 
 	/* The last message received and its decoding, wiped after use */
 	uint8_t msg[ESDM_ES_EXT_PROTO_MSG_MAX];
@@ -123,12 +129,6 @@ static struct {
 	atomic_bool configured;
 	atomic_bool credited;
 	atomic_uint published_rate;
-
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	/* Filled by the ES monitor: a slow provider holds up no reseed */
-	struct esdm_es_buf buf;
-	bool buf_alloced;
-#endif
 } extsock = {
 	.mutex = MUTEX_UNLOCKED,
 	.peer_uid = ESDM_EXT_PEER_UID,
@@ -190,17 +190,25 @@ static uint32_t extsock_level(bool credited, uint32_t declared,
 		       0;
 }
 
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-/* The rate of the provider as published, see esdm_es_buf_alloc() */
-static uint32_t extsock_buf_rate(void)
-{
-	return extsock_rate(atomic_load(&extsock.published_rate), NULL);
-}
-#endif
-
 static void extsock_lock(void)
 {
 	mutex_lock(&extsock.mutex);
+}
+
+/* The mutex within ESDM_EXT_TIMEOUT_MS: 0, or an errno */
+static int extsock_lock_timed(void)
+{
+	struct timespec ts;
+
+	if (clock_gettime(CLOCK_REALTIME, &ts))
+		return errno;
+	ts.tv_sec += ESDM_EXT_TIMEOUT_MS / 1000;
+	ts.tv_nsec += (long)(ESDM_EXT_TIMEOUT_MS % 1000) * 1000000;
+	if (ts.tv_nsec >= (long)EXTSOCK_NSEC) {
+		ts.tv_sec++;
+		ts.tv_nsec -= (long)EXTSOCK_NSEC;
+	}
+	return pthread_rwlock_timedwrlock(&extsock.mutex, &ts);
 }
 
 /* Release the mutex, publishing the state read without it */
@@ -224,7 +232,6 @@ static void extsock_disconnect(void)
 	atomic_store(&extsock.credited, false);
 	json_object_put(extsock.status);
 	extsock.status = NULL;
-	extsock.status_at = 0;
 }
 
 /*
@@ -253,12 +260,15 @@ static ssize_t extsock_recv(uint64_t deadline)
 {
 	for (;;) {
 		struct pollfd pfd = { .fd = extsock.fd, .events = POLLIN };
-		uint64_t now = esdm_monotonic_now_ns();
+		uint64_t now = esdm_monotonic_wait_ns();
+		struct timespec ts;
 		ssize_t n;
 
 		if (now >= deadline)
 			return -ETIMEDOUT;
-		n = poll(&pfd, 1, (int)((deadline - now + 999999) / 1000000));
+		ts.tv_sec = (time_t)((deadline - now) / EXTSOCK_NSEC);
+		ts.tv_nsec = (long)((deadline - now) % EXTSOCK_NSEC);
+		n = ppoll(&pfd, 1, &ts, NULL);
 		if (n < 0 && errno != EINTR)
 			return -errno;
 		if (n <= 0)
@@ -291,7 +301,7 @@ static int extsock_call(uint16_t type, uint32_t length, unsigned int timeout_ms)
 	/* One request at a time: it fits the socket buffer */
 	n = send(extsock.fd, req, reqlen, MSG_DONTWAIT | MSG_NOSIGNAL);
 	if (reqlen && n == (ssize_t)reqlen)
-		n = extsock_recv(esdm_monotonic_now_ns() +
+		n = extsock_recv(esdm_monotonic_wait_ns() +
 				 (uint64_t)timeout_ms * 1000000);
 	else
 		n = n < 0 ? -errno : -EIO;
@@ -307,19 +317,7 @@ static int extsock_call(uint16_t type, uint32_t length, unsigned int timeout_ms)
 	return 0;
 }
 
-/* The blocks collected before are not to be served any more */
-static void extsock_es_reset(void)
-{
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock.buf_alloced)
-		esdm_es_buf_reset(&extsock.buf);
-#endif
-}
-
-/*
- * 0 if the provider passed, -EFAULT otherwise. A failure discards the blocks
- * cached: they were made just before it.
- */
+/* 0 if the provider passed, -EFAULT otherwise */
 static int extsock_selftest_locked(void)
 {
 	int32_t status;
@@ -336,7 +334,6 @@ static int extsock_selftest_locked(void)
 	if (status) {
 		extsock_log(LOGGER_ERR, "self test failed: %s\n",
 			    strerror(-status));
-		extsock_es_reset();
 		return -EFAULT;
 	}
 	return 0;
@@ -374,6 +371,8 @@ static int extsock_info(void)
 	}
 	return 0;
 }
+
+static void extsock_status_refresh(void);
 
 /* Connect to the provider, ask it what it declares and test it */
 static bool extsock_connect(void)
@@ -441,7 +440,7 @@ err:
 
 /*
  * Is the connection there? Nothing is to be read on an idle one, so whatever
- * poll(2) reports is its end - a provider restarted, or making room for
+ * ppoll(2) reports is its end - a provider restarted, or making room for
  * another client: it is made again at once, the next request not lost on it.
  */
 static bool extsock_alive(void)
@@ -450,7 +449,7 @@ static bool extsock_alive(void)
 
 	if (extsock.fd < 0)
 		return false;
-	if (poll(&pfd, 1, 0) <= 0)
+	if (esdm_ppoll_ms(&pfd, 1, 0) <= 0)
 		return true;
 
 	extsock_log(LOGGER_VERBOSE, "connection closed by the provider\n");
@@ -479,7 +478,7 @@ static bool extsock_ensure(void)
 static void extsock_reset_locked(void)
 {
 	extsock_disconnect();
-	extsock.retry_at = extsock.probe_at = 0;
+	extsock.retry_at = extsock.probe_at = extsock.status_at = 0;
 	extsock.last_logged = EXTSOCK_LOGGED_NONE;
 	extsock.was_connected = false;
 	extsock.read_failed = extsock.selftest_failed = false;
@@ -489,26 +488,14 @@ static void extsock_reset_locked(void)
 	extsock.status_warned = false;
 }
 
-/* The cap of the cache, see esdm_es_buf_alloc() */
-static uint32_t extsock_entropylevel(uint32_t requested_bits);
-
 static int extsock_init(void)
 {
 	extsock_lock();
 	extsock_reset_locked();
 	/* A provider not there yet is connected to by the ES monitor */
-	if (extsock_path()[0])
-		extsock_connect();
+	if (extsock_path()[0] && extsock_connect())
+		extsock_status_refresh();
 	extsock_unlock();
-
-	extsock_es_reset();
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (!extsock.buf_alloced &&
-	    !esdm_es_buf_alloc(&extsock.buf, ESDM_EXT_ENTROPY_BLOCKS,
-			       EXTSOCK_NAME, extsock_buf_rate,
-			       extsock_entropylevel))
-		extsock.buf_alloced = true;
-#endif
 
 	return 0;
 }
@@ -518,13 +505,6 @@ static void extsock_fini(void)
 	extsock_lock();
 	extsock_reset_locked();
 	extsock_unlock();
-
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock.buf_alloced) {
-		esdm_es_buf_free(&extsock.buf);
-		extsock.buf_alloced = false;
-	}
-#endif
 }
 
 /* As published: a request in progress is not waited for */
@@ -558,7 +538,13 @@ static void extsock_get(struct entropy_es *eb_es, uint32_t requested_bits)
 	if (!len || len > sizeof(eb_es->e) || !atomic_load(&extsock.credited))
 		return;
 
-	extsock_lock();
+	/*
+	 * The seeding holds a seed lock: not waiting longer than a request may
+	 * take behind a reconnect, a self test or other seedings. Nothing
+	 * failed then, no entropy for this one.
+	 */
+	if (extsock_lock_timed())
+		return;
 	if (!extsock_alive() || !extsock_credited())
 		goto out;
 
@@ -586,49 +572,9 @@ out:
 	extsock_unlock();
 }
 
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-
-static void extsock_buf_fill(struct entropy_es *eb_es, uint32_t requested_bits,
-			     void *ctx)
-{
-	(void)ctx;
-	extsock_get(eb_es, requested_bits);
-}
-
-/*
- * A block of the cache only, see struct esdm_es_cb.get_cached - none while the
- * provider is not credited. A block without entropy from a source credited at
- * a rate is a miss: one of a failed request, or claimed with nothing.
- */
-static bool extsock_get_cached(struct entropy_es *eb_es,
-			       uint32_t requested_bits)
-{
-	if (!extsock.buf_alloced || !atomic_load(&extsock.credited))
-		return false;
-
-	return esdm_es_buf_try_get(&extsock.buf, eb_es, requested_bits,
-				   !!extsock_entropylevel(requested_bits));
-}
-
-#endif
-
-static void extsock_get_ent(struct entropy_es *eb_es, uint32_t requested_bits,
-			    bool allow_cached)
-{
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (allow_cached && extsock_get_cached(eb_es, requested_bits))
-		return;
-#else
-	(void)allow_cached;
-#endif
-	extsock_get(eb_es, requested_bits);
-}
-
 /*
  * The monitor connects to the provider, and probes a failing one with data it
- * discards. It fills the block cache from a credited one, starting no request
- * after one timeout: a slow provider is not to hold up the pass of every
- * source, nor a reinitialization waiting for it.
+ * discards.
  */
 static int extsock_monitor(void)
 {
@@ -645,44 +591,39 @@ static int extsock_monitor(void)
 		}
 		memset_secure(&extsock.rsp, 0, sizeof(extsock.rsp));
 	}
+	/* Here rather than by whoever renders the ESDM status, see there */
+	extsock_status_refresh();
 	extsock_unlock();
 
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	if (extsock.buf_alloced && atomic_load(&extsock.credited))
-		esdm_es_buf_monitor_until(
-			&extsock.buf, esdm_get_seed_entropy_osr(false, true),
-			extsock_buf_fill, NULL,
-			esdm_monotonic_now_ns() +
-				ESDM_EXT_TIMEOUT_MS * 1000000ULL);
-#endif
 	return 0;
 }
 
+/* Not asked for its status after a STATUS not answered */
+#define EXTSOCK_STATUS_BACKOFF_SEC 60
+
 /*
- * Ask the provider connected to for its status, at most every
- * ESDM_EXT_STATUS_INTERVAL_SEC: a seeding waits meanwhile, and whoever asks
- * for the ESDM status is not to make the seedings wait at will. No connection
- * is made for it.
+ * Ask the provider connected to for its status, on every monitor round - the
+ * ESDM status shows the last answer, so whoever asks for it does not make the
+ * seedings wait. No connection is made for it. A provider too slow for it
+ * keeps delivering entropy, without a status for a while.
  */
 static void extsock_status_refresh(void)
 {
-	uint64_t now = esdm_monotonic_now_ns();
 	int32_t status;
 
-	if (extsock.status_at &&
-	    now - extsock.status_at <
-		    ESDM_EXT_STATUS_INTERVAL_SEC * EXTSOCK_NSEC)
-		return;
 	json_object_put(extsock.status);
 	extsock.status = NULL;
-	extsock.status_at = now;
 
-	if (!extsock_alive())
+	if (!extsock_alive() || esdm_monotonic_now_ns() < extsock.status_at)
 		return;
 	if (extsock_call(ESDM_ES_EXT_PROTO_STATUS, ESDM_ES_EXT_PROTO_STATUS_MAX,
 			 ESDM_EXT_STATUS_TIMEOUT_MS)) {
-		extsock_log(LOGGER_WARN,
-			    "no valid answer to STATUS, disconnected\n");
+		extsock.status_at = esdm_monotonic_now_ns() +
+				    EXTSOCK_STATUS_BACKOFF_SEC * EXTSOCK_NSEC;
+		extsock_log(
+			LOGGER_WARN,
+			"no valid answer to STATUS, disconnected, not asked again for %u seconds\n",
+			EXTSOCK_STATUS_BACKOFF_SEC);
 		return;
 	}
 	status = extsock.rsp.status;
@@ -718,8 +659,6 @@ struct extsock_state {
 /* Caller holds the mutex, which keeps what @st points to */
 static void extsock_state_locked(struct extsock_state *st)
 {
-	extsock_status_refresh();
-
 	st->poolsize = extsock_level(extsock_credited(), extsock.rate,
 				     esdm_security_strength());
 	st->entropy_rate = extsock_level(extsock_credited(), extsock.rate, 256);
@@ -742,41 +681,9 @@ static void extsock_state_locked(struct extsock_state *st)
 		snprintf(st->accepted, sizeof(st->accepted), "root");
 }
 
-static void extsock_es_state(char *buf, size_t buflen)
-{
-	struct extsock_state st;
-	size_t len;
-
-	extsock_lock();
-	extsock_state_locked(&st);
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n"
-		 " Assessed rate: %u\n"
-		 " Assessed rate source: %s\n"
-		 "%s%s%s"
-		 " Provider socket: %s\n"
-		 " Provider accepted: %s\n"
-		 " Status: %s\n",
-		 st.poolsize, st.entropy_rate, st.rate, st.rate_source,
-		 extsock.name[0] ? " Declared name: " : "", extsock.name,
-		 extsock.name[0] ? "\n" : "", st.path, st.accepted, st.status);
-
-	/* JSON escapes the control characters of the status */
-	len = strlen(buf);
-	if (extsock.status)
-		snprintf(buf + len, buflen - len, " Provider status: %s\n",
-			 json_object_to_json_string_ext(
-				 extsock.status,
-				 JSON_C_TO_STRING_PLAIN |
-					 JSON_C_TO_STRING_NOSLASHESCAPE));
-	extsock_unlock();
-}
-
 /*
- * The members of the text above, but for the name declared: it replaces
- * "name", the ES table name kept as "instance" - see esdm_es_mgr_cb.h - and
- * the status of the provider is the object "provider".
+ * The provider's declared name replaces "name", the ES table name is kept as
+ * "instance", and the provider's status is the object "provider".
  */
 static void extsock_es_state_json(char *buf, size_t buflen)
 {
@@ -790,7 +697,33 @@ static void extsock_es_state_json(char *buf, size_t buflen)
 		return;
 	}
 
-	extsock_lock();
+	/*
+	 * Not waiting for the mutex, held across each provider request for up
+	 * to ESDM_EXT_TIMEOUT_MS: the single EGD worker and the RPC workers
+	 * render the status, and their other clients would wait as long. During
+	 * a request, the state published at the last release stands in.
+	 */
+	if (mutex_trylock(&extsock.mutex)) {
+		bool credited = atomic_load(&extsock.credited);
+		uint32_t rate = atomic_load(&extsock.published_rate);
+
+		json_object_object_add(obj, "name",
+				       json_object_new_string(EXTSOCK_NAME));
+		json_object_object_add(obj, "instance",
+				       json_object_new_string(EXTSOCK_NAME));
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(extsock_level(
+				credited, rate, esdm_security_strength())));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(extsock_level(credited, rate, 256)));
+		json_object_object_add(
+			obj, "status",
+			json_object_new_string("busy with a request"));
+		esdm_es_state_write(obj, buf, buflen);
+		return;
+	}
 	extsock_state_locked(&st);
 	json_object_object_add(obj, "name",
 			       json_object_new_string(extsock.name[0] ?
@@ -862,15 +795,11 @@ int esdm_es_ext_set_path(const char *path)
 	if (path[0] && !(copy = strdup(path)))
 		return -ENOMEM;
 
-	/* Nor is what the provider of the old path delivered served */
-	esdm_es_mgr_monitor_pause();
 	extsock_lock();
 	free(extsock.path);
 	extsock.path = copy;
 	extsock_reset_locked();
 	extsock_unlock();
-	extsock_es_reset();
-	esdm_es_mgr_monitor_resume();
 	return 0;
 }
 
@@ -892,15 +821,11 @@ struct esdm_es_cb esdm_es_extsock = {
 	.init = extsock_init,
 	.fini = extsock_fini,
 	.monitor_es = extsock_monitor,
-	.get_ent = extsock_get_ent,
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	.get_cached = extsock_get_cached,
-#endif
+	.get_ent = extsock_get,
 	.curr_entropy = extsock_entropylevel,
 	.max_entropy = extsock_poolsize,
-	.state = extsock_es_state,
 	.state_json = extsock_es_state_json,
-	.reset = extsock_es_reset,
+	.reset = NULL,
 	.active = extsock_active,
 	.selftest = extsock_selftest,
 };

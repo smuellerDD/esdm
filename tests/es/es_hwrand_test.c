@@ -28,14 +28,21 @@
  * derefs, crashes, malformed state strings and max/curr_entropy divergence.
  */
 
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_hwrand.h"
 #include "esdm_es_mgr.h"
+#include "helper.h"
+#include "../es_state_check.h"
 
 #define ES_IDX esdm_ext_es_hwrand
 #define ES_NAME "hwrand"
@@ -54,21 +61,21 @@ static int es_hwrand_name(void)
 
 static int es_hwrand_state(void)
 {
-	char buf[512];
+	struct json_object *state = es_state_get(esdm_es[ES_IDX]);
+	int ret = 0;
 
-	/* state is optional; nothing to check if absent */
-	if (!esdm_es[ES_IDX]->state)
-		return 0;
-
-	memset(buf, 0, sizeof(buf));
-	esdm_es[ES_IDX]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Available entropy")) {
-		printf("ES %s - fail: state string malformed: %s\n", ES_NAME,
-		       buf);
-		return 1;
+	if (!es_state_member(state, "available_entropy", json_type_int)) {
+		printf("ES " ES_NAME
+		       " - fail: state information contains unexpected content: %s\n",
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES " ES_NAME " - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
-	printf("ES %s - pass: state:\n%s\n", ES_NAME, buf);
-	return 0;
+
+	json_object_put(state);
+	return ret;
 }
 
 static int es_hwrand_poolsize(void)
@@ -103,7 +110,7 @@ static int es_hwrand_getdata(void)
 		return 0;
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	/*
 	 * With no device present, get_ent must gracefully return 0 credited
@@ -119,6 +126,101 @@ static int es_hwrand_getdata(void)
 	       eb_es.e_bits, eb_es.e_bits ? "present" : "absent");
 	return 0;
 }
+
+#ifdef ESDM_TESTMODE
+/*
+ * A device blocking for good (a FIFO nobody writes) costs a seeding the read
+ * timeout once: the source then fails, claims nothing and is skipped until an
+ * ES monitor probe finds data again.
+ */
+static int es_hwrand_stalled(void)
+{
+	const struct esdm_es_cb *es = esdm_es[ES_IDX];
+	char dir[] = "/tmp/esdm-hwrand-test-XXXXXX", path[sizeof(dir) + 8];
+	struct entropy_es eb_es;
+	uint8_t data[96];
+	uint64_t start, ms;
+	unsigned int i;
+	int ret = 0, wfd;
+
+	for (i = 0; i < sizeof(data); i++)
+		data[i] = (uint8_t)(i + 1);
+
+	if (!mkdtemp(dir)) {
+		printf("ES %s - fail: no directory for the FIFO\n", ES_NAME);
+		return 1;
+	}
+	snprintf(path, sizeof(path), "%s/fifo", dir);
+	if (mkfifo(path, 0600) ||
+	    (wfd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC)) < 0) {
+		printf("ES %s - fail: no FIFO\n", ES_NAME);
+		rmdir(dir);
+		return 1;
+	}
+
+	esdm_config_es_hwrand_entropy_rate_set(
+		ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	esdm_hwrand_test_set_path(path);
+	es->init();
+	if (!es->active() || !es->max_entropy()) {
+		printf("ES %s - fail: FIFO not taken as the device\n", ES_NAME);
+		ret++;
+		goto out;
+	}
+
+	memset(&eb_es, 0, sizeof(eb_es));
+	start = esdm_monotonic_now_ns();
+	es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	ms = (esdm_monotonic_now_ns() - start) / 1000000;
+	if (eb_es.e_bits || ms > 4000 || es->max_entropy() || !es->selftest()) {
+		printf("ES %s - fail: stalled device: %u bits in %llu ms, %u bits claimed after\n",
+		       ES_NAME, eb_es.e_bits, (unsigned long long)ms,
+		       es->max_entropy());
+		ret++;
+	}
+
+	/* Failed, the device is not read for a seeding */
+	start = esdm_monotonic_now_ns();
+	es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	ms = (esdm_monotonic_now_ns() - start) / 1000000;
+	if (eb_es.e_bits || ms > 200) {
+		printf("ES %s - fail: failed device read again: %u bits in %llu ms\n",
+		       ES_NAME, eb_es.e_bits, (unsigned long long)ms);
+		ret++;
+	}
+
+	/*
+	 * The monitor probe finds data and a seeding gets it again. The timed
+	 * out read, retrying until its deadline, takes the first 32 bytes if
+	 * they arrive before it gives up; they reach nobody.
+	 */
+	if (write(wfd, data, sizeof(data)) != sizeof(data))
+		ret++;
+	usleep(100000);
+	es->monitor_es();
+	memset(&eb_es, 0, sizeof(eb_es));
+	es->get_ent(&eb_es, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (eb_es.e_bits != ESDM_DRNG_SECURITY_STRENGTH_BITS ||
+	    (memcmp(eb_es.e, data + 32, 32) &&
+	     memcmp(eb_es.e, data + 64, 32))) {
+		printf("ES %s - fail: recovered device delivered %u bits\n",
+		       ES_NAME, eb_es.e_bits);
+		ret++;
+	}
+
+	if (!ret)
+		printf("ES %s - pass: stalled device bounded, skipped and recovered\n",
+		       ES_NAME);
+
+out:
+	es->fini();
+	esdm_hwrand_test_set_path(NULL);
+	close(wfd);
+	unlink(path);
+	rmdir(dir);
+	return ret;
+}
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -140,6 +242,10 @@ int main(int argc, char *argv[])
 
 	if (esdm_es[ES_IDX]->fini)
 		esdm_es[ES_IDX]->fini();
+
+#ifdef ESDM_TESTMODE
+	ret += es_hwrand_stalled();
+#endif
 
 	return ret;
 }

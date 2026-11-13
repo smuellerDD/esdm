@@ -41,11 +41,9 @@
  * The auxiliary pool, which every build has, plays that source here.
  */
 static void esdm_get_seed_failing_get_ent(struct entropy_es *eb_es,
-					  uint32_t requested_bits,
-					  bool allow_cached)
+					  uint32_t requested_bits)
 {
 	(void)requested_bits;
-	(void)allow_cached;
 
 	eb_es->e_bits = 0;
 }
@@ -53,8 +51,8 @@ static void esdm_get_seed_failing_get_ent(struct entropy_es *eb_es,
 static int esdm_get_seed_failed_source_test(uint64_t *buf, size_t buflen)
 {
 	struct esdm_es_cb *es = esdm_es[esdm_ext_es_aux];
-	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits,
-			bool allow_cached) = es->get_ent;
+	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits) =
+		es->get_ent;
 	struct entropy_buf *eb = (struct entropy_buf *)(buf + 2);
 	struct entropy_es pattern;
 	ssize_t rc;

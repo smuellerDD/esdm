@@ -32,6 +32,8 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <json-c/json.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -51,19 +53,96 @@ static char test_dir[] = "/tmp/esdm-es-ext-server-test-XXXXXX";
 static char test_socket[sizeof(test_dir) + 32];
 static char *test_envp[TEST_ENV_MAX_VARS + 1];
 
-/* The section of the text status about the source, NULL for none */
-static const char *test_es(void)
+static bool test_str_is(struct json_object *obj, const char *key,
+			const char *expected)
+{
+	struct json_object *val;
+
+	return json_object_object_get_ex(obj, key, &val) &&
+	       json_object_is_type(val, json_type_string) &&
+	       !strcmp(json_object_get_string(val), expected);
+}
+
+/*
+ * The entry of the source in the JSON status, NULL for none. The JSON rather
+ * than the text, whose labels and nesting follow the member names.
+ */
+static struct json_object *test_es(void)
 {
 	static char status[65536];
+	struct json_object *doc, *sources, *es = NULL;
+	size_t i, n = 0;
+
+	memset(status, 0, sizeof(status));
+	if (esdm_rpcc_status_json(status, sizeof(status)))
+		return NULL;
+
+	doc = json_tokener_parse(status);
+	if (json_object_object_get_ex(doc, "entropy_sources", &sources) &&
+	    json_object_is_type(sources, json_type_array))
+		n = json_object_array_length(sources);
+	for (i = 0; i < n && !es; i++) {
+		struct json_object *src = json_object_array_get_idx(sources, i);
+
+		if (test_str_is(src, "instance", "ExternalSocket"))
+			es = json_object_get(src);
+	}
+	json_object_put(doc);
+	return es;
+}
+
+static bool test_connected(struct json_object *es)
+{
+	return test_str_is(es, "status", "connected (uid 0)");
+}
+
+/* Connected, with the name and the status the test provider declares */
+static bool test_shown(struct json_object *es)
+{
+	struct json_object *provider, *server, *plugin;
+	struct json_object *expected = json_tokener_parse(ES_EXT_TEST_STATUS);
+	bool ret;
+
+	ret = test_connected(es) && test_str_is(es, "name", "es-ext-test") &&
+	      json_object_object_get_ex(es, "provider", &provider) &&
+	      json_object_object_get_ex(provider, "server", &server) &&
+	      json_object_is_type(server, json_type_object) &&
+	      json_object_object_get_ex(provider, "plugin", &plugin) &&
+	      json_object_equal(plugin, expected);
+	json_object_put(expected);
+	return ret;
+}
+
+static bool test_not_connected(struct json_object *es)
+{
+	return test_str_is(es, "status", "not connected");
+}
+
+/*
+ * The entry of the source once @done accepts it, else the last one seen after
+ * TEST_START_SEC: the daemon has to come up, and a busy source says only that.
+ */
+static struct json_object *test_es_until(bool (*done)(struct json_object *))
+{
+	struct json_object *es = NULL;
 	unsigned int i;
 
 	for (i = 0; i < TEST_START_SEC * 10; i++) {
-		memset(status, 0, sizeof(status));
-		if (!esdm_rpcc_status(status, sizeof(status)))
-			return strstr(status, "\n Name: ExternalSocket\n");
+		json_object_put(es);
+		es = test_es();
+		if (es && done(es))
+			break;
 		es_ext_test_sleep_ms(100);
 	}
-	return NULL;
+	return es;
+}
+
+static const char *test_es_print(struct json_object *es)
+{
+	return es ? json_object_to_json_string_ext(
+			    es, JSON_C_TO_STRING_PLAIN |
+					JSON_C_TO_STRING_NOSLASHESCAPE) :
+		    "";
 }
 
 static void test_server(const char *server, const char *serve)
@@ -71,8 +150,8 @@ static void test_server(const char *server, const char *serve)
 	char *const argv[] = { (char *)server, "-f", "--es_ext", test_socket,
 			       NULL };
 	static uint8_t seed[8192];
+	struct json_object *es;
 	pid_t provider, pid;
-	const char *es;
 
 	provider = es_ext_test_serve(serve, test_socket, NULL, NULL);
 	CHECK(provider > 0, "the provider did not come up");
@@ -81,30 +160,31 @@ static void test_server(const char *server, const char *serve)
 	if (pid <= 0)
 		goto out;
 
-	es = test_es();
-	CHECK(es && strstr(es, " Status: connected (uid 0)\n") &&
-		      strstr(es, " Declared name: es-ext-test\n") &&
-		      strstr(es, "\n Provider status: {\"server\":{") &&
-		      strstr(es, "\"plugin\":" ES_EXT_TEST_STATUS "}\n"),
-	      "the provider is not connected and shown (%.800s)", es ? es : "");
+	es = test_es_until(test_shown);
+	CHECK(es && test_shown(es),
+	      "the provider is not connected and shown (%.800s)",
+	      test_es_print(es));
+	json_object_put(es);
 
 	es_ext_test_terminate(provider);
 	CHECK(esdm_rpcc_get_seed(seed, sizeof(seed), 0) > 0,
 	      "no seed with the provider gone");
 	es_ext_test_sleep_ms(TEST_INTERVAL_MS);
-	es = test_es();
-	CHECK(es && strstr(es, " Status: not connected\n"),
-	      "a provider gone is still connected (%.400s)", es ? es : "");
+	es = test_es_until(test_not_connected);
+	CHECK(es && test_not_connected(es),
+	      "a provider gone is still connected (%.400s)", test_es_print(es));
+	json_object_put(es);
 
 	provider = es_ext_test_serve(serve, test_socket, NULL, NULL);
 	CHECK(provider > 0, "the provider did not come up again");
 	es_ext_test_sleep_ms(TEST_INTERVAL_MS);
 	CHECK(esdm_rpcc_get_seed(seed, sizeof(seed), 0) > 0,
 	      "no seed with the provider back");
-	es = test_es();
-	CHECK(es && strstr(es, " Status: connected (uid 0)\n"),
+	es = test_es_until(test_connected);
+	CHECK(es && test_connected(es),
 	      "the provider back was not connected to again (%.400s)",
-	      es ? es : "");
+	      test_es_print(es));
+	json_object_put(es);
 
 	es_ext_test_terminate(pid);
 out:

@@ -41,13 +41,24 @@ int esdm_xdrbg_alloc(struct esdm_xdrbg *xdrbg)
 	return xdrbg->xof_cb->xof_alloc(&xdrbg->xof);
 }
 
-void esdm_xdrbg_zero(struct esdm_xdrbg *xdrbg)
+static void esdm_xdrbg_zero_state(struct esdm_xdrbg *xdrbg)
 {
-	/* What the context absorbed is wiped as it is initialized again */
 	xdrbg->initially_seeded = false;
 	xdrbg->seed_initialized = false;
 	xdrbg->inserted = false;
 	memset_secure(xdrbg->v, 0, sizeof(xdrbg->v));
+}
+
+void esdm_xdrbg_zero(struct esdm_xdrbg *xdrbg)
+{
+	esdm_xdrbg_zero_state(xdrbg);
+
+	/*
+	 * Initializing the context wipes what it absorbed (V, inserted data)
+	 * now, as the next seed may never come. A failure is ignored.
+	 */
+	if (xdrbg->xof)
+		(void)xdrbg->xof_cb->xof_init(xdrbg->xof);
 }
 
 void esdm_xdrbg_zero_free(struct esdm_xdrbg *xdrbg)
@@ -88,8 +99,8 @@ int esdm_xdrbg_seed_init(struct esdm_xdrbg *xdrbg)
 	if (!xdrbg->xof)
 		return -EOPNOTSUPP;
 
-	/* A new instantiation */
-	esdm_xdrbg_zero(xdrbg);
+	/* A new instantiation, its context initialized - and wiped - below */
+	esdm_xdrbg_zero_state(xdrbg);
 	CKINT(esdm_xdrbg_ctx_init(xdrbg));
 	xdrbg->seed_initialized = true;
 

@@ -83,17 +83,16 @@ would otherwise keep retrying to enable it.
 .BR \-s ", " \-\-force_schedes
 The same for the scheduler entropy source.
 .TP
-.B \-\-jent_block_disable
-Disable the asynchronous block collection of the Jitter RNG entropy source.
-.TP
 .BR \-\-es_jent_instances " \fIN\fR"
-Refill the block buffer of the Jitter RNG entropy source with
+Collect from the Jitter RNG entropy source with
 .I N
-collectors, 1 to 64, each in a thread of its own, instead of the number the
-build was configured with (meson option
+collectors side by side, 1 to 64, instead of the number the build was
+configured with (meson option
 .BR es_jent_instances ,
-1 by default). The buffer refills about as many times faster as there are CPUs
-for the collectors, at the memory of one collector each.
+by default 4 in a build reseeding often \- sp80090c, fips140, ais2031_drg4 \-
+and 1 otherwise): as many collectors serve the seedings of the DRNGs.
+The seedings scale with the CPUs there are for the collectors, at the memory
+of one collector each.
 .TP
 .BR \-S ", " \-\-syslog
 Log to syslog instead of standard output and standard error.
@@ -216,8 +215,8 @@ The status of the provider, a JSON object of up to 1024 bytes, is shown as
 .B Provider status
 line of
 .BR "esdm\-tool \-\-status" .
-It is asked for at most every 5 seconds, holding the source for up to half a
-second; a provider answering later is disconnected.
+It is asked for on every round of the entropy source monitor, holding the
+source for up to half a second; a provider answering later is disconnected.
 .SH SIGNALS
 .TP
 .BR SIGTERM ", " SIGINT ", " SIGQUIT ", " SIGHUP

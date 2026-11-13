@@ -148,26 +148,6 @@ if get_option('es_irq').enabled() or get_option('es_sched').enabled()
 	     timeout: 120)
 endif
 
-# The interrupt and the scheduler source compiled into the test, which fills
-# their block cache by hand - see the file header. No kernel support needed.
-foreach es_reset : [ [ 'es_irq', 'interrupt', [] ],
-		     [ 'es_sched', 'scheduler', [ '-DTEST_ES_SCHED' ] ] ]
-	if get_option(es_reset[0]).enabled()
-		es_reset_tester = executable(
-			es_reset[0] + '_cache_reset_tester',
-			[ 'es_kernel_cache_reset_test.c' ],
-			c_args: es_reset[2],
-			include_directories: [ include_dirs_server,
-					       include_directories('../common') ],
-			dependencies: dependencies_server,
-			link_with: esdm_static_lib,
-		)
-
-		test('ES ' + es_reset[1] + ' cache reset', es_reset_tester,
-		     suite: 'es')
-	endif
-endforeach
-
 # The following hardware/service-backed sources may be absent on the test
 # machine; their tests are structural / graceful-absence checks (see the file
 # headers) and pass whether or not the device is present.
@@ -183,6 +163,21 @@ if get_option('es_hwrand').enabled()
 	test('ES Linux HW Random', es_hwrand_tester, suite: 'es')
 endif
 
+# The bounded device read of both: a device blocking for good costs a caller
+# its deadline once.
+if get_option('es_hwrand').enabled() or get_option('es_tpm2').enabled()
+	es_reader_tester = executable(
+		'es_reader_tester',
+		[ 'es_reader_test.c' ],
+		dependencies: dependencies_server,
+		include_directories: [ include_dirs_server,
+				       include_directories('../common') ],
+		link_with: esdm_static_lib,
+	)
+
+	test('ES bounded device read', es_reader_tester, suite: 'es')
+endif
+
 if get_option('es_tpm2').enabled()
 	es_tpm2_tester = executable(
 		'es_tpm2_tester',
@@ -192,9 +187,8 @@ if get_option('es_tpm2').enabled()
 		link_with: esdm_static_lib,
 	)
 
-	# With a TPM behind it the test drives the device itself, including a
-	# full fill of the block cache - one command exchange per block, and a
-	# software TPM in an emulated machine is not quick about them.
+	# With a TPM behind it the test drives the device itself, and a software
+	# TPM in an emulated machine is not quick about it.
 	test('ES TPM 2.0', es_tpm2_tester, timeout: 120, suite: 'es')
 endif
 
@@ -238,6 +232,17 @@ if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
 
 	test('ES eBPF conditioning pool', es_ebpf_pool_tester, suite: 'es')
 endif
+
+# The health tests of the eBPF programs on known sequences: plain C, so built
+# whether the eBPF sources are or not.
+es_ebpf_health_seq_tester = executable(
+	'es_ebpf_health_seq_tester',
+	[ 'es_ebpf_health_seq_test.c' ],
+	include_directories: [ include_dirs_server,
+			       include_directories('../common') ],
+)
+
+test('ES eBPF health test sequences', es_ebpf_health_seq_tester, suite: 'es')
 
 if get_option('es_sched_ebpf').enabled() or get_option('es_irq_ebpf').enabled()
 	es_ebpf_health_tester = executable(

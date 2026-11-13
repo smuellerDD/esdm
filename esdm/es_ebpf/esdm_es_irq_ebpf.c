@@ -28,6 +28,7 @@
  */
 
 #include <errno.h>
+#include <json-c/json.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -276,8 +277,7 @@ static uint32_t esdm_irq_ebpf_poolsize(void)
 	return ent;
 }
 
-static void esdm_irq_ebpf_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			      bool __unused unused)
+static void esdm_irq_ebpf_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	mutex_lock(&irq_ebpf_mutex);
 	esdm_ebpf_get_ent(&esdm_irq_ebpf_es, eb_es, requested_bits);
@@ -291,22 +291,39 @@ static void esdm_irq_ebpf_reset(void)
 	mutex_unlock(&irq_ebpf_mutex);
 }
 
-static void esdm_irq_ebpf_es_state(char *buf, size_t buflen)
+static void esdm_irq_ebpf_es_state_json(char *buf, size_t buflen)
 {
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n"
-		 " Oversampling Rate: %u\n"
-		 " Standards compliance: %s\n"
-		 " eBPF programs loaded: %s\n"
-		 " Health test failures: %llu%s\n",
-		 esdm_irq_ebpf_entropylevel(0),
-		 esdm_config_es_irq_ebpf_entropy_rate(),
-		 esdm_ebpf_osr(&esdm_irq_ebpf_es),
-		 esdm_irq_ebpf_es.health_enabled ? "SP800-90B" : "",
-		 esdm_irq_ebpf_es.loaded ? "true" : "false",
-		 (unsigned long long)esdm_irq_ebpf_es.health_failures,
-		 esdm_irq_ebpf_es.perm_failure ? " (permanent failure)" : "");
+	struct json_object *obj = json_object_new_object();
+
+	if (obj) {
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_irq_ebpf_entropylevel(0)));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(
+				esdm_config_es_irq_ebpf_entropy_rate()));
+		json_object_object_add(obj, "oversampling_rate",
+				       json_object_new_int64(esdm_ebpf_osr(
+					       &esdm_irq_ebpf_es)));
+		json_object_object_add(
+			obj, "standards_compliance",
+			json_object_new_string(esdm_irq_ebpf_es.health_enabled ?
+						       "SP800-90B" :
+						       ""));
+		json_object_object_add(
+			obj, "ebpf_programs_loaded",
+			json_object_new_boolean(esdm_irq_ebpf_es.loaded));
+		json_object_object_add(
+			obj, "health_test_failures",
+			json_object_new_int64(
+				(int64_t)esdm_irq_ebpf_es.health_failures));
+		json_object_object_add(
+			obj, "permanent_failure",
+			json_object_new_boolean(esdm_irq_ebpf_es.perm_failure));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_irq_ebpf_active(void)
@@ -350,7 +367,7 @@ struct esdm_es_cb esdm_es_irq_ebpf = {
 	.get_ent = esdm_irq_ebpf_get,
 	.curr_entropy = esdm_irq_ebpf_entropylevel,
 	.max_entropy = esdm_irq_ebpf_poolsize,
-	.state = esdm_irq_ebpf_es_state,
+	.state_json = esdm_irq_ebpf_es_state_json,
 	.reset = esdm_irq_ebpf_reset,
 	.active = esdm_irq_ebpf_active,
 	.selftest = esdm_irq_ebpf_selftest,

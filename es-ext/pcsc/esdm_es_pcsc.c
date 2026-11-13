@@ -130,6 +130,13 @@ static int pcsc_failed(struct pcsc_ctx *c, const char *what, LONG rv)
 	pcsc_error(c, LOGGER_VERBOSE, "%s failed: %s", what,
 		   pcsc_stringify_error(rv));
 
+	/*
+	 * Another program's transaction: the card stays connected, as pcscd
+	 * lets a new connection wait for its end without limit
+	 */
+	if (rv == SCARD_E_SHARING_VIOLATION)
+		return -EBUSY;
+
 	if (rv == SCARD_E_NO_SERVICE || rv == SCARD_E_SERVICE_STOPPED ||
 	    rv == SCARD_E_INVALID_HANDLE)
 		pcsc_release(c);
@@ -262,19 +269,15 @@ static int pcsc_challenge(struct pcsc_ctx *c, uint8_t *buf, size_t len)
 }
 
 /*
- * Fill @buf of @buflen bytes from the card connected, within one transaction
- * so that no other program's command comes in between
+ * Fill @buf of @buflen bytes from the card connected. No transaction: every
+ * GET CHALLENGE stands on its own, and SCardBeginTransaction() waits without
+ * limit for one of another program, which pcscd protects from our commands.
  */
 static int pcsc_transact(struct pcsc_ctx *c, uint8_t *buf, size_t buflen)
 {
 	uint64_t start = esdm_monotonic_now_ns();
 	size_t done = 0;
-	LONG rv;
 	int ret = 0;
-
-	rv = SCardBeginTransaction(c->card);
-	if (rv != SCARD_S_SUCCESS)
-		return pcsc_failed(c, "SCardBeginTransaction", rv);
 
 	while (done < buflen) {
 		size_t chunk = buflen - done;
@@ -295,9 +298,6 @@ static int pcsc_transact(struct pcsc_ctx *c, uint8_t *buf, size_t buflen)
 		}
 	}
 
-	/* The connection may be gone with a failure above already */
-	if (c->connected)
-		SCardEndTransaction(c->card, SCARD_LEAVE_CARD);
 	return ret;
 }
 
@@ -358,6 +358,13 @@ static int pcsc_init(void **ctx)
 		free(c);
 		return -EINVAL;
 	}
+
+	/*
+	 * Read by libpcsclite with its first context: SCardTransmit() and
+	 * SCardStatus() fail during another program's transaction rather than
+	 * retry until it ends
+	 */
+	setenv("PCSCLITE_NO_BLOCKING", "1", 0);
 
 	/* No card yet is no failure: it is looked for on every request */
 	(void)pcsc_connect(c);

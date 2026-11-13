@@ -7,10 +7,10 @@ on:
     branches: [ "master" ]
 
 env:
-  JITTERENTROPY_VERSION: "3.7.0"
-  # Ubuntu 24.04 only ships Botan 2, while ESDM requires botan-3 >= 3.2, and it
-  # does not package leancrypto at all - both are therefore built from source
-  # and cached.
+  # Jitter RNG tag or branch for every job but the jitterentropy one
+  JENT_REF: refs/tags/v3.7.0
+  # Not every tested Ubuntu ships botan-3 >= 3.2, none packages leancrypto:
+  # both are built from source and cached, one version on every runner.
   BOTAN_VERSION: "3.12.0"
   LEANCRYPTO_VERSION: "1.8.0"
   # The GnuTLS backend drives GnuTLS' SP800-90A CTR DRBG through
@@ -24,7 +24,7 @@ env:
   # alone does not identify the artefact: without this a recipe change silently
   # keeps restoring the previously built - and now wrong - prefix from cache.
   BOTAN_BUILD_REV: "2"
-  LEANCRYPTO_BUILD_REV: "1"
+  LEANCRYPTO_BUILD_REV: "2"
   GNUTLS_BUILD_REV: "2"
   # One prefix and one cache per dependency. They must not share a cache key:
   # a botan job populates only Botan, so a leancrypto job restoring the same
@@ -44,9 +44,9 @@ jobs:
       # first one - the configurations are independent of each other.
       fail-fast: false
       matrix:
-        # ubuntu-24.04-arm is the native arm64 runner, so the arm64 leg is a
-        # real build and test run rather than an emulated one.
-        runner: [ ubuntu-24.04, ubuntu-24.04-arm ]
+        # Three Ubuntu LTS releases; the -arm runners are native, not emulated
+        runner: [ ubuntu-22.04, ubuntu-22.04-arm, ubuntu-24.04,
+                  ubuntu-24.04-arm, ubuntu-26.04, ubuntu-26.04-arm ]
         # Every crypto backend, including the DRNG variants the backends offer.
         # The variants matter: they select different code paths behind #ifdef
         # and are not covered by building the backend's default alone.
@@ -77,7 +77,27 @@ jobs:
               -Des_ext=disabled -Desdm-es-ext=disabled
         # esdm-es-pkcs11 and esdm-es-pcsc, on x86_64 only
         include:
+          # The meson defaults: no reseed caps, one Jitter RNG collector.
+          # The later -Dfips140 of the opts overrides the setup's.
+          - runner: ubuntu-26.04
+            backend:
+              name: builtin-uncapped
+              opts: -Dcrypto_backend=builtin -Dfips140=false
+          - runner: ubuntu-22.04
+            backend:
+              name: openssl-es-ext
+              opts: >-
+                -Dcrypto_backend=openssl
+                -Des_pkcs11=enabled
+                -Des_pcsc=enabled
           - runner: ubuntu-24.04
+            backend:
+              name: openssl-es-ext
+              opts: >-
+                -Dcrypto_backend=openssl
+                -Des_pkcs11=enabled
+                -Des_pcsc=enabled
+          - runner: ubuntu-26.04
             backend:
               name: openssl-es-ext
               opts: >-
@@ -86,7 +106,7 @@ jobs:
                 -Des_pcsc=enabled
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install build dependencies
       run: |
@@ -109,11 +129,15 @@ jobs:
 
     - name: Install Jitter RNG
       run: |
-        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v${JITTERENTROPY_VERSION}.tar.gz
-        tar xfz jent.tar.gz
-        make -C jitterentropy-library-${JITTERENTROPY_VERSION}
-        sudo make -C jitterentropy-library-${JITTERENTROPY_VERSION} install
+        # Over the image's own copy (26.04 ships 3.6.3): the header and the
+        # library linked and loaded must all be this one.
+        wget -O jent.tar.gz "https://github.com/smuellerDD/jitterentropy-library/archive/${JENT_REF}.tar.gz"
+        mkdir jent
+        tar xfz jent.tar.gz -C jent --strip-components=1
+        make -C jent
+        sudo make -C jent install PREFIX=/usr LIBDIR="lib/$(gcc -print-multiarch)"
         sudo ldconfig
+        grep -E 'define JENT_(MAJ|MIN|PATCH)VERSION' /usr/include/jitterentropy.h
 
     # restore/save are split rather than using actions/cache: the combined
     # action saves in its post step even when the job failed, which would
@@ -122,7 +146,7 @@ jobs:
     - name: Restore Botan
       if: startsWith(matrix.backend.name, 'botan')
       id: botan-cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ${{ env.BOTAN_PREFIX }}
         key: ${{ matrix.runner }}-botan-${{ env.BOTAN_VERSION }}-r${{ env.BOTAN_BUILD_REV }}
@@ -152,7 +176,7 @@ jobs:
     - name: Save Botan
       if: startsWith(matrix.backend.name, 'botan') && steps.botan-cache.outputs.cache-hit != 'true'
       continue-on-error: true
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: ${{ env.BOTAN_PREFIX }}
         key: ${{ matrix.runner }}-botan-${{ env.BOTAN_VERSION }}-r${{ env.BOTAN_BUILD_REV }}
@@ -160,7 +184,7 @@ jobs:
     - name: Restore leancrypto
       if: matrix.backend.name == 'leancrypto'
       id: leancrypto-cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ${{ env.LEANCRYPTO_PREFIX }}
         key: ${{ matrix.runner }}-leancrypto-${{ env.LEANCRYPTO_VERSION }}-r${{ env.LEANCRYPTO_BUILD_REV }}
@@ -171,6 +195,9 @@ jobs:
         wget -O leancrypto.tar.gz https://github.com/smuellerDD/leancrypto/archive/refs/tags/v${LEANCRYPTO_VERSION}.tar.gz
         tar xfz leancrypto.tar.gz
         cd leancrypto-${LEANCRYPTO_VERSION}
+        # lc_free() after a failed memfd_secret crashes the RPC server
+        # robustness test; not upstream yet, the flake applies it too.
+        patch -p1 < "${GITHUB_WORKSPACE}/nix/leancrypto-memfd-secret-free.patch"
         # ESDM only links the library: skip leancrypto's own test suite and its
         # helper apps, which dominate the build time here. The algorithm
         # self-tests (enable_selftests) stay on - those run inside the library.
@@ -186,7 +213,7 @@ jobs:
     - name: Save leancrypto
       if: matrix.backend.name == 'leancrypto' && steps.leancrypto-cache.outputs.cache-hit != 'true'
       continue-on-error: true
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: ${{ env.LEANCRYPTO_PREFIX }}
         key: ${{ matrix.runner }}-leancrypto-${{ env.LEANCRYPTO_VERSION }}-r${{ env.LEANCRYPTO_BUILD_REV }}
@@ -194,7 +221,7 @@ jobs:
     - name: Restore GnuTLS
       if: matrix.backend.name == 'gnutls'
       id: gnutls-cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ${{ env.GNUTLS_PREFIX }}
         key: ${{ matrix.runner }}-gnutls-${{ env.GNUTLS_VERSION }}-fips-r${{ env.GNUTLS_BUILD_REV }}
@@ -241,7 +268,7 @@ jobs:
     - name: Save GnuTLS
       if: matrix.backend.name == 'gnutls' && steps.gnutls-cache.outputs.cache-hit != 'true'
       continue-on-error: true
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: ${{ env.GNUTLS_PREFIX }}
         key: ${{ matrix.runner }}-gnutls-${{ env.GNUTLS_VERSION }}-fips-r${{ env.GNUTLS_BUILD_REV }}
@@ -284,8 +311,11 @@ jobs:
 
     - name: Meson setup
       run: |
+        # b_lto_threads: the meson of 22.04 passes a plain -flto otherwise,
+        # which the LTO wrapper notes on every link as serial.
         meson setup build -Dtestmode=enabled -Dselinux=disabled \
                           -Dais2031_ntg1=false -Dais2031_drg4=false -Dfips140=true \
+                          -Db_lto_threads="$(nproc)" \
                           ${{ matrix.backend.opts }}
 
     - name: Meson compile
@@ -318,6 +348,58 @@ jobs:
         sudo env LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" \
              meson test -v -C build 'esdm-server with an external entropy source'
 
+  # The supported Jitter RNG releases and master, with the builtin backend
+  jitterentropy:
+    name: ${{ matrix.runner }} / jitterentropy ${{ matrix.jent.name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ ubuntu-24.04, ubuntu-24.04-arm ]
+        jent:
+          - name: "3.6"
+            ref: refs/tags/v3.6.3
+          - name: "3.7"
+            ref: refs/tags/v3.7.0
+          - name: master
+            ref: refs/heads/master
+
+    env:
+      JENT_REF: ${{ matrix.jent.ref }}
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y meson ninja-build pkg-config \
+                                libprotobuf-c-dev libfuse3-dev libjson-c-dev
+
+    - name: Install Jitter RNG
+      run: |
+        # Over the image's own copy (26.04 ships 3.6.3): the header and the
+        # library linked and loaded must all be this one.
+        wget -O jent.tar.gz "https://github.com/smuellerDD/jitterentropy-library/archive/${JENT_REF}.tar.gz"
+        mkdir jent
+        tar xfz jent.tar.gz -C jent --strip-components=1
+        make -C jent
+        sudo make -C jent install PREFIX=/usr LIBDIR="lib/$(gcc -print-multiarch)"
+        sudo ldconfig
+        grep -E 'define JENT_(MAJ|MIN|PATCH)VERSION' /usr/include/jitterentropy.h
+
+    - name: Meson setup
+      run: |
+        meson setup build -Dtestmode=enabled -Dselinux=disabled \
+                          -Dais2031_ntg1=false -Dais2031_drg4=false -Dfips140=true
+
+    - name: Meson compile
+      run: meson compile -C build
+
+    - name: Meson test
+      run: meson test -v -C build
+
   # Memory safety: the same sources built with AddressSanitizer and
   # UndefinedBehaviorSanitizer, then driven hard through the esdm-tool stress
   # tests. These exercise the threading, fork and RPC paths that the ordinary
@@ -330,7 +412,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ ubuntu-24.04, ubuntu-24.04-arm ]
+        # Not 22.04 arm64: GCC 11's ASan takes three seconds to start each
+        # process there, beyond the test timeouts.
+        runner: [ ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm,
+                  ubuntu-26.04, ubuntu-26.04-arm ]
 
     env:
       # halt_on_error/abort_on_error make a finding fail the job instead of
@@ -340,14 +425,17 @@ jobs:
       # LD_PRELOAD libesdm-getrandom.so, and ASan otherwise aborts every one of
       # them with "ASan runtime does not come first in initial library list"
       # before the test has run at all.
-      ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_summary=1:verify_asan_link_order=0
+      #
+      # use_sigaltstack=0 on 22.04: GCC 11's runtime fails its own check
+      # tearing down the signal stack of a thread the EGD client test cancels.
+      ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_summary=1:verify_asan_link_order=0${{ startsWith(matrix.runner, 'ubuntu-22.04') && ':use_sigaltstack=0' || '' }}
       UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1:print_summary=1:print_stacktrace=1
       # Keep each stress run short - these are smoke tests for memory safety,
       # not benchmarks.
       STRESS_DURATION: "10"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install build dependencies
       run: |
@@ -358,11 +446,15 @@ jobs:
 
     - name: Install Jitter RNG
       run: |
-        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v${JITTERENTROPY_VERSION}.tar.gz
-        tar xfz jent.tar.gz
-        make -C jitterentropy-library-${JITTERENTROPY_VERSION}
-        sudo make -C jitterentropy-library-${JITTERENTROPY_VERSION} install
+        # Over the image's own copy (26.04 ships 3.6.3): the header and the
+        # library linked and loaded must all be this one.
+        wget -O jent.tar.gz "https://github.com/smuellerDD/jitterentropy-library/archive/${JENT_REF}.tar.gz"
+        mkdir jent
+        tar xfz jent.tar.gz -C jent --strip-components=1
+        make -C jent
+        sudo make -C jent install PREFIX=/usr LIBDIR="lib/$(gcc -print-multiarch)"
         sudo ldconfig
+        grep -E 'define JENT_(MAJ|MIN|PATCH)VERSION' /usr/include/jitterentropy.h
 
     - name: Meson setup
       run: |
@@ -444,16 +536,22 @@ jobs:
           exit 1
         fi
 
-  # eBPF-based entropy sources plus the raw measurement addon
-  # (addon/es_ebpf_testing -> esdm-ebpf-collect). The eBPF programs are
+  # eBPF-based entropy sources plus the raw measurement tool
+  # (tests/es_ebpf_testing -> esdm-ebpf-collect). The eBPF programs are
   # compiled for the BPF target with clang and turned into libbpf skeletons by
   # bpftool, so this covers a toolchain the other jobs never touch.
   ebpf:
-    name: ebpf
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.runner }} / ebpf
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Not 22.04, whose libbpf 0.5 is older than the 1.2 required
+        runner: [ ubuntu-24.04, ubuntu-26.04 ]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install build dependencies
       run: |
@@ -510,11 +608,15 @@ jobs:
 
     - name: Install Jitter RNG
       run: |
-        wget -O jent.tar.gz https://github.com/smuellerDD/jitterentropy-library/archive/refs/tags/v${JITTERENTROPY_VERSION}.tar.gz
-        tar xfz jent.tar.gz
-        make -C jitterentropy-library-${JITTERENTROPY_VERSION}
-        sudo make -C jitterentropy-library-${JITTERENTROPY_VERSION} install
+        # Over the image's own copy (26.04 ships 3.6.3): the header and the
+        # library linked and loaded must all be this one.
+        wget -O jent.tar.gz "https://github.com/smuellerDD/jitterentropy-library/archive/${JENT_REF}.tar.gz"
+        mkdir jent
+        tar xfz jent.tar.gz -C jent --strip-components=1
+        make -C jent
+        sudo make -C jent install PREFIX=/usr LIBDIR="lib/$(gcc -print-multiarch)"
         sudo ldconfig
+        grep -E 'define JENT_(MAJ|MIN|PATCH)VERSION' /usr/include/jitterentropy.h
 
     - name: Meson setup
       run: |
@@ -534,13 +636,13 @@ jobs:
     - name: Meson compile
       run: meson compile -C build
 
-    - name: Check that the measurement addon was built
+    - name: Check that the measurement tool was built
       run: |
-        # addon/es_ebpf_testing is only built with -Des_ebpf_testing=enabled;
+        # tests/es_ebpf_testing is only built with -Des_ebpf_testing=enabled;
         # make its absence an explicit failure rather than something the later
         # steps skip over silently.
-        test -x build/addon/es_ebpf_testing/esdm-ebpf-collect
-        build/addon/es_ebpf_testing/esdm-ebpf-collect --help
+        test -x build/tests/es_ebpf_testing/esdm-ebpf-collect
+        build/tests/es_ebpf_testing/esdm-ebpf-collect --help
 
     - name: Meson test
       run: meson test -v -C build
@@ -555,7 +657,7 @@ jobs:
 
     - name: Collect raw eBPF entropy events
       run: |
-        # Exercise addon/es_ebpf_testing for real: attach with raw sampling
+        # Exercise tests/es_ebpf_testing for real: attach with raw sampling
         # enabled - a code path none of the entropy source tests take and one
         # the verifier has to accept - and gather enough events for the
         # analysis steps below to work on.
@@ -579,7 +681,7 @@ jobs:
           # makes the collector stop and write out what it has, so a quiet
           # machine fails on the record count of the next step instead.
           if sudo timeout -s TERM 120 \
-                  build/addon/es_ebpf_testing/esdm-ebpf-collect \
+                  build/tests/es_ebpf_testing/esdm-ebpf-collect \
                   --source "${src}" --out "raw-${src}.txt" --events 20000 \
                   2> "collect-${src}.log"; then
             cat "collect-${src}.log"
@@ -613,7 +715,7 @@ jobs:
         # would show up as a short output file here.
         for src in sched; do
           lines=$(wc -l < "raw-${src}.txt")
-          build/addon/test/esdm-extractlsb "raw-${src}.txt" "raw-${src}.bin" \
+          build/tests/validation-helpers/esdm-extractlsb "raw-${src}.txt" "raw-${src}.bin" \
               "${lines}" FF
           bytes=$(stat -c %s "raw-${src}.bin")
           echo "${src}: ${lines} deltas -> ${bytes} bytes"

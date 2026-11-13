@@ -34,6 +34,7 @@
 #include "esdm_es_sched.h"
 #include "helper.h"
 #include "test_pertubation.h"
+#include "../es_state_check.h"
 
 static void create_sched_entropy(void)
 {
@@ -59,38 +60,36 @@ static void create_sched_entropy(void)
 
 static int es_sched_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_int_es_sched]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_int_es_sched]->state) {
-		printf("ES Scheduler - fail: state callback missing\n");
-		return 1;
-	}
-
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_int_es_sched]->state(buf, sizeof(buf));
-
-	if (!strncmp(buf, "disabled", 8))
+	if (es_state_member(state, "disabled", json_type_string)) {
+		json_object_put(state);
 		return -ENOENT;
+	}
 
 	/*
-	 * The members come from the kernel module
-	 * (esdm_sched_es_state_json() of kernel/esdm_es/esdm_es_sched.c),
-	 * their labels from esdm_kernel_state(). The module post-processes
-	 * with a DRBG rather than a hash since commit 1dd63ca.
+	 * The members come from kernel/esdm_es/esdm_es_sched.c, which
+	 * post-processes with a DRBG rather than a hash since commit 1dd63ca.
 	 */
-	if (!strstr(buf, "DRBG for operating entropy pool") ||
-	    !strstr(buf, "Available entropy") ||
-	    !strstr(buf, "per-CPU scheduler event collection size") ||
-	    !strstr(buf, "Standards compliance") ||
-	    !strstr(buf, "High-resolution timer")) {
+	if (!es_state_member(state, "drbg_for_operating_entropy_pool",
+			     json_type_string) ||
+	    !es_state_member(state, "available_entropy", json_type_int) ||
+	    !es_state_member(state, "per_cpu_scheduler_event_collection_size",
+			     json_type_int) ||
+	    !es_state_member(state, "standards_compliance", json_type_string) ||
+	    !es_state_member(state, "high_resolution_timer",
+			     json_type_boolean)) {
 		printf("ES Scheduler - fail: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES Scheduler - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
-	printf("ES Scheduler - pass: state information found:\n%s\n", buf);
 
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_sched_getdata(void)
@@ -110,7 +109,7 @@ static int es_sched_getdata(void)
 		memset(&eb_es, 0, sizeof(eb_es));
 		create_sched_entropy();
 		esdm_es[esdm_int_es_sched]->get_ent(
-			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 		if (eb_es.e_bits == 0) {
 			printf("ES Scheduler - pass: get_ent did not collect data\n");
 			if (memcmp(eb_es.e, zero,

@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <json-c/json.h>
+#include <linux/sockios.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -46,6 +47,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -53,12 +55,14 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_egd_protocol.h"
 #include "esdm_egd_server.h"
 #include "esdm_logger.h"
 #include "threading_support.h"
+#include "esdm_ppoll.h"
 
 /*
  * Two helpers the EGD server shares with the RPC server, which is not linked
@@ -120,6 +124,9 @@ int set_fd_nonblocking(int fd)
 /* How long the ESDM is fed and given time to reach the operational state. */
 #define TEST_SEED_ROUNDS 200
 #define TEST_SEED_INTERVAL_MS 50
+
+/* Requests of 256 bytes draining the DRNGs, 16 MiB */
+#define TEST_DRAIN_ROUNDS 65536
 
 static char tmpdir[] = "/tmp/esdm-egd-raw-test-XXXXXX";
 static char sockpath[sizeof(tmpdir) + 32];
@@ -227,7 +234,7 @@ static int test_recv(int fd, void *buf, size_t len, int timeout_ms)
 	while (received < len) {
 		struct pollfd pfd = { .fd = fd, .events = POLLIN };
 		ssize_t rc;
-		int pret = poll(&pfd, 1, timeout_ms);
+		int pret = esdm_ppoll_ms(&pfd, 1, timeout_ms);
 
 		if (pret < 0) {
 			if (errno == EINTR)
@@ -260,7 +267,7 @@ static bool test_quiet(int fd, int timeout_ms)
 	int pret;
 
 	do {
-		pret = poll(&pfd, 1, timeout_ms);
+		pret = esdm_ppoll_ms(&pfd, 1, timeout_ms);
 	} while (pret < 0 && errno == EINTR);
 
 	return (pret == 0);
@@ -407,6 +414,21 @@ static int test_esdm_seed(void)
 	}
 
 	return esdm_state_operational() ? 0 : -1;
+}
+
+/*
+ * Entropy to reseed DRNGs drained to where a build capping their output
+ * without a full reseed stops them: no entropy source is credited here.
+ */
+static void test_esdm_refill(void)
+{
+	uint8_t seed[64];
+	unsigned int i;
+
+	for (i = 0; i < 4; i++) {
+		memset(seed, (int)i + 0x5a, sizeof(seed));
+		esdm_pool_insert_aux(seed, sizeof(seed), 8 * sizeof(seed));
+	}
 }
 
 /*
@@ -1382,7 +1404,8 @@ static void test_esdm_status(void)
 	CHECK(len > 0 && text && strlen(text) == len,
 	      "the status of %u bytes is no text of that length", len);
 	CHECK(text && strstr(text, "DRNG name: ") &&
-		      strstr(text, "Entropy Source 0 properties:"),
+		      strstr(text, "\nEntropy sources:\n ") &&
+		      strstr(text, " (ID 0):\n"),
 	      "the status lacks its sections: %.200s", text ? text : "");
 	free(text);
 	text = NULL;
@@ -1526,6 +1549,8 @@ static void test_esdm_bulk(void)
 	CHECK(delivered > ESDM_EGD_MAX_TRANSFER &&
 		      !test_all_zero(buf, delivered),
 	      "the bulk read delivered %u bytes", delivered);
+	/* Past what a capped DRNG gives: reseed it for the reads that follow */
+	test_esdm_refill();
 
 	CHECK(test_cmd_bulk_read(fd, ESDM_EGD_CMD_ESDM_READ_UNSEEDED, 1000, buf,
 				 &delivered, TEST_RESPONSE_MS) == 0 &&
@@ -1854,6 +1879,162 @@ static void test_esdm_split_command(void)
 	close(fd);
 }
 
+/****************************
+ * Robustness
+ ****************************/
+
+/*
+ * A client may send data and leave at once - an insertion has no response -
+ * and what it sent must still be processed. A socket closed with unread data
+ * resets its peer, so the client shuts down rather than closes its end and
+ * waits for its data to be taken. It first stalls the server on an unread
+ * answer, so the server cannot have read everything before the hangup.
+ */
+static void test_hangup_input(void)
+{
+	uint8_t read_cmd[6] = { ESDM_EGD_CMD_ESDM_BULK_READ,
+				ESDM_EGD_CMD_READ_NONBLOCK };
+	uint8_t data[ESDM_EGD_MAX_TRANSFER], hdr[5];
+	socklen_t errlen = sizeof(int);
+	unsigned int i;
+	int err = 0, outq = -1, fd;
+
+	printf("EGD raw: the input of a client that hung up\n");
+
+	for (i = 0; i < sizeof(data); i++)
+		data[i] = (uint8_t)(i ^ 0x5a);
+
+	fd = test_connect();
+	if (fd < 0) {
+		CHECK(0, "cannot connect to %s: %s", sockpath, strerror(errno));
+		return;
+	}
+
+	/*
+	 * A few request bytes asking for far more than a socket buffer holds:
+	 * the server stalls on an answer, the client still has room to send.
+	 */
+	test_put_be32(read_cmd + 2, ESDM_EGD_MAX_BULK);
+	for (i = 0; i < 16; i++) {
+		if (test_send(fd, read_cmd, sizeof(read_cmd))) {
+			CHECK(0, "the read requests could not be sent");
+			close(fd);
+			return;
+		}
+	}
+	test_sleep_ms(200);
+
+	/* An insertion, and a bulk one taking several reads */
+	hdr[0] = ESDM_EGD_CMD_ESDM_BULK_INSERT;
+	test_put_be32(hdr + 1, 16 * sizeof(data));
+	CHECK(test_cmd_write_entropy(fd, data, sizeof(data), 0) == 0 &&
+		      test_send(fd, hdr, sizeof(hdr)) == 0,
+	      "the insertions could not be sent");
+	for (i = 0; i < 16; i++)
+		CHECK(test_send(fd, data, sizeof(data)) == 0,
+		      "the bulk insertion could not be sent");
+
+	shutdown(fd, SHUT_RDWR);
+
+	for (i = 0; i < TEST_RESPONSE_MS / 10; i++) {
+		if (ioctl(fd, SIOCOUTQ, &outq) < 0 || !outq)
+			break;
+		test_sleep_ms(10);
+	}
+	CHECK(outq == 0, "%d bytes of a client that hung up were not taken",
+	      outq);
+	CHECK(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen) == 0 &&
+		      err == 0,
+	      "the server dropped what a client sent before it hung up: %s",
+	      strerror(err));
+
+	close(fd);
+}
+
+/*
+ * A non-blocking read while the ESDM is operational but its DRNGs await a
+ * reseed (a capped build stops at the threshold) is answered after the
+ * reseed, not empty, which would tell the client it is not operational.
+ */
+static void test_esdm_reseed_read(void)
+{
+#if ESDM_DRNG_MAX_RESEED_BITS == 0xffffffff
+	printf("EGD raw: non-blocking reads waiting for a reseed\n");
+	printf("  SKIPPED: the output is not capped without a full reseed\n");
+#else
+	/* 0x01 and 0xe2 of 32 bytes, and the bulk read of 64 behind them */
+	uint8_t cmds[] = { ESDM_EGD_CMD_READ_NONBLOCK,
+			   32,
+			   ESDM_EGD_CMD_ESDM_READ_UNSEEDED,
+			   32,
+			   ESDM_EGD_CMD_ESDM_BULK_READ,
+			   ESDM_EGD_CMD_READ_NONBLOCK,
+			   0,
+			   0,
+			   0,
+			   64 };
+	uint8_t buf[256];
+	ssize_t got = 0;
+	unsigned int i;
+	int fd;
+
+	printf("EGD raw: non-blocking reads waiting for a reseed\n");
+
+	if (!esdm_state_operational()) {
+		printf("  SKIPPED: the ESDM is not operational\n");
+		return;
+	}
+
+	/*
+	 * Every thread on the initial DRNG: else the EGD worker may read a node
+	 * DRNG the loop below does not drain
+	 */
+	esdm_config_max_nodes_set(1);
+
+	/* The auxiliary pool holds too little to reseed the DRNGs */
+	for (i = 0; i < TEST_DRAIN_ROUNDS && got != -EAGAIN; i++)
+		got = esdm_get_random_bytes(buf, sizeof(buf));
+	if (got != -EAGAIN || !esdm_state_operational()) {
+		printf("  SKIPPED: the DRNGs did not stop at their reseed threshold\n");
+		return;
+	}
+
+	fd = test_connect();
+	if (fd < 0) {
+		CHECK(0, "cannot connect");
+		return;
+	}
+
+	CHECK(!test_send(fd, cmds, sizeof(cmds)), "cannot send the reads");
+	/*
+	 * A quarter of ESDM_EGD_PARK_MS, after which the reads are answered
+	 * empty: the rest is left for the reseed below, on a loaded machine
+	 */
+	CHECK(test_quiet(fd, 250),
+	      "a read was answered while the DRNGs wait for their reseed");
+
+	/*
+	 * Fed until answered: an insertion seeds one DRNG, and the drained node
+	 * DRNGs, up to one per CPU, come before the initial one
+	 */
+	for (i = 0; i < TEST_SEED_ROUNDS; i++) {
+		test_esdm_refill();
+		if (!test_quiet(fd, 10))
+			break;
+	}
+
+	CHECK(!test_recv(fd, buf, 1 + 32, TEST_RESPONSE_MS) && buf[0] == 32,
+	      "the read 0x01 was not answered in full after the reseed");
+	CHECK(!test_recv(fd, buf, 1 + 32, TEST_RESPONSE_MS) && buf[0] == 32,
+	      "the read 0xe2 was not answered in full after the reseed");
+	CHECK(!test_recv(fd, buf, 4 + 64, TEST_RESPONSE_MS) &&
+		      test_be32(buf) == 64,
+	      "the bulk read was not answered in full after the reseed");
+
+	close(fd);
+#endif
+}
+
 int main(int argc, char *argv[])
 {
 	struct stat sb;
@@ -1952,6 +2133,9 @@ int main(int argc, char *argv[])
 	test_unread_responses();
 	test_vanishing_client();
 	test_unknown_command();
+	test_hangup_input();
+	/* Drains the DRNGs, after every test that needs their output */
+	test_esdm_reseed_read();
 
 	/* Nothing anywhere above may have signalled the process. */
 	CHECK(!test_sigpipe, "the server raised SIGPIPE");

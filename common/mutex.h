@@ -63,6 +63,16 @@ static inline void mutex_lock(mutex_t *mutex)
 }
 
 /**
+ * Take the lock if it is free
+ * @param [in] mutex lock variable to lock
+ * @return 0 if taken, an error - EBUSY - otherwise
+ */
+static inline int mutex_trylock(mutex_t *mutex)
+{
+	return pthread_rwlock_trywrlock(mutex);
+}
+
+/**
  * Unlock the lock
  * @param [in] mutex lock variable to lock
  */

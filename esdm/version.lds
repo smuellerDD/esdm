@@ -92,8 +92,6 @@ LIBESDM_1.0 {
 		esdm_config_es_irq_entropy_rate_set;
 		esdm_config_es_irq_retry;
 		esdm_config_es_irq_retry_set;
-		esdm_config_es_jent_async_enabled;
-		esdm_config_es_jent_async_enabled_set;
 		esdm_config_es_jent_instances;
 		esdm_config_es_jent_instances_set;
 		esdm_config_es_jent_entropy_rate;
@@ -145,6 +143,9 @@ LIBESDM_PRIVATE_1.0 {
 
 		/* esdm_shm_status.h */
 		esdm_shm_status_cleanup_ipc;
+
+		/* esdm_config_internal.h - the DRNG each RPC worker keeps to */
+		esdm_config_thread_node_set;
 
 		/*
 		 * esdm_drng_mgr.h / esdm_es_mgr.h - the self tests the server

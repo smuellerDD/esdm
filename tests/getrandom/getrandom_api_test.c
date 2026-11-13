@@ -91,18 +91,22 @@ static void test_flags_refused(void)
 
 		/*
 		 * Refused before any of it reaches the ESDM or the kernel, so
-		 * the buffer has to come back as it went in.
+		 * the buffer has to come back as it went in - and the way the
+		 * system call refuses, with -1 and errno.
 		 */
-		CHECK(__wrap_getrandom(buf, sizeof(buf), cases[i].flags) ==
-			      -EINVAL,
+		errno = 0;
+		CHECK(__wrap_getrandom(buf, sizeof(buf), cases[i].flags) == -1,
 		      "%s was not refused", cases[i].desc);
+		CHECK_EQ(errno, EINVAL);
 		CHECK(is_untouched(buf, sizeof(buf)),
 		      "%s was refused after writing to the buffer",
 		      cases[i].desc);
 
 		/* The interposed entry point answers the same way */
-		CHECK(getrandom(buf, sizeof(buf), cases[i].flags) == -EINVAL,
+		errno = 0;
+		CHECK(getrandom(buf, sizeof(buf), cases[i].flags) == -1,
 		      "%s was not refused through getrandom()", cases[i].desc);
+		CHECK_EQ(errno, EINVAL);
 	}
 }
 
@@ -121,6 +125,8 @@ static void test_fallback_to_kernel(void)
 		{ "a non-blocking request", GRND_NONBLOCK },
 		{ "insecure randomness", GRND_INSECURE },
 		{ "prediction resistant randomness", GRND_RANDOM },
+		{ "non-blocking prediction resistant randomness",
+		  GRND_RANDOM | GRND_NONBLOCK },
 	};
 	uint8_t buf[32];
 	size_t i;
@@ -135,8 +141,13 @@ static void test_fallback_to_kernel(void)
 		      "%s delivered nothing", cases[i].desc);
 	}
 
-	/* A request for nothing is not an error */
+	/*
+	 * A request for nothing is not an error. It asks the ESDM whether it
+	 * is seeded, and without one the kernel, whose CRNG is ready here.
+	 */
 	CHECK_EQ(__wrap_getrandom(buf, 0, 0), 0);
+	CHECK_EQ(__wrap_getrandom(buf, 0, GRND_NONBLOCK), 0);
+	CHECK_EQ(__wrap_getrandom(NULL, 0, GRND_RANDOM | GRND_NONBLOCK), 0);
 }
 
 /*

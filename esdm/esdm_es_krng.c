@@ -21,6 +21,8 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <json-c/json.h>
+#include <stdatomic.h>
 #include <sys/random.h>
 #include <sys/stat.h>
 
@@ -36,6 +38,9 @@
 #include "esdm_logger.h"
 
 static uint32_t krng_entropy = ESDM_KERNEL_RNG_ENTROPY_RATE;
+
+/* A failed self test: no entropy is claimed until a later one passes */
+static atomic_bool krng_selftest_failed = false;
 
 static void esdm_krng_fini(void)
 {
@@ -78,6 +83,9 @@ static uint32_t esdm_krng_entropylevel(uint32_t requested_bits)
 {
 	uint32_t entropylevel = krng_entropy;
 
+	if (atomic_load(&krng_selftest_failed))
+		return 0;
+
 	/*
 	 * If a specific entropy value is configured, use it instead of the
 	 * heuristic.
@@ -100,8 +108,7 @@ static uint32_t esdm_krng_poolsize(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			  bool __unused unused)
+static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	uint32_t ent_bits = esdm_krng_entropylevel(requested_bits);
 	ssize_t ret =
@@ -128,12 +135,20 @@ static void esdm_krng_get(struct entropy_es *eb_es, uint32_t requested_bits,
 	}
 }
 
-static void esdm_krng_es_state(char *buf, size_t buflen)
+static void esdm_krng_es_state_json(char *buf, size_t buflen)
 {
-	snprintf(buf, buflen,
-		 " Available entropy: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n",
-		 esdm_krng_poolsize(), esdm_krng_entropylevel(256));
+	struct json_object *obj = json_object_new_object();
+
+	if (obj) {
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_krng_poolsize()));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(esdm_krng_entropylevel(256)));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_krng_active(void)
@@ -143,28 +158,41 @@ static bool esdm_krng_active(void)
 
 /*
  * The kernel still answers getrandom(2), and with something other than a
- * constant.
+ * constant. A kernel RNG not initialized yet is not tested, as get_ent
+ * credits it with nothing anyway.
  */
 static int esdm_krng_selftest(void)
 {
 	uint8_t first[16], second[16];
+	ssize_t r1, r2 = 0;
 	int ret = 0;
 
-	if (esdm_os_getrandom(first, sizeof(first), GRND_NONBLOCK) !=
-		    (ssize_t)sizeof(first) ||
-	    esdm_os_getrandom(second, sizeof(second), GRND_NONBLOCK) !=
-		    (ssize_t)sizeof(second)) {
-		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
-			    "KernelRNG ES: getrandom(2) did not deliver\n");
-		ret = -EFAULT;
+	r1 = esdm_os_getrandom(first, sizeof(first), GRND_NONBLOCK);
+	if (r1 == (ssize_t)sizeof(first))
+		r2 = esdm_os_getrandom(second, sizeof(second), GRND_NONBLOCK);
+
+	if (r1 == -EAGAIN || r2 == -EAGAIN) {
+		esdm_logger(
+			LOGGER_DEBUG, LOGGER_C_ES,
+			"KernelRNG ES: kernel RNG not initialized - nothing to test\n");
 		goto out;
 	}
 
-	if (!memcmp(first, second, sizeof(first))) {
+	if (r1 != (ssize_t)sizeof(first) || r2 != (ssize_t)sizeof(second)) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
+			    "KernelRNG ES: getrandom(2) did not deliver\n");
+		ret = -EFAULT;
+	} else if (!memcmp(first, second, sizeof(first))) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
 			    "KernelRNG ES: getrandom(2) repeated its output\n");
 		ret = -EFAULT;
 	}
+
+	if (ret)
+		atomic_store(&krng_selftest_failed, true);
+	else if (atomic_exchange(&krng_selftest_failed, false))
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "KernelRNG ES: self test passed again\n");
 
 out:
 	memset_secure(first, 0, sizeof(first));
@@ -181,7 +209,7 @@ struct esdm_es_cb esdm_es_krng = {
 	.get_ent = esdm_krng_get,
 	.curr_entropy = esdm_krng_entropylevel,
 	.max_entropy = esdm_krng_poolsize,
-	.state = esdm_krng_es_state,
+	.state_json = esdm_krng_es_state_json,
 	.reset = NULL,
 	.active = esdm_krng_active,
 	.selftest = esdm_krng_selftest,

@@ -37,6 +37,7 @@
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "../es_state_check.h"
 
 #define ES_IDX esdm_ext_es_jent_kernel
 #define ES_NAME "jent_kernel"
@@ -55,21 +56,22 @@ static int es_jent_kernel_name(void)
 
 static int es_jent_kernel_state(void)
 {
-	char buf[512];
+	struct json_object *state = es_state_get(esdm_es[ES_IDX]);
+	int ret = 0;
 
-	/* state is optional; nothing to check if absent */
-	if (!esdm_es[ES_IDX]->state)
-		return 0;
-
-	memset(buf, 0, sizeof(buf));
-	esdm_es[ES_IDX]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Available entropy")) {
-		printf("ES %s - fail: state string malformed: %s\n", ES_NAME,
-		       buf);
-		return 1;
+	if (!es_state_member(state, "available_entropy", json_type_int) ||
+	    !es_state_member(state, "kernel_rng", json_type_string)) {
+		printf("ES " ES_NAME
+		       " - fail: state information contains unexpected content: %s\n",
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES " ES_NAME " - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
-	printf("ES %s - pass: state:\n%s\n", ES_NAME, buf);
-	return 0;
+
+	json_object_put(state);
+	return ret;
 }
 
 static int es_jent_kernel_poolsize(void)
@@ -104,7 +106,7 @@ static int es_jent_kernel_getdata(void)
 		return 0;
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	esdm_es[ES_IDX]->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 	/*
 	 * With no device present, get_ent must gracefully return 0 credited

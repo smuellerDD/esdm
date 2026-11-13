@@ -35,10 +35,13 @@ and
 .BR __real_getentropy ()
 available for the original kernel behaviour.
 .PP
-Should the ESDM be unreachable, the call falls back to the
+Should the ESDM be unreachable or not answer within a few seconds, the call
+falls back to the
 .BR getrandom (2)
 system call, so preloading the library cannot leave a program without random
-data.
+data. PID 1 and processes that embed libesdm, such as
+.BR esdm\-server (8),
+always use the system call.
 .SH FLAGS
 The
 .I flags
@@ -46,7 +49,10 @@ argument of
 .BR getrandom (2)
 keeps its usual meaning:
 .B GRND_NONBLOCK
-does not wait for the ESDM to be seeded,
+does not wait for the ESDM to be seeded but fails with
+.B EAGAIN
+as long as it is not - also for a request of no bytes, which reports the
+readiness as with the system call,
 .B GRND_RANDOM
 selects the prediction\-resistance generator, and
 .B GRND_INSECURE

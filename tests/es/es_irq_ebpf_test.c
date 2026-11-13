@@ -32,6 +32,7 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "esdm_logger.h"
+#include "../es_state_check.h"
 
 /*
  * Generate interrupt and softirq events: short sleeps arm hrtimers whose
@@ -54,22 +55,25 @@ static void consume_events(void)
 
 static int es_irq_ebpf_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_int_es_irq_ebpf]);
+	int ret = 0;
 
-	memset(buf, 0, sizeof(buf));
-	esdm_es[esdm_int_es_irq_ebpf]->state(buf, sizeof(buf));
-
-	if (!strstr(buf, "eBPF programs loaded: true") ||
-	    !strstr(buf, "Available entropy") ||
-	    !strstr(buf, "Oversampling Rate") ||
-	    !strstr(buf, "Entropy Rate per 256 data bits")) {
+	if (!json_object_get_boolean(es_state_member(
+		    state, "ebpf_programs_loaded", json_type_boolean)) ||
+	    !es_state_member(state, "available_entropy", json_type_int) ||
+	    !es_state_member(state, "oversampling_rate", json_type_int) ||
+	    !es_state_member(state, "entropy_rate_per_256_data_bits",
+			     json_type_int)) {
 		printf("ES InterruptEBPF - fail: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES InterruptEBPF - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
-	printf("ES InterruptEBPF - pass: state information found:\n%s\n", buf);
 
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_irq_ebpf_poolsize(void)
@@ -118,7 +122,7 @@ static int es_irq_ebpf_getdata(void)
 		create_irq_events();
 		consume_events();
 		esdm_es[esdm_int_es_irq_ebpf]->get_ent(
-			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+			&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 
 		if (!memcmp(eb_es.e, zero, ESDM_DRNG_INIT_SEED_SIZE_BYTES)) {
 			printf("ES InterruptEBPF - fail: get_ent did not deliver data for iteration %u\n",

@@ -15,7 +15,7 @@ BuildRequires:  meson
 BuildRequires:  gcc
 BuildRequires:  fuse3
 BuildRequires:  fuse3-devel
-BuildRequires:  leancrypto-devel
+BuildRequires:  leancrypto-devel >= 1.6.0
 BuildRequires:  libjitterentropy3
 BuildRequires:  libjson-c-devel
 BuildRequires:  libprotobuf-c-devel

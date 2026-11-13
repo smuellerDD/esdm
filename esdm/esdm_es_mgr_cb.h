@@ -111,22 +111,14 @@ struct entropy_buf {
  * @fini: Deinitialize the entropy source - may be NULL
  * @get_ent: Fetch entropy into the entropy_buf. The ES shall only deliver
  *	     data if its internal initialization is complete, including any
- *	     SP800-90B startup testing or similar.
- *
- *	     allow_cached tells whether the request may be served from a block
- *	     the ES collected ahead of it, e.g. by its ES monitor. False asks
- *	     for entropy collected for this very request - the seeding of the
- *	     prediction resistance DRNG, whose contract is just that - and an
- *	     ES with such a cache then takes its synchronous path.
- * @get_cached: Fetch a block the ES collected ahead of the request, if one is
- *		ready, and return true - or return false and leave @eb alone.
- *		Never collects itself: a reseed asks this first and leaves out
- *		an ES without a block when the others deliver the entropy, see
- *		esdm_get_reseed_buffers(). NULL for an ES without a cache.
+ *	     SP800-90B startup testing or similar. The entropy is collected
+ *	     for this very request, none is buffered ahead of it.
  * @curr_entropy: Return amount of currently available entropy in bits.
  * @max_entropy: Maximum amount of entropy the entropy source is able to
  *		 maintain.
- * @state: Buffer with human-readable ES state.
+ * @state_json: Write the ES state as one NUL-terminated JSON object, or
+ *		nothing if it does not fit into @buflen. esdm_status_json()
+ *		takes its members, esdm_status() renders text from them.
  * @reset: Reset entropy source (drop all entropy and reinitialize).
  *	   This callback may be NULL.
  * @active: Is ES active.
@@ -144,31 +136,23 @@ struct entropy_buf {
  *
  *	      Returns 0 if the source is in order, < 0 otherwise. This callback
  *	      may be NULL, which the manager reports as an untested source.
+ * @read_failed: Is the source credited with nothing until a read of it
+ *		 works again? Seedings then read it however little entropy
+ *		 is available, so it can recover. May be NULL.
  */
 struct esdm_es_cb {
 	const char *name;
 	int (*init)(void);
 	int (*monitor_es)(void);
 	void (*fini)(void);
-	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits,
-			bool allow_cached);
-	bool (*get_cached)(struct entropy_es *eb, uint32_t requested_bits);
+	void (*get_ent)(struct entropy_es *eb, uint32_t requested_bits);
 	uint32_t (*curr_entropy)(uint32_t requested_bits);
 	uint32_t (*max_entropy)(void);
-	void (*state)(char *buf, size_t buflen);
-	/*
-	 * State of the entropy source as a JSON object, used by
-	 * esdm_status_json(). The member names are the labels of ->state,
-	 * lower-cased with every run of non-alphanumeric characters replaced by
-	 * one underscore - but for the external source: "name" is the name its
-	 * provider declares, "instance" the name above, and "provider" the
-	 * status object of the provider. This callback may be NULL, in which
-	 * case the members are derived from the ->state text.
-	 */
 	void (*state_json)(char *buf, size_t buflen);
 	void (*reset)(void);
 	bool (*active)(void);
 	int (*selftest)(void);
+	bool (*read_failed)(void);
 };
 
 /* Reseed is desired */
@@ -181,12 +165,10 @@ void esdm_es_add_entropy(void);
 void esdm_kernel_read(struct entropy_es *eb_es, int fd, unsigned int ioctl_cmd,
 		      enum esdm_es_data_size data_size, const char *name);
 
-/*
- * The status text of an entropy source of the kernel module, rendered from its
- * JSON status (@ioctl_json) as " Label: value" lines.
- */
-void esdm_kernel_state(char *buf, size_t buflen, int fd,
-		       unsigned int ioctl_json);
+struct json_object;
+
+/* Write @obj as the ->state_json of an entropy source and release it */
+void esdm_es_state_write(struct json_object *obj, char *buf, size_t buflen);
 
 /* Set the requested bit size */
 void esdm_kernel_set_requested_bits(uint32_t *configured_bits,

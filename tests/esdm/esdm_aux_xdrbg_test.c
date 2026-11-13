@@ -83,7 +83,7 @@ static int esdm_axt_extract(struct esdm_es_cb *aux, const uint8_t *seed,
 	}
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	aux->get_ent(&eb_es, ESDM_AXT_OUTLEN << 3, true);
+	aux->get_ent(&eb_es, ESDM_AXT_OUTLEN << 3);
 	if (!eb_es.e_bits) {
 		printf("%s: no entropy credited\n", what);
 		return 1;

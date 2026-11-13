@@ -43,6 +43,7 @@
  * DAMAGE.
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
 #include <poll.h>
 #include <pthread.h>
@@ -60,6 +61,7 @@
 #include "esdm_egd_protocol.h"
 #include "esdm_logger.h"
 #include "fuzz.h"
+#include "esdm_ppoll.h"
 
 /* Largest buffer a call is given, and the guard behind it. */
 #define FUZZ_BUF_MAX 1024
@@ -213,7 +215,7 @@ static void fuzz_serve_conn(int fd)
 		if (!len)
 			return;
 
-		if (poll(&pfd, 1, FUZZ_TIMEOUT_MS) <= 0)
+		if (esdm_ppoll_ms(&pfd, 1, FUZZ_TIMEOUT_MS) <= 0)
 			return;
 
 		if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
@@ -241,7 +243,7 @@ static void *fuzz_serve(void *unused)
 		struct pollfd pfd = { .fd = fuzz_listen_fd, .events = POLLIN };
 		int fd;
 
-		if (poll(&pfd, 1, FUZZ_ACCEPT_POLL_MS) <= 0)
+		if (esdm_ppoll_ms(&pfd, 1, FUZZ_ACCEPT_POLL_MS) <= 0)
 			continue;
 
 		fd = accept(fuzz_listen_fd, NULL, NULL);

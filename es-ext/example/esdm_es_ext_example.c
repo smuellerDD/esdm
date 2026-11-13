@@ -34,7 +34,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +48,6 @@
 
 /* A request of the ESDM must not block for long: a DRNG waits for it */
 #define EXAMPLE_READ_TIMEOUT_MS 1000
-#define EXAMPLE_POLL_SLICE_MS 100
 
 struct example_ctx {
 	int fd;
@@ -100,7 +98,6 @@ static int example_get_entropy(void *ctx, uint8_t *buf, size_t buflen,
 {
 	const struct timespec pace = { .tv_sec = 0, .tv_nsec = 10000000 };
 	struct example_ctx *c = ctx;
-	struct pollfd pfd = { .fd = c->fd, .events = POLLIN };
 	struct timespec start;
 	size_t done = 0;
 
@@ -122,16 +119,14 @@ static int example_get_entropy(void *ctx, uint8_t *buf, size_t buflen,
 		}
 
 		/*
-		 * The clock keeps the time, not poll(2): the hwrng device is
-		 * ready at once whatever it holds, the pause keeps it from
-		 * spinning.
+		 * The hwrng device implements no poll: the clock keeps the
+		 * time, a pause between the reads keeps it from spinning.
 		 */
 		if (example_ms_since(&start) >= EXAMPLE_READ_TIMEOUT_MS) {
 			c->failures++;
 			return -ETIMEDOUT;
 		}
-		if (poll(&pfd, 1, EXAMPLE_POLL_SLICE_MS) > 0)
-			nanosleep(&pace, NULL);
+		nanosleep(&pace, NULL);
 	}
 
 	c->reads++;

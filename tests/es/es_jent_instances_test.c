@@ -1,13 +1,8 @@
 /*
- * Test that several Jitter RNG instances refill the block cache
+ * Test that several Jitter RNG collectors serve
  *
- * With es_jent_instances above 1 the cache of the Jitter RNG is refilled by
- * that many collectors side by side, each in a thread of its own per round of
- * the ES monitor (thread_fork_join(), inline on a single CPU). The test sets
- * three instances before esdm_init(), runs the monitor callback of the source
- * itself - the first round only arms it - and takes the blocks out through
- * get_cached: every one carries the entropy of the configured rate, and the
- * cache delivers blocks until it is drained.
+ * The test sets three collectors before esdm_init() and reads through the
+ * source as often: every read carries the entropy of the configured rate.
  *
  * It also checks that esdm_config_es_jent_instances_set() keeps the number
  * within 1 to 64.
@@ -45,8 +40,6 @@
 
 #define ES_JI_INSTANCES 3
 
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
-
 static int es_ji_config(void)
 {
 	int ret = 0;
@@ -78,7 +71,7 @@ static int es_ji_config(void)
 	return ret;
 }
 
-static int es_ji_refill(void)
+static int es_ji_read(void)
 {
 	struct esdm_es_cb *es = esdm_es[esdm_ext_es_jitter];
 	uint32_t bits = esdm_get_seed_entropy_osr(false, true);
@@ -86,53 +79,27 @@ static int es_ji_refill(void)
 		esdm_fast_noise_entropylevel(esdm_config_es_jent_entropy_rate(),
 					     bits);
 	struct entropy_es eb_es;
-	unsigned int i, hits = 0;
+	unsigned int i;
 	int ret = 0;
 
-	if (!es->monitor_es || !es->get_cached) {
-		printf("ES Jitter RNG instances - fail: no cache callbacks\n");
-		return 1;
-	}
 	if (!es->active()) {
 		printf("ES Jitter RNG instances - Jitter RNG not available, skipping\n");
 		return 77;
 	}
 
-	/* The first round arms the cache, the second fills it */
-	es->monitor_es();
-	es->monitor_es();
-
-	for (i = 0; i <= ESDM_JENT_ENTROPY_BLOCKS; i++) {
+	for (i = 0; i < ES_JI_INSTANCES; i++) {
 		memset(&eb_es, 0, sizeof(eb_es));
-		if (!es->get_cached(&eb_es, bits))
-			break;
-		hits++;
+		es->get_ent(&eb_es, bits);
 		if (eb_es.e_bits != expected) {
-			printf("ES Jitter RNG instances - fail: block %u carries %u bits instead of %u\n",
+			printf("ES Jitter RNG instances - fail: read %u carries %u bits instead of %u\n",
 			       i, eb_es.e_bits, expected);
 			ret++;
 		}
 	}
 	memset_secure(&eb_es, 0, sizeof(eb_es));
 
-	printf("ES Jitter RNG instances - %u instances filled %u of %u blocks\n",
-	       esdm_config_es_jent_instances(), hits, ESDM_JENT_ENTROPY_BLOCKS);
-
-	/*
-	 * Nothing else takes from the cache here but a seeding the monitor
-	 * might start, which takes a block or two at most.
-	 */
-	if (hits < ESDM_JENT_ENTROPY_BLOCKS / 2) {
-		printf("ES Jitter RNG instances - fail: the instances did not refill the cache\n");
-		ret++;
-	}
-	if (hits > ESDM_JENT_ENTROPY_BLOCKS) {
-		printf("ES Jitter RNG instances - fail: more blocks than slots\n");
-		ret++;
-	}
-
 	if (!ret)
-		printf("ES Jitter RNG instances - pass: the instances refilled the cache\n");
+		printf("ES Jitter RNG instances - pass: the collectors serve\n");
 
 	return ret;
 }
@@ -153,7 +120,7 @@ static int es_ji_test(void)
 		return 1;
 	}
 
-	rc = es_ji_refill();
+	rc = es_ji_read();
 	if (rc == 77 && !ret)
 		ret = 77;
 	else if (rc != 77)
@@ -164,17 +131,10 @@ static int es_ji_test(void)
 	return ret;
 }
 
-#endif
-
 int main(int argc, char *argv[])
 {
 	(void)argc;
 	(void)argv;
 
-#if (ESDM_JENT_ENTROPY_BLOCKS != 0)
 	return es_ji_test();
-#else
-	printf("no Jitter RNG cache in this build\n");
-	return 77;
-#endif
 }

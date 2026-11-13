@@ -63,10 +63,18 @@ ifeq ($(BUILD_TESTING), 1)
 CFLAGS_esdm_es_mgr.o		+= -DESDM_TESTING
 CFLAGS_esdm_testing.o		= -DESDM_TESTING
 esdm_es-y			+= esdm_testing.o
+#
+# Only the files of the entropy sources built: the others would never see
+# data, and the scheduler ones have all readers busy-poll, see esdm_testing.c.
+#
+ifeq ($(BUILD_ES_IRQ), 1)
 ccflags-y			+= -DCONFIG_ESDM_RAW_HIRES_ENTROPY
+ccflags-y			+= -DCONFIG_ESDM_IRQ_PERF
+endif
+ifeq ($(BUILD_ES_SCHED), 1)
 ccflags-y			+= -DCONFIG_ESDM_RAW_SCHED_HIRES_ENTROPY
 ccflags-y			+= -DCONFIG_ESDM_SCHED_PERF
-ccflags-y			+= -DCONFIG_ESDM_IRQ_PERF
+endif
 endif
 
 

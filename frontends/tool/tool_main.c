@@ -272,7 +272,7 @@ static int handle_drng_status(enum drng_status_target target, uint32_t node,
 {
 	struct json_object *doc = NULL, *obj = NULL;
 	const char *out;
-	int ret;
+	int ret = -EINVAL;
 
 	switch (target) {
 	case DRNG_STATUS_PR:
@@ -378,6 +378,20 @@ static int handle_get_random(size_t num_rand_bytes, enum RANDOM_MODE mode,
 		case RAND_MODE_NONE:
 			esdm_invoke(
 				esdm_rpcc_get_random_bytes(bytes, chunk_size));
+			/*
+			 * Short or -EAGAIN: operational, every DRNG awaiting
+			 * its reseed, which the waiting getter waits for.
+			 */
+			if (ret == -EAGAIN)
+				ret = 0;
+			if (ret >= 0 && ret < (ssize_t)chunk_size) {
+				size_t done = (size_t)ret;
+
+				esdm_invoke(esdm_rpcc_get_random_bytes_full(
+					bytes + done, chunk_size - done));
+				if (ret >= 0)
+					ret += (ssize_t)done;
+			}
 			break;
 		case RAND_MODE_FULL:
 			esdm_invoke(esdm_rpcc_get_random_bytes_full(
@@ -825,9 +839,12 @@ static int handle_is_running(void)
 		}
 	}
 
-	/* do a liveness check */
+	/*
+	 * A liveness check: an operational ESDM whose DRNGs all await their
+	 * reseed answers short or with -EAGAIN
+	 */
 	esdm_invoke(esdm_rpcc_get_random_bytes(bytes, sizeof(bytes)));
-	if (ret != (ssize_t)sizeof(bytes)) {
+	if (ret <= 0 && ret != -EAGAIN) {
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_TOOL,
 			"ESDM is not running. Unable to fetch random bytes.\n");

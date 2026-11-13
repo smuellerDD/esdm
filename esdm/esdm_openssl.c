@@ -25,10 +25,14 @@
 #include <string.h>
 #include <time.h>
 
+#include <openssl/core.h>
+#include <openssl/core_dispatch.h>
+#include <openssl/core_names.h>
+#include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/params.h>
 #include <openssl/provider.h>
-#include <openssl/core_names.h>
 
 #include "config.h"
 #include "esdm_crypto.h"
@@ -216,11 +220,270 @@ const struct esdm_xof_cb esdm_openssl_xof_cb = {
 	.xof_dealloc = esdm_openssl_hash_dealloc,
 };
 
+/*
+ * The DRBG's seed source: a RAND of an ESDM-own provider, handing the DRBG the
+ * seed and nonce in place. TEST-RAND freed a heap copy of each seed uncleared,
+ * and EVP_RAND_reseed() with the seed still reseeds from the parent on top
+ * (the FIPS provider takes it as additional input only).
+ */
+#define ESDM_OPENSSL_SEED_SRC_PROV "esdm-seed-src"
+#define ESDM_OPENSSL_SEED_SRC_ENTROPY "esdm-entropy"
+#define ESDM_OPENSSL_SEED_SRC_NONCE "esdm-nonce"
+#define ESDM_OPENSSL_SEED_SRC_STRENGTH 256
+
+struct esdm_openssl_seed_src {
+	const unsigned char *entropy, *nonce;
+	size_t entropy_len, nonce_len;
+	int state;
+};
+
+static OSSL_FUNC_rand_newctx_fn esdm_openssl_seed_src_new;
+static OSSL_FUNC_rand_freectx_fn esdm_openssl_seed_src_free;
+static OSSL_FUNC_rand_instantiate_fn esdm_openssl_seed_src_instantiate;
+static OSSL_FUNC_rand_uninstantiate_fn esdm_openssl_seed_src_uninstantiate;
+static OSSL_FUNC_rand_generate_fn esdm_openssl_seed_src_generate;
+static OSSL_FUNC_rand_nonce_fn esdm_openssl_seed_src_nonce;
+static OSSL_FUNC_rand_get_seed_fn esdm_openssl_seed_src_get_seed;
+static OSSL_FUNC_rand_get_ctx_params_fn esdm_openssl_seed_src_get_ctx_params;
+static OSSL_FUNC_rand_set_ctx_params_fn esdm_openssl_seed_src_set_ctx_params;
+
+static void *esdm_openssl_seed_src_new(void *provctx, void *parent,
+				       const OSSL_DISPATCH *parent_calls)
+{
+	struct esdm_openssl_seed_src *src;
+
+	(void)provctx;
+	(void)parent_calls;
+
+	/* The root of the chain */
+	if (parent)
+		return NULL;
+
+	src = calloc(1, sizeof(*src));
+	if (src)
+		src->state = EVP_RAND_STATE_UNINITIALISED;
+	return src;
+}
+
+/* It only ever points to the seed, which is the ESDM's */
+static void esdm_openssl_seed_src_free(void *vsrc)
+{
+	free(vsrc);
+}
+
+static int esdm_openssl_seed_src_instantiate(void *vsrc, unsigned int strength,
+					     int prediction_resistance,
+					     const unsigned char *pstr,
+					     size_t pstr_len,
+					     const OSSL_PARAM params[])
+{
+	struct esdm_openssl_seed_src *src = vsrc;
+
+	(void)prediction_resistance;
+	(void)pstr;
+	(void)pstr_len;
+
+	if (strength > ESDM_OPENSSL_SEED_SRC_STRENGTH ||
+	    !esdm_openssl_seed_src_set_ctx_params(src, params))
+		return 0;
+
+	src->state = EVP_RAND_STATE_READY;
+	return 1;
+}
+
+static int esdm_openssl_seed_src_uninstantiate(void *vsrc)
+{
+	struct esdm_openssl_seed_src *src = vsrc;
+
+	src->state = EVP_RAND_STATE_UNINITIALISED;
+	return 1;
+}
+
+/* Never a random number generator itself: the seed is for get_seed only */
+static int esdm_openssl_seed_src_generate(void *vsrc, unsigned char *out,
+					  size_t outlen, unsigned int strength,
+					  int prediction_resistance,
+					  const unsigned char *adin,
+					  size_t adin_len)
+{
+	(void)vsrc;
+	(void)out;
+	(void)outlen;
+	(void)strength;
+	(void)prediction_resistance;
+	(void)adin;
+	(void)adin_len;
+	return 0;
+}
+
+static size_t esdm_openssl_seed_src_nonce(void *vsrc, unsigned char *out,
+					  unsigned int strength,
+					  size_t min_noncelen,
+					  size_t max_noncelen)
+{
+	struct esdm_openssl_seed_src *src = vsrc;
+	size_t len;
+
+	(void)min_noncelen;
+
+	if (!src->nonce || strength > ESDM_OPENSSL_SEED_SRC_STRENGTH)
+		return 0;
+
+	len = src->nonce_len < max_noncelen ? src->nonce_len : max_noncelen;
+	if (out)
+		memcpy(out, src->nonce, len);
+	return len;
+}
+
+static size_t esdm_openssl_seed_src_get_seed(void *vsrc, unsigned char **pout,
+					     int entropy, size_t min_len,
+					     size_t max_len,
+					     int prediction_resistance,
+					     const unsigned char *adin,
+					     size_t adin_len)
+{
+	struct esdm_openssl_seed_src *src = vsrc;
+
+	(void)entropy;
+	(void)min_len;
+	(void)prediction_resistance;
+	(void)adin;
+	(void)adin_len;
+
+	if (!src->entropy)
+		return 0;
+
+	/* The DRBG only reads it, and without clear_seed never frees it */
+	*pout = (unsigned char *)(uintptr_t)src->entropy;
+	return src->entropy_len < max_len ? src->entropy_len : max_len;
+}
+
+static int esdm_openssl_seed_src_get_ctx_params(void *vsrc, OSSL_PARAM params[])
+{
+	struct esdm_openssl_seed_src *src = vsrc;
+	OSSL_PARAM *p;
+
+	p = OSSL_PARAM_locate(params, OSSL_RAND_PARAM_STATE);
+	if (p && !OSSL_PARAM_set_int(p, src->state))
+		return 0;
+
+	p = OSSL_PARAM_locate(params, OSSL_RAND_PARAM_STRENGTH);
+	if (p && !OSSL_PARAM_set_uint(p, ESDM_OPENSSL_SEED_SRC_STRENGTH))
+		return 0;
+
+	return 1;
+}
+
+static int esdm_openssl_seed_src_set_ctx_params(void *vsrc,
+						const OSSL_PARAM params[])
+{
+	struct esdm_openssl_seed_src *src = vsrc;
+	const OSSL_PARAM *p;
+	const void *ptr;
+	size_t len;
+
+	p = OSSL_PARAM_locate_const(params, ESDM_OPENSSL_SEED_SRC_ENTROPY);
+	if (p) {
+		if (!OSSL_PARAM_get_octet_ptr(p, &ptr, &len))
+			return 0;
+		src->entropy = ptr;
+		src->entropy_len = len;
+	}
+
+	p = OSSL_PARAM_locate_const(params, ESDM_OPENSSL_SEED_SRC_NONCE);
+	if (p) {
+		if (!OSSL_PARAM_get_octet_ptr(p, &ptr, &len))
+			return 0;
+		src->nonce = ptr;
+		src->nonce_len = len;
+	}
+
+	return 1;
+}
+
+static const OSSL_DISPATCH esdm_openssl_seed_src_functions[] = {
+	{ OSSL_FUNC_RAND_NEWCTX, (void (*)(void))esdm_openssl_seed_src_new },
+	{ OSSL_FUNC_RAND_FREECTX, (void (*)(void))esdm_openssl_seed_src_free },
+	{ OSSL_FUNC_RAND_INSTANTIATE,
+	  (void (*)(void))esdm_openssl_seed_src_instantiate },
+	{ OSSL_FUNC_RAND_UNINSTANTIATE,
+	  (void (*)(void))esdm_openssl_seed_src_uninstantiate },
+	{ OSSL_FUNC_RAND_GENERATE,
+	  (void (*)(void))esdm_openssl_seed_src_generate },
+	{ OSSL_FUNC_RAND_NONCE, (void (*)(void))esdm_openssl_seed_src_nonce },
+	{ OSSL_FUNC_RAND_GET_SEED,
+	  (void (*)(void))esdm_openssl_seed_src_get_seed },
+	{ OSSL_FUNC_RAND_GET_CTX_PARAMS,
+	  (void (*)(void))esdm_openssl_seed_src_get_ctx_params },
+	{ OSSL_FUNC_RAND_SET_CTX_PARAMS,
+	  (void (*)(void))esdm_openssl_seed_src_set_ctx_params },
+	{ 0, NULL }
+};
+
+static const OSSL_ALGORITHM esdm_openssl_seed_src_algs[] = {
+	{ "ESDM-SEED-SRC", "provider=" ESDM_OPENSSL_SEED_SRC_PROV,
+	  esdm_openssl_seed_src_functions, "ESDM DRBG seed source" },
+	{ NULL, NULL, NULL, NULL }
+};
+
+static const OSSL_ALGORITHM *
+esdm_openssl_seed_src_query(void *provctx, int operation_id, int *no_cache)
+{
+	(void)provctx;
+
+	*no_cache = 0;
+	return operation_id == OSSL_OP_RAND ? esdm_openssl_seed_src_algs : NULL;
+}
+
+static const OSSL_DISPATCH esdm_openssl_seed_src_prov[] = {
+	{ OSSL_FUNC_PROVIDER_QUERY_OPERATION,
+	  (void (*)(void))esdm_openssl_seed_src_query },
+	{ 0, NULL }
+};
+
+static int esdm_openssl_seed_src_init(const OSSL_CORE_HANDLE *handle,
+				      const OSSL_DISPATCH *in,
+				      const OSSL_DISPATCH **out, void **provctx)
+{
+	(void)in;
+
+	*out = esdm_openssl_seed_src_prov;
+	*provctx = (void *)(uintptr_t)handle;
+	return 1;
+}
+
+static CRYPTO_ONCE esdm_openssl_seed_src_once = CRYPTO_ONCE_STATIC_INIT;
+static int esdm_openssl_seed_src_added;
+
+static void esdm_openssl_seed_src_add(void)
+{
+	esdm_openssl_seed_src_added = OSSL_PROVIDER_add_builtin(
+		NULL, ESDM_OPENSSL_SEED_SRC_PROV, esdm_openssl_seed_src_init);
+}
+
 struct esdm_openssl_drng_state {
 	EVP_RAND_CTX *drbg, *seed_source;
+	OSSL_PROVIDER *seed_prov;
 	unsigned int strength;
 	int seeded;
 };
+
+/* Point the seed source to the seed of the next instantiation or reseed */
+static int esdm_openssl_seed_src_point(struct esdm_openssl_drng_state *state,
+				       const void *entropy, size_t entropy_len,
+				       const void *nonce, size_t nonce_len)
+{
+	void *ent = (void *)(uintptr_t)entropy, *non = (void *)(uintptr_t)nonce;
+	OSSL_PARAM params[3];
+
+	params[0] = OSSL_PARAM_construct_octet_ptr(
+		ESDM_OPENSSL_SEED_SRC_ENTROPY, &ent, entropy_len);
+	params[1] = OSSL_PARAM_construct_octet_ptr(ESDM_OPENSSL_SEED_SRC_NONCE,
+						   &non, nonce_len);
+	params[2] = OSSL_PARAM_construct_end();
+
+	return EVP_RAND_CTX_set_params(state->seed_source, params);
+}
 
 static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 					   size_t inbuflen,
@@ -229,7 +492,6 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 {
 	struct esdm_openssl_drng_state *state = drng;
 	struct timespec current_time = { 0 };
-	OSSL_PARAM params[3] = { 0 };
 	int ret = 0;
 
 	if (!state->seeded) {
@@ -251,32 +513,16 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 		}
 
 		/*
-		 * TEST-RAND will return the full >= 384 of input entropy
-		 * in TEST_ENTROPY when the DRBG is seeded. The nonce is
-		 * not used to comply with the SP800-90C security argumentation,
-		 * just to satisfy OpenSSL's API, which expects a non-zero
-		 * nonce, as TEST-RAND declares to deliver nonces.
-		 *
-		 * Note: const is cast away due to OpenSSL's OSSL_PARAM API
-		 * requiring void*. The buffer is not modified by OpenSSL.
+		 * The seed source hands over the full >= 384 bits of entropy.
+		 * The nonce is not part of the SP800-90C argument; it only
+		 * satisfies OpenSSL, which wants one as the source offers it.
 		 */
-		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
-		if (addtl) {
-			params[1] = OSSL_PARAM_construct_octet_string(
-				OSSL_RAND_PARAM_TEST_NONCE, (void *)addtl,
-				addtllen);
-		} else {
-			params[1] = OSSL_PARAM_construct_octet_string(
-				OSSL_RAND_PARAM_TEST_NONCE,
-				(void *)&current_time, sizeof(current_time));
-		}
-		params[2] = OSSL_PARAM_construct_end();
-
-		if (!EVP_RAND_instantiate(state->seed_source, state->strength,
-					  0, NULL, 0, params)) {
+		if (!esdm_openssl_seed_src_point(
+			    state, inbuf, inbuflen,
+			    addtl ? (const void *)addtl : &current_time,
+			    addtl ? addtllen : sizeof(current_time))) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-				    "Failed to instantiate seed source: %s\n",
+				    "Failed to set the seed: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
 			ret = -EFAULT;
 			goto out;
@@ -287,41 +533,51 @@ static int esdm_openssl_drbg_seed_internal(void *drng, const uint8_t *inbuf,
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
 				    "Failed to instantiate DRBG: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
-			EVP_RAND_uninstantiate(state->seed_source);
+			/* Out of its error state, for the next seed to retry */
+			EVP_RAND_uninstantiate(state->drbg);
 			ret = -EFAULT;
 			goto out;
 		}
 
 		state->seeded = 1;
 	} else {
-		params[0] = OSSL_PARAM_construct_octet_string(
-			OSSL_RAND_PARAM_TEST_ENTROPY, (void *)inbuf, inbuflen);
-		if (addtl) {
-			params[1] = OSSL_PARAM_construct_octet_string(
-				OSSL_RAND_PARAM_TEST_NONCE, (void *)addtl,
-				addtllen);
-			params[2] = OSSL_PARAM_construct_end();
-		} else {
-			params[1] = OSSL_PARAM_construct_end();
-		}
-
-		if (!EVP_RAND_CTX_set_params(state->seed_source, params)) {
+		if (!esdm_openssl_seed_src_point(state, inbuf, inbuflen, NULL,
+						 0)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-				    "Failed to reseed seed source: %s\n",
+				    "Failed to set the seed: %s\n",
 				    ERR_error_string(ERR_get_error(), NULL));
 			ret = -EFAULT;
 			goto out;
 		}
 
-		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, NULL, 0)) {
+		/*
+		 * addtl (output of zero-credit sources) is the reseed's
+		 * additional input; each DRBG type takes up to 2^31 - 1 bytes.
+		 */
+		if (!EVP_RAND_reseed(state->drbg, 0, NULL, 0, addtl,
+				     addtl ? addtllen : 0)) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_MD,
-				    "Failed to reseed DRBG\n");
+				    "Failed to reseed DRBG: %s\n",
+				    ERR_error_string(ERR_get_error(), NULL));
+			/*
+			 * In its error state (after a failed generate, or a
+			 * reseed of its own in a forked child), OpenSSL
+			 * restarts the DRBG from the seed source, which has no
+			 * nonce here: instantiate it anew with the next seed.
+			 */
+			EVP_RAND_uninstantiate(state->drbg);
+			state->seeded = 0;
 			ret = -EFAULT;
 			goto out;
 		}
 	}
 
 out:
+	/*
+	 * Drop the pointer to the seed the caller wipes: a reseed the DRBG
+	 * starts itself (after a fork) then fails instead of reusing it.
+	 */
+	(void)esdm_openssl_seed_src_point(state, NULL, 0, NULL, 0);
 	memset_secure(&current_time, 0, sizeof(current_time));
 	return ret;
 }
@@ -398,6 +654,8 @@ esdm_openssl_drbg_dealloc_internal(struct esdm_openssl_drng_state *state)
 		EVP_RAND_uninstantiate(state->seed_source);
 		EVP_RAND_CTX_free(state->seed_source);
 	}
+	if (state->seed_prov)
+		OSSL_PROVIDER_unload(state->seed_prov);
 }
 
 static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
@@ -419,23 +677,25 @@ static int esdm_openssl_drbg_alloc(void **drng, uint32_t sec_strength)
 	if (!state)
 		return -ENOMEM;
 
-	state->strength = 256;
+	/* Loaded with the fallback providers kept, by each DRNG it serves */
+	if (!CRYPTO_THREAD_run_once(&esdm_openssl_seed_src_once,
+				    esdm_openssl_seed_src_add) ||
+	    !esdm_openssl_seed_src_added) {
+		ret = -EFAULT;
+		goto out;
+	}
+	state->seed_prov =
+		OSSL_PROVIDER_try_load(NULL, ESDM_OPENSSL_SEED_SRC_PROV, 1);
+	CKNULL(state->seed_prov, -EFAULT);
 
-	rand = EVP_RAND_fetch(NULL, "TEST-RAND", "-fips");
+	rand = EVP_RAND_fetch(NULL, "ESDM-SEED-SRC",
+			      "provider=" ESDM_OPENSSL_SEED_SRC_PROV ",-fips");
 	CKNULL(rand, -ENOMEM);
 
 	state->seed_source = EVP_RAND_CTX_new(rand, NULL);
 	CKNULL(state->seed_source, -ENOMEM);
 	EVP_RAND_free(rand);
 	rand = NULL;
-
-	params[0] = OSSL_PARAM_construct_uint(OSSL_RAND_PARAM_STRENGTH,
-					      &state->strength);
-	params[1] = OSSL_PARAM_construct_end();
-	if (!EVP_RAND_CTX_set_params(state->seed_source, params)) {
-		ret = -EFAULT;
-		goto out;
-	}
 
 #ifdef ESDM_OPENSSL_DRNG_CTR
 	rand = EVP_RAND_fetch(NULL, "CTR-DRBG", NULL);

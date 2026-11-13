@@ -197,6 +197,18 @@ int thread_start(int (*start_routine)(void *), void *tdata,
 void thread_fork_join(void *(*start_routine)(void *), void *args,
 		      size_t arg_stride, size_t num);
 
+/**
+ * @brief - Run @start_routine(@arg) on a detached plain pthread
+ *
+ * Like thread_fork_join(): configured stack size, none during a forced
+ * teardown. Not waited for: the caller ensures the thread is done before its
+ * data goes away. The thread names itself, as it may be gone at any time.
+ *
+ * @return 0 on success, < 0 if no thread was started - the caller runs the
+ *	   routine itself or does without
+ */
+int thread_start_detached(void *(*start_routine)(void *), void *arg);
+
 #define ESDM_THREAD_MAX_NAMELEN 16
 /**
  * @brief - Give a name to a thread that is used for logging

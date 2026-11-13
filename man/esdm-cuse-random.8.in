@@ -47,7 +47,19 @@ on the write side.
 .B esdm\-cuse\-random
 serves the blocking semantics: reads wait until the ESDM is fully seeded.
 .B esdm\-cuse\-urandom
-serves the non\-blocking semantics.
+serves the non\-blocking semantics. The privileged
+.BR ioctl (2)
+commands require
+.B CAP_SYS_ADMIN
+of the calling thread, read from
+.IR /proc ,
+which a
+.I /proc
+mounted with
+.B hidepid
+must allow; with
+.B \-\-pid_namespace
+the caller is not visible and uid 0 is required instead.
 .PP
 Both daemons must be started as root and drop to an unprivileged user after
 the device has been created. On systemd installations they are normally

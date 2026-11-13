@@ -40,6 +40,7 @@
 
 #include "common_test.h"
 #include "esdm_logger.h"
+#include "esdm_ppoll.h"
 
 /* Filled in by mkstemp(), below the temporary directory of the test run */
 static char logfile[256];
@@ -255,7 +256,7 @@ static void terminal_child(bool no_color)
 	esdm_logger(LOGGER_STATUS, LOGGER_C_ANY, "terminal-record\n");
 
 	/* Until the record is through, which the flush of the logger ensures */
-	while (len < sizeof(buf) - 1 && poll(&pfd, 1, 2000) > 0) {
+	while (len < sizeof(buf) - 1 && esdm_ppoll_ms(&pfd, 1, 2000) > 0) {
 		rd = read(pfd.fd, buf + len, sizeof(buf) - 1 - len);
 		if (rd <= 0)
 			break;

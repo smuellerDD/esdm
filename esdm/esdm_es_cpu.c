@@ -19,6 +19,7 @@
  * DAMAGE.
  */
 
+#include <json-c/json.h>
 #include <stdatomic.h>
 #include <stdio.h>
 
@@ -34,6 +35,7 @@
 #include "helper.h"
 #include "mutex.h"
 #include "ret_checkers.h"
+#include "test_pertubation.h"
 
 static uint32_t esdm_cpu_data_multiplier = 0;
 
@@ -50,8 +52,32 @@ static atomic_bool esdm_cpu_read_failed = false;
 /* Tracks whether the CPU RNG ever delivered. */
 static atomic_bool esdm_cpu_delivered = false;
 
+/*
+ * A CPU RNG repeating its output in the self test is credited with nothing
+ * until a later self test passes - a read that works does not clear it.
+ */
+static atomic_bool esdm_cpu_selftest_failed = false;
+
+static bool esdm_cpu_read(unsigned long *val)
+{
+	return !esdm_test_cpu_read_fails() && cpu_es_get(val);
+}
+
 static int esdm_cpu_init(void)
 {
+	unsigned long probe;
+
+	/* No CPU RNG instruction (or RISC-V seed CSR access): no entropy */
+	if (esdm_cpu_read(&probe)) {
+		atomic_store(&esdm_cpu_read_failed, false);
+		atomic_store(&esdm_cpu_delivered, true);
+	} else {
+		atomic_store(&esdm_cpu_read_failed, true);
+		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+			    "CPU ES: no CPU RNG usable on this system\n");
+	}
+	memset_secure(&probe, 0, sizeof(probe));
+
 	esdm_cpu_data_multiplier = cpu_es_multiplier();
 	if (!esdm_cpu_data_multiplier)
 		esdm_cpu_data_multiplier = 1;
@@ -69,7 +95,8 @@ static int esdm_cpu_init(void)
 
 static uint32_t esdm_cpu_entropylevel(uint32_t requested_bits)
 {
-	if (atomic_load(&esdm_cpu_read_failed))
+	if (atomic_load(&esdm_cpu_read_failed) ||
+	    atomic_load(&esdm_cpu_selftest_failed))
 		return 0;
 
 	return esdm_fast_noise_entropylevel(esdm_config_es_cpu_entropy_rate(),
@@ -79,6 +106,13 @@ static uint32_t esdm_cpu_entropylevel(uint32_t requested_bits)
 static uint32_t esdm_cpu_poolsize(void)
 {
 	return esdm_cpu_entropylevel(esdm_security_strength());
+}
+
+/* Not a CPU without a CPU RNG, which never delivered */
+static bool esdm_cpu_read_failed_get(void)
+{
+	return atomic_load(&esdm_cpu_read_failed) &&
+	       atomic_load(&esdm_cpu_delivered);
 }
 
 static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
@@ -98,7 +132,7 @@ static uint32_t esdm_get_cpu_data(uint8_t *outbuf, uint32_t requested_bits)
 		 */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
-		if (!cpu_es_get((unsigned long *)(outbuf + i))) {
+		if (!esdm_cpu_read((unsigned long *)(outbuf + i))) {
 #pragma GCC diagnostic pop
 			atomic_store(&esdm_cpu_read_failed, true);
 			/*
@@ -233,8 +267,7 @@ static uint32_t esdm_cpu_multiplier(void)
  * @eb: entropy buffer to store entropy
  * @requested_bits: requested entropy in bits
  */
-static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits,
-			 bool __unused unsused)
+static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits)
 {
 	uint32_t ent_bits, multiplier = esdm_cpu_multiplier();
 
@@ -252,20 +285,32 @@ static void esdm_cpu_get(struct entropy_es *eb_es, uint32_t requested_bits,
 	eb_es->e_bits = ent_bits;
 }
 
-static void esdm_cpu_es_state(char *buf, size_t buflen)
+static void esdm_cpu_es_state_json(char *buf, size_t buflen)
 {
 	const struct esdm_drng *esdm_drng_init = esdm_drng_init_instance();
 	uint32_t multiplier = esdm_cpu_multiplier();
+	struct json_object *obj = json_object_new_object();
 
 	/* Assume the esdm_drng_init lock is taken by caller */
-	snprintf(buf, buflen,
-		 " Hash for compressing data: %s\n"
-		 " Available entropy: %u\n"
-		 " Data multiplier: %u\n"
-		 " Entropy Rate per 256 data bits: %u\n",
-		 (multiplier <= 1) ? "N/A" :
-				     esdm_drng_init->hash_cb->hash_name(),
-		 esdm_cpu_poolsize(), multiplier, esdm_cpu_entropylevel(256));
+	if (obj) {
+		/* Without a multiplier, nothing is compressed */
+		json_object_object_add(
+			obj, "hash_for_compressing_data",
+			(multiplier <= 1) ?
+				NULL :
+				json_object_new_string(
+					esdm_drng_init->hash_cb->hash_name()));
+		json_object_object_add(
+			obj, "available_entropy",
+			json_object_new_int64(esdm_cpu_poolsize()));
+		json_object_object_add(obj, "data_multiplier",
+				       json_object_new_int64(multiplier));
+		json_object_object_add(
+			obj, "entropy_rate_per_256_data_bits",
+			json_object_new_int64(esdm_cpu_entropylevel(256)));
+	}
+
+	esdm_es_state_write(obj, buf, buflen);
 }
 
 static bool esdm_cpu_active(void)
@@ -277,35 +322,38 @@ static bool esdm_cpu_active(void)
 #endif
 }
 
-/* Two reads of the CPU RNG that have to succeed and have to differ. */
+/* Two reads of the CPU RNG that have to differ. */
 static int esdm_cpu_selftest(void)
 {
 #ifdef ESDM_CPU_ES_IMPLEMENTED
 	unsigned long first, second;
 
-	if (!cpu_es_get(&first) || !cpu_es_get(&second)) {
+	if (!esdm_cpu_read(&first) || !esdm_cpu_read(&second)) {
 		/*
-		 * A CPU that never delivered does not have the instruction the
-		 * build provides for - there is nothing to test, just as there
-		 * is nothing to test for a device that is not present.
+		 * Nothing to test: a CPU that never delivered lacks the
+		 * instruction, and one that stalls - RDSEED or RNDRRS starved
+		 * past the retry loop - is a read failure, credited with
+		 * nothing until a read works again, rather than a reason to
+		 * stop the ESDM.
 		 */
-		if (!atomic_load(&esdm_cpu_delivered)) {
+		if (atomic_load(&esdm_cpu_delivered)) {
+			atomic_store(&esdm_cpu_read_failed, true);
+			esdm_logger(
+				LOGGER_WARN, LOGGER_C_ES,
+				"CPU ES: the CPU RNG did not deliver - no entropy until it does\n");
+		} else {
 			esdm_logger(
 				LOGGER_DEBUG, LOGGER_C_ES,
 				"CPU ES: no CPU RNG on this system - nothing to test\n");
-			return 0;
 		}
-
-		atomic_store(&esdm_cpu_read_failed, true);
-		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
-			    "CPU ES: the CPU RNG did not deliver\n");
-		return -EFAULT;
+		return 0;
 	}
 
+	atomic_store(&esdm_cpu_read_failed, false);
 	atomic_store(&esdm_cpu_delivered, true);
 
 	if (first == second) {
-		atomic_store(&esdm_cpu_read_failed, true);
+		atomic_store(&esdm_cpu_selftest_failed, true);
 		esdm_logger(LOGGER_ERR, LOGGER_C_ES,
 			    "CPU ES: the CPU RNG repeated its output\n");
 		return -EFAULT;
@@ -313,6 +361,10 @@ static int esdm_cpu_selftest(void)
 
 	memset_secure(&first, 0, sizeof(first));
 	memset_secure(&second, 0, sizeof(second));
+
+	if (atomic_exchange(&esdm_cpu_selftest_failed, false))
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "CPU ES: self test passed again\n");
 
 	return 0;
 #else
@@ -329,8 +381,9 @@ struct esdm_es_cb esdm_es_cpu = {
 	.get_ent = esdm_cpu_get,
 	.curr_entropy = esdm_cpu_entropylevel,
 	.max_entropy = esdm_cpu_poolsize,
-	.state = esdm_cpu_es_state,
+	.state_json = esdm_cpu_es_state_json,
 	.reset = NULL,
 	.active = esdm_cpu_active,
 	.selftest = esdm_cpu_selftest,
+	.read_failed = esdm_cpu_read_failed_get,
 };

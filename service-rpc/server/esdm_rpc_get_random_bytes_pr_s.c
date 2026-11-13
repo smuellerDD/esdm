@@ -18,7 +18,9 @@
  */
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "esdm.h"
 #include "esdm_rpc_protocol.h"
@@ -29,6 +31,44 @@
 #include "memset_secure.h"
 #include "threading_support.h"
 #include "unpriv_access.pb-c.h"
+
+/*
+ * One PR request is served at a time; the others get -EAGAIN and retry later,
+ * so a privileged consumer (the kernel seeder in PR mode) would rarely win
+ * against unprivileged clients hammering PR. Waiting would block the worker's
+ * event loop, so a privileged request that lost reserves the next turn:
+ * unprivileged ones are turned away long enough for its retry to come.
+ */
+#define ESDM_RPCS_PR_PRIV_RESERVE_NS (3LL * 1000000000LL)
+static atomic_llong esdm_rpcs_pr_priv_reserved_until = 0;
+
+static long long esdm_rpcs_pr_now_ns(void)
+{
+	struct timespec ts;
+
+	clock_gettime(ESDM_CLOCK_COARSE, &ts);
+	return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
+
+static ssize_t esdm_rpcs_pr_get(uint8_t *buf, size_t len, void *closure_data)
+{
+	bool privileged = esdm_rpc_client_is_privileged(closure_data);
+	long long now = esdm_rpcs_pr_now_ns();
+	ssize_t ret;
+
+	if (!privileged && now < atomic_load(&esdm_rpcs_pr_priv_reserved_until))
+		return -EAGAIN;
+
+	ret = esdm_get_random_bytes_pr_noblock(buf, len);
+
+	if (privileged)
+		atomic_store(&esdm_rpcs_pr_priv_reserved_until,
+			     ret == -EAGAIN ?
+				     now + ESDM_RPCS_PR_PRIV_RESERVE_NS :
+				     0);
+
+	return ret;
+}
 
 void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
 				  const GetRandomBytesRequest *request,
@@ -43,8 +83,8 @@ void esdm_rpc_get_random_bytes_pr(UnprivAccess_Service *service,
 		response.ret = -ESDM_RPC_MAX_PR_REQUEST_SIZE;
 		closure(&response, closure_data);
 	} else {
-		response.ret = (int)esdm_get_random_bytes_pr_noblock(
-			rndval, request->len);
+		response.ret = (int)esdm_rpcs_pr_get(rndval, request->len,
+						     closure_data);
 
 		if (response.ret > 0) {
 			esdm_test_shm_status_add_rpc_server_written(

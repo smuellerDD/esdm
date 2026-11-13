@@ -20,12 +20,16 @@
 #define _GNU_SOURCE
 #include <assert.h>
 #include <errno.h>
+#include <linux/capability.h>
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -60,6 +64,7 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	static const int fwd_signals[] = { SIGHUP, SIGINT, SIGQUIT, SIGTERM,
 					   SIGUSR1 };
 	struct sigaction sa;
+	sigset_t fwd_set, old_set;
 	unsigned int i;
 	pid_t pid;
 	int errsv, status;
@@ -83,9 +88,20 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	esdm_logger(LOGGER_VERBOSE, LOGGER_C_SERVER,
 		    "Successfully entered isolating PID namespace\n");
 
+	/*
+	 * Block the forwarded signals until the forwarders below exist, else
+	 * the daemon's handlers would run in the supervisor and a stop during
+	 * startup would be lost.
+	 */
+	sigemptyset(&fwd_set);
+	for (i = 0; i < sizeof(fwd_signals) / sizeof(fwd_signals[0]); i++)
+		sigaddset(&fwd_set, fwd_signals[i]);
+	sigprocmask(SIG_BLOCK, &fwd_set, &old_set);
+
 	pid = fork();
 	if (pid < 0) {
 		errsv = errno;
+		sigprocmask(SIG_SETMASK, &old_set, NULL);
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
 			    "Cannot fork into PID namespace: %s\n",
 			    strerror(errsv));
@@ -93,6 +109,8 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	}
 
 	if (pid == 0) {
+		sigprocmask(SIG_SETMASK, &old_set, NULL);
+
 		/*
 		 * Child: PID 1 of the new namespace, continues as the actual
 		 * daemon. Tie its lifetime to the supervisor so a SIGKILLed
@@ -128,6 +146,7 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	sa.sa_flags = SA_RESTART;
 	for (i = 0; i < sizeof(fwd_signals) / sizeof(fwd_signals[0]); i++)
 		sigaction(fwd_signals[i], &sa, NULL);
+	sigprocmask(SIG_SETMASK, &old_set, NULL);
 
 	for (;;) {
 		if (waitpid(pid, &status, 0) >= 0)
@@ -165,16 +184,14 @@ int linux_isolate_namespace_prefork(void (*supervisor_exit_cb)(void))
 	exit(WIFEXITED(status) ? WEXITSTATUS(status) : EXIT_FAILURE);
 }
 
-int linux_isolate_namespace(void)
+static int linux_unshare(int flags)
 {
 	/*
 	 * Unshare from the following namespaces - the ESDM process cannot
 	 * re-establish connection to those resources. Hence, the ESDM process
 	 * is effectively jailed with respect to those resources.
-	 *
-	 * The ESDM server only needs shared IPC and Semaphores.
 	 */
-	if (unshare(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWNET) == -1) {
+	if (unshare(flags) == -1) {
 		int errsv = errno;
 
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
@@ -186,6 +203,83 @@ int linux_isolate_namespace(void)
 		    "Successfully entered isolating namespaces\n");
 
 	return 0;
+}
+
+int linux_isolate_namespace(void)
+{
+	/* The ESDM server only needs shared IPC and Semaphores. */
+	return linux_unshare(CLONE_NEWNS | CLONE_NEWCGROUP | CLONE_NEWNET);
+}
+
+int linux_isolate_namespace_keep_mounts(void)
+{
+	return linux_unshare(CLONE_NEWCGROUP | CLONE_NEWNET);
+}
+
+/* Whether @path reads the same as @ref, which a shorter read cannot */
+static int linux_same_content(const char *path, const char *ref)
+{
+	FILE *a = fopen(path, "re"), *b;
+	int ret = 1, ca, cb;
+
+	if (!a)
+		return -errno;
+	b = fopen(ref, "re");
+	if (!b) {
+		ret = -errno;
+		fclose(a);
+		return ret;
+	}
+
+	do {
+		ca = fgetc(a);
+		cb = fgetc(b);
+		if (ca != cb) {
+			ret = 0;
+			break;
+		}
+	} while (ca != EOF);
+
+	if (ferror(a) || ferror(b))
+		ret = -EIO;
+
+	fclose(a);
+	fclose(b);
+	return ret;
+}
+
+int linux_task_has_cap_sys_admin(pid_t pid)
+{
+	struct __user_cap_header_struct hdr = {
+		.version = _LINUX_CAPABILITY_VERSION_3,
+		.pid = pid,
+	};
+	struct __user_cap_data_struct data[_LINUX_CAPABILITY_U32S_3];
+	char path[64];
+	int ret;
+
+	if (pid <= 0)
+		return -EINVAL;
+
+	/*
+	 * capget(2), not CapEff of /proc/<pid>/status: like capable(), it
+	 * honors LSM denials, e.g. AppArmor's on Ubuntu user namespaces.
+	 */
+	if (syscall(SYS_capget, &hdr, data))
+		return -errno;
+	if (!(data[CAP_TO_INDEX(CAP_SYS_ADMIN)].effective &
+	      CAP_TO_MASK(CAP_SYS_ADMIN)))
+		return 0;
+
+	/*
+	 * Capabilities count only in the task's user namespace, which anybody
+	 * may create. A task in another user namespace sees another uid_map,
+	 * unless one privileged over all our uids created it.
+	 */
+	snprintf(path, sizeof(path), "/proc/%d/uid_map", (int)pid);
+	ret = linux_same_content(path, "/proc/self/uid_map");
+
+	return ret;
 }
 
 int linux_personalization_string(char **ptr, size_t *length)

@@ -34,7 +34,23 @@ bool esdm_jent_ntg1(void);
 
 extern struct esdm_es_cb esdm_es_jent;
 
+/*
+ * Admit a seeding of a caller that may not wait only while a Jitter RNG
+ * collector is free, and end the admission.
+ */
+bool esdm_jent_seed_admit(void);
+void esdm_jent_seed_done(void);
+
 #else /* ESDM_ES_JENT */
+
+static inline bool esdm_jent_seed_admit(void)
+{
+	return true;
+}
+
+static inline void esdm_jent_seed_done(void)
+{
+}
 
 static inline int esdm_jent_status(char *buf, size_t buf_length)
 {

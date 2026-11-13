@@ -69,6 +69,11 @@ struct esdm_rpc_client_connection {
 	 */
 	esdm_rpcc_interrupt_func_t interrupt_func;
 	void *interrupt_data;
+	/*
+	 * The one registered, restored for every user: one chaining its own
+	 * in front may be cancelled before it takes it off again.
+	 */
+	esdm_rpcc_interrupt_func_t interrupt_func_init;
 
 	/*
 	 * Both are robust mutexes, so a caller killed while owning the
@@ -85,13 +90,18 @@ struct esdm_rpc_client_connection {
 	atomic_int state;
 
 	/*
-	 * The request/response and unpack scratch buffers are not stored per
-	 * connection but per calling thread (see esdm_rpcc_reqbuf /
-	 * esdm_rpcc_unpack_buf in esdm_rpc_client.c): they are only ever used
-	 * during a single synchronous invoke held by the calling thread, so one
-	 * buffer set per thread suffices instead of one per connection. This
-	 * bounds the buffer memory by the number of threads issuing RPCs rather
-	 * than by the size of the connection pool.
+	 * Getters blocked on ref_cnt without esdm_rpcc_conn_lock; counted so
+	 * the teardown does not destroy the connection under them.
+	 */
+	atomic_uint waiters;
+
+	/* Bound of the request in flight - see esdm_client_invoke() */
+	struct timespec deadline;
+
+	/*
+	 * The request/response and unpack scratch buffers are per calling
+	 * thread, not per connection - see struct esdm_rpcc_tbuf in
+	 * esdm_rpc_client.c.
 	 */
 
 	/*
@@ -135,9 +145,27 @@ esdm_rpcc_last_error(const esdm_rpc_client_connection_t *rpc_conn)
 	return (ret < 0 && ret != -EAGAIN) ? ret : 0;
 }
 
-/* Sleep time for poll operations */
-static const struct timespec esdm_client_poll_ts = { .tv_sec = 1,
-						     .tv_nsec = 0 };
+/*
+ * Wait before re-polling a request the server could not serve yet (all DRNGs
+ * await their reseed, which takes milliseconds): 1 ms, doubled per poll up to
+ * 16 ms, so short waits are not stretched and long ones do not busy poll.
+ * @polls counts the polls of the request.
+ */
+static inline struct timespec esdm_client_poll_ts(unsigned int *polls)
+{
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 1000000L << *polls };
+
+	if (*polls < 4)
+		(*polls)++;
+	return ts;
+}
+
+static inline void esdm_client_poll_wait(unsigned int *polls)
+{
+	struct timespec ts = esdm_client_poll_ts(polls);
+
+	nanosleep(&ts, NULL);
+}
 
 #ifdef __cplusplus
 }

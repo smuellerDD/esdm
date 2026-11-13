@@ -208,7 +208,7 @@ if get_option('es_ebpf_testing').enabled()
 	   get_option('es_irq_ebpf').disabled()
 		error('es_ebpf_testing requires es_sched_ebpf or es_irq_ebpf to be enabled')
 	endif
-	subdirs += [ 'addon/es_ebpf_testing' ]
+	subdirs += [ 'tests/es_ebpf_testing' ]
 endif
 
 if get_option('esdm-server').enabled()
@@ -239,7 +239,9 @@ if get_option('crypto_backend') == 'builtin'
 endif
 
 if get_option('crypto_backend') == 'gnutls'
-	gnutls_dep = dependency('gnutls', version: '>= 3.5', required: true)
+	# 3.6.7: esdm_gnutls.c declares GnuTLS' private struct drbg_aes_ctx,
+	# which 3.5 to 3.6.3 at least lay out larger: GnuTLS would overrun it.
+	gnutls_dep = dependency('gnutls', version: '>= 3.6.7', required: true)
 
 	# The SP800-90A Block_Cipher_df in front of GnuTLS' CTR DRBG uses the
 	# AES-256 core directly. GnuTLS only lists nettle in Requires.private,
@@ -263,7 +265,10 @@ Rebuild GnuTLS with FIPS140 mode enabled, or select another crypto_backend.''')
 endif
 
 if get_option('crypto_backend') == 'leancrypto'
-	leancrypto_dep = dependency('leancrypto', version: '>= 1.0', required: true)
+	# 1.6.0: lc_hash_init() reports a failed self test instead of asserting
+	# A system include: its headers are not built to -Wpedantic
+	leancrypto_dep = dependency('leancrypto', version: '>= 1.6.0', required: true,
+				    include_type: 'system')
 endif
 
 if get_option('crypto_backend') == 'botan'
@@ -307,7 +312,7 @@ if get_option('esdm-tool').enabled()
 endif
 
 if get_option('validation-helpers').enabled()
-	subdirs += [ 'addon/test' ]
+	subdirs += [ 'tests/validation-helpers' ]
 endif
 
 subdirs += [ 'man' ]

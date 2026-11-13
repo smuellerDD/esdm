@@ -37,9 +37,6 @@ extern _Atomic uint32_t esdm_write_wakeup_bits;
 void esdm_set_entropy_thresh(uint32_t new);
 void esdm_reset_state(void);
 
-int esdm_pool_trylock(void);
-void esdm_pool_lock(void);
-void esdm_pool_unlock(void);
 void esdm_pool_all_nodes_seeded(bool set);
 bool esdm_pool_all_nodes_seeded_get(void);
 
@@ -47,7 +44,7 @@ bool esdm_fully_seeded(bool do_full_init, uint32_t collected_entropy,
 		       struct entropy_buf *eb);
 uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb);
 void esdm_unset_fully_seeded(struct esdm_drng *drng);
-void esdm_init_ops(struct entropy_buf *eb);
+void esdm_init_ops(uint32_t seed_bits);
 /*
  * Collect from the entropy sources in one pass, splitting the result over the
  * two buffers a reseed needs: @seedbuf takes the sources that may be credited
@@ -60,24 +57,10 @@ void esdm_init_ops(struct entropy_buf *eb);
  * One pass rather than two: no source belongs in both buffers, so filling them
  * separately meant walking the sources twice and, where the fetch runs in
  * parallel, waiting out two rounds of the slowest one.
- *
- * @allow_cached false keeps the sources from serving blocks they collected
- * ahead of the request, see struct esdm_es_cb.get_ent.
  */
 void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 			   struct entropy_buf *addtl, uint32_t requested_bits,
-			   bool force, bool allow_cached);
-
-/*
- * As esdm_get_seed_buffers() with cached blocks allowed, for the reseed of a
- * DRNG: a source with a cache that has no block ready is left out if the other
- * sources deliver @requested_bits - see struct esdm_es_cb.get_cached. Neither
- * for the initial seeding, whose policy may ask for more than one source, nor
- * for the PR DRNG.
- */
-void esdm_get_reseed_buffers(struct entropy_buf *seedbuf,
-			     struct entropy_buf *addtl, uint32_t requested_bits,
-			     bool force);
+			   bool force);
 
 int esdm_es_mgr_reinitialize(void);
 int esdm_es_mgr_initialize(void);

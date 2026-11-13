@@ -463,30 +463,30 @@ static void test_server_allow(void)
 }
 
 /*
- * With all 8 slots taken, a client connecting takes the slot of the one idle
- * the longest: clients holding slots do not lock the ESDM out
+ * With all 8 slots taken, a client connecting takes the slot of the one
+ * connected last: clients holding slots do not lock the ESDM out, nor do the
+ * ones connecting after it take its slot, however often they do
  */
 static void test_server_slots(void)
 {
-	struct es_ext_test_client c[9];
+	struct es_ext_test_client c[10];
 	unsigned int i;
 
 	test_reset();
 	if (!test_start(&es_ext_test_plugin, &c[0]))
 		return;
-	/* Used one after the other, the first again before the last connects */
-	for (i = 0; i < 9; i++) {
-		if (i == 8)
-			CHECK_EQ(es_ext_test_client_ask(&c[0], GET, 16), 0);
+	/* Used one after the other: the first, idle the longest, stays */
+	for (i = 0; i < 10; i++) {
 		CHECK(!i || !es_ext_test_client_open(&c[i], test_socket),
 		      "client %u cannot connect", i);
 		CHECK(!es_ext_test_client_ask(&c[i], GET, 16),
 		      "client %u is not served", i);
 		es_ext_test_sleep_ms(5);
 	}
-	/* The second one, idle the longest, lost its slot */
-	for (i = 0; i < 9; i++) {
-		CHECK(es_ext_test_client_ask(&c[i], GET, 16) == (i == 1),
+	/* The eighth and the ninth, each connected last, lost their slots */
+	for (i = 0; i < 10; i++) {
+		CHECK(es_ext_test_client_ask(&c[i], GET, 16) ==
+			      (i == 7 || i == 8),
 		      "client %u", i);
 		es_ext_test_client_close(&c[i]);
 	}

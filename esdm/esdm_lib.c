@@ -17,6 +17,8 @@
  * DAMAGE.
  */
 
+#include <errno.h>
+
 #include "config.h"
 #include "esdm.h"
 #include "esdm_config_internal.h"
@@ -31,10 +33,27 @@
 #include "threading_support.h"
 #include "visibility.h"
 
+/*
+ * esdm_fini() is final: its termination flags and freed states stay, and the
+ * entropy sources cannot be brought up again. Refuse a second initialization
+ * rather than return success with DRNGs that never seed.
+ */
+static int esdm_finalized(void)
+{
+	if (!esdm_drng_mgr_terminating())
+		return 0;
+
+	esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
+		    "The ESDM cannot be initialized again after esdm_fini()\n");
+	return -ESHUTDOWN;
+}
+
 DSO_PUBLIC
 int esdm_init(void)
 {
 	int ret = 0;
+
+	CKINT(esdm_finalized());
 
 #ifdef ESDM_OVERSAMPLE_ENTROPY_SOURCES
 	/* Enable oversampling of entropy sources if selected at compile time */
@@ -86,6 +105,8 @@ int esdm_reinit(void)
 	 */
 	esdm_es_mgr_monitor_pause();
 
+	CKINT(esdm_finalized());
+
 	/* Initialize configuration subsystem */
 	CKINT(esdm_config_reinit());
 
@@ -112,9 +133,6 @@ out:
 DSO_PUBLIC
 void esdm_fini(void)
 {
-	/* Clear up the SHM information */
-	esdm_shm_status_exit();
-
 	/*
 	 * Stop the asynchronous reseed worker before the entropy source manager
 	 * joins the threads: the worker waits between its passes and only this
@@ -131,6 +149,13 @@ void esdm_fini(void)
 
 	/* Finalize the entropy source manager and all its entropy sources. */
 	esdm_es_mgr_finalize();
+
+	/*
+	 * Clear up the SHM information only after the threads are joined:
+	 * every seeding updates it, see esdm_writer_wakeup(), and the reseed
+	 * worker, self test worker and ES monitor seed until here.
+	 */
+	esdm_shm_status_exit();
 
 	/* Terminate the DRNG manager after the ES are all silenced. */
 	esdm_drng_mgr_finalize();

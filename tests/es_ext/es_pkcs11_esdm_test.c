@@ -52,7 +52,7 @@ static uint32_t test_get(uint8_t *data)
 	struct entropy_es eb_es;
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	ES->get_ent(&eb_es, BITS, true);
+	ES->get_ent(&eb_es, BITS);
 	if (data)
 		memcpy(data, eb_es.e, BITS / 8);
 	return eb_es.e_bits;

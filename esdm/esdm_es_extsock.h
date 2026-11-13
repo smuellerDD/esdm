@@ -43,16 +43,11 @@
 #endif
 
 /*
- * The longest the ESDM status waits for the STATUS of a provider - a seeding
+ * The longest the ES monitor waits for the STATUS of a provider - a seeding
  * waiting behind it still has time for its own request
  */
 #ifndef ESDM_EXT_STATUS_TIMEOUT_MS
 #define ESDM_EXT_STATUS_TIMEOUT_MS (ESDM_EXT_TIMEOUT_MS / 4)
-#endif
-
-/* STATUS is asked for at most once per this many seconds */
-#ifndef ESDM_EXT_STATUS_INTERVAL_SEC
-#define ESDM_EXT_STATUS_INTERVAL_SEC 5
 #endif
 
 extern struct esdm_es_cb esdm_es_extsock;
@@ -60,8 +55,10 @@ extern struct esdm_es_cb esdm_es_extsock;
 /**
  * @brief The socket of the provider, in place of the meson option es_ext_path
  *
- * Set before esdm_init() - esdm-server --es_ext - or later, which reconnects
- * at once; "" restores the default. Kept across esdm_fini().
+ * Set before esdm_init() - esdm-server --es_ext - or before esdm_init_monitor()
+ * at the latest: the ES monitor connects, and it does not run without a
+ * monitored source active at its start. "" restores the default. Kept across
+ * esdm_fini().
  *
  * @return 0, -EINVAL for a NULL path or one too long, -ENOMEM
  */

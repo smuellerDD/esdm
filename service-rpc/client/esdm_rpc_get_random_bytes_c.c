@@ -113,6 +113,13 @@ ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 			}
 			maxbuflen = new_max;
 			continue;
+		} else if (buffer.ret == -EAGAIN || buffer.ret == 0) {
+			/*
+			 * All DRNGs await their reseed: return what came so
+			 * far or let the caller wait - asking again would spin.
+			 */
+			ret = (buflen < orig_buflen) ? 0 : -EAGAIN;
+			goto out;
 		} else if (buffer.ret < 0) {
 			ret = buffer.ret;
 			goto out;
@@ -125,7 +132,7 @@ ssize_t esdm_rpcc_get_random_bytes_int(uint8_t *buf, size_t buflen,
 
 out:
 	esdm_rpcc_put_unpriv_service(rpc_conn);
-	return (ret < 0) ? ret : (ssize_t)orig_buflen;
+	return (ret < 0) ? ret : (ssize_t)(orig_buflen - buflen);
 }
 
 DSO_PUBLIC

@@ -65,11 +65,14 @@ int main(int argc, char *argv[])
 
 		memset(buf, 0, len);
 
-		rc = esdm_rpcc_get_random_bytes(buf, len);
-		if (rc < 0) {
-			ret = (int)ret;
+		/* Short, or -EAGAIN, where every DRNG waits for its reseed */
+		rc = probe_call_retry(esdm_rpcc_get_random_bytes, buf, len);
+		if (rc <= 0) {
+			printf("get_random_bytes failed: %zd\n", rc);
+			ret = 1;
 			goto out;
 		}
+		len = (size_t)rc;
 
 		if (!memcmp(zero, buf, len)) {
 			printf("output buffer is zero!\n");

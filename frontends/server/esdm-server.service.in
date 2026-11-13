@@ -73,7 +73,9 @@ PrivateMounts=no
 PrivateNetwork=yes
 PrivateTmp=yes
 PrivateUsers=no
-ProcSubset=pid
+# No ProcSubset=pid: it hides /proc/sys/crypto/fips_enabled, which tells the
+# server whether the kernel runs in FIPS mode - without it, a fips=1 kernel
+# gets a server without FIPS mode and without SP800-90C oversampling.
 ProtectClock=yes
 ProtectControlGroups=yes
 ProtectHome=yes
@@ -88,7 +90,7 @@ ReadWritePaths=/run
 RemoveIPC=yes
 Restart=on-failure
 RestartSec=5s
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=@ADDRESS_FAMILIES@
 # pid: allow the server to fork itself into an isolating PID namespace when
 # it is started with --pid_namespace (disabled by default)
 RestrictNamespaces=mnt cgroup net pid

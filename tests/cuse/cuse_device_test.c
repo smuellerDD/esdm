@@ -40,11 +40,16 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/capability.h>
 #include <linux/random.h>
+#include <sched.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "common_test.h"
@@ -276,13 +281,17 @@ int esdm_cuse_bind_unmount(char **src, char **dst)
 #define TEST_REQ ((fuse_req_t)&reply)
 #define TEST_PH ((struct fuse_pollhandle *)&notify_calls)
 
-/* The caller of the requests that follow */
+/*
+ * The caller of the requests that follow. Without a PID, as from outside the
+ * daemon's PID namespace, the uid decides: the cases below do not depend on
+ * the test's capabilities; test_privileged_capability() covers those.
+ */
 static void caller_is_root(bool root)
 {
 	memset(&test_ctx, 0, sizeof(test_ctx));
 	test_ctx.uid = root ? 0 : 1000;
 	test_ctx.gid = root ? 0 : 1000;
-	test_ctx.pid = getpid();
+	test_ctx.pid = 0;
 }
 
 static void ioctl_call(unsigned long cmd, const void *in_buf, size_t in_bufsz,
@@ -523,6 +532,192 @@ static void test_read_fallback(void)
 	CHECK(reply.err != 0, "a read with nothing behind it reported success");
 
 	close(fd);
+
+	/* A failing fallback reports its own error, not its -1 read as EPERM */
+	fd = open("/dev/null", O_WRONLY | O_CLOEXEC);
+	if (fd >= 0) {
+		memset(&fi, 0, sizeof(fi));
+		reply_reset();
+		esdm_cuse_read_internal(
+			TEST_REQ, 32, 0, &fi,
+			esdm_rpcc_get_random_bytes_full_noblock_int, fd);
+		CHECK_EQ(reply.kind, REPLY_ERR);
+		CHECK_EQ(reply.err, EBADF);
+		close(fd);
+	}
+}
+
+static unsigned int test_get_calls;
+
+static ssize_t test_get(uint8_t *buf, size_t len, void *int_data)
+{
+	(void)int_data;
+
+	test_get_calls++;
+	memset(buf, 0x5a, len);
+	return (ssize_t)len;
+}
+
+/*
+ * O_SYNC is __O_SYNC | O_DSYNC: O_DSYNC alone asks for no prediction
+ * resistance, so the device's own getter serves it.
+ */
+static void test_dsync(void)
+{
+	struct fuse_file_info fi;
+
+	memset(&fi, 0, sizeof(fi));
+	fi.flags = O_DSYNC;
+	test_get_calls = 0;
+	reply_reset();
+	esdm_cuse_read_internal(TEST_REQ, 32, 0, &fi, test_get, -1);
+	CHECK_EQ(reply.kind, REPLY_BUF);
+	CHECK_EQ(reply.size, 32);
+	CHECK_EQ(test_get_calls, 1);
+}
+
+/* Whether this process holds CAP_SYS_ADMIN, asked without /proc */
+static bool own_cap_sys_admin(void)
+{
+	struct __user_cap_header_struct hdr = {
+		.version = _LINUX_CAPABILITY_VERSION_3,
+		.pid = 0,
+	};
+	struct __user_cap_data_struct data[2];
+
+	if (syscall(SYS_capget, &hdr, data))
+		return false;
+
+	return !!(data[0].effective & (1U << CAP_SYS_ADMIN));
+}
+
+/*
+ * A waiting child without CAP_SYS_ADMIN (@userns false) or in a user
+ * namespace of its own (true); 0 if it could not get there.
+ */
+static pid_t spawn_caller(bool userns)
+{
+	char ready = 0;
+	int p[2];
+	pid_t pid;
+
+	if (pipe(p))
+		return 0;
+
+	pid = fork();
+	if (pid < 0) {
+		close(p[0]);
+		close(p[1]);
+		return 0;
+	}
+
+	if (!pid) {
+		struct __user_cap_header_struct hdr = {
+			.version = _LINUX_CAPABILITY_VERSION_3,
+			.pid = 0,
+		};
+		struct __user_cap_data_struct data[2];
+		char c = 'y';
+
+		if (userns) {
+			if (unshare(CLONE_NEWUSER))
+				c = 'n';
+		} else if (syscall(SYS_capget, &hdr, data)) {
+			c = 'n';
+		} else {
+			data[0].effective &= ~(1U << CAP_SYS_ADMIN);
+			if (syscall(SYS_capset, &hdr, data))
+				c = 'n';
+		}
+
+		if (write(p[1], &c, 1) != 1 || c != 'y')
+			_exit(0);
+		pause();
+		_exit(0);
+	}
+
+	close(p[1]);
+	if (read(p[0], &ready, 1) != 1 || ready != 'y') {
+		waitpid(pid, NULL, 0);
+		pid = 0;
+	}
+	close(p[0]);
+
+	return pid;
+}
+
+static void reap(pid_t pid)
+{
+	if (pid > 0) {
+		kill(pid, SIGKILL);
+		waitpid(pid, NULL, 0);
+	}
+}
+
+/*
+ * The privileged ioctls require the caller's CAP_SYS_ADMIN, as the kernel's
+ * do, not root: the daemon acts with its own, which neither a root service
+ * without it nor root of any user namespace may reach.
+ */
+static void test_privileged_capability(void)
+{
+	bool has = own_cap_sys_admin();
+	pid_t child;
+
+	memset(&test_ctx, 0, sizeof(test_ctx));
+	test_ctx.pid = getpid();
+
+	test_ctx.uid = 1000;
+	CHECK(esdm_cuse_client_privileged(TEST_REQ) == has,
+	      "a caller with uid 1000 was not judged by its capabilities");
+	test_ctx.uid = 0;
+	CHECK(esdm_cuse_client_privileged(TEST_REQ) == has,
+	      "a caller with uid 0 was not judged by its capabilities");
+
+	child = spawn_caller(false);
+	if (child) {
+		test_ctx.pid = child;
+		test_ctx.uid = 0;
+		CHECK(!esdm_cuse_client_privileged(TEST_REQ),
+		      "root without CAP_SYS_ADMIN was let through");
+
+		ioctl_call(44, NULL, 0, 0, -1);
+		CHECK_EQ(reply.kind, REPLY_ERR);
+		CHECK_EQ(reply.err, EPERM);
+		CHECK_EQ(raise_calls, 0);
+		reap(child);
+	}
+
+	child = spawn_caller(true);
+	if (child) {
+		test_ctx.pid = child;
+		CHECK(!esdm_cuse_client_privileged(TEST_REQ),
+		      "root of a user namespace of its own was let through");
+		reap(child);
+	}
+
+	/* A caller that cannot be looked up is refused */
+	child = fork();
+	if (!child)
+		_exit(0);
+	if (child > 0) {
+		waitpid(child, NULL, 0);
+		test_ctx.pid = child;
+		test_ctx.uid = 0;
+		CHECK(!esdm_cuse_client_privileged(TEST_REQ),
+		      "a caller that cannot be looked up was let through");
+
+		/* In a PID namespace of its own, the daemon asks for root */
+		esdm_cuse_pid_namespace = true;
+		CHECK(esdm_cuse_client_privileged(TEST_REQ),
+		      "root was refused in the PID namespace fallback");
+		test_ctx.uid = 1000;
+		CHECK(!esdm_cuse_client_privileged(TEST_REQ),
+		      "a user was let through in the PID namespace fallback");
+		esdm_cuse_pid_namespace = false;
+	}
+
+	caller_is_root(false);
 }
 
 /*
@@ -570,6 +765,17 @@ static void test_write_fallback(void)
 	CHECK(reply.err != 0, "a write with nothing behind it reported success");
 
 	close(fd);
+
+	/* A failing fallback reports its own error rather than EPERM */
+	fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
+	if (fd >= 0) {
+		reply_reset();
+		esdm_cuse_write_internal(TEST_REQ, (const char *)buf,
+					 sizeof(buf), 0, &fi, fd);
+		CHECK_EQ(reply.kind, REPLY_ERR);
+		CHECK_EQ(reply.err, EBADF);
+		close(fd);
+	}
 }
 
 /*
@@ -603,13 +809,18 @@ static void test_poll_registration(void)
 
 	/*
 	 * A second poll on the same descriptor replaces the first
-	 * registration rather than adding to it.
+	 * registration rather than adding to it, but keeps its events: another
+	 * thread may poll the same file for other ones and must still wake.
 	 */
 	reply_reset();
+	fi.poll_events = POLLOUT;
 	esdm_cuse_poll(TEST_REQ, &fi, TEST_PH);
 	CHECK_EQ(destroy_calls, 1);
 	CHECK(esdm_cuse_poll_list && !esdm_cuse_poll_list->next,
 	      "the stale registration was kept alongside the new one");
+	CHECK(esdm_cuse_poll_list &&
+		      esdm_cuse_poll_list->poll_events == (POLLIN | POLLOUT),
+	      "the events of the replaced registration were dropped");
 
 	/* The release takes it with it */
 	reply_reset();
@@ -842,7 +1053,9 @@ int main(int argc, char *argv[])
 	test_ioctl_privileged_refused();
 	test_ioctl_status_and_unknown();
 	test_read_fallback();
+	test_dsync();
 	test_write_fallback();
+	test_privileged_capability();
 	test_poll_registration();
 	test_pollmask();
 	test_privileged_ioctls();

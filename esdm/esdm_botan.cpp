@@ -290,6 +290,12 @@ static int esdm_botan_xof_init(void *xof)
 	struct esdm_botan_xof_ctx *ctx =
 		reinterpret_cast<esdm_botan_xof_ctx *>(xof);
 
+	/*
+	 * Released first, the old state is wiped even if no new one can be
+	 * created - see esdm_xdrbg_zero()
+	 */
+	ctx->xof_fn.reset();
+
 	try {
 		/* Starts over: an XOF takes no input after its output */
 		ctx->xof_fn = Botan::XOF::create_or_throw("SHAKE-256");

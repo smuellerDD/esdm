@@ -134,10 +134,11 @@ Once connected, the operations stay within
 .BR poll (2),
 .BR close (2),
 .BR getpid (2),
-.BR clock_gettime (2),
-.BR nanosleep (2)
+.BR getpeername (2),
+.BR rt_sigprocmask (2),
+.BR clock_gettime (2)
 and
-.BR getsockopt (2).
+.BR nanosleep (2).
 That is deliberate: it is the set a seccomp confined process is typically still
 allowed, OpenSSH's pre\-auth sandbox being the reference case. In particular
 .BR send (2)/ recv (2)
@@ -147,9 +148,12 @@ which that filter answers with
 .B SECCOMP_RET_KILL
 \- and
 .B MSG_NOSIGNAL
-is therefore not available, so a write is preceded by a poll that catches a
-vanished peer before it could raise
-.BR SIGPIPE .
+is therefore not available. A write blocks
+.B SIGPIPE
+for its thread instead, and only once the peer is gone takes the signal off
+again with
+.BR rt_sigtimedwait (2)
+\- where a reconnect would follow anyway.
 .PP
 Establishing a connection is a different matter: it needs
 .BR socket (2)

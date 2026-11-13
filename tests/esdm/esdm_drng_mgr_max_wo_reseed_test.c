@@ -96,11 +96,15 @@ static int esdm_drng_mgr_max_wo_reseed_test(bool success)
 		goto err;
 	}
 
+	/*
+	 * The node DRNG, reseeded inline with too little entropy, left the
+	 * fully seeded state at its maximum. The initial DRNG serving this
+	 * request reaches its own: non-operational with any instance count.
+	 */
 	esdm_drng_force_reseed();
 	esdm_get_random_bytes(buf, sizeof(buf));
-	if (esdm_state_operational() != success) {
-		printf("(4) failed to %soperational mode\n",
-		       success ? "remain in " : "enter non-");
+	if (esdm_state_operational()) {
+		printf("(4) failed to enter non-operational mode\n");
 		goto err;
 	}
 

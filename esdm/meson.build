@@ -3,7 +3,6 @@ esdm_src = files([
 	'esdm_config.c',
 	'esdm_drng_mgr.c',
 	'esdm_es_aux.c',
-	'esdm_es_buf.c',
 	'esdm_es_mgr.c',
 	'esdm_info.c',
 	'esdm_interface_dev_common.c',
@@ -72,6 +71,10 @@ endif
 
 if get_option('es_tpm2').enabled()
 	esdm_src += files('esdm_es_tpm2.c')
+endif
+
+if get_option('es_hwrand').enabled() or get_option('es_tpm2').enabled()
+	esdm_src += files('esdm_es_reader.c')
 endif
 
 if get_option('es_ext').enabled()

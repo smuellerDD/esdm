@@ -22,6 +22,7 @@
 #include "build_bug_on.h"
 #include "esdm_drng_mgr.h"
 #include "esdm_es_mgr.h"
+#include "esdm_rpc_server.h"
 #include "esdm_rpc_service.h"
 #include "esdm_selftest.h"
 #include "priv_access.pb-c.h"
@@ -43,6 +44,13 @@ void esdm_rpc_selftest(PrivAccess_Service *service, const EmptyRequest *request,
 	BUILD_BUG_ON(esdm_selftest_undone != 0);
 	BUILD_BUG_ON(esdm_selftest_passed != 1);
 	BUILD_BUG_ON(esdm_selftest_failed != 2);
+
+	/* Like every handler of the privileged interface */
+	if (!esdm_rpc_client_is_privileged(closure_data)) {
+		response.ret = -EPERM;
+		closure(&response, closure_data);
+		return;
+	}
 
 	ret = esdm_selftest_run();
 

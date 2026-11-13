@@ -21,12 +21,32 @@
 #define LINUX_SUPPORT_H
 
 #include <stddef.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/**
+ * @brief Leave the mount, cgroup and network namespaces of the host.
+ *
+ * unshare(2) moves the calling thread only: call before creating threads.
+ */
 int linux_isolate_namespace(void);
+/**
+ * @brief As linux_isolate_namespace, but keeping the host's mount namespace.
+ *
+ * For a daemon that publishes mounts to the host, as the CUSE frontends do.
+ */
+int linux_isolate_namespace_keep_mounts(void);
+/**
+ * @brief Whether a task holds CAP_SYS_ADMIN in our user namespace.
+ *
+ * @param [in] pid Thread or process ID in the PID namespace of our /proc.
+ *
+ * @return 1 if it does, 0 if not, < 0 where that cannot be told.
+ */
+int linux_task_has_cap_sys_admin(pid_t pid);
 /**
  * @brief Fork the daemon into an isolating PID namespace.
  *

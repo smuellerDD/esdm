@@ -24,6 +24,7 @@
 #include <limits.h>
 #include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,9 +40,11 @@
 #include "esdm_egd_client.h"
 #include "esdm_egd_protocol.h"
 #include "esdm_logger.h"
+#include "helper.h"
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "visibility.h"
+#include "esdm_ppoll.h"
 
 /*
  * Attempts per operation: the initial one plus a single retry on a freshly
@@ -101,6 +104,14 @@ struct esdm_egd_client {
 	 */
 	pid_t owner_pid;
 
+	/*
+	 * Peer address of @fd as getpeername(2) reported it after the connect,
+	 * see esdm_egd_client_fd_is_ours_locked(): the path the server bound,
+	 * which may differ from socket_path, e.g. through a /var/run symlink.
+	 */
+	struct sockaddr_un peer_addr;
+	socklen_t peer_addrlen;
+
 	/* Registry entry, see esdm_egd_client_atfork_child(). */
 	TAILQ_ENTRY(esdm_egd_client) tailq;
 };
@@ -143,13 +154,21 @@ static void esdm_egd_clients_lock_acquire(void)
  * Connection handling
  ****************************/
 
-/* Caller holds the lock. */
+static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client);
+
+/*
+ * Give up the connection. Caller holds the lock - or is the fork child, alone.
+ *
+ * Close the descriptor only if it still is the connection: one the application
+ * closed (closefrom()) and reused for a file of its own is not ours to close.
+ */
 static void esdm_egd_client_disconnect_locked(struct esdm_egd_client *client)
 {
 	if (client->fd < 0)
 		return;
 
-	close(client->fd);
+	if (esdm_egd_client_fd_is_ours_locked(client))
+		close(client->fd);
 	client->fd = -1;
 }
 
@@ -221,11 +240,7 @@ static void esdm_egd_client_atfork_child(void)
 	struct esdm_egd_client *client;
 
 	TAILQ_FOREACH (client, &esdm_egd_clients, tailq) {
-		if (client->fd >= 0) {
-			close(client->fd);
-			client->fd = -1;
-		}
-
+		esdm_egd_client_disconnect_locked(client);
 		esdm_egd_client_recreate_lock(&client->lock);
 	}
 
@@ -269,7 +284,7 @@ static uint64_t esdm_egd_client_now_ms(void)
 {
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(ESDM_CLOCK_COARSE, &ts);
 
 	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)(ts.tv_nsec / 1000000);
 }
@@ -306,7 +321,7 @@ static int esdm_egd_client_wait(int fd, short events, int timeout_ms,
 	int ret;
 
 	do {
-		ret = poll(&pfd, 1, timeout_ms);
+		ret = esdm_ppoll_ms(&pfd, 1, timeout_ms);
 	} while (ret < 0 && errno == EINTR);
 
 	if (revents)
@@ -423,6 +438,19 @@ static int esdm_egd_client_connect_locked(struct esdm_egd_client *client)
 		return -errsv;
 	}
 
+	memset(&client->peer_addr, 0, sizeof(client->peer_addr));
+	client->peer_addrlen = sizeof(client->peer_addr);
+	if (getpeername(fd, (struct sockaddr *)&client->peer_addr,
+			&client->peer_addrlen) < 0) {
+		errsv = errno;
+		close(fd);
+		return -errsv;
+	}
+	if (client->peer_addrlen > sizeof(client->peer_addr)) {
+		close(fd);
+		return -EPROTO;
+	}
+
 	client->fd = fd;
 	client->owner_pid = getpid();
 
@@ -441,6 +469,9 @@ static int esdm_egd_client_connect_locked(struct esdm_egd_client *client)
  * for reuse, and reading "random" data out of whatever took its place would be
  * a silent and serious failure. getpeername(2) is permitted even inside
  * OpenSSH's pre-auth sandbox, so confirming costs one allowed syscall.
+ *
+ * The answer is compared with the one at connect time rather than with the
+ * configured path: the kernel reports the path as the server spelled it.
  */
 static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client)
 {
@@ -454,11 +485,8 @@ static bool esdm_egd_client_fd_is_ours_locked(struct esdm_egd_client *client)
 		return false;
 
 	/* Some other socket took the number. */
-	if (addr.sun_family != AF_UNIX || addrlen > sizeof(addr))
-		return false;
-
-	return strncmp(addr.sun_path, client->socket_path,
-		       sizeof(addr.sun_path)) == 0;
+	return addrlen <= sizeof(addr) && addrlen == client->peer_addrlen &&
+	       memcmp(&addr, &client->peer_addr, addrlen) == 0;
 }
 
 /* Caller holds the lock. */
@@ -481,6 +509,46 @@ static int esdm_egd_client_ensure_connected_locked(struct esdm_egd_client *clien
  * Raw transfers
  ****************************/
 
+/*
+ * write(2) without the SIGPIPE of a vanished peer, which would kill the
+ * application. send(2) with MSG_NOSIGNAL is sendto(2), which OpenSSH's
+ * pre-auth sandbox kills for (see the header). So SIGPIPE is blocked for this
+ * thread and, if the write raised it, consumed before the mask is restored.
+ * The sandbox permits rt_sigprocmask(2); rt_sigtimedwait(2) runs only once
+ * the peer is gone, where the following reconnect is not permitted either.
+ */
+static ssize_t esdm_egd_client_write_nosignal(int fd, const uint8_t *buf,
+					      size_t len)
+{
+	static const struct timespec nowait = { 0, 0 };
+	sigset_t sigpipe, old;
+	ssize_t ret;
+	int errsv;
+
+	sigemptyset(&sigpipe);
+	sigaddset(&sigpipe, SIGPIPE);
+	if (pthread_sigmask(SIG_BLOCK, &sigpipe, &old))
+		return write(fd, buf, len);
+
+	ret = write(fd, buf, len);
+	errsv = errno;
+
+	/*
+	 * A SIGPIPE the caller blocks itself stays pending for the caller.
+	 * Otherwise none was pending before, so one pending now is the write's.
+	 */
+	if (ret < 0 && errsv == EPIPE && !sigismember(&old, SIGPIPE)) {
+		while (sigtimedwait(&sigpipe, NULL, &nowait) < 0 &&
+		       errno == EINTR)
+			;
+	}
+
+	pthread_sigmask(SIG_SETMASK, &old, NULL);
+	errno = errsv;
+
+	return ret;
+}
+
 /* Caller holds the lock. */
 static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 					    const uint8_t *buf, size_t len)
@@ -496,11 +564,8 @@ static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 		/*
 		 * Establish writability before writing rather than after an
 		 * EAGAIN: poll reports the hangup of a peer that went away, so
-		 * the write never happens and cannot raise a SIGPIPE that would
-		 * kill the application this library is linked into. send(2)
-		 * with MSG_NOSIGNAL is deliberately not used - it is sendto(2),
-		 * which OpenSSH's pre-auth sandbox answers with
-		 * SECCOMP_RET_KILL (see the header).
+		 * the write is not even attempted then. A peer going away
+		 * between the two is covered by the write itself.
 		 */
 		wret = esdm_egd_client_wait(client->fd, POLLOUT, timeout_ms,
 					    &revents);
@@ -509,7 +574,8 @@ static int esdm_egd_client_write_all_locked(struct esdm_egd_client *client,
 		if (revents & (POLLERR | POLLHUP | POLLNVAL))
 			return -EPIPE;
 
-		ret = write(client->fd, buf + written, len - written);
+		ret = esdm_egd_client_write_nosignal(client->fd, buf + written,
+						     len - written);
 
 		if (ret > 0) {
 			written += (size_t)ret;

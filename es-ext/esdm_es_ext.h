@@ -91,7 +91,10 @@ extern "C" {
  *		 terminated, of up to ESDM_ES_EXT_STATUS_MAX bytes - into @buf
  *		 of @buflen bytes: 0, -EMSGSIZE or another negative errno. The
  *		 ESDM shows it as "plugin" of the "provider" status of the
- *		 source, asked for at most every 5 seconds. May be NULL.
+ *		 source, asked for on every round of the ESDM's entropy
+ *		 source monitor. An answer taking more than 500 ms drops
+ *		 the connection, and the status is not asked for a minute.
+ *		 May be NULL.
  * @entropy_rate: The rate the source declares, 0 to
  *		  ESDM_ES_EXT_ENTROPY_RATE_MAX - a higher one is capped - or
  *		  ESDM_ES_EXT_PROTO_RATE_NONE for none, called once after
@@ -223,9 +226,10 @@ int esdm_es_ext_server_set_entropy_rate(struct esdm_es_ext_server *server,
  * @brief Serve requests until esdm_es_ext_server_stop()
  *
  * Up to ESDM_ES_EXT_MAX_CLIENTS clients at a time, a client breaking the
- * protocol is disconnected. A client beyond takes the slot of the one idle the
- * longest - one of root only for another one of root, as the ESDM connects as
- * root at start up.
+ * protocol is disconnected. A client beyond takes the slot of the one connected
+ * last, so later ones cannot take the ESDM's - one of root only for another one
+ * of root. A process once connected as root counts as root, as the ESDM
+ * reconnects after dropping its privileges.
  *
  * @param [in] server The server
  *

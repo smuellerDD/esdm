@@ -386,37 +386,43 @@ static bool esdm_cuse_fips_enabled(void)
 #endif
 
 static const char *esdm_cuse_unprivileged_user = "nobody";
-static void esdm_cuse_drop_privileges(void)
-{
-	static bool dropped = false;
 
-	if (dropped)
-		return;
-
-	if (linux_isolate_namespace() == 0 &&
-	    drop_privileges_transient(esdm_cuse_unprivileged_user) == 0)
-		dropped = true;
-}
+/* Set with --pid_namespace, see esdm_cuse_client_privileged() */
+static bool esdm_cuse_pid_namespace = false;
 
 static bool esdm_cuse_client_privileged(fuse_req_t req)
 {
 	const struct fuse_ctx *ctx = fuse_req_ctx(req);
+	bool privileged;
+	int ret;
 
 	/*
-	 * We are not checking the GID as we expect a root user to use any
-	 * GID.
-	 *
-	 * WARNING: as documented for struct fuse_ctx, the CUSE daemon
-	 * MUST NOT run in a PID or user namespace.
+	 * In a PID namespace of its own the daemon sees callers as PID 0 and
+	 * cannot look them up. Fall back to root then, which unlike the
+	 * kernel's check admits root without CAP_SYS_ADMIN.
 	 */
-	if (ctx->uid == 0) {
-		esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE,
-			    "CUSE caller privileged\n");
-		return true;
+	if (esdm_cuse_pid_namespace || !ctx->pid) {
+		privileged = !ctx->uid;
+		goto out;
 	}
 
-	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller unprivileged\n");
-	return false;
+	/*
+	 * Like the kernel, require CAP_SYS_ADMIN of the calling thread, not
+	 * root: the daemon acts with its own CAP_SYS_ADMIN, which a root
+	 * service without it must not reach. ctx->pid, blocked in the ioctl,
+	 * cannot be reused meanwhile; a failed lookup refuses the request.
+	 */
+	ret = linux_task_has_cap_sys_admin(ctx->pid);
+	if (ret < 0)
+		esdm_logger(LOGGER_WARN, LOGGER_C_CUSE,
+			    "Cannot check the capabilities of caller %d: %s\n",
+			    (int)ctx->pid, strerror(-ret));
+	privileged = (ret == 1);
+
+out:
+	esdm_logger(LOGGER_DEBUG, LOGGER_C_CUSE, "CUSE caller %sprivileged\n",
+		    privileged ? "" : "un");
+	return privileged;
 }
 
 /*
@@ -434,11 +440,12 @@ static bool esdm_cuse_client_privileged(fuse_req_t req)
  * admin control path.
  */
 static mutex_t esdm_cuse_priv = MUTEX_UNLOCKED_PREFER_WRITER;
-static void esdm_cuse_raise_privilege_transient(fuse_req_t req)
+
+/* Only for a caller esdm_cuse_client_privileged() accepted */
+static void esdm_cuse_raise_privilege_transient(void)
 {
 	mutex_lock(&esdm_cuse_priv);
-	if (esdm_cuse_client_privileged(req))
-		raise_privilege_transient(0, 0);
+	raise_privilege_transient(0, 0);
 }
 
 static void esdm_cuse_drop_privilege_transient(void)
@@ -475,13 +482,25 @@ static int esdm_cuse_interrupt(void *data)
 	return !!fuse_req_interrupted(req);
 }
 
+/* Wait 1, 2, 4, 8, then 16 ms before asking again, as the RPC client does */
+static void esdm_cuse_poll_wait(unsigned int *polls)
+{
+	struct timespec ts = { .tv_nsec = (1L << *polls) * 1000000L };
+
+	if (*polls < 4)
+		(*polls)++;
+	nanosleep(&ts, NULL);
+}
+
 void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi, get_func_t get,
 			     int fallback_fd)
 {
 	uint8_t tmpbuf_s[64] = { 0 }, *tmpbuf_p = tmpbuf_s, *tmpbuf = NULL;
 	size_t read_bytes = 0;
+	unsigned int polls = 0;
 	ssize_t ret = 0;
+	bool wait;
 
 	(void)off;
 
@@ -497,8 +516,19 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
-	if (fi->flags & O_SYNC)
-		get = esdm_rpcc_get_random_bytes_pr_int;
+	/*
+	 * No getter waits under esdm_cuse_priv: a privileged ioctl waiting for
+	 * it would queue every later caller behind that wait (writer
+	 * preference). The waiting getters are asked in their non-waiting
+	 * form, and the wait happens below with the lock dropped.
+	 *
+	 * O_SYNC is __O_SYNC | O_DSYNC, a test of O_SYNC alone takes O_DSYNC.
+	 */
+	if ((fi->flags & O_SYNC) == O_SYNC)
+		get = esdm_rpcc_get_random_bytes_pr_noblock_int;
+	else if (get == esdm_rpcc_get_random_bytes_full_int)
+		get = esdm_rpcc_get_random_bytes_full_noblock_int;
+	wait = get != esdm_rpcc_get_random_bytes_int;
 
 	/*
 	 * fuse automatically chunks requests, e.g. for a 1MB read
@@ -513,6 +543,24 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 		esdm_cuse_unpriv_call_end();
 
 		/*
+		 * /dev/urandom: the ESDM is operational, but every DRNG awaits
+		 * its reseed - wait for that as /dev/random does.
+		 */
+		if (ret == -EAGAIN && !wait) {
+			get = esdm_rpcc_get_random_bytes_full_noblock_int;
+			wait = true;
+		}
+		if (ret == -EAGAIN) {
+			if (fuse_req_interrupted(req)) {
+				ret = -EINTR;
+				goto out;
+			}
+			esdm_cuse_poll_wait(&polls);
+			continue;
+		}
+		polls = 0;
+
+		/*
 		 * If call to the ESDM server failed, let us fall back to the
 		 * fallback file descriptor. Yet, we do not cover for short
 		 * reads as this entire CUSE handling is prone to short reads
@@ -525,6 +573,8 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 				"Use fallback to provide data due to RPC error code %zd\n",
 				ret);
 			ret = read(fallback_fd, tmpbuf_p + read_bytes, todo);
+			if (ret < 0)
+				ret = -errno;
 
 			/*
 			 * A 0-byte read (EOF - e.g. a regular-file fallback in
@@ -540,7 +590,9 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			goto out;
 		read_bytes += (size_t)ret;
 	}
-	ret = fuse_reply_buf(req, (const char *)tmpbuf_p, size);
+	/* The reply frees req, also when it fails: no second one below */
+	fuse_reply_buf(req, (const char *)tmpbuf_p, size);
+	ret = 0;
 
 out:
 	if (tmpbuf) {
@@ -602,6 +654,8 @@ err:
 			ret = write(fallback_fd, buf + written, size - written);
 			if (ret > 0)
 				written += (size_t)ret;
+			else if (ret < 0)
+				ret = -errno;
 		} while (ret > 0 && written < size);
 
 		/*
@@ -669,7 +723,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege_transient(req);
+			esdm_cuse_raise_privilege_transient();
 			esdm_invoke(esdm_rpcc_rnd_add_to_ent_cnt_int(
 				ent_count_bits, req));
 			/* In case of an error, update the kernel */
@@ -724,7 +778,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege_transient(req);
+			esdm_cuse_raise_privilege_transient();
 
 			esdm_invoke(esdm_rpcc_rnd_add_entropy_int(
 				(const uint8_t *)rpi->buf,
@@ -756,7 +810,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege_transient(req);
+		esdm_cuse_raise_privilege_transient();
 		esdm_invoke(esdm_rpcc_rnd_clear_pool_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
@@ -778,7 +832,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege_transient(req);
+		esdm_cuse_raise_privilege_transient();
 		esdm_invoke(esdm_rpcc_rnd_reseed_crng_int(req));
 		if (!ret) {
 			if (backend_fd >= 0 &&
@@ -844,7 +898,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 				fuse_reply_err(req, EPERM);
 				return;
 			}
-			esdm_cuse_raise_privilege_transient(req);
+			esdm_cuse_raise_privilege_transient();
 			if (backend_fd >= 0 &&
 			    ioctl(backend_fd, RNDADDENTROPY, rpi) == -1)
 				ret = -errno;
@@ -868,7 +922,7 @@ void esdm_cuse_ioctl(int backend_fd, fuse_req_t req, unsigned long cmd,
 			fuse_reply_err(req, EPERM);
 			return;
 		}
-		esdm_cuse_raise_privilege_transient(req);
+		esdm_cuse_raise_privilege_transient();
 		if (backend_fd >= 0 && ioctl(backend_fd, RNDRESEEDCRNG) == -1)
 			ret = -errno;
 		else
@@ -906,15 +960,20 @@ struct esdm_cuse_poll {
 static struct esdm_cuse_poll *esdm_cuse_poll_list;
 static DEFINE_MUTEX_W_UNLOCKED(esdm_cuse_ph_lock);
 
-/* Unlink and free every registration for fh; caller holds esdm_cuse_ph_lock. */
-static void esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
+/*
+ * Unlink and free every registration for fh, returning the events they waited
+ * for; caller holds esdm_cuse_ph_lock.
+ */
+static uint32_t esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
 {
 	struct esdm_cuse_poll **pp = &esdm_cuse_poll_list;
+	uint32_t events = 0;
 
 	while (*pp) {
 		struct esdm_cuse_poll *node = *pp;
 
 		if (node->fh == fh) {
+			events |= node->poll_events;
 			if (notify)
 				fuse_notify_poll(node->ph);
 			fuse_pollhandle_destroy(node->ph);
@@ -924,6 +983,8 @@ static void esdm_cuse_poll_remove_fh(uint64_t fh, bool notify)
 			pp = &node->next;
 		}
 	}
+
+	return events;
 }
 
 static void esdm_cuse_get_pollmask(unsigned int *outmask)
@@ -976,7 +1037,8 @@ static void esdm_cuse_set_pollmask(unsigned int request_events,
 void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 		    struct fuse_pollhandle *ph)
 {
-	unsigned int mask;
+	unsigned int sysmask, mask;
+	uint32_t events;
 	int err_code;
 
 	if (!fi->poll_events) {
@@ -988,15 +1050,23 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 	 * Check current status and return it if it complies with requested
 	 * status.
 	 */
-	esdm_cuse_get_pollmask(&mask);
+	esdm_cuse_get_pollmask(&sysmask);
+	mask = sysmask;
 	esdm_cuse_set_pollmask(fi->poll_events, &mask);
 	fuse_reply_poll(req, mask);
 
 	/* cleanup first, as we may have an interrupted poll/select */
 	mutex_w_lock(&esdm_cuse_ph_lock);
 	{
-		/* Drop any stale registration for this fh. */
-		esdm_cuse_poll_remove_fh(fi->fh, false);
+		/*
+		 * Replace any registration of this fh (the kernel has one poll
+		 * handle per file, waking all its pollers) but keep its events:
+		 * another thread may poll the file for other events.
+		 */
+		events = fi->poll_events |
+			 esdm_cuse_poll_remove_fh(fi->fh, false);
+		mask = sysmask;
+		esdm_cuse_set_pollmask(events, &mask);
 
 		if (mask) {
 			/* Event already available (replied above). */
@@ -1018,7 +1088,7 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 
 				node->fh = fi->fh;
 				node->ph = ph;
-				node->poll_events = fi->poll_events;
+				node->poll_events = events;
 				node->next = esdm_cuse_poll_list;
 				esdm_cuse_poll_list = node;
 
@@ -1029,7 +1099,7 @@ void esdm_cuse_poll(fuse_req_t req, struct fuse_file_info *fi,
 				 * instead of waiting for the next state change.
 				 */
 				esdm_cuse_get_pollmask(&recheck);
-				esdm_cuse_set_pollmask(fi->poll_events, &recheck);
+				esdm_cuse_set_pollmask(events, &recheck);
 				if (recheck) {
 					fuse_notify_poll(node->ph);
 					fuse_pollhandle_destroy(node->ph);
@@ -1145,7 +1215,12 @@ void esdm_cuse_init_done(void *userdata)
 	CKINT(esdm_cuse_shm_status_create_sem());
 	CKINT(esdm_cuse_shm_status_create_shm());
 
-	esdm_cuse_drop_privileges();
+	/*
+	 * The transient raise for privileged ioctls exists to avoid serving at
+	 * euid 0, so a failed drop ends the daemon.
+	 */
+	CKINT_LOG(drop_privileges_transient(esdm_cuse_unprivileged_user),
+		  "Cannot drop privileges: %d\n", ret);
 
 	CKINT_LOG(thread_start(esdm_cuse_poll_checker, NULL,
 			       ESDM_THREAD_CUSE_POLL_GROUP, NULL),
@@ -1269,6 +1344,9 @@ int main_common(const char *_devname, const char *target, const char *semname,
 		esdm_logger_enable_syslog("esdm-cuse");
 	}
 
+	/* See esdm_cuse_client_privileged() */
+	esdm_cuse_pid_namespace = !!param.pid_namespace;
+
 	esdm_test_disable_fallback(param.disable_fallback);
 
 	CKINT(esdm_cuse_file_name(devname, sizeof(devname), _devname));
@@ -1331,6 +1409,15 @@ int main_common(const char *_devname, const char *target, const char *semname,
 	/* Enter PID namespace (opt-in via --pid_namespace) */
 	if (param.pid_namespace)
 		CKINT(linux_isolate_namespace_prefork(NULL));
+
+	/*
+	 * Before any thread exists, as unshare() moves the calling thread
+	 * only. The mount namespace stays the host's: the bind mount over the
+	 * kernel device has to be seen there, and removed from there again.
+	 */
+	if (linux_isolate_namespace_keep_mounts())
+		esdm_logger(LOGGER_WARN, LOGGER_C_CUSE,
+			    "Continuing without namespace isolation\n");
 
 	/* One thread group */
 	CKINT(thread_init(1));

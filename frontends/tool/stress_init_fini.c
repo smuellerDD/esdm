@@ -96,6 +96,33 @@ static void check_service_usable(struct init_fini_stats *stats, const char *ctx)
 	esdm_rpcc_put_unpriv_service(rpc_conn);
 }
 
+/* A short answer or -EAGAIN: the DRNG waits for a reseed, see rpc_once() */
+static bool rpc_served(ssize_t ret)
+{
+	return ret >= 0 || ret == -EAGAIN;
+}
+
+/*
+ * One request of random bytes. A build capping the output without a full
+ * reseed (SP800-90C, fips140) stops a DRNG at its cap until the reseed, and
+ * the non-waiting getter answers short or with -EAGAIN meanwhile: no failure.
+ */
+static void rpc_once(struct init_fini_stats *stats, const char *ctx)
+{
+	uint8_t buf[16];
+	ssize_t ret = esdm_rpcc_get_random_bytes(buf, sizeof(buf));
+
+	if (rpc_served(ret)) {
+		atomic_fetch_add(&stats->rpc_calls, 1);
+		return;
+	}
+
+	/* The first failure says what went wrong, the count how often */
+	if (!atomic_fetch_add(&stats->rpc_errors, 1))
+		esdm_logger(LOGGER_ERR, LOGGER_C_TOOL, "%s: RPC failed: %s\n",
+			    ctx, strerror((int)-ret));
+}
+
 /*
  * Churn thread: takes and drops references on both services as fast as it can,
  * so the other threads race against the allocation and the teardown of the
@@ -115,15 +142,8 @@ static void *init_fini_churn(void *arg)
 		/* Our own reference is held here, so this has to work. */
 		check_service_usable(stats, "churn");
 
-		if (a->do_rpc) {
-			uint8_t buf[16];
-
-			if (esdm_rpcc_get_random_bytes(buf, sizeof(buf)) !=
-			    (ssize_t)sizeof(buf))
-				atomic_fetch_add(&stats->rpc_errors, 1);
-			else
-				atomic_fetch_add(&stats->rpc_calls, 1);
-		}
+		if (a->do_rpc)
+			rpc_once(stats, "churn");
 
 		esdm_rpcc_fini_unpriv_service();
 		atomic_fetch_add(&stats->unpriv_cycles, 1);
@@ -163,15 +183,8 @@ static void *init_fini_holder(void *arg)
 	while (!deadline_passed(&a->deadline)) {
 		check_service_usable(stats, "holder");
 
-		if (a->do_rpc) {
-			uint8_t buf[16];
-
-			if (esdm_rpcc_get_random_bytes(buf, sizeof(buf)) !=
-			    (ssize_t)sizeof(buf))
-				atomic_fetch_add(&stats->rpc_errors, 1);
-			else
-				atomic_fetch_add(&stats->rpc_calls, 1);
-		}
+		if (a->do_rpc)
+			rpc_once(stats, "holder");
 	}
 
 	esdm_rpcc_fini_unpriv_service();
@@ -256,8 +269,7 @@ static bool server_reachable(void)
 {
 	uint8_t buf[16];
 
-	return esdm_rpcc_get_random_bytes(buf, sizeof(buf)) ==
-	       (ssize_t)sizeof(buf);
+	return rpc_served(esdm_rpcc_get_random_bytes(buf, sizeof(buf)));
 }
 
 int handle_stress_init_fini(double timeout_sec, int num_threads)

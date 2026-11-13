@@ -498,6 +498,8 @@ static void test_endless_stress_without_server(void)
 	      r.err);
 }
 
+/* Only the builds that can set the rates of the sources ask, see below */
+#if defined(ESDM_TESTMODE) || defined(ESDM_BUILDTYPE_DEBUG)
 /*
  * Does every entropy source in the status document of @doc report an entropy
  * rate of zero? At least one has to report a rate at all.
@@ -532,6 +534,7 @@ out:
 	json_object_put(root);
 	return zero;
 }
+#endif
 
 /*
  * The entropy rates, which only a server built in test mode or with
