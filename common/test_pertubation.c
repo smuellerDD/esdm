@@ -46,6 +46,28 @@ void esdm_test_seed_entropy(uint32_t ent)
 
 /******************************************************************************/
 
+static atomic_uint jent_fail_sync_reads = 0;
+
+void esdm_test_jent_fail_sync_reads(unsigned int reads)
+{
+	atomic_store(&jent_fail_sync_reads, reads);
+}
+
+bool esdm_test_jent_sync_read_fails(void)
+{
+	unsigned int left = atomic_load(&jent_fail_sync_reads);
+
+	while (left) {
+		if (atomic_compare_exchange_weak(&jent_fail_sync_reads, &left,
+						 left - 1))
+			return true;
+	}
+
+	return false;
+}
+
+/******************************************************************************/
+
 static int disable_fallback = 0;
 
 void esdm_test_disable_fallback(int disable)

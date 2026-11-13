@@ -1134,6 +1134,19 @@ static void esdm_es_fetch(struct entropy_buf *seedbuf,
 #endif
 }
 
+/* Does a source wait for a working read to be credited again? */
+static bool esdm_es_read_failed(void)
+{
+	uint32_t i;
+
+	for_each_esdm_es (i) {
+		if (esdm_es[i]->read_failed && esdm_es[i]->read_failed())
+			return true;
+	}
+
+	return false;
+}
+
 void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 			   struct entropy_buf *addtl, uint32_t requested_bits,
 			   bool force)
@@ -1159,8 +1172,10 @@ void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
 	 * Require at least 256 bits of entropy for any reseed. If the ESDM is
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
+	 * Not while a source waits for a working read: nothing else reads it.
 	 */
-	if (!force && fully_seeded && (esdm_avail_entropy() < req_ent)) {
+	if (!force && fully_seeded && (esdm_avail_entropy() < req_ent) &&
+	    !esdm_es_read_failed()) {
 		for_each_esdm_es (i) {
 			seedbuf->entropy_es[i].e_bits = 0;
 			if (addtl)

@@ -134,6 +134,9 @@ struct entropy_buf {
  *
  *	      Returns 0 if the source is in order, < 0 otherwise. This callback
  *	      may be NULL, which the manager reports as an untested source.
+ * @read_failed: Is the source credited with nothing until a read of it
+ *		 works again? Seedings then read it however little entropy
+ *		 is available, so it can recover. May be NULL.
  */
 struct esdm_es_cb {
 	const char *name;
@@ -157,6 +160,7 @@ struct esdm_es_cb {
 	void (*reset)(void);
 	bool (*active)(void);
 	int (*selftest)(void);
+	bool (*read_failed)(void);
 };
 
 /* Reseed is desired */

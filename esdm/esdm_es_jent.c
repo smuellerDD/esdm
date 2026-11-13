@@ -35,6 +35,7 @@
 #include "mutex.h"
 #include "mutex_w.h"
 #include "ret_checkers.h"
+#include "test_pertubation.h"
 #include "threading_support.h"
 
 /*
@@ -54,10 +55,21 @@ static atomic_int esdm_jent_initialized = 0;
 struct esdm_jent_sync {
 	mutex_w_t lock;
 	struct rand_data *ec;
+	bool failed; /* Its last read failed, under lock */
 };
 static struct esdm_jent_sync *esdm_jent_sync = NULL;
 static unsigned int esdm_jent_num_sync = 0;
 static atomic_uint esdm_jent_sync_next = 0;
+
+/*
+ * No entropy is claimed while a synchronous collector fails to read - after a
+ * permanent health test failure, or the known answer tests bound to it - nor
+ * while the self test fails. The former ends with the next read of that
+ * collector that works, the latter with the next self test that passes, both
+ * with a reinit.
+ */
+static atomic_uint esdm_jent_read_failures = 0;
+static atomic_bool esdm_jent_selftest_failed = false;
 
 int esdm_jent_status(char *buf, size_t buf_length)
 {
@@ -99,7 +111,9 @@ bool esdm_jent_ntg1(void)
 static uint32_t esdm_jent_entropylevel(uint32_t requested_bits)
 {
 	return esdm_fast_noise_entropylevel(
-		atomic_load(&esdm_jent_initialized) ?
+		atomic_load(&esdm_jent_initialized) &&
+				!atomic_load(&esdm_jent_read_failures) &&
+				!atomic_load(&esdm_jent_selftest_failed) ?
 			esdm_config_es_jent_entropy_rate() :
 			0,
 		requested_bits);
@@ -108,6 +122,11 @@ static uint32_t esdm_jent_entropylevel(uint32_t requested_bits)
 static uint32_t esdm_jent_poolsize(void)
 {
 	return esdm_jent_entropylevel(esdm_security_strength());
+}
+
+static bool esdm_jent_read_failed(void)
+{
+	return !!atomic_load(&esdm_jent_read_failures);
 }
 
 /*
@@ -128,10 +147,29 @@ static void esdm_jent_get(struct esdm_jent_sync *sync,
 
 	ret = jent_read_entropy_safe(&sync->ec, (char *)eb_es->e,
 				     requested_bits >> 3);
+	if (esdm_test_jent_sync_read_fails())
+		ret = -1;
+
 	if (ret < 0) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "Jitter RNG failed with %zd\n", ret);
+		if (!sync->failed) {
+			sync->failed = true;
+			if (!atomic_fetch_add(&esdm_jent_read_failures, 1))
+				esdm_logger(
+					LOGGER_WARN, LOGGER_C_ES,
+					"JitterRNG ES: the Jitter RNG failed (%zd) - no entropy until it delivers again\n",
+					ret);
+		}
 		goto err;
+	}
+
+	if (sync->failed) {
+		sync->failed = false;
+		if (atomic_fetch_sub(&esdm_jent_read_failures, 1) == 1)
+			esdm_logger(
+				LOGGER_STATUS, LOGGER_C_ES,
+				"JitterRNG ES: the Jitter RNG delivers again\n");
 	}
 
 	ent_bits = esdm_jent_entropylevel((uint32_t)(ret << 3));
@@ -201,6 +239,7 @@ static void esdm_jent_sync_free(void)
 	free(esdm_jent_sync);
 	esdm_jent_sync = NULL;
 	esdm_jent_num_sync = 0;
+	atomic_store(&esdm_jent_read_failures, 0);
 }
 
 /* Allocate the synchronous collectors, under esdm_jent_lock taken alone */
@@ -384,6 +423,8 @@ static int esdm_jent_initialize(void)
 	/* Initialize the Jitter RNG after the clocksources are initialized. */
 	CKINT(esdm_jent_sync_alloc(ESDM_JENT_OSR, flags));
 
+	/* New collectors, past the startup tests the self test runs */
+	atomic_store(&esdm_jent_selftest_failed, false);
 	atomic_store(&esdm_jent_initialized, 1);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 		    "Jitter RNG working on current system\n");
@@ -475,12 +516,17 @@ static int esdm_jent_selftest(void)
 	mutex_unlock(&esdm_jent_lock);
 
 	if (ret) {
+		atomic_store(&esdm_jent_selftest_failed, true);
 		esdm_logger(
 			LOGGER_ERR, LOGGER_C_ES,
 			"JitterRNG ES: SP800-90B health tests failed: %d\n",
 			ret);
 		return -EFAULT;
 	}
+
+	if (atomic_exchange(&esdm_jent_selftest_failed, false))
+		esdm_logger(LOGGER_STATUS, LOGGER_C_ES,
+			    "JitterRNG ES: self test passed again\n");
 
 	return 0;
 }
@@ -497,4 +543,5 @@ struct esdm_es_cb esdm_es_jent = {
 	.reset = NULL,
 	.active = esdm_jent_active,
 	.selftest = esdm_jent_selftest,
+	.read_failed = esdm_jent_read_failed,
 };

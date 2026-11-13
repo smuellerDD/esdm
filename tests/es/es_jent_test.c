@@ -21,10 +21,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "config.h"
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
+#include "test_pertubation.h"
 
 static int es_jent_getstate(void)
 {
@@ -208,6 +210,50 @@ static int es_jent_fini(void)
 	return 0;
 }
 
+#ifdef ESDM_TESTMODE
+/*
+ * While a collector fails, the source is credited with nothing until that
+ * collector delivers again.
+ */
+static int es_jent_after_failure(void)
+{
+	const struct esdm_es_cb *es = esdm_es[esdm_ext_es_jitter];
+	struct entropy_es eb;
+	uint32_t i;
+	int ret = 0;
+
+	esdm_test_jent_fail_sync_reads(1);
+	es->get_ent(&eb, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (eb.e_bits) {
+		printf("ES Jitter RNG - fail: a failed read was credited\n");
+		ret = 1;
+	}
+
+	if (es->curr_entropy(ESDM_DRNG_SECURITY_STRENGTH_BITS)) {
+		printf("ES Jitter RNG - fail: credited while a collector fails\n");
+		ret = 1;
+	}
+
+	/* The collectors take turns: the read of the failed one ends it */
+	for (i = 0; i < esdm_config_es_jent_instances(); i++)
+		es->get_ent(&eb, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (!eb.e_bits) {
+		printf("ES Jitter RNG - fail: not credited after the collector recovered\n");
+		ret = 1;
+	}
+
+	if (!ret)
+		printf("ES Jitter RNG - pass: nothing credited while a collector fails\n");
+
+	return ret;
+}
+#else
+static int es_jent_after_failure(void)
+{
+	return 0;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 	uint32_t i;
@@ -231,6 +277,7 @@ int main(int argc, char *argv[])
 		ret += es_jent_getdata(i);
 	}
 
+	ret += es_jent_after_failure();
 	ret += es_jent_getstate();
 	ret += es_jent_fini();
 
