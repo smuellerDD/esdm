@@ -1562,7 +1562,7 @@ static uint64_t esdm_drng_reseed_pass(void)
 	uint32_t slots = esdm_drng_reseed_slots();
 	bool unseeded = false;
 	uint64_t next = UINT64_MAX;
-	uint32_t node, nunseeded = 0;
+	uint32_t i, node, nunseeded = 0;
 
 	/*
 	 * Without per-node DRNGs the initial DRNG is the only one to look at -
@@ -1583,9 +1583,16 @@ static uint64_t esdm_drng_reseed_pass(void)
 			next = 0;
 		}
 	} else {
-		for (node = 0; node < num_nodes; node++) {
-			struct esdm_drng *drng = esdm_drng[node];
+		/*
+		 * Node 0, the initial DRNG, last: it reseeds itself on demand,
+		 * while a spent node DRNG serves nothing until reseeded here.
+		 */
+		for (i = 1; i <= num_nodes; i++) {
+			struct esdm_drng *drng;
 			bool requested;
+
+			node = i % num_nodes;
+			drng = esdm_drng[node];
 
 			if (esdm_drng_reseed_stop())
 				break;
