@@ -44,6 +44,7 @@
 #include "memset_secure.h"
 #include "mutex_w.h"
 #include "visibility.h"
+#include "esdm_ppoll.h"
 
 /*
  * Attempts per operation: the initial one plus a single retry on a freshly
@@ -320,7 +321,7 @@ static int esdm_egd_client_wait(int fd, short events, int timeout_ms,
 	int ret;
 
 	do {
-		ret = poll(&pfd, 1, timeout_ms);
+		ret = esdm_ppoll_ms(&pfd, 1, timeout_ms);
 	} while (ret < 0 && errno == EINTR);
 
 	if (revents)

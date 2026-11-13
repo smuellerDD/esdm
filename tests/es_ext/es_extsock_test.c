@@ -24,6 +24,7 @@
  * scripted ("evil").
  */
 
+#define _GNU_SOURCE
 #include "config.h"
 
 #define ESDM_EXT_RETRY_INTERVAL_SEC 1
@@ -37,6 +38,7 @@
 #include "../es_state_check.h"
 #include "es_ext_test_plugin.h"
 #include "es_ext_test_util.h"
+#include "esdm_ppoll.h"
 
 #define ES (&esdm_es_extsock)
 #define BITS ESDM_DRNG_SECURITY_STRENGTH_BITS
@@ -143,7 +145,7 @@ static void *evil_run(void *arg)
 		struct pollfd pfd = { .fd = evil_fd, .events = POLLIN };
 		int fd;
 
-		if (poll(&pfd, 1, 50) <= 0 ||
+		if (esdm_ppoll_ms(&pfd, 1, 50) <= 0 ||
 		    (fd = accept4(evil_fd, NULL, NULL, SOCK_CLOEXEC)) < 0)
 			continue;
 		evil_conns++;
@@ -155,7 +157,7 @@ static void *evil_run(void *arg)
 			uint16_t type;
 			ssize_t n;
 
-			if (poll(&pfd, 1, 50) <= 0)
+			if (esdm_ppoll_ms(&pfd, 1, 50) <= 0)
 				continue;
 			n = recv(fd, req, sizeof(req), 0);
 			if (n <= 0 || esdm_es_ext_proto_req_unpack(

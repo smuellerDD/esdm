@@ -47,6 +47,7 @@
  */
 int esdm_signal_helper_main_unused(int argc, char **argv);
 #include "server_signal_helper.c"
+#include "esdm_ppoll.h"
 
 #undef main
 
@@ -231,7 +232,7 @@ static bool fake_server_stop(struct fake_server *server, int timeout_ms)
 	bool got = false;
 	char c;
 
-	if (poll(&pfd, 1, timeout_ms) == 1 && read(server->report, &c, 1) == 1)
+	if (esdm_ppoll_ms(&pfd, 1, timeout_ms) == 1 && read(server->report, &c, 1) == 1)
 		got = c == 'u';
 
 	close(server->report);

@@ -46,6 +46,7 @@
 #include "helper.h"
 #include "memset_secure.h"
 #include "visibility.h"
+#include "esdm_ppoll.h"
 
 struct esdm_es_ext_server {
 	const struct esdm_es_ext_plugin *plugin;
@@ -732,7 +733,7 @@ int esdm_es_ext_server_run(struct esdm_es_ext_server *server)
 			pfd[i + 2] = (struct pollfd){ .fd = server->clients[i],
 						      .events = POLLIN };
 
-		if (poll(pfd, ESDM_ES_EXT_MAX_CLIENTS + 2, -1) < 0) {
+		if (esdm_ppoll_ms(pfd, ESDM_ES_EXT_MAX_CLIENTS + 2, -1) < 0) {
 			if (errno == EINTR)
 				continue;
 			return -errno;

@@ -51,8 +51,8 @@ static atomic_bool provider_served;
  * The signals ending the provider, blocked in every thread - those @init
  * starts too - and taken by sigwait(2) in a thread of their own: a handler
  * may be deferred for good. A thread sanitizer defers it until the thread
- * enters a function it intercepts, and the fortified poll(2) of the server,
- * __poll_chk(), is none: SIGTERM was ignored.
+ * enters a function it intercepts, which the fortified poll(2) the server
+ * used, __poll_chk(), was not: SIGTERM was ignored.
  */
 static sigset_t provider_signal_set;
 

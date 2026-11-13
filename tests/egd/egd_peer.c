@@ -35,6 +35,7 @@
 
 #include "egd_peer.h"
 #include "esdm_egd_protocol.h"
+#include "esdm_ppoll.h"
 
 /*
  * One connection per client, plus room for the ones a forked child of a test
@@ -285,7 +286,7 @@ static void *peer_conn_thread(void *arg)
 		if (peer->mode == EGD_PEER_SILENT) {
 			struct pollfd pfd = { .fd = conn->fd, .events = 0 };
 
-			poll(&pfd, 1, EGD_PEER_POLL_MS);
+			esdm_ppoll_ms(&pfd, 1, EGD_PEER_POLL_MS);
 			continue;
 		}
 
@@ -293,7 +294,7 @@ static void *peer_conn_thread(void *arg)
 		if (peer->mode == EGD_PEER_SHUT_RD) {
 			struct pollfd pfd = { .fd = conn->fd, .events = 0 };
 
-			if (poll(&pfd, 1, EGD_PEER_POLL_MS) > 0 &&
+			if (esdm_ppoll_ms(&pfd, 1, EGD_PEER_POLL_MS) > 0 &&
 			    (pfd.revents & (POLLHUP | POLLERR)))
 				break;
 			continue;
@@ -371,7 +372,7 @@ static void *peer_accept_thread(void *arg)
 		unsigned int connections;
 		int fd;
 
-		if (poll(&pfd, 1, EGD_PEER_POLL_MS) <= 0)
+		if (esdm_ppoll_ms(&pfd, 1, EGD_PEER_POLL_MS) <= 0)
 			continue;
 
 		fd = accept(peer->listen_fd, NULL, NULL);

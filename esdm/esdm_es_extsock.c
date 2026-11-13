@@ -70,6 +70,7 @@
 #include "memset_secure.h"
 #include "mutex.h"
 #include "visibility.h"
+#include "esdm_ppoll.h"
 
 #define EXTSOCK_NAME "ExternalSocket"
 #define EXTSOCK_NSEC 1000000000ULL
@@ -259,12 +260,15 @@ static ssize_t extsock_recv(uint64_t deadline)
 {
 	for (;;) {
 		struct pollfd pfd = { .fd = extsock.fd, .events = POLLIN };
-		uint64_t now = esdm_monotonic_now_ns();
+		uint64_t now = esdm_monotonic_wait_ns();
+		struct timespec ts;
 		ssize_t n;
 
 		if (now >= deadline)
 			return -ETIMEDOUT;
-		n = poll(&pfd, 1, (int)((deadline - now + 999999) / 1000000));
+		ts.tv_sec = (time_t)((deadline - now) / EXTSOCK_NSEC);
+		ts.tv_nsec = (long)((deadline - now) % EXTSOCK_NSEC);
+		n = ppoll(&pfd, 1, &ts, NULL);
 		if (n < 0 && errno != EINTR)
 			return -errno;
 		if (n <= 0)
@@ -297,7 +301,7 @@ static int extsock_call(uint16_t type, uint32_t length, unsigned int timeout_ms)
 	/* One request at a time: it fits the socket buffer */
 	n = send(extsock.fd, req, reqlen, MSG_DONTWAIT | MSG_NOSIGNAL);
 	if (reqlen && n == (ssize_t)reqlen)
-		n = extsock_recv(esdm_monotonic_now_ns() +
+		n = extsock_recv(esdm_monotonic_wait_ns() +
 				 (uint64_t)timeout_ms * 1000000);
 	else
 		n = n < 0 ? -errno : -EIO;
@@ -436,7 +440,7 @@ err:
 
 /*
  * Is the connection there? Nothing is to be read on an idle one, so whatever
- * poll(2) reports is its end - a provider restarted, or making room for
+ * ppoll(2) reports is its end - a provider restarted, or making room for
  * another client: it is made again at once, the next request not lost on it.
  */
 static bool extsock_alive(void)
@@ -445,7 +449,7 @@ static bool extsock_alive(void)
 
 	if (extsock.fd < 0)
 		return false;
-	if (poll(&pfd, 1, 0) <= 0)
+	if (esdm_ppoll_ms(&pfd, 1, 0) <= 0)
 		return true;
 
 	extsock_log(LOGGER_VERBOSE, "connection closed by the provider\n");

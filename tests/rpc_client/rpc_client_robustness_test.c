@@ -45,6 +45,7 @@
 #include "../test_namespace.h"
 #include "esdm_rpc_client.h"
 #include "esdm_rpc_service.h"
+#include "esdm_ppoll.h"
 
 /* What the client may take at most, with ample slack for a loaded machine */
 #define TEST_MAX_SECONDS 20
@@ -163,7 +164,7 @@ static void *test_count_requests(void *arg)
 	pfd[0].events = POLLIN;
 
 	while (!atomic_load(&c->stop)) {
-		if (poll(pfd, n, 50) <= 0)
+		if (esdm_ppoll_ms(pfd, n, 50) <= 0)
 			continue;
 
 		if ((pfd[0].revents & POLLIN) && n < 16) {

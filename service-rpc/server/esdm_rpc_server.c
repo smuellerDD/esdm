@@ -68,6 +68,7 @@
 #include "queue.h"
 #include "systemd_support.h"
 #include "threading_support.h"
+#include "esdm_ppoll.h"
 
 #ifndef TAILQ_FOREACH_SAFE
 #define TAILQ_FOREACH_SAFE(var, head, field, tvar)                             \
@@ -226,7 +227,7 @@ static int esdm_rpcs_write_data(struct esdm_rpcs_connection *rpc_conn,
 			/* Wait a short moment for writeability, but not forever */
 			struct pollfd pfd = { .fd = rpc_conn->child_fd,
 					      .events = POLLOUT };
-			int poll_ret = poll(&pfd, 1, TIMEOUT_MS);
+			int poll_ret = esdm_ppoll_ms(&pfd, 1, TIMEOUT_MS);
 
 			/* early check for writeable */
 			if (poll_ret > 0 && pfd.revents & POLLOUT) {

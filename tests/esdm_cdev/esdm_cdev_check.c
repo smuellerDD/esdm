@@ -69,6 +69,7 @@
 
 #include "config.h"
 #include "esdm_egd_protocol.h"
+#include "esdm_ppoll.h"
 
 #define CDEV_RANDOM "/dev/esdm_random"
 #define CDEV_URANDOM "/dev/esdm_urandom"
@@ -608,7 +609,7 @@ static void cmd_poll(int argc, char *argv[])
 		const char *dev = cdev_devs[d];
 		struct pollfd pfd = { .fd = open_or_fail(dev, O_RDWR),
 				      .events = want[d] };
-		int rc = poll(&pfd, 1, 10000);
+		int rc = esdm_ppoll_ms(&pfd, 1, 10000);
 		int err = errno;
 
 		close(pfd.fd);
@@ -2009,7 +2010,7 @@ static void poll_writable_only(int fd, const char *when)
 	struct pollfd pfd = {
 		.fd = fd, .events = POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM
 	};
-	int ret = poll(&pfd, 1, 0);
+	int ret = esdm_ppoll_ms(&pfd, 1, 0);
 
 	if (ret < 0)
 		fail("poll %s: %s", when, strerror(errno));
@@ -2044,7 +2045,7 @@ static void cmd_poll_notop(int argc, char *argv[])
 		int ret;
 
 		polls++;
-		ret = poll(&pfd, 1, 200);
+		ret = esdm_ppoll_ms(&pfd, 1, 200);
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;

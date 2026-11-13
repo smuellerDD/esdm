@@ -62,6 +62,7 @@
 #include "esdm_egd_server.h"
 #include "esdm_logger.h"
 #include "threading_support.h"
+#include "esdm_ppoll.h"
 
 /*
  * Two helpers the EGD server shares with the RPC server, which is not linked
@@ -233,7 +234,7 @@ static int test_recv(int fd, void *buf, size_t len, int timeout_ms)
 	while (received < len) {
 		struct pollfd pfd = { .fd = fd, .events = POLLIN };
 		ssize_t rc;
-		int pret = poll(&pfd, 1, timeout_ms);
+		int pret = esdm_ppoll_ms(&pfd, 1, timeout_ms);
 
 		if (pret < 0) {
 			if (errno == EINTR)
@@ -266,7 +267,7 @@ static bool test_quiet(int fd, int timeout_ms)
 	int pret;
 
 	do {
-		pret = poll(&pfd, 1, timeout_ms);
+		pret = esdm_ppoll_ms(&pfd, 1, timeout_ms);
 	} while (pret < 0 && errno == EINTR);
 
 	return (pret == 0);
