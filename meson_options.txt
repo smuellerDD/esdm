@@ -433,15 +433,17 @@ automatically detect this and ignore the hardware.
 ''')
 
 # Option for: ESDM_HWRAND_ENTROPY_RATE
-option('es_hwrand_entropy_rate', type: 'integer', min: 0, max: 256, value: 128,
-       description:'''CPU-based entropy source entropy rate.
+option('es_hwrand_entropy_rate', type: 'integer', min: 0, max: 256, value: 0,
+       description:'''/dev/hwrng entropy source entropy rate.
 
 The option defines the amount of entropy the ESDM applies to 256
-bits of data obtained from the CPU entropy source. The ESDM
+bits of data obtained from the /dev/hwrng entropy source. The ESDM
 enforces the limit that this value must be in the range between 0 and 256.
 
-When configuring this value to 0, the CPU entropy source will provide
-256 bits of data without being credited to contain entropy.
+When configuring this value to 0, the default, the /dev/hwrng entropy source
+provides 256 bits of data without being credited to contain entropy. A
+seeding then skips the device while another uses it: waiting would serialize
+every seeding.
 ''')
 
 ################################################################################
@@ -471,15 +473,17 @@ reseeded TPM 2.0 DRBG.
 ''')
 
 # Option for: ESDM_TPM2_ENTROPY_RATE
-option('es_tpm2_entropy_rate', type: 'integer', min: 0, max: 256, value: 256,
+option('es_tpm2_entropy_rate', type: 'integer', min: 0, max: 256, value: 0,
        description:'''TPM 2.0 entropy source entropy rate.
 
 The option defines the amount of entropy the ESDM applies to 256
 bits of data obtained from the TPM 2.0 entropy source. The ESDM
 enforces the limit that this value must be in the range between 0 and 256.
 
-When configuring this value to 0, the TPM 2.0 entropy source will provide
-256 bits of data without being credited to contain entropy.
+When configuring this value to 0, the default, the TPM 2.0 entropy source
+provides 256 bits of data without being credited to contain entropy. A
+seeding then skips the TPM while another uses it: it serves one command at a
+time, and waiting would serialize every seeding.
 ''')
 
 option('es_tpm2_rm_path', type: 'string', value: '/dev/tpmrm0',
