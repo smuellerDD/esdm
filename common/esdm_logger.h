@@ -77,38 +77,27 @@ void _esdm_logger_binary(const enum esdm_logger_verbosity severity,
  * @param class logging class
  * @param fmt format string as defined by fprintf(3)
  */
-#pragma GCC diagnostic push
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#pragma clang diagnostic ignored "-Wvariadic-macros"
-#else
-#pragma GCC diagnostic ignored "-Wvariadic-macros"
-#endif
-#define esdm_logger(severity, class_, fmt...)                                  \
+/*
+ * __VA_ARGS__ includes fmt, so it is never empty. No GNU named variadic
+ * macro: ISO C++ warns about it, and GCC < 13 does despite any pragma.
+ */
+#define esdm_logger(severity, class_, ...)                                     \
 	do {                                                                   \
 		_Pragma("GCC diagnostic push")                                 \
 			_Pragma("GCC diagnostic ignored \"-Wpedantic\"")       \
 				_esdm_logger(severity, class_, __FILE__,       \
-					     __FUNCTION__, __LINE__, ##fmt);   \
+					     __FUNCTION__, __LINE__,           \
+					     __VA_ARGS__);                     \
 		_Pragma("GCC diagnostic pop")                                  \
 	} while (0);
-#pragma GCC diagnostic pop
 
 /**
  * logger - log status if LOGGER_WARN or LOGGER_ERR is found
  * @param class logging class
  * @param fmt format string as defined by fprintf(3)
  */
-#pragma GCC diagnostic push
-#ifdef __clang__
-#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#pragma clang diagnostic ignored "-Wvariadic-macros"
-#else
-#pragma GCC diagnostic ignored "-Wvariadic-macros"
-#endif
-#define esdm_logger_status(class_, fmt...)                                     \
-	esdm_logger(LOGGER_STATUS, class_, ##fmt)
-#pragma GCC diagnostic pop
+#define esdm_logger_status(class_, ...)                                        \
+	esdm_logger(LOGGER_STATUS, class_, __VA_ARGS__)
 
 /**
  * logger_set_verbosity - set verbosity level

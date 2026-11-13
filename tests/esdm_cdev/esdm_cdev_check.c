@@ -1281,8 +1281,12 @@ static ssize_t throughput_egd(void *ctx, uint8_t *buf, size_t size)
 	int fd = *(int *)ctx;
 	size_t num = (size + ESDM_EGD_MAX_TRANSFER - 1) / ESDM_EGD_MAX_TRANSFER;
 	size_t i, done = 0;
-	uint8_t *req = xmalloc(2 * num);
+	/* Zeroed, which GCC 15 cannot tell the loop below does for all of it */
+	uint8_t *req = calloc(1, 2 * num + 1);
 	ssize_t ret;
+
+	if (!req)
+		fail("out of memory for %zu bytes", 2 * num);
 
 	for (i = 0; i < num; i++) {
 		size_t chunk = size - i * ESDM_EGD_MAX_TRANSFER;

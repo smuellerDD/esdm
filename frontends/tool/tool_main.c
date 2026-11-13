@@ -272,7 +272,7 @@ static int handle_drng_status(enum drng_status_target target, uint32_t node,
 {
 	struct json_object *doc = NULL, *obj = NULL;
 	const char *out;
-	int ret;
+	int ret = -EINVAL;
 
 	switch (target) {
 	case DRNG_STATUS_PR:

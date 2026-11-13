@@ -266,7 +266,9 @@ endif
 
 if get_option('crypto_backend') == 'leancrypto'
 	# 1.6.0: lc_hash_init() reports a failed self test instead of asserting
-	leancrypto_dep = dependency('leancrypto', version: '>= 1.6.0', required: true)
+	# A system include: its headers are not built to -Wpedantic
+	leancrypto_dep = dependency('leancrypto', version: '>= 1.6.0', required: true,
+				    include_type: 'system')
 endif
 
 if get_option('crypto_backend') == 'botan'
