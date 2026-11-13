@@ -22,7 +22,6 @@
 
 #if defined(__aarch64__)
 
-#include <arm_acle.h>
 #include <stdint.h>
 
 #include <stdbool.h>
@@ -69,11 +68,22 @@ static inline bool arm_id_aa64isar0_el1_feature(unsigned long feature)
 /*
  * RNDRRS, Reseeded Random Number. Returns a 64-bit random number which is
  * reseeded from the True Random Number source immediately before the read
- * of the random number.
+ * of the random number, and sets PSTATE.Z when it could not produce one.
  *
- * The ACLE intrinsic __rndrrs returns 0 on success (a genuine random number
- * was produced) and non-zero on failure.
+ * Read by its encoding rather than through the ACLE intrinsic __rndrrs, whose
+ * register name older assemblers (that of Ubuntu 22.04) do not know.
  */
+static inline bool arm_rndrrs(uint64_t *val)
+{
+	bool ok;
+
+	__asm__ __volatile__("mrs %0, s3_3_c2_c4_1\n\tcset %w1, ne"
+			     : "=r"(*val), "=r"(ok)
+			     :
+			     : "cc");
+	return ok;
+}
+
 /*
  * RNDRRS may transiently fail while the immediate reseed from the TRNG cannot
  * complete (e.g. under load from other consumers) - the same failure class
@@ -82,12 +92,12 @@ static inline bool arm_id_aa64isar0_el1_feature(unsigned long feature)
  */
 #define RNDRRS_RETRY_LOOPS 1024
 
-__attribute__((target("+rng"))) static inline bool arm_seed(unsigned long *data)
+static inline bool arm_seed(unsigned long *data)
 {
 	unsigned int retry = 0;
 	uint64_t val;
 
-	while (__rndrrs(&val) != 0) {
+	while (!arm_rndrrs(&val)) {
 		if (retry++ >= RNDRRS_RETRY_LOOPS)
 			return false;
 		__asm__ __volatile__("yield");
