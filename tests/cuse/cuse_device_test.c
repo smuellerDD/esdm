@@ -547,6 +547,35 @@ static void test_read_fallback(void)
 	}
 }
 
+static unsigned int test_get_calls;
+
+static ssize_t test_get(uint8_t *buf, size_t len, void *int_data)
+{
+	(void)int_data;
+
+	test_get_calls++;
+	memset(buf, 0x5a, len);
+	return (ssize_t)len;
+}
+
+/*
+ * O_SYNC is __O_SYNC | O_DSYNC: O_DSYNC alone asks for no prediction
+ * resistance, so the device's own getter serves it.
+ */
+static void test_dsync(void)
+{
+	struct fuse_file_info fi;
+
+	memset(&fi, 0, sizeof(fi));
+	fi.flags = O_DSYNC;
+	test_get_calls = 0;
+	reply_reset();
+	esdm_cuse_read_internal(TEST_REQ, 32, 0, &fi, test_get, -1);
+	CHECK_EQ(reply.kind, REPLY_BUF);
+	CHECK_EQ(reply.size, 32);
+	CHECK_EQ(test_get_calls, 1);
+}
+
 /* Whether this process holds CAP_SYS_ADMIN, asked without /proc */
 static bool own_cap_sys_admin(void)
 {
@@ -1024,6 +1053,7 @@ int main(int argc, char *argv[])
 	test_ioctl_privileged_refused();
 	test_ioctl_status_and_unknown();
 	test_read_fallback();
+	test_dsync();
 	test_write_fallback();
 	test_privileged_capability();
 	test_poll_registration();

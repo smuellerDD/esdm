@@ -482,13 +482,25 @@ static int esdm_cuse_interrupt(void *data)
 	return !!fuse_req_interrupted(req);
 }
 
+/* Wait 1, 2, 4, 8, then 16 ms before asking again, as the RPC client does */
+static void esdm_cuse_poll_wait(unsigned int *polls)
+{
+	struct timespec ts = { .tv_nsec = (1L << *polls) * 1000000L };
+
+	if (*polls < 4)
+		(*polls)++;
+	nanosleep(&ts, NULL);
+}
+
 void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 			     struct fuse_file_info *fi, get_func_t get,
 			     int fallback_fd)
 {
 	uint8_t tmpbuf_s[64] = { 0 }, *tmpbuf_p = tmpbuf_s, *tmpbuf = NULL;
 	size_t read_bytes = 0;
+	unsigned int polls = 0;
 	ssize_t ret = 0;
+	bool wait;
 
 	(void)off;
 
@@ -504,8 +516,19 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 
 	fallback_fd = esdm_test_fallback_fd(fallback_fd);
 
-	if (fi->flags & O_SYNC)
-		get = esdm_rpcc_get_random_bytes_pr_int;
+	/*
+	 * No getter waits under esdm_cuse_priv: a privileged ioctl waiting for
+	 * it would queue every later caller behind that wait (writer
+	 * preference). The waiting getters are asked in their non-waiting
+	 * form, and the wait happens below with the lock dropped.
+	 *
+	 * O_SYNC is __O_SYNC | O_DSYNC, a test of O_SYNC alone takes O_DSYNC.
+	 */
+	if ((fi->flags & O_SYNC) == O_SYNC)
+		get = esdm_rpcc_get_random_bytes_pr_noblock_int;
+	else if (get == esdm_rpcc_get_random_bytes_full_int)
+		get = esdm_rpcc_get_random_bytes_full_noblock_int;
+	wait = get != esdm_rpcc_get_random_bytes_int;
 
 	/*
 	 * fuse automatically chunks requests, e.g. for a 1MB read
@@ -520,13 +543,22 @@ void esdm_cuse_read_internal(fuse_req_t req, size_t size, off_t off,
 		esdm_cuse_unpriv_call_end();
 
 		/*
-		 * The ESDM is operational, but every DRNG awaits its reseed:
-		 * the waiting getter finishes, waiting for that reseed only.
+		 * /dev/urandom: the ESDM is operational, but every DRNG awaits
+		 * its reseed - wait for that as /dev/random does.
 		 */
-		if (ret == -EAGAIN && get == esdm_rpcc_get_random_bytes_int) {
-			get = esdm_rpcc_get_random_bytes_full_int;
+		if (ret == -EAGAIN && !wait) {
+			get = esdm_rpcc_get_random_bytes_full_noblock_int;
+			wait = true;
+		}
+		if (ret == -EAGAIN) {
+			if (fuse_req_interrupted(req)) {
+				ret = -EINTR;
+				goto out;
+			}
+			esdm_cuse_poll_wait(&polls);
 			continue;
 		}
+		polls = 0;
 
 		/*
 		 * If call to the ESDM server failed, let us fall back to the
