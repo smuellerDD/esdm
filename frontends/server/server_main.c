@@ -194,6 +194,24 @@ static void set_es_ext_rate(const char *arg)
 #endif
 }
 
+/* Jitter RNG collectors: 1 to 64 */
+static void set_es_jent_instances(const char *arg)
+{
+	unsigned long val;
+	char *end;
+
+	errno = 0;
+	val = strtoul(arg, &end, 10);
+	if (errno || end == arg || *end || arg[0] == '-' || val < 1 ||
+	    val > 64) {
+		fprintf(stderr,
+			"--es_jent_instances takes a number from 1 to 64, not \"%s\"\n",
+			arg);
+		exit(1);
+	}
+	esdm_config_es_jent_instances_set((uint32_t)val);
+}
+
 /* A uid, a user name, or none for root only */
 static void set_es_ext_uid(const char *arg)
 {
@@ -385,8 +403,7 @@ static void parse_opts(int argc, char *argv[])
 				break;
 			case 20:
 				/* es_jent_instances */
-				esdm_config_es_jent_instances_set(
-					(uint32_t)strtoul(optarg, NULL, 10));
+				set_es_jent_instances(optarg);
 				break;
 			case 21:
 				/* es_jent_kernel_name */

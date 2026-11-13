@@ -75,15 +75,14 @@ into account.
 ''')
 
 # Option for: ESDM_JENT_INSTANCES
-option('es_jent_instances', type: 'integer', min: 1, max: 64, value: 1,
+option('es_jent_instances', type: 'integer', min: 0, max: 64, value: 0,
        description:'''Jitter RNG collectors working side by side
 
-As many Jitter RNG collectors serve the seedings of the DRNGs side by side,
-each behind a lock of its own. Collecting is the bulk of the time a seeding
-takes, so the seedings, and with them the output of a build reseeding often
-(sp80090c, ais2031_drg4), scale with the CPUs there are for the collectors, at
-the cost of a collector's memory each. The default for
-esdm_config_es_jent_instances_set() and esdm-server --es_jent_instances.
+Each collector serves DRNG seedings behind a lock of its own. Collecting
+dominates a seeding, so a build reseeding often (sp80090c, ais2031_drg4)
+scales with the CPUs for the collectors, at a collector's memory each. The
+default for esdm_config_es_jent_instances_set() and esdm-server
+--es_jent_instances; 0 picks 4 for a build reseeding often and 1 otherwise.
 ''')
 
 ################################################################################

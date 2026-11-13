@@ -123,8 +123,6 @@ conf_data.set('ESDM_JENT_HASH_LOOP_COUNT',
 conf_data.set('ESDM_JENT_ALL_CACHES',
 	      get_option('es_jent_all_caches').enabled())
 
-conf_data.set('ESDM_JENT_INSTANCES', get_option('es_jent_instances'))
-
 conf_data.set('ESDM_ES_CPU', get_option('es_cpu').enabled())
 conf_data.set('ESDM_CPU_ENTROPY_RATE',
 	      get_option('es_cpu_entropy_rate'))
@@ -265,10 +263,19 @@ if not get_option('ais2031_drg3') and (get_option('sp80090c') or
 
 	conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', reseed_thresh)
 	conf_data.set('ESDM_DRNG_MAX_RESEED_BITS', max_reseed)
+
+	# A full reseed every 12 KiB of output, each collecting from the Jitter
+	# RNG for some 17 ms: the output scales with the collectors.
+	jent_instances = 4
 else
 	conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', get_option('drng_reseed_threshold_bits'))
 	conf_data.set('ESDM_DRNG_MAX_RESEED_BITS', get_option('drng_max_reseed_bits'))
+	jent_instances = 1
 endif
+if get_option('es_jent_instances') > 0
+	jent_instances = get_option('es_jent_instances')
+endif
+conf_data.set('ESDM_JENT_INSTANCES', jent_instances)
 
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH_UNPRIVILEGED', get_option('esdm-server-rpc-path-unprivileged'))
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH_PRIVILEGED', get_option('esdm-server-rpc-path-privileged'))

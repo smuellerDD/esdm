@@ -89,7 +89,8 @@ Collect from the Jitter RNG entropy source with
 collectors side by side, 1 to 64, instead of the number the build was
 configured with (meson option
 .BR es_jent_instances ,
-1 by default): as many collectors serve the seedings of the DRNGs.
+by default 4 in a build reseeding often \- sp80090c, fips140, ais2031_drg4 \-
+and 1 otherwise): as many collectors serve the seedings of the DRNGs.
 The seedings scale with the CPUs there are for the collectors, at the memory
 of one collector each.
 .TP
