@@ -80,31 +80,17 @@ reference values of the pre-operational integrity test, and the server refuses
 to start without them - a missing reference value is a failed integrity test,
 not a prompt to compute one over whatever is on disk.
 
-The components are:
-
-* the `esdm-server` executable,
-
-* the ESDM library it loads, `libesdm.so.1`,
-
-* the Jitter RNG, `libjitterentropy.so.3`, where the build uses it as an
-  entropy source, and
-
-* the library providing the cryptography where that is not the built-in
-  implementation: `libcrypto.so` (OpenSSL), `libgnutls.so` together with
-  `libnettle.so`, `libbotan-3.so` or `libleancrypto.so`.
-
-The last two are attested wherever they are loaded from; the server names any
-component whose reference value is missing, so starting it once tells you which
-files still need one. Write them when the module is installed, over the files as
-they were built:
+The components are the `esdm-server` executable and the ESDM library it loads,
+`libesdm.so.1`. The libraries the ESDM is built against - the Jitter RNG and the
+crypto library of the backend - are not attested by the ESDM. Write the
+reference values when the module is installed, over the files as they were
+built:
 
 ```
 esdm-tool --fips-targetfile /usr/bin/esdm-server \
           --fips-checkfile /usr/bin/.esdm-server.hmac
 esdm-tool --fips-targetfile /usr/lib64/libesdm.so.1 \
           --fips-checkfile /usr/lib64/.libesdm.so.1.hmac
-esdm-tool --fips-targetfile /usr/lib64/libjitterentropy.so.3 \
-          --fips-checkfile /usr/lib64/.libjitterentropy.so.3.hmac
 ```
 
 Use the library path the loader resolves - the SONAME (`libesdm.so.1`), not the

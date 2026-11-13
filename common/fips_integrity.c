@@ -19,7 +19,6 @@
 
 #define _GNU_SOURCE
 #include <dlfcn.h>
-#include <link.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -426,59 +425,4 @@ int fips_post_integrity_obj(const void *addr)
 		return 0;
 
 	return fips_post_integrity(info.dli_fname);
-}
-
-struct fips_loaded_ctx {
-	const char *soname;
-	size_t sonamelen;
-	unsigned int attested;
-	int ret;
-};
-
-static int fips_loaded_cb(struct dl_phdr_info *info, size_t size, void *data)
-{
-	struct fips_loaded_ctx *ctx = data;
-	const char *base;
-
-	(void)size;
-
-	/* The main executable, which the caller attests on its own */
-	if (!info->dlpi_name || !info->dlpi_name[0])
-		return 0;
-
-	base = strrchr(info->dlpi_name, '/');
-	base = base ? base + 1 : info->dlpi_name;
-
-	/*
-	 * A prefix match on the file name, so that the version behind the
-	 * SONAME - libjitterentropy.so.3, libcrypto.so.3 - does not have to be
-	 * spelled out by the caller.
-	 */
-	if (strncmp(base, ctx->soname, ctx->sonamelen))
-		return 0;
-
-	ctx->ret = fips_post_integrity(info->dlpi_name);
-	if (ctx->ret)
-		return 1; /* stop the walk on the first failure */
-
-	ctx->attested++;
-
-	return 0;
-}
-
-int fips_post_integrity_loaded(const char *soname)
-{
-	struct fips_loaded_ctx ctx;
-
-	if (!soname || !soname[0])
-		return -EINVAL;
-
-	ctx.soname = soname;
-	ctx.sonamelen = strlen(soname);
-	ctx.attested = 0;
-	ctx.ret = 0;
-
-	dl_iterate_phdr(fips_loaded_cb, &ctx);
-
-	return ctx.ret ? ctx.ret : (int)ctx.attested;
 }
