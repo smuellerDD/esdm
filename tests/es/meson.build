@@ -163,6 +163,21 @@ if get_option('es_hwrand').enabled()
 	test('ES Linux HW Random', es_hwrand_tester, suite: 'es')
 endif
 
+# The bounded device read of both: a device blocking for good costs a caller
+# its deadline once.
+if get_option('es_hwrand').enabled() or get_option('es_tpm2').enabled()
+	es_reader_tester = executable(
+		'es_reader_tester',
+		[ 'es_reader_test.c' ],
+		dependencies: dependencies_server,
+		include_directories: [ include_dirs_server,
+				       include_directories('../common') ],
+		link_with: esdm_static_lib,
+	)
+
+	test('ES bounded device read', es_reader_tester, suite: 'es')
+endif
+
 if get_option('es_tpm2').enabled()
 	es_tpm2_tester = executable(
 		'es_tpm2_tester',

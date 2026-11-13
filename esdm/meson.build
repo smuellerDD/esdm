@@ -73,6 +73,10 @@ if get_option('es_tpm2').enabled()
 	esdm_src += files('esdm_es_tpm2.c')
 endif
 
+if get_option('es_hwrand').enabled() or get_option('es_tpm2').enabled()
+	esdm_src += files('esdm_es_reader.c')
+endif
+
 if get_option('es_ext').enabled()
 	esdm_src += files('esdm_es_extsock.c') + es_ext_proto_src
 endif
