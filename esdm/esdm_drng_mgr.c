@@ -2119,11 +2119,16 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 			disable = esdm_drng_check_disable_threshold(drng);
 			if (!todo || disable) {
 				/*
-				 * The initial DRNG out of its budget stays
-				 * fully seeded, see esdm_drng_budget(), and is
-				 * reseeded by the next request.
+				 * Out of its budget, a DRNG stays fully seeded
+				 * for its reseed: the initial DRNG, see
+				 * esdm_drng_budget(), by the next request, a
+				 * node DRNG by the worker, as below. Past a
+				 * limit otherwise, it reverts to unseeded.
 				 */
-				if (disable || drng != esdm_drng_init_instance())
+				if (drng == esdm_drng_init_instance() ?
+					    disable :
+					    (budget ||
+					     !esdm_drng_mgr_reseed_worker_running()))
 					esdm_unset_fully_seeded(drng);
 				mutex_w_unlock(&drng->lock);
 				exhausted = true;
@@ -2166,8 +2171,18 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 					INT_MAX);
 
 			/* The seed of the PR DRNG is spent */
-			if (pr)
+			if (pr) {
 				atomic_store(&drng->fully_seeded, false);
+			} else if (drng != esdm_drng_init_instance() &&
+				   !esdm_drng_budget(drng)) {
+				/*
+				 * Spent: the worker reseeds it right away.
+				 * Without one, the caller brings it up below.
+				 */
+				if (!esdm_drng_mgr_reseed_worker_running())
+					esdm_unset_fully_seeded(drng);
+				exhausted = true;
+			}
 		}
 		mutex_w_unlock(&drng->lock);
 		if (ret <= 0) {
@@ -2185,16 +2200,18 @@ static ssize_t esdm_drng_get(struct esdm_drng *drng, uint8_t *outbuf,
 	}
 
 	/*
-	 * Reseed a DRNG left at its maximum now that its lock is dropped:
-	 * tell the worker; a caller that may wait seeds right away, any other
-	 * only without a worker on duty, as seeding takes milliseconds.
+	 * Reseed a DRNG left at its maximum now that its lock is dropped: the
+	 * worker does, the caller only without a worker on duty, as seeding
+	 * takes milliseconds its output need not wait for.
 	 */
 	if (exhausted) {
 		esdm_drng_reseed_notify();
-		if (nonblock && !esdm_drng_mgr_reseed_worker_running())
-			esdm_drng_seed_work_try();
-		else if (!nonblock)
-			esdm_force_fully_seeded();
+		if (!esdm_drng_mgr_reseed_worker_running()) {
+			if (nonblock)
+				esdm_drng_seed_work_try();
+			else
+				esdm_force_fully_seeded();
+		}
 	}
 
 	return processed;
@@ -2235,8 +2252,14 @@ static ssize_t esdm_drng_get_sleep(uint8_t *outbuf, size_t outbuflen, bool pr,
 				continue;
 			if (esdm_drng[j] &&
 			    mutex_w_trylock(&esdm_drng[j]->lock) == 0) {
+				/*
+				 * Not one spent by a request crossing its
+				 * maximum: it would serve nothing, leaving the
+				 * request to the initial DRNG.
+				 */
 				bool seeded =
-					atomic_load(&esdm_drng[j]->fully_seeded);
+					atomic_load(&esdm_drng[j]->fully_seeded) &&
+					esdm_drng_budget(esdm_drng[j]);
 
 				mutex_w_unlock(&esdm_drng[j]->lock);
 				if (!seeded)

@@ -166,9 +166,10 @@ static int esdm_drng_mgr_max_wo_reseed_bits_crossing(void)
 		goto err_put;
 	}
 
-	/* The next one finds it spent, whoever serves it then */
+	/* Spent, it serves the next request no more: another instance does */
+	used = atomic_read_u32(&drng->request_bits_since_fully_seeded);
 	esdm_get_random_bytes(buf, sizeof(buf));
-	if (atomic_load(&drng->fully_seeded)) {
+	if (atomic_read_u32(&drng->request_bits_since_fully_seeded) > used) {
 		printf("the node DRNG serves past the maximum before a reseed\n");
 		goto err_put;
 	}
