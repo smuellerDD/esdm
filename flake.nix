@@ -2034,6 +2034,13 @@
               ];
           });
 
+          # The ESDM to AIS 20/31 3.0 (2024) DRG.3: the oversampling without
+          # the reseeding limits that fips140 caps in the package above.
+          esdm-drg3 = self.packages.${system}.esdm.overrideAttrs (prev: {
+            pname = "esdm-drg3";
+            mesonFlags = prev.mesonFlags ++ [ "-Dais2031_drg3=true" ];
+          });
+
 
           # The ESDM under the thread sanitizer, running the meson test suite
           # as its check phase: a race produces data rather than a failing
