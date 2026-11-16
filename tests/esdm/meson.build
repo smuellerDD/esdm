@@ -2,26 +2,9 @@
 # machine-global System V names - see tests/test_ipc_ns.c.
 esdm_ipc_ns = files('../test_ipc_ns.c')
 
-# The per-ES block cache is exercised on its own: the ES manager entry points it
-# calls out to are stubbed in the test, which is what makes the cooperative
-# shutdown of the monitor loop and the wakeup accounting observable at all. It
-# therefore compiles the unit under test rather than linking the ESDM library,
-# and needs neither a server nor an initialized DRNG.
-esdm_es_buf_test = executable(
-	'esdm_es_buf_test',
-	[ files('../../esdm/esdm_es_buf.c'), 'esdm_es_buf_test.c' ],
-	include_directories: [ include_dirs_server,
-			       include_directories('../common') ],
-	dependencies: dependencies_server,
-	link_with: esdm_common_static_lib,
-)
-
-test('ESDM per-ES block cache', esdm_es_buf_test, suite: 'core')
-
-# fips.c only exists in a FIPS build. Like the block cache above it is compiled
-# into the test rather than linked from the library, so the configuration probe
-# its constructor calls can be stubbed out - a failing power-on self test would
-# exit() the process before main() runs.
+# fips.c only exists in a FIPS build. It is compiled into the test rather than
+# linked, so the configuration probe of its constructor can be stubbed out: a
+# failing power-on self test would exit() before main() runs.
 if get_option('fips140')
 	esdm_fips_test = executable(
 		'esdm_fips_test',
@@ -41,6 +24,15 @@ if get_option('esdm-server').enabled()
 		[ esdm_ipc_ns, 'esdm_status_test.c' ],
 		include_directories: include_dirs_server,
 		link_with: esdm_lib,
+		dependencies: dependencies_server,
+	)
+
+	esdm_status_text_test = executable(
+		'esdm_status_text_test',
+		[ 'esdm_status_text_test.c' ],
+		include_directories: [ include_dirs_server,
+				       include_directories('../common') ],
+		link_with: esdm_static_lib,
 		dependencies: dependencies_server,
 	)
 
@@ -71,14 +63,6 @@ if get_option('esdm-server').enabled()
 	esdm_drng_mgr_max_wo_reseed_test = executable(
 		'esdm_drng_mgr_max_wo_reseed_test',
 		[ esdm_ipc_ns, 'esdm_drng_mgr_max_wo_reseed_test.c' ],
-		include_directories: include_dirs_server,
-		link_with: esdm_static_lib,
-		dependencies: dependencies_server,
-	)
-
-	esdm_reseed_cached_test = executable(
-		'esdm_reseed_cached_test',
-		[ esdm_ipc_ns, 'esdm_reseed_cached_test.c' ],
 		include_directories: include_dirs_server,
 		link_with: esdm_static_lib,
 		dependencies: dependencies_server,
@@ -124,6 +108,22 @@ if get_option('esdm-server').enabled()
 		dependencies: dependencies_server,
 	)
 
+	esdm_weak_source_reseed_test = executable(
+		'esdm_weak_source_reseed_test',
+		[ esdm_ipc_ns, 'esdm_weak_source_reseed_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
+	esdm_reseed_no_worker_test = executable(
+		'esdm_reseed_no_worker_test',
+		[ esdm_ipc_ns, 'esdm_reseed_no_worker_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
 	esdm_ntg1_seeding_test = executable(
 		'esdm_ntg1_seeding_test',
 		[ esdm_ipc_ns, 'esdm_ntg1_seeding_test.c' ],
@@ -133,6 +133,7 @@ if get_option('esdm-server').enabled()
 	)
 
 	test('ESDM API call esdm_status', esdm_status_test, suite: 'core')
+	test('ESDM status text', esdm_status_text_test, suite: 'core')
 	test('ESDM API call esdm_version', esdm_version_test, suite: 'core')
 	test('ESDM API call esdm_get_random_bytes_full', esdm_get_random_bytes_full_test,
 		suite: 'core')
@@ -150,6 +151,9 @@ if get_option('esdm-server').enabled()
 		suite: 'core')
 	test('ESDM DRNG manager max w/o reseed bits - 2 DRNG', esdm_drng_mgr_max_wo_reseed_bits_test,
 		args : [ '2' ],
+		suite: 'core')
+	test('ESDM DRNG manager max w/o reseed bits crossed by a request', esdm_drng_mgr_max_wo_reseed_bits_test,
+		args : [ '2', 'crossing' ],
 		suite: 'core')
 
 	# Serial: it reports a rate, and a rate measured while the rest of the
@@ -217,8 +221,11 @@ if get_option('esdm-server').enabled()
 		timeout: 120,
 		suite: 'core')
 
-	test('ESDM reseed leaves out an empty cache', esdm_reseed_cached_test,
-		suite: 'core')
+	test('ESDM reseed with a single source below a full seed',
+		esdm_weak_source_reseed_test, timeout: 120, suite: 'core')
+
+	test('ESDM reseed of node DRNGs without a worker',
+		esdm_reseed_no_worker_test, suite: 'core')
 
 	esdm_aux_xdrbg_test = executable(
 		'esdm_aux_xdrbg_test',
@@ -239,5 +246,18 @@ if get_option('esdm-server').enabled()
 	)
 
 	test('ESDM aux pool XOF failure', esdm_aux_xof_failure_test,
+		suite: 'core')
+
+	esdm_lifecycle_test = executable(
+		'esdm_lifecycle_test',
+		[ esdm_ipc_ns, 'esdm_lifecycle_test.c' ],
+		include_directories: include_dirs_server,
+		link_with: esdm_static_lib,
+		dependencies: dependencies_server,
+	)
+
+	test('ESDM non-blocking getters, node count, re-init',
+		esdm_lifecycle_test,
+		timeout: 120,
 		suite: 'core')
 endif

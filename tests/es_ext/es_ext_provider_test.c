@@ -20,9 +20,9 @@
 /*
  * The provider programs: esdm_es_ext_provider_main() serving the test source
  * - its command line, the clients it serves by default, what it declares, its
- * end on SIGTERM - and the example of es-ext/example, reading a device that
- * delivers and one that stalls. The server behind is tested by
- * es_ext_lib_test.c.
+ * end on SIGTERM, also with the source stuck - and the example of
+ * es-ext/example, reading a device that delivers and one that stalls. The
+ * server behind is tested by es_ext_lib_test.c.
  *
  * Usage: es_ext_provider_test <test provider> <example>
  *			       <example reading a FIFO> <the FIFO>
@@ -118,6 +118,71 @@ static void test_serve(const char *serve)
 	CHECK_EQ(kill(pid, SIGTERM), 0);
 	CHECK_EQ(es_ext_test_wait(pid), 0);
 	CHECK(lstat(test_socket, &sb) < 0, "the socket was left behind");
+}
+
+/*
+ * A source stuck in a call keeps the server from stopping: the provider exits
+ * with 1 after 5 seconds, or at once at a second signal - SIGINT, which is
+ * not merged with a SIGTERM still pending
+ */
+static void test_stuck(const char *serve)
+{
+	uint8_t req[ESDM_ES_EXT_PROTO_REQ_MAX];
+	size_t reqlen = esdm_es_ext_proto_req_pack(req, sizeof(req), GET, 32);
+	struct es_ext_test_client c;
+	struct timespec start, end;
+	unsigned int second;
+	double secs;
+	pid_t pid;
+
+	for (second = 0; second < 2; second++) {
+		pid = es_ext_test_serve(serve, test_socket, NULL,
+					"get_delay_ms=30000");
+		CHECK_EQ(es_ext_test_client_open(&c, test_socket), 0);
+		CHECK(send(c.fd, req, reqlen, MSG_NOSIGNAL) == (ssize_t)reqlen,
+		      "cannot send the request");
+		/* The provider in the source */
+		es_ext_test_sleep_ms(200);
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		CHECK_EQ(kill(pid, SIGTERM), 0);
+		if (second)
+			CHECK_EQ(kill(pid, SIGINT), 0);
+		CHECK_EQ(es_ext_test_wait(pid), 1);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		secs = (double)(end.tv_sec - start.tv_sec) +
+		       (double)(end.tv_nsec - start.tv_nsec) / 1e9;
+		CHECK(second ? secs < 4 : secs >= 4 && secs < 20,
+		      "exited after %.1f s", secs);
+		es_ext_test_client_close(&c);
+	}
+}
+
+/* A signal ends a provider whose source hangs setting up */
+static void test_stuck_init(const char *serve)
+{
+	char *const argv[] = { (char *)serve, "--socket", test_socket, NULL };
+	char env[] = ES_EXT_TEST_PLUGIN_ENV "=init_delay_ms=30000";
+	char *const envp[] = { env, NULL };
+	struct timespec start, end;
+	double secs;
+	pid_t pid;
+
+	pid = es_ext_test_spawn(argv, envp);
+	CHECK(pid > 0, "cannot start the provider");
+	if (pid <= 0)
+		return;
+	/* The provider in the init of the source */
+	es_ext_test_sleep_ms(500);
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+	CHECK_EQ(kill(pid, SIGTERM), 0);
+	CHECK_EQ(es_ext_test_wait(pid), 1);
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	secs = (double)(end.tv_sec - start.tv_sec) +
+	       (double)(end.tv_nsec - start.tv_nsec) / 1e9;
+	CHECK(secs < 4, "exited after %.1f s", secs);
+	unlink(test_socket);
 }
 
 /* Without --client_uid, root and nobody - the ESDM - and nobody else */
@@ -273,6 +338,8 @@ int main(int argc, char *argv[])
 
 	test_refusals(argv[1]);
 	test_serve(argv[1]);
+	test_stuck(argv[1]);
+	test_stuck_init(argv[1]);
 	test_default_clients(argv[1]);
 	test_info(argv[1]);
 	test_example(argv[2]);

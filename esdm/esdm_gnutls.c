@@ -240,6 +240,11 @@ const struct esdm_xof_cb esdm_gnutls_xof_cb = {
 	.xof_dealloc = esdm_gnutls_xof_dealloc,
 };
 
+/*
+ * The private context of GnuTLS' CTR DRBG, which no installed header declares:
+ * the layout of 3.6.7 and later, which meson requires - earlier releases carry
+ * more fields, which GnuTLS would write past this structure.
+ */
 struct drbg_aes_ctx {
 	unsigned seeded;
 	/* The current key */

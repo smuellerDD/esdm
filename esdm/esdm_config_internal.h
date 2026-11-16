@@ -27,6 +27,14 @@ int esdm_config_init(void);
 int esdm_config_reinit(void);
 
 /*
+ * Bind the calling thread, e.g. an RPC worker, to a node DRNG instead of the
+ * one of its current CPU, which all threads there share: its requests find
+ * their DRNG without probing or contending with other workers. @index spreads
+ * the workers over the node DRNGs; the initial DRNG stays the fallback.
+ */
+void esdm_config_thread_node_set(uint32_t index);
+
+/*
  * Generate requests after which a DRNG is reseeded - ESDM_DRNG_RESEED_THRESH
  * unless lowered for a test.
  */

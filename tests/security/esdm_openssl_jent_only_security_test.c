@@ -70,6 +70,7 @@
 #include "esdm_sec_jent_only.h"
 #include "../test_namespace.h"
 #include "../test_plan.h"
+#include "esdm_ppoll.h"
 
 #if defined(ESDM_TESTMODE) && defined(ESDM_ES_JENT)
 
@@ -264,7 +265,7 @@ static enum esdm_sec_result esdm_sec_call(OSSL_LIB_CTX *libctx,
 	pfd.fd = pipefd[0];
 	pfd.events = POLLIN;
 	do {
-		rc = poll(&pfd, 1, secs * 1000);
+		rc = esdm_ppoll_ms(&pfd, 1, secs * 1000);
 	} while (rc < 0 && errno == EINTR);
 
 	if (!rc) {

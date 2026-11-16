@@ -1,0 +1,86 @@
+name: Documentation
+
+# The design document and the slide deck from their Typst sources in
+# doc/typst (nix build .#esdm-doc), and both once more with the changes since
+# the documentation of the previous release marked (nix run .#esdm-doc-diff):
+# the four PDFs are the artifact esdm-doc of the run. A manual run can
+# compare with any other git revision.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'doc/**'
+      - flake.nix
+      - flake.lock
+      - .github/workflows/doc.yml
+  pull_request:
+    paths:
+      - 'doc/**'
+      - flake.nix
+      - flake.lock
+      - .github/workflows/doc.yml
+  workflow_dispatch:
+    inputs:
+      rev:
+        description: 'Git revision to mark the changes since (default: doc-1.2.3)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  doc:
+    name: design document and slide deck
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    env:
+      # The documentation of the release before the one in meson.build
+      DIFF_BASE: ${{ inputs.rev || 'doc-1.2.3' }}
+    steps:
+      # make diff extracts the old version from the history, tags included
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # With typst on PATH they also compile every merge they make.
+      - name: Test typstdiff
+        run: |
+          nix develop .#doc -c python3 -m unittest discover -s doc/tools -v
+
+      - name: Build the documentation
+        if: ${{ !cancelled() }}
+        run: |
+          nix build --print-build-logs .#esdm-doc
+          mkdir -p out
+          cp result/share/doc/esdm/*.pdf out/
+
+      - name: Mark the changes since ${{ env.DIFF_BASE }}
+        if: ${{ !cancelled() }}
+        run: |
+          if ! git rev-parse --verify --quiet "${DIFF_BASE}^{commit}" >/dev/null; then
+            echo "::error::no git revision ${DIFF_BASE} to compare with"
+            exit 1
+          fi
+          nix run .#esdm-doc-diff -- "$DIFF_BASE" OUT="$PWD/out"
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: esdm-doc
+          path: out/*.pdf
+          if-no-files-found: error

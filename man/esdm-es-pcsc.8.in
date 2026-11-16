@@ -23,7 +23,8 @@ pulled or reset, or a pcscd restarted, is set up anew on the next request. A
 card is tested when it is connected and on every self test of the ESDM \- two
 reads of 16 bytes that must differ \- and one repeating itself is credited with
 nothing until it passes again. No card is no reason not to serve: the ESDM
-credits nothing meanwhile.
+credits nothing meanwhile. While another program holds a transaction on the
+card, a request fails at once.
 .SH NAME, RATE AND STATUS
 The source declares the name
 .B PC/SC

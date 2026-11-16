@@ -90,6 +90,7 @@ ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
 	};
 	ssize_t ret = 0;
 	int noblock = flags & ESDM_GET_SEED_NONBLOCK;
+	unsigned int polls = 0;
 
 	CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 
@@ -129,9 +130,13 @@ ssize_t esdm_rpcc_get_seed_int(uint8_t *buf, size_t buflen, unsigned int flags,
 		/*
 		 * The server-side always invokes the command non-blocking.
 		 * Thus, we need to loop, in case the caller did not request
-		 * non-blocking and ESDM cannot deliver data.
+		 * non-blocking and ESDM cannot deliver data. Do not hold the
+		 * pooled connection while waiting.
 		 */
-		nanosleep(&esdm_client_poll_ts, NULL);
+		esdm_rpcc_put_unpriv_service(rpc_conn);
+		rpc_conn = NULL;
+		esdm_client_poll_wait(&polls);
+		CKINT(esdm_rpcc_get_unpriv_service(&rpc_conn, int_data));
 	}
 
 out:

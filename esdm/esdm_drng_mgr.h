@@ -86,18 +86,20 @@ struct esdm_drng {
 	atomic_bool force_reseed; /* Force a reseed */
 	atomic_bool initiated; /* Was DRNG initiated once? (used for pr drng) */
 
-	/*
-	 * A reseed is due and has been handed to the asynchronous reseed
-	 * worker. Set by the generate path instead of collecting entropy
-	 * inline, cleared by the worker once it has taken the DRNG on. It also
-	 * serves as the "already queued" guard: the generate path keeps seeing
-	 * the reseed condition on every iteration until the worker lands, and
-	 * only the thread that flips this flag wakes the worker.
-	 */
-	atomic_bool reseed_pending;
+	/* The worker runs a reseed of it on a thread, see esdm_drng_reseed_pass */
+	atomic_bool reseed_running;
+	/* Seconds (CLOCK_MONOTONIC) before which the worker does not retry it */
+	_Atomic long long reseed_retry_at;
 
 	/* Lock write operations on DRNG state, DRNG replacement of drng_cb */
 	mutex_w_t lock; /* Non-atomic DRNG operation */
+
+	/*
+	 * Serializes the seedings of this DRNG, so entropy is collected once
+	 * rather than by every path finding its reseed due. Per DRNG: seedings
+	 * of different DRNGs run side by side. Taken before lock.
+	 */
+	mutex_w_t seed_lock;
 };
 
 #define ESDM_DRNG_STATE_INIT(x, d, d_cb, h_cb)                                 \
@@ -105,7 +107,8 @@ struct esdm_drng {
 	.requests = ESDM_DRNG_RESEED_THRESH, .requests_since_fully_seeded = 0, \
 	.request_bits_since_fully_seeded = 0, .seed_generation = 0,            \
 	.last_seeded_time = 0, .last_seeded_wtime = 0, .fully_seeded = false,  \
-	.force_reseed = true, .initiated = false, .reseed_pending = false
+	.force_reseed = true, .initiated = false, .reseed_running = false,     \
+	.seed_lock = MUTEX_W_UNLOCKED
 
 /*
  * Statistics of one DRNG instance, as handed to the callback of
@@ -121,7 +124,6 @@ struct esdm_drng_stats {
 	const char *drng_name;
 	bool fully_seeded;
 	bool force_reseed;
-	bool reseed_pending;
 	bool initiated;
 	/* Generate requests left before a reseed is due, may be negative */
 	int requests_until_reseed;
@@ -200,9 +202,6 @@ bool esdm_drng_mgr_terminating(void);
 /**
  * @brief Put the asynchronous reseed worker on duty
  *
- * A reseed interval of zero seconds keeps one off duty - the requests reseed
- * themselves then, see esdm_set_reseed_max_time().
- *
  * @return true if a worker is on duty afterwards
  */
 bool esdm_drng_mgr_reseed_worker_start(void);
@@ -238,7 +237,6 @@ void esdm_drng_reset(struct esdm_drng *drng);
  * @return true if a seeding was performed
  */
 bool esdm_drng_seed_work_try(void);
-void esdm_try_fully_seeded(void);
 void esdm_force_fully_seeded(void);
 void esdm_force_fully_seeded_all_drbgs(void);
 

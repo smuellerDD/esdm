@@ -4,8 +4,8 @@
  * Standalone tool gathering raw, unconditioned event timing from the eBPF
  * entropy source programs for SP800-90B entropy assessment. It writes the
  * time between successive events of a CPU as decimal ASCII, one delta per
- * line - the format extractlsb(1) of addon/test reads, which turns it into
- * the byte stream the NIST tools assess:
+ * line - the format extractlsb(8) of tests/validation-helpers reads, which
+ * turns it into the byte stream the NIST tools assess:
  *
  *     esdm-ebpf-collect --source sched --cpu 0 --out raw.txt --events 1000000
  *     extractlsb raw.txt raw.bin 1000000 FF

@@ -60,6 +60,8 @@ static unsigned int foreground = 0;
 /* "/run/esdm-rpc-server.pid" */
 static char *pidfile = NULL;
 static int pidfile_fd = -1;
+/* The process holding the PID file lock, the only one to remove the file */
+static pid_t pidfile_owner = 0;
 static const char *username = NULL;
 static const char *groupname = NULL;
 static unsigned int memlock = 0;
@@ -112,11 +114,8 @@ static void usage(void)
 		"\t-s --force_schedes\tForce to enable Sched ES where the ESDM\n");
 	fprintf(stderr, "\t\t\t\tretries enabling it\n");
 	fprintf(stderr,
-		"\t   --jent_block_disable\tDisable Jitter RNG block collection\n");
-	fprintf(stderr,
-		"\t   --es_jent_instances <N>\tRefill the Jitter RNG buffer with N\n");
-	fprintf(stderr,
-		"\t\t\tcollectors, each in a thread of its own (default %u)\n",
+		"\t   --es_jent_instances <N>\tCollect from the Jitter RNG with N\n");
+	fprintf(stderr, "\t\t\tcollectors side by side (default %u)\n",
 		ESDM_JENT_INSTANCES);
 	fprintf(stderr,
 		"\t-S --syslog\tLog to syslog instead of stdout/stderr\n");
@@ -195,6 +194,24 @@ static void set_es_ext_rate(const char *arg)
 #endif
 }
 
+/* Jitter RNG collectors: 1 to 64 */
+static void set_es_jent_instances(const char *arg)
+{
+	unsigned long val;
+	char *end;
+
+	errno = 0;
+	val = strtoul(arg, &end, 10);
+	if (errno || end == arg || *end || arg[0] == '-' || val < 1 ||
+	    val > 64) {
+		fprintf(stderr,
+			"--es_jent_instances takes a number from 1 to 64, not \"%s\"\n",
+			arg);
+		exit(1);
+	}
+	esdm_config_es_jent_instances_set((uint32_t)val);
+}
+
 /* A uid, a user name, or none for root only */
 static void set_es_ext_uid(const char *arg)
 {
@@ -260,11 +277,10 @@ static void parse_opts(int argc, char *argv[])
 			{ "pid", 1, 0, 0 },
 			{ "help", 0, 0, 0 },
 			{ "version", 0, 0, 0 },
-			{ "username", 0, 0, 0 },
+			{ "username", 1, 0, 0 },
 			{ "foreground", 0, 0, 0 },
 			{ "force_irqes", 0, 0, 0 },
 			{ "force_schedes", 0, 0, 0 },
-			{ "jent_block_disable", 0, 0, 0 },
 			{ "syslog", 0, 0, 0 },
 			{ "raise_sched_priority", 0, 0, 0 },
 			{ "groupname", 1, 0, 0 },
@@ -330,50 +346,45 @@ static void parse_opts(int argc, char *argv[])
 				break;
 
 			case 8:
-				/* jent_block_disable */
-				esdm_config_es_jent_async_enabled_set(0);
-				break;
-
-			case 9:
 				/* syslog */
 				esdm_logger_enable_syslog("esdm-server");
 				break;
 
-			case 10:
+			case 9:
 				/* raise_sched_priority */
 				daemon_raise_sched_priority();
 				break;
-			case 11:
+			case 10:
 				/* groupname */
 				groupname = optarg;
 				break;
-			case 12:
+			case 11:
 				/* memlock */
 				memlock = 1;
 				break;
-			case 13:
+			case 12:
 				/* small_memory */
 				small_memory = 1;
 				break;
-			case 14:
+			case 13:
 				/* keep_ipc */
 				esdm_config_ipc_cleanup_set(0);
 				break;
-			case 15:
+			case 14:
 				/* pid_namespace */
 				pid_namespace = 1;
 				break;
-			case 16:
+			case 15:
 				/* egd_socket */
 				if (esdm_egd_server_enable(optarg))
 					exit(1);
 				break;
-			case 17:
+			case 16:
 				/* egd_socket_pr */
 				if (esdm_egd_server_enable_pr(optarg))
 					exit(1);
 				break;
-			case 18:
+			case 17:
 				/* es_ext */
 				if (!optarg[0]) {
 					fprintf(stderr,
@@ -382,20 +393,19 @@ static void parse_opts(int argc, char *argv[])
 				}
 				es_ext_set("--es_ext", esdm_es_ext_set_path(optarg));
 				break;
-			case 19:
+			case 18:
 				/* es_ext_entropy_rate */
 				set_es_ext_rate(optarg);
 				break;
-			case 20:
+			case 19:
 				/* es_ext_uid */
 				set_es_ext_uid(optarg);
 				break;
-			case 21:
+			case 20:
 				/* es_jent_instances */
-				esdm_config_es_jent_instances_set(
-					(uint32_t)strtoul(optarg, NULL, 10));
+				set_es_jent_instances(optarg);
 				break;
-			case 22:
+			case 21:
 				/* es_jent_kernel_name */
 				set_es_jent_kernel_name(optarg);
 				break;
@@ -501,16 +511,31 @@ static void daemon_raise_sched_priority(void)
 static void dealloc(void)
 {
 	if (pidfile_fd != -1) {
+		/*
+		 * Remove while still locked, so a new instance's file is not
+		 * taken along, and only as the lock holder - not the daemon of
+		 * a PID namespace supervisor. This fails after the permanent
+		 * privilege drop; systemd removes the file then (PIDFile=), and
+		 * esdm-server-signal-helper signals only a lock holder.
+		 */
+		if (pidfile != NULL && getpid() == pidfile_owner)
+			unlink(pidfile);
 		close(pidfile_fd);
 		pidfile_fd = -1;
-		if (pidfile != NULL) {
-			unlink(pidfile);
-			free(pidfile);
-			pidfile = NULL;
-		}
+		free(pidfile);
+		pidfile = NULL;
 	}
 
 	daemon_release();
+}
+
+/* Teardown of the PID namespace supervisor, which keeps its privileges */
+static void supervisor_exit(void)
+{
+	esdm_rpc_server_cleanup();
+
+	if (pidfile)
+		unlink(pidfile);
 }
 
 /*
@@ -590,8 +615,10 @@ static void create_pid_file(const char *pid_file)
 		exit(1);
 	}
 
+	pidfile_owner = getpid();
+
 	/* write our pid to the pid file */
-	snprintf(pid_str, sizeof(pid_str), "%i\n", getpid());
+	snprintf(pid_str, sizeof(pid_str), "%i\n", pidfile_owner);
 	if (write(pidfile_fd, pid_str, strlen(pid_str)) !=
 	    (ssize_t)strlen(pid_str)) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
@@ -708,12 +735,6 @@ int main(int argc, char *argv[])
 		 */
 		esdm_config_max_nodes_set(1);
 
-		/*
-		 * Disable the asynchronous Jitter RNG block collection, which
-		 * otherwise keeps pre-filled entropy buffers resident.
-		 */
-		esdm_config_es_jent_async_enabled_set(0);
-
 #ifdef __GLIBC__
 		/*
 		 * Tune the glibc allocator for a small footprint:
@@ -759,11 +780,11 @@ int main(int argc, char *argv[])
 	 *
 	 * The supervisor performs the IPC cleanup after the daemon terminated:
 	 * the daemon permanently drops its privileges and can no longer remove
-	 * the root-owned sockets, SHM segment and semaphores itself.
+	 * the root-owned sockets, SHM segment and semaphores - nor the PID
+	 * file - itself.
 	 */
 	if (pid_namespace)
-		CKINT(linux_isolate_namespace_prefork(
-			esdm_rpc_server_cleanup));
+		CKINT(linux_isolate_namespace_prefork(supervisor_exit));
 
 	/*
 	 * The IPC cleanup at shutdown only succeeds with privileges retained,

@@ -54,6 +54,8 @@ credited only after a self test passed.
 takes the command line, sets the source up and serves it until SIGTERM,
 SIGINT or SIGHUP; it tells systemd once it serves
 .RB ( Type=notify ).
+A source still in a call 5 seconds after the signal, or at a second one, ends
+the process with exit status 1 at once.
 .PP
 .BR esdm_es_ext_server_alloc (),
 .BR esdm_es_ext_server_allow_uid (),
@@ -65,8 +67,9 @@ and
 .BR esdm_es_ext_server_free ()
 serve a source from a program of its own making, see
 .IR esdm_es_ext.h .
-The server serves up to 8 clients, a new one taking the slot of the one idle
-the longest \- of root only for another one of root.
+The server serves up to 8 clients, a new one taking the slot of the one
+connected last \- of root only for another one of root, as which a process
+counts that connected as root before.
 .SH RETURN VALUE
 .BR esdm_es_ext_provider_main ()
 returns 0 once a signal ended it, or for
@@ -91,8 +94,8 @@ the backlog the ESDM connects through: a group of the ESDM user is safer.
 Serve clients running as
 .I USER
 next to root, up to 8 times; nobody by default, the user the ESDM runs as.
-Every process of the user can take a client slot from the ESDM: a user only the
-ESDM runs as is safer.
+Every process of the user can fill the client slots before the ESDM connects: a
+user only the ESDM runs as is safer.
 .TP
 .BR \-\-name " \fINAME\fR"
 Declare

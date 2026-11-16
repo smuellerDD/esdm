@@ -137,6 +137,10 @@
  *
  * Any other byte naming the read of 0xeb, or a length beyond the bound, is
  * treated as an unknown command.
+ *
+ * A non-blocking read of the regular DRNGs is answered empty only by an ESDM
+ * that is not operational: one finding them waiting for a reseed is answered
+ * once it landed, or empty after a second.
  */
 
 #define ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK 0xe0

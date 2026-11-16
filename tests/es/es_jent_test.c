@@ -17,37 +17,37 @@
  * DAMAGE.
  */
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "config.h"
 #include "esdm_config.h"
 #include "esdm_definitions.h"
 #include "esdm_es_aux.h"
+#include "esdm_es_jent.h"
 #include "esdm_es_mgr.h"
+#include "test_pertubation.h"
+#include "../es_state_check.h"
 
 static int es_jent_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_ext_es_jitter]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_ext_es_jitter]->state) {
-		printf("ES Jitter RNG - fail: state callback missing\n");
-		return 1;
-	}
-
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_ext_es_jitter]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Library version") ||
-	    !strstr(buf, "Available entropy")) {
+	if (!es_state_member(state, "library_version", json_type_int) ||
+	    !es_state_member(state, "available_entropy", json_type_int)) {
 		printf("ES Jitter RNG - fail: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES Jitter RNG - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
 
-	printf("ES Jitter RNG - pass: state information found:\n%s\n", buf);
-
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_jent_getdata(uint32_t expected_ent_level)
@@ -65,7 +65,7 @@ static int es_jent_getdata(uint32_t expected_ent_level)
 	memset(&eb_es, 0, sizeof(eb_es));
 	memset(&zero, 0, sizeof(zero));
 	esdm_es[esdm_ext_es_jitter]->get_ent(
-		&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+		&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(esdm_config_es_jent_entropy_rate(),
 					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {
@@ -208,6 +208,69 @@ static int es_jent_fini(void)
 	return 0;
 }
 
+/* The status of the Jitter RNG library, as the RPC interface reports it */
+static int es_jent_status(void)
+{
+	char buf[4096];
+	int ret = esdm_jent_status(buf, sizeof(buf));
+
+	if (ret == -ENOENT) {
+		printf("ES Jitter RNG - skip: jitterentropy without jent_status\n");
+		return 0;
+	}
+	if (ret || buf[0] != '{') {
+		printf("ES Jitter RNG - fail: status %d: %.80s\n", ret, buf);
+		return 1;
+	}
+
+	printf("ES Jitter RNG - pass: status\n");
+	return 0;
+}
+
+#ifdef ESDM_TESTMODE
+/*
+ * While a collector fails, the source is credited with nothing until that
+ * collector delivers again.
+ */
+static int es_jent_after_failure(void)
+{
+	const struct esdm_es_cb *es = esdm_es[esdm_ext_es_jitter];
+	struct entropy_es eb;
+	uint32_t i;
+	int ret = 0;
+
+	esdm_test_jent_fail_sync_reads(1);
+	es->get_ent(&eb, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (eb.e_bits) {
+		printf("ES Jitter RNG - fail: a failed read was credited\n");
+		ret = 1;
+	}
+
+	if (es->curr_entropy(ESDM_DRNG_SECURITY_STRENGTH_BITS)) {
+		printf("ES Jitter RNG - fail: credited while a collector fails\n");
+		ret = 1;
+	}
+
+	/* The collectors take turns: the read of the failed one ends it */
+	for (i = 0; i < esdm_config_es_jent_instances(); i++)
+		es->get_ent(&eb, ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	if (!eb.e_bits) {
+		printf("ES Jitter RNG - fail: not credited after the collector recovered\n");
+		ret = 1;
+	}
+
+	if (!ret)
+		printf("ES Jitter RNG - pass: nothing credited while a collector fails\n");
+
+	return ret;
+}
+#else
+static int es_jent_after_failure(void)
+{
+	return 0;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 	uint32_t i;
@@ -231,6 +294,8 @@ int main(int argc, char *argv[])
 		ret += es_jent_getdata(i);
 	}
 
+	ret += es_jent_status();
+	ret += es_jent_after_failure();
 	ret += es_jent_getstate();
 	ret += es_jent_fini();
 

@@ -24,6 +24,7 @@
  * scripted ("evil").
  */
 
+#define _GNU_SOURCE
 #include "config.h"
 
 #define ESDM_EXT_RETRY_INTERVAL_SEC 1
@@ -37,6 +38,7 @@
 #include "../es_state_check.h"
 #include "es_ext_test_plugin.h"
 #include "es_ext_test_util.h"
+#include "esdm_ppoll.h"
 
 #define ES (&esdm_es_extsock)
 #define BITS ESDM_DRNG_SECURITY_STRENGTH_BITS
@@ -143,7 +145,7 @@ static void *evil_run(void *arg)
 		struct pollfd pfd = { .fd = evil_fd, .events = POLLIN };
 		int fd;
 
-		if (poll(&pfd, 1, 50) <= 0 ||
+		if (esdm_ppoll_ms(&pfd, 1, 50) <= 0 ||
 		    (fd = accept4(evil_fd, NULL, NULL, SOCK_CLOEXEC)) < 0)
 			continue;
 		evil_conns++;
@@ -155,7 +157,7 @@ static void *evil_run(void *arg)
 			uint16_t type;
 			ssize_t n;
 
-			if (poll(&pfd, 1, 50) <= 0)
+			if (esdm_ppoll_ms(&pfd, 1, 50) <= 0)
 				continue;
 			n = recv(fd, req, sizeof(req), 0);
 			if (n <= 0 || esdm_es_ext_proto_req_unpack(
@@ -188,19 +190,15 @@ static uint32_t test_get(uint32_t bits, uint8_t *first)
 {
 	struct entropy_es eb_es = { 0 };
 
-	ES->get_ent(&eb_es, bits, true);
+	ES->get_ent(&eb_es, bits);
 	if (first)
 		*first = eb_es.e[0];
 	return eb_es.e_bits;
 }
 
-/* The monitor, leaving the block cache empty for the tests but its own */
 static void test_monitor(void)
 {
 	ES->monitor_es();
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
-	ES->reset();
-#endif
 }
 
 /* The provider of @path, connected to by the monitor */
@@ -226,18 +224,20 @@ static bool test_state_has(const char *key, const char *what)
 /* The "provider" member of the state, the provider asked anew */
 static struct json_object *test_provider(struct json_object **state)
 {
-	extsock.status_at = 0;
+	/* The monitor asks the provider for it, the status only shows it */
+	test_monitor();
 	*state = es_state_get(ES);
 	return es_state_member(*state, "provider", json_type_object);
 }
 
-/* Sleep past the end of the retry interval the source recorded */
+/*
+ * Sleep past the end of the retry interval the source recorded, polling: its
+ * coarse clock lags by up to a tick
+ */
 static void test_wait_retry(void)
 {
-	uint64_t now = esdm_monotonic_now_ns();
-
-	if (extsock.retry_at > now)
-		es_ext_test_sleep_ms((long)((extsock.retry_at - now) / MS + 1));
+	while (esdm_monotonic_now_ns() < extsock.retry_at)
+		es_ext_test_sleep_ms(5);
 }
 
 static bool test_rate_is(uint32_t rate, const char *source)
@@ -484,7 +484,6 @@ static void test_names(void)
 	};
 	struct json_object *state;
 	unsigned int i;
-	char txt[4096];
 
 	test_connect(test_good);
 	CHECK_EQ(test_get(BITS, NULL), BITS);
@@ -493,9 +492,6 @@ static void test_names(void)
 		      es_state_str_is(state, "instance", EXTSOCK_NAME),
 	      "not shown under the name declared: %s", es_state_print(state));
 	json_object_put(state);
-	ES->state(txt, sizeof(txt));
-	CHECK(strstr(txt, " Declared name: " ES_EXT_TEST_NAME "\n"),
-	      "the text has no declared name: %s", txt);
 
 	test_connect(test_evil);
 	CHECK_EQ(test_get(BITS, NULL), 8);
@@ -565,11 +561,9 @@ static void test_status(void)
 		      es_state_member(provider, "plugin", json_type_object),
 	      "no status of the provider: %s", es_state_print(state));
 	json_object_put(state);
-	ES->state(txt, sizeof(txt));
+	/* Asked once per interval, not once per state */
+	ES->state_json(txt, sizeof(txt));
 	CHECK_EQ(ctl->status_calls, calls + 1);
-	CHECK(strstr(txt, "\n Provider status: {\"server\":{") &&
-		      strstr(txt, "\"plugin\":" ES_EXT_TEST_STATUS "}\n"),
-	      "the text has no status of the provider: %s", txt);
 
 	test_connect(test_evil);
 	CHECK_EQ(test_get(BITS, NULL), 8);
@@ -600,6 +594,9 @@ static void test_status(void)
 				      ESDM_EXT_TIMEOUT_MS * MS,
 		      "mode %d: %s", dropping[i], es_state_print(state));
 		json_object_put(state);
+		/* Not asked again for a while, the reconnect not dropped */
+		CHECK(extsock.status_at > esdm_monotonic_now_ns(),
+		      "mode %d: STATUS asked again at once", dropping[i]);
 		evil_status = EVIL_GOOD;
 		test_monitor();
 		CHECK_EQ(test_get(BITS, NULL), 0);
@@ -607,76 +604,48 @@ static void test_status(void)
 		test_monitor();
 		CHECK_EQ(test_get(BITS, NULL), 8);
 		CHECK_EQ(evil_conns, conns + 1);
+		/* For the next mode */
+		extsock.status_at = 0;
 	}
 }
 
-#if (ESDM_EXT_ENTROPY_BLOCKS != 0)
+static void *test_slow_get(void *arg)
+{
+	(void)arg;
+	test_get(BITS, NULL);
+	return NULL;
+}
+
 /*
- * Filled by the monitor, for one request timeout per pass; a block served at
- * the rate now, blocks of a failed request passed; the cache passed while the
- * provider is not credited, and discarded by a failed self test and with a
- * new path
+ * The status does not wait for a provider request in progress: the EGD and
+ * RPC workers rendering it would keep their other clients waiting as long
  */
-static void test_cache(void)
+static void test_status_busy(void)
 {
-	unsigned int calls;
+	struct json_object *state;
+	pthread_t thread;
+	uint64_t start;
 
 	test_connect(test_good);
-	CHECK_EQ(test_get(BITS, NULL), BITS);
-	/* The first round after a reset fills nothing, see esdm_es_buf.c */
-	ES->monitor_es();
-	calls = ctl->get_calls;
-	ES->monitor_es();
-	CHECK_EQ(ctl->get_calls, calls + ESDM_EXT_ENTROPY_BLOCKS);
-	calls = ctl->get_calls;
-	CHECK_EQ(test_get(BITS, NULL), BITS);
-	esdm_config_es_ext_entropy_rate_set(64);
-	CHECK_EQ(test_get(BITS, NULL), 64);
-	esdm_config_es_ext_entropy_rate_set(256);
-	CHECK_EQ(ctl->get_calls, calls);
+	ctl->get_delay_ms = ESDM_EXT_TIMEOUT_MS * 6 / 10;
+	if (pthread_create(&thread, NULL, test_slow_get, NULL)) {
+		CHECK(0, "cannot start the request");
+		ctl->get_delay_ms = 0;
+		return;
+	}
+	es_ext_test_sleep_ms(ESDM_EXT_TIMEOUT_MS / 10);
 
-	ctl->selftest_ret = -ENODEV;
-	CHECK_EQ(ES->selftest(), -EFAULT);
-	CHECK_EQ(test_get(BITS, NULL), 0);
-	ctl->selftest_ret = 0;
-	CHECK_EQ(ES->selftest(), 0);
-	CHECK_EQ(test_get(BITS, NULL), BITS);
-	CHECK_EQ(ctl->get_calls, calls + 1);
+	start = esdm_monotonic_now_ns();
+	state = es_state_get(ES);
+	CHECK(esdm_monotonic_now_ns() - start < ESDM_EXT_TIMEOUT_MS / 10 * MS,
+	      "the status waited for the request");
+	CHECK(es_state_str_has(state, "status", "busy"),
+	      "no busy status: %s", es_state_print(state));
+	json_object_put(state);
 
-	ES->monitor_es();
-	ES->monitor_es();
-	calls = ctl->get_calls;
-	test_connect(test_good);
-	CHECK_EQ(test_get(BITS, NULL), BITS);
-	CHECK_EQ(ctl->get_calls, calls + 1);
-
-	/* A slow provider: no request begun after the timeout */
-	ES->monitor_es();
-	ctl->get_delay_ms = ESDM_EXT_TIMEOUT_MS / 4;
-	calls = ctl->get_calls;
-	ES->monitor_es();
+	pthread_join(thread, NULL);
 	ctl->get_delay_ms = 0;
-	CHECK(ctl->get_calls - calls <= 5, "%u requests in one pass",
-	      ctl->get_calls - calls);
-
-	/* The first block fails: the rest is passed once the probe succeeds */
-	ES->reset();
-	ES->monitor_es();
-	ctl->get_ret = -EIO;
-	ES->monitor_es();
-	ctl->get_ret = 0;
-	CHECK_EQ(test_get(BITS, NULL), 0);
-	ES->monitor_es();
-	calls = ctl->get_calls;
-	CHECK_EQ(test_get(BITS, NULL), BITS);
-	CHECK_EQ(ctl->get_calls, calls + 1);
-	ES->reset();
 }
-#else
-static void test_cache(void)
-{
-}
-#endif
 
 int main(void)
 {
@@ -707,7 +676,7 @@ int main(void)
 	test_names();
 	test_rates();
 	test_status();
-	test_cache();
+	test_status_busy();
 
 	ES->fini();
 	good_stop();

@@ -46,6 +46,7 @@
 
 #include "esdm_egd_protocol.h"
 #include "ossl_prov_fuzz.h"
+#include "esdm_ppoll.h"
 
 /*
  * What one step of an exchange is given. The provider hands the client library
@@ -110,7 +111,7 @@ static void fuzz_serve_conn(int fd)
 		if (!len)
 			return;
 
-		if (poll(&pfd, 1, FUZZ_TIMEOUT_MS) <= 0)
+		if (esdm_ppoll_ms(&pfd, 1, FUZZ_TIMEOUT_MS) <= 0)
 			return;
 
 		if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
@@ -137,7 +138,7 @@ static void *fuzz_serve(void *unused)
 		struct pollfd pfd = { .fd = fuzz_listen_fd, .events = POLLIN };
 		int fd;
 
-		if (poll(&pfd, 1, FUZZ_ACCEPT_POLL_MS) <= 0)
+		if (esdm_ppoll_ms(&pfd, 1, FUZZ_ACCEPT_POLL_MS) <= 0)
 			continue;
 
 		fd = accept(fuzz_listen_fd, NULL, NULL);

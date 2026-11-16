@@ -60,6 +60,11 @@ static void es_ext_test_env(struct esdm_es_ext_test_control *ctl)
 			ctl->init_ret = atoi(val);
 		} else if (!strcmp(s, "rate")) {
 			ctl->entropy_rate = (uint32_t)strtoul(val, NULL, 0);
+		} else if (!strcmp(s, "get_delay_ms")) {
+			ctl->get_delay_ms = (unsigned int)strtoul(val, NULL, 0);
+		} else if (!strcmp(s, "init_delay_ms")) {
+			es_ext_test_sleep_ms(
+				(unsigned int)strtoul(val, NULL, 0));
 		}
 	}
 }

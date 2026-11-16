@@ -35,6 +35,7 @@
 
 #include "egd_peer.h"
 #include "esdm_egd_protocol.h"
+#include "esdm_ppoll.h"
 
 /*
  * One connection per client, plus room for the ones a forked child of a test
@@ -175,6 +176,7 @@ static int peer_cmd_read_nonblock(struct egd_peer_conn *conn)
 	case EGD_PEER_NORMAL:
 	case EGD_PEER_SILENT:
 	case EGD_PEER_HANGUP:
+	case EGD_PEER_SHUT_RD:
 		delivered = requested;
 		break;
 	}
@@ -284,7 +286,17 @@ static void *peer_conn_thread(void *arg)
 		if (peer->mode == EGD_PEER_SILENT) {
 			struct pollfd pfd = { .fd = conn->fd, .events = 0 };
 
-			poll(&pfd, 1, EGD_PEER_POLL_MS);
+			esdm_ppoll_ms(&pfd, 1, EGD_PEER_POLL_MS);
+			continue;
+		}
+
+		/* Nothing to read either - until the client is gone. */
+		if (peer->mode == EGD_PEER_SHUT_RD) {
+			struct pollfd pfd = { .fd = conn->fd, .events = 0 };
+
+			if (esdm_ppoll_ms(&pfd, 1, EGD_PEER_POLL_MS) > 0 &&
+			    (pfd.revents & (POLLHUP | POLLERR)))
+				break;
 			continue;
 		}
 
@@ -360,12 +372,15 @@ static void *peer_accept_thread(void *arg)
 		unsigned int connections;
 		int fd;
 
-		if (poll(&pfd, 1, EGD_PEER_POLL_MS) <= 0)
+		if (esdm_ppoll_ms(&pfd, 1, EGD_PEER_POLL_MS) <= 0)
 			continue;
 
 		fd = accept(peer->listen_fd, NULL, NULL);
 		if (fd < 0)
 			continue;
+
+		if (peer->mode == EGD_PEER_SHUT_RD)
+			shutdown(fd, SHUT_RD);
 
 		pthread_mutex_lock(&peer->lock);
 		peer->connections++;

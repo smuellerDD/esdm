@@ -90,10 +90,18 @@
 #define ESDM_EGD_IDLE_POLL_MS 250
 
 /*
- * Poll interval while a blocking read request is deferred: it defines how
- * quickly such a request is answered once the ESDM turns operational.
+ * Poll interval while a blocking read request is deferred or a non-blocking one
+ * parked: it defines how quickly such a request is answered once the ESDM turns
+ * operational, or a reseed landed.
  */
 #define ESDM_EGD_DEFERRED_POLL_MS 50
+
+/*
+ * Longest a non-blocking read is parked for a reseed, see
+ * esdm_egd_reseed_wait() - below the timeouts of the clients, esdm_cdev's 5 s,
+ * which take a longer wait for a failure of the ESDM.
+ */
+#define ESDM_EGD_PARK_MS 1000
 
 /*
  * Time a response may stay undelivered before the connection is considered
@@ -154,6 +162,14 @@ struct esdm_egd_conn {
 	bool deferred_pr;
 
 	/*
+	 * The non-blocking read at the head of the input is parked since
+	 * parked_since, see esdm_egd_reseed_wait(). It stays there, unconsumed,
+	 * and holds up the connection as a deferred request does.
+	 */
+	bool parked;
+	uint64_t parked_since;
+
+	/*
 	 * Bytes of the deferred answer collected so far, see
 	 * esdm_egd_cmd_read_block().
 	 */
@@ -166,6 +182,9 @@ struct esdm_egd_conn {
 	 */
 	uint32_t insert_left;
 	int32_t insert_status;
+
+	/* The client is gone, see esdm_egd_hangup(). */
+	bool hangup;
 
 	TAILQ_ENTRY(esdm_egd_conn) tailq;
 };
@@ -465,7 +484,7 @@ static uint64_t esdm_egd_now_ms(void)
 {
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(ESDM_CLOCK_COARSE, &ts);
 
 	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)(ts.tv_nsec / 1000000);
 }
@@ -493,6 +512,26 @@ static void esdm_egd_out_clear(struct esdm_egd_conn *conn)
 }
 
 /*
+ * The client is gone, but what it sent may still be unread: a write request
+ * has no response, so closing right after it is how a client hands over its
+ * data. The input is processed to its end, which closes the connection, but
+ * not answered; a deferred request is dropped rather than waited for.
+ */
+static void esdm_egd_hangup(struct esdm_egd_conn *conn)
+{
+	conn->hangup = true;
+	esdm_egd_out_clear(conn);
+
+	conn->deferred = 0;
+	conn->deferred_pr = false;
+	memset_secure(conn->answer, 0, sizeof(conn->answer));
+	conn->answer_len = 0;
+
+	/* What the client sent is processed, see esdm_egd_read() */
+	conn->parked = false;
+}
+
+/*
  * Push out what is left of the response.
  *
  * A socket that cannot take it all is not waited for: the rest stays in the
@@ -505,6 +544,12 @@ static void esdm_egd_out_clear(struct esdm_egd_conn *conn)
  */
 static int esdm_egd_flush(struct esdm_egd_conn *conn)
 {
+	/* Nobody to deliver to, see esdm_egd_hangup() */
+	if (conn->hangup) {
+		esdm_egd_out_clear(conn);
+		return 0;
+	}
+
 	while (esdm_egd_out_pending(conn)) {
 		/*
 		 * MSG_NOSIGNAL: a client closing its end between asking and
@@ -531,6 +576,12 @@ static int esdm_egd_flush(struct esdm_egd_conn *conn)
 		/* The client has not made room yet - EPOLLOUT tells us when. */
 		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 			return 0;
+
+		/* Its input may still hold what it sent before going. */
+		if (ret < 0 && (errno == EPIPE || errno == ECONNRESET)) {
+			esdm_egd_hangup(conn);
+			return 0;
+		}
 
 		return ret < 0 ? -errno : -EIO;
 	}
@@ -657,6 +708,29 @@ static int esdm_egd_get_random(bool pr, uint8_t *buf, size_t len,
 	return (*generated < len) ? -EAGAIN : 0;
 }
 
+/*
+ * A non-blocking read of the regular DRNGs got nothing (@ret) though the ESDM
+ * is operational: they await a reseed, as the initial DRNG does at its reseed
+ * threshold in a build capping the output without one. An empty answer means
+ * "not operational" (protocol header), so park the read up to ESDM_EGD_PARK_MS.
+ *
+ * @return true when the read is to be retried later
+ */
+static bool esdm_egd_reseed_wait(struct esdm_egd_conn *conn, bool pr,
+				 ssize_t ret)
+{
+	uint64_t now;
+
+	if (pr || ret != -EAGAIN || !esdm_state_operational())
+		return false;
+
+	now = esdm_egd_now_ms();
+	if (!conn->parked)
+		conn->parked_since = now;
+
+	return now - conn->parked_since < ESDM_EGD_PARK_MS;
+}
+
 /* Command 0x00: report the currently available amount of entropy in bits. */
 static int esdm_egd_cmd_entropy_count(struct esdm_egd_conn *conn)
 {
@@ -676,6 +750,8 @@ static int esdm_egd_cmd_entropy_count(struct esdm_egd_conn *conn)
  * answering with zero bytes while the ESDM is not operational yet. Clients
  * treat that as "no entropy available right now" and fall back to the blocking
  * request.
+ *
+ * @return -EAGAIN when the read is parked, see esdm_egd_reseed_wait()
  */
 static int esdm_egd_cmd_read_nonblock(struct esdm_egd_conn *conn, bool pr,
 				      uint8_t requested)
@@ -689,6 +765,8 @@ static int esdm_egd_cmd_read_nonblock(struct esdm_egd_conn *conn, bool pr,
 		size_t generated = 0;
 
 		ret = esdm_egd_get_random(pr, resp + 1, requested, &generated);
+		if (!generated && esdm_egd_reseed_wait(conn, pr, ret))
+			return -EAGAIN;
 		if (ret == -EAGAIN) {
 			/* A short answer is what this command is for. */
 			resp[0] = (uint8_t)generated;
@@ -818,6 +896,8 @@ static int esdm_egd_cmd_get_pid(struct esdm_egd_conn *conn)
  * /dev/urandom. Answered as command 0x01. Before the ESDM is operational it
  * hands out nothing at all - an empty answer then, which is no error - and
  * otherwise only an error answers short.
+ *
+ * @return -EAGAIN when the read is parked, see esdm_egd_reseed_wait()
  */
 static int esdm_egd_cmd_read_unseeded(struct esdm_egd_conn *conn,
 				      uint8_t requested)
@@ -830,10 +910,13 @@ static int esdm_egd_cmd_read_unseeded(struct esdm_egd_conn *conn,
 
 	if (requested) {
 		ret = esdm_get_random_bytes(resp + 1, requested);
+		if (esdm_egd_reseed_wait(conn, false, ret))
+			return -EAGAIN;
 		if (ret < 0) {
-			/* Not operational yet is a state, not a failure */
-			esdm_logger(ret == -EOPNOTSUPP ? LOGGER_DEBUG :
-							 LOGGER_ERR,
+			/* Not operational, or no reseed yet, is no failure */
+			esdm_logger((ret == -EOPNOTSUPP || ret == -EAGAIN) ?
+					    LOGGER_DEBUG :
+					    LOGGER_ERR,
 				    LOGGER_C_SERVER,
 				    "EGD server: generation of %u bytes failed: %zd\n",
 				    requested, ret);
@@ -856,6 +939,8 @@ static int esdm_egd_cmd_read_unseeded(struct esdm_egd_conn *conn,
  * Command 0xeb: the non-blocking read @read - 0x01, 0xe0 or 0xe2 - of up to
  * ESDM_EGD_MAX_BULK bytes, answered as that read but with a 4 byte length,
  * from a buffer of its own as the status reports are.
+ *
+ * @return -EAGAIN when the read is parked, see esdm_egd_reseed_wait()
  */
 static int esdm_egd_cmd_bulk_read(struct esdm_egd_conn *conn, uint8_t read,
 				  uint32_t requested)
@@ -863,6 +948,9 @@ static int esdm_egd_cmd_bulk_read(struct esdm_egd_conn *conn, uint8_t read,
 	uint8_t *buf = malloc(4 + (size_t)requested);
 	size_t generated = 0;
 	ssize_t ret;
+	bool pr = read != ESDM_EGD_CMD_ESDM_READ_UNSEEDED &&
+		  (conn->listener->prediction_resistance ||
+		   read == ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK);
 
 	/* Without memory, an empty answer is all there is to say */
 	if (!buf) {
@@ -872,24 +960,27 @@ static int esdm_egd_cmd_bulk_read(struct esdm_egd_conn *conn, uint8_t read,
 	}
 
 	if (requested && read == ESDM_EGD_CMD_ESDM_READ_UNSEEDED) {
-		/* As command 0xe2, not being operational is no failure */
 		ret = esdm_get_random_bytes(buf + 4, requested);
 		if (ret > 0)
 			generated = ((size_t)ret < requested) ? (size_t)ret :
 								requested;
+		/* As command 0xe2, not being operational is no failure */
 		else if (ret == -EOPNOTSUPP)
 			ret = 0;
 	} else if (requested) {
-		/* As commands 0x01 and 0xe0, a short answer is no failure */
-		ret = esdm_egd_get_random(
-			conn->listener->prediction_resistance ||
-				read == ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK,
-			buf + 4, requested, &generated);
-		if (ret == -EAGAIN)
-			ret = 0;
+		ret = esdm_egd_get_random(pr, buf + 4, requested, &generated);
 	} else {
 		ret = 0;
 	}
+
+	if (!generated && esdm_egd_reseed_wait(conn, pr, ret)) {
+		free(buf);
+		return -EAGAIN;
+	}
+
+	/* As the reads it stands for, a short answer is no failure */
+	if (ret == -EAGAIN)
+		ret = 0;
 
 	if (ret < 0)
 		esdm_logger(LOGGER_ERR, LOGGER_C_SERVER,
@@ -1049,6 +1140,23 @@ out:
 	return esdm_egd_write(conn, resp, sizeof(resp));
 }
 
+/* Does the command change anything beyond producing its response? */
+static bool esdm_egd_cmd_has_effect(uint8_t cmd)
+{
+	switch (cmd) {
+	case ESDM_EGD_CMD_WRITE_ENTROPY:
+	case ESDM_EGD_CMD_ESDM_ADD_TO_ENT_CNT:
+	case ESDM_EGD_CMD_ESDM_CLEAR_POOL:
+	case ESDM_EGD_CMD_ESDM_RESEED:
+	case ESDM_EGD_CMD_ESDM_SET_WRITE_WAKEUP:
+	case ESDM_EGD_CMD_ESDM_SET_MIN_RESEED_SECS:
+	case ESDM_EGD_CMD_ESDM_BULK_INSERT:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /* Serve a deferred blocking read request, if there is one. */
 static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
 {
@@ -1073,11 +1181,12 @@ static int esdm_egd_serve_deferred(struct esdm_egd_conn *conn)
  * A response on its way out is waited for with EPOLLOUT and nothing else: the
  * command behind it is not processed until it is delivered.
  *
- * A connection with a deferred request is watched for neither, since nothing of
- * it is read (see esdm_egd_read()) and a level-triggered EPOLLIN would spin the
- * worker on a pipelined client's unread bytes for as long as the request waits.
- * EPOLLERR and EPOLLHUP are reported regardless, so an unwatched connection is
- * still torn down when its peer goes away.
+ * A connection with a deferred request or a parked read is watched for neither,
+ * since nothing of it is read (see esdm_egd_read()) and a level-triggered
+ * EPOLLIN would spin the worker on a pipelined client's unread bytes for as
+ * long as the request waits.
+ * EPOLLERR and EPOLLHUP are reported regardless, so an unwatched connection
+ * still learns that its peer went away, see esdm_egd_hangup().
  */
 static void esdm_egd_conn_arm(int epfd, struct esdm_egd_conn *conn)
 {
@@ -1085,7 +1194,7 @@ static void esdm_egd_conn_arm(int epfd, struct esdm_egd_conn *conn)
 
 	if (esdm_egd_out_pending(conn))
 		ev.events = EPOLLOUT;
-	else if (!conn->deferred)
+	else if (!conn->deferred && !conn->parked)
 		ev.events = EPOLLIN | EPOLLRDHUP;
 
 	if (conn->armed == ev.events)
@@ -1208,6 +1317,12 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 			return -EPROTO;
 		}
 
+		/* Nobody to answer, see esdm_egd_hangup() */
+		if (conn->hangup && !esdm_egd_cmd_has_effect(conn->in[0])) {
+			ret = 0;
+			goto next;
+		}
+
 		/* The socket selects the generator, or the ESDM's own command */
 		pr = conn->listener->prediction_resistance ||
 		     conn->in[0] == ESDM_EGD_CMD_ESDM_PR_READ_NONBLOCK ||
@@ -1284,6 +1399,18 @@ static int esdm_egd_process(struct esdm_egd_conn *conn)
 			ret = -EPROTO;
 			break;
 		}
+
+		/*
+		 * Only the non-blocking reads return it here: retried in a
+		 * later round, see esdm_egd_reseed_wait().
+		 */
+		if (ret == -EAGAIN) {
+			conn->parked = true;
+			return 0;
+		}
+
+	next:
+		conn->parked = false;
 
 		/* Do not leave client supplied entropy data in the buffer. */
 		memset_secure(conn->in, 0, cmd_len);
@@ -1369,18 +1496,30 @@ int esdm_egd_fuzz_stream(bool prediction_resistance, int out_fd,
  */
 static int esdm_egd_read(struct esdm_egd_conn *conn)
 {
-	while (1) {
+	/* A client streaming input keeps it here: not past a stop request */
+	while (!atomic_load(&esdm_egd_exit)) {
 		ssize_t received;
 		int ret;
 
 		/*
-		 * While a request is deferred, a response is on its way out or
-		 * the buffer is full, do not read further: the pending data
-		 * stays in the socket buffer, which applies backpressure to the
-		 * client instead of requiring unbounded buffering here.
+		 * Client gone: process its input without waiting for EOF from
+		 * recv(), so a parked or deferred read cannot strand it.
 		 */
-		if (conn->deferred || esdm_egd_out_pending(conn) ||
-		    conn->in_len >= sizeof(conn->in))
+		if (conn->hangup && conn->in_len) {
+			ret = esdm_egd_process(conn);
+			if (ret)
+				return ret;
+		}
+
+		/*
+		 * While a request is deferred or parked, a response is on its
+		 * way out or the buffer is full, do not read further: the
+		 * pending data stays in the socket buffer, which applies
+		 * backpressure to the client instead of requiring unbounded
+		 * buffering here.
+		 */
+		if (conn->deferred || conn->parked ||
+		    esdm_egd_out_pending(conn) || conn->in_len >= sizeof(conn->in))
 			return 0;
 
 		/* recv() for symmetry with the send() of the response. */
@@ -1404,6 +1543,8 @@ static int esdm_egd_read(struct esdm_egd_conn *conn)
 		if (ret)
 			return ret;
 	}
+
+	return 0;
 }
 
 static void esdm_egd_release_conn(struct esdm_egd_conn *conn)
@@ -1627,9 +1768,11 @@ static int esdm_egd_handler(void __unused *args)
 
 			conn = events[i].data.ptr;
 
+			/* Gone, but its input is still to be processed */
 			if (events[i].events & (EPOLLERR | EPOLLHUP))
-				ret = -EPIPE;
-			else if (esdm_egd_out_pending(conn))
+				esdm_egd_hangup(conn);
+
+			if (esdm_egd_out_pending(conn))
 				/* Room was made - deliver the rest and go on. */
 				ret = esdm_egd_process(conn);
 			else
@@ -1639,11 +1782,13 @@ static int esdm_egd_handler(void __unused *args)
 			 * EPOLLRDHUP only signals that the client will not send
 			 * any more data - it may still be waiting for what it
 			 * asked for before, be that a response on its way out or
-			 * a request that has yet to find its entropy. Close only
-			 * once nothing is owed to it any more.
+			 * a request that has yet to find its entropy, deferred
+			 * or parked. Close only once nothing is owed to it any
+			 * more.
 			 */
 			if (!ret && (events[i].events & EPOLLRDHUP) &&
-			    !conn->deferred && !esdm_egd_out_pending(conn))
+			    !conn->deferred && !conn->parked &&
+			    !esdm_egd_out_pending(conn))
 				ret = -EPIPE;
 
 			if (ret) {
@@ -1678,7 +1823,12 @@ static int esdm_egd_handler(void __unused *args)
 			uint64_t out_since = conn->out_since;
 			bool stuck;
 
-			if (!conn->deferred && !esdm_egd_out_pending(conn))
+			/* Each may seed from the entropy sources */
+			if (atomic_load(&esdm_egd_exit))
+				break;
+
+			if (!conn->deferred && !conn->parked &&
+			    !esdm_egd_out_pending(conn))
 				continue;
 
 			collected = conn->answer_len;
@@ -1732,6 +1882,10 @@ static int esdm_egd_handler(void __unused *args)
 				if (conn->deferred)
 					deferred_requests++;
 			}
+
+			/* Waiting for a reseed sets the pace as well */
+			if (conn->parked)
+				deferred_requests++;
 
 			esdm_egd_conn_arm(epfd, conn);
 		}
@@ -1788,7 +1942,6 @@ void esdm_egd_server_signal_exit_safe(void)
 void esdm_egd_server_fini(void)
 {
 	struct esdm_egd_listener *listener;
-	unsigned int i;
 
 	if (!esdm_egd_server_active())
 		return;
@@ -1796,13 +1949,12 @@ void esdm_egd_server_fini(void)
 	esdm_egd_server_signal_exit_safe();
 
 	/*
-	 * Wait for the worker to leave its event loop before the ESDM is
-	 * finalized - it must not be inside esdm_get_random_bytes_full_noblock
-	 * or esdm_pool_insert_aux by then. It is a special thread and thus not
-	 * covered by the RPC server's thread_wait_all(). The bound is generous
-	 * against the poll interval, but shutdown must not hang either.
+	 * Wait for the worker to leave its event loop before its listening
+	 * sockets are closed, whose numbers it would use otherwise. It leaves
+	 * within a round, which checks the stop request between clients; it
+	 * is joined with the special threads in esdm_fini() in any case.
 	 */
-	for (i = 0; i < 100 && atomic_load(&esdm_egd_worker_running); i++) {
+	while (atomic_load(&esdm_egd_worker_running)) {
 		struct timespec ts = { .tv_sec = 0, .tv_nsec = 10000000 };
 
 		nanosleep(&ts, NULL);

@@ -30,6 +30,9 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -507,13 +510,22 @@ static int test_failure_wipes_buffer(void)
 	return ret;
 }
 
+/* Is @fd still the application's /dev/zero? */
+static bool test_is_dev_zero(int fd)
+{
+	struct stat st;
+
+	return fstat(fd, &st) == 0 && S_ISCHR(st.st_mode);
+}
+
 /*
  * An application may close descriptor ranges it did not open - OpenSSH does on
  * its way into the pre-authentication child - freeing the number for reuse.
  * Reading "random" data out of whatever took its place would be a silent and
- * serious failure, so the client has to notice. The check needs the client's
- * descriptor, which is the lowest free one at connect time; nothing else here
- * opens one in between, but that is verified rather than trusted.
+ * serious failure, so the client has to notice, and leave the descriptor alone
+ * on reconnect, fork and free. The check needs the client's descriptor, which
+ * is the lowest free one at connect time; nothing else here opens one in
+ * between, but that is verified rather than trusted.
  */
 static int test_descriptor_identity(void)
 {
@@ -523,7 +535,8 @@ static int test_descriptor_identity(void)
 	socklen_t addrlen = sizeof(addr);
 	uint8_t buf[16];
 	size_t i;
-	int fd, zero_fd, ret = 0;
+	pid_t child;
+	int fd, zero_fd, status, ret = 0;
 
 	if (egd_peer_start(&peer, test_socket("closefrom"), EGD_PEER_NORMAL))
 		return 1;
@@ -563,6 +576,14 @@ static int test_descriptor_identity(void)
 		return 0;
 	}
 
+	/* The fork handler gives up the client's connections in the child */
+	child = fork();
+	if (child == 0)
+		_exit(test_is_dev_zero(zero_fd) ? 0 : 1);
+	CHECK(child > 0 && waitpid(child, &status, 0) == child &&
+		      WIFEXITED(status) && WEXITSTATUS(status) == 0,
+	      "the fork child lost the application's descriptor");
+
 	/*
 	 * Reading from /dev/zero would succeed and deliver zeros. The client
 	 * has to reconnect instead and come back with the peer's data.
@@ -570,6 +591,8 @@ static int test_descriptor_identity(void)
 	memset(buf, 0xff, sizeof(buf));
 	CHECK(esdm_egd_client_get_random(client, buf, sizeof(buf)) == 0,
 	      "the blocking read failed");
+	CHECK(test_is_dev_zero(zero_fd),
+	      "the client closed the application's descriptor on reconnect");
 	for (i = 0; i < sizeof(buf); i++) {
 		if (buf[i] != egd_peer_data_byte(i)) {
 			CHECK(0,
@@ -582,9 +605,122 @@ static int test_descriptor_identity(void)
 	      "%u connections, expected the client to have reconnected",
 	      egd_peer_connections(peer));
 
+	esdm_egd_client_free(client);
+	CHECK(test_is_dev_zero(zero_fd),
+	      "freeing the client closed the application's descriptor");
 	close(zero_fd);
+	egd_peer_stop(peer);
+
+	return ret;
+}
+
+/*
+ * The kernel reports the peer by the path the server bound, not the configured
+ * one (/var/run is mostly a symlink to /run). That must not read as a foreign
+ * descriptor: every operation would reconnect, which a sandbox cannot.
+ */
+static int test_symlinked_path(void)
+{
+	char link[sizeof(((struct sockaddr_un *)0)->sun_path)];
+	struct egd_peer *peer;
+	struct esdm_egd_client *client = NULL;
+	uint32_t bits = 0;
+	uint8_t buf[16];
+	int ret = 0;
+
+	if (egd_peer_start(&peer, test_socket("target"), EGD_PEER_NORMAL))
+		return 1;
+
+	snprintf(link, sizeof(link), "%s/link.sock", tmpdir);
+	if (symlink(test_socket("target"), link)) {
+		egd_peer_stop(peer);
+		return 1;
+	}
+
+	if (esdm_egd_client_alloc(&client, link, TEST_TIMEOUT_MS)) {
+		unlink(link);
+		egd_peer_stop(peer);
+		return 1;
+	}
+
+	CHECK(esdm_egd_client_entropy_count(client, &bits) == 0,
+	      "the entropy count failed");
+	CHECK(esdm_egd_client_get_random(client, buf, sizeof(buf)) == 0,
+	      "the blocking read failed");
+	CHECK(esdm_egd_client_entropy_count(client, &bits) == 0,
+	      "the entropy count failed");
+	CHECK(egd_peer_connections(peer) == 1,
+	      "%u connections, expected the client to keep its first one",
+	      egd_peer_connections(peer));
+
+	esdm_egd_client_free(client);
+	unlink(link);
+	egd_peer_stop(peer);
+
+	return ret;
+}
+
+static volatile sig_atomic_t test_sigpipe;
+
+static void test_sigpipe_handler(int sig)
+{
+	(void)sig;
+	test_sigpipe = 1;
+}
+
+/*
+ * A peer that stopped reading leaves the socket writable without a hangup;
+ * the write then must fail the operation, not raise SIGPIPE and kill the
+ * application. Caught here so that a failure is reported, not fatal.
+ */
+static int test_write_to_closed_peer(void)
+{
+	struct sigaction sa, old_sa;
+	sigset_t mask, pending;
+	struct egd_peer *peer;
+	struct esdm_egd_client *client = NULL;
+	uint32_t bits = 0;
+	unsigned int i;
+	int rc, ret = 0;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = test_sigpipe_handler;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(SIGPIPE, &sa, &old_sa))
+		return 1;
+	test_sigpipe = 0;
+
+	if (egd_peer_start(&peer, test_socket("shutrd"), EGD_PEER_SHUT_RD)) {
+		sigaction(SIGPIPE, &old_sa, NULL);
+		return 1;
+	}
+
+	/* Short: the retry may write before the peer shut its end down */
+	if (esdm_egd_client_alloc(&client, test_socket("shutrd"), 500)) {
+		egd_peer_stop(peer);
+		sigaction(SIGPIPE, &old_sa, NULL);
+		return 1;
+	}
+
+	/* The first attempt is to find the receiving end shut down */
+	for (i = 0; i < 100 && egd_peer_connections(peer) < 1; i++)
+		usleep(10 * 1000);
+
+	rc = esdm_egd_client_entropy_count(client, &bits);
+	CHECK(rc == -EPIPE || rc == -ETIMEDOUT,
+	      "the request to a peer that does not read returned %d", rc);
+	CHECK(!test_sigpipe, "writing to the peer raised SIGPIPE");
+
+	/* The signal mask is as it was, with nothing left pending */
+	CHECK(pthread_sigmask(SIG_SETMASK, NULL, &mask) == 0 &&
+		      !sigismember(&mask, SIGPIPE),
+	      "SIGPIPE was left blocked");
+	CHECK(sigpending(&pending) == 0 && !sigismember(&pending, SIGPIPE),
+	      "a SIGPIPE was left pending");
+
 	esdm_egd_client_free(client);
 	egd_peer_stop(peer);
+	sigaction(SIGPIPE, &old_sa, NULL);
 
 	return ret;
 }
@@ -707,6 +843,9 @@ int main(int argc, char *argv[])
 		{ "reconnect after a hangup", test_reconnect },
 		{ "buffer cleansing on failure", test_failure_wipes_buffer },
 		{ "descriptor identity", test_descriptor_identity },
+		{ "socket path through a symlink", test_symlinked_path },
+		{ "write to a peer that does not read",
+		  test_write_to_closed_peer },
 		{ "fork", test_fork },
 		{ "peer arriving late", test_late_peer },
 	};

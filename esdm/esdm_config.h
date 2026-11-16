@@ -50,34 +50,19 @@ uint32_t esdm_config_es_cpu_entropy_rate(void);
 void esdm_config_es_jent_entropy_rate_set(uint32_t ent);
 
 /**
- * @brief Obtain setting about Jitter RNG async block filling
+ * @brief Obtain the number of Jitter RNG collectors working side by side
  *
- * @return Boolean indicating whether Jitter RNG block filling is enable
- */
-uint32_t esdm_config_es_jent_async_enabled(void);
-
-/**
- * @brief Enable or disable the Jitter RNG async block filling
- *
- * @param [in] setting Boolean to enable the behavior
- */
-void esdm_config_es_jent_async_enabled_set(int setting);
-
-/**
- * @brief Obtain the number of Jitter RNG instances refilling its buffer
- *
- * @return The number of instances, each with a collector and a thread of its
- *	   own
+ * @return The number of collectors serving the seedings side by side
  */
 uint32_t esdm_config_es_jent_instances(void);
 
 /**
- * @brief Set the number of Jitter RNG instances refilling its buffer
+ * @brief Set the number of Jitter RNG collectors working side by side
  *
- * Takes effect at the first initialization of the Jitter RNG entropy source,
- * i.e. is to be called before esdm_init().
+ * Takes effect at the initialization of the Jitter RNG entropy source, i.e. is
+ * to be called before esdm_init().
  *
- * @param [in] instances Number of instances, 1 to 64
+ * @param [in] instances Number of collectors, 1 to 64
  */
 void esdm_config_es_jent_instances_set(uint32_t instances);
 

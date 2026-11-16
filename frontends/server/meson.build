@@ -73,6 +73,13 @@ else
 	server_conf_data.set('EBPF_UNIT_SNIPPET', '')
 endif
 
+# The kernel Jitter RNG source reads through an AF_ALG socket of libkcapi
+if get_option('es_jent_kernel').enabled()
+	server_conf_data.set('ADDRESS_FAMILIES', 'AF_UNIX AF_ALG')
+else
+	server_conf_data.set('ADDRESS_FAMILIES', 'AF_UNIX')
+endif
+
 esdm_server_service = configure_file(
 	input : 'esdm-server.service.in',
 	output : 'esdm-server.service',

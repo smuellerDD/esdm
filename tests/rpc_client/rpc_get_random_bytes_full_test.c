@@ -29,7 +29,16 @@ int main(int argc, char *argv[])
 {
 	uint8_t buf[1024 * 1024];
 	uint8_t zero[sizeof(buf)];
+#if ESDM_DRNG_MAX_RESEED_BITS != 0xffffffff
+	/*
+	 * A capped DRNG serves only what the entropy sources reseed it for:
+	 * a quarter keeps the requests above one RPC message and the total
+	 * within the test timeout.
+	 */
+	size_t len = sizeof(buf) / 4;
+#else
 	size_t len = sizeof(buf);
+#endif
 	int ret;
 
 	(void)argc;

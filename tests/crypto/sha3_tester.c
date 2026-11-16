@@ -14,6 +14,8 @@
  * byte 0xa3 is longer than the block of every SHA-3 variant, so it takes the
  * full-block paths as well.
  *
+ * An init wipes what the context absorbed, a partial block as well.
+ *
  * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
  *
  * License: see LICENSE file in root directory
@@ -187,6 +189,44 @@ static int sha3_tester(const char *name, const struct esdm_hash *hash,
 	return ret ? 1 : 0;
 }
 
+/* An init wipes the previous message: the state and a partial block alike */
+#define SHA3_TEST_WIPE_BYTE 0x5c
+#define SHA3_TEST_WIPE_RUN 8
+
+static int sha3_init_wipes(const char *name, const struct esdm_hash *hash)
+{
+	struct esdm_hash_ctx *ctx = NULL;
+	uint8_t msg[100];
+	const uint8_t *state;
+	size_t i, run = 0;
+	int ret = 0;
+
+	if (esdm_hash_alloc(hash, &ctx)) {
+		printf("%s: cannot allocate the hash context\n", name);
+		return 1;
+	}
+
+	/* Not a multiple of any of the block sizes */
+	memset(msg, SHA3_TEST_WIPE_BYTE, sizeof(msg));
+	esdm_hash_init(ctx);
+	esdm_hash_update(ctx, msg, sizeof(msg));
+	esdm_hash_init(ctx);
+
+	state = (const uint8_t *)ctx->hash_state;
+	for (i = 0; i < esdm_hash_ctxsize(ctx); i++) {
+		run = state[i] == SHA3_TEST_WIPE_BYTE ? run + 1 : 0;
+		if (run == SHA3_TEST_WIPE_RUN) {
+			printf("%s: an init leaves absorbed bytes behind\n",
+			       name);
+			ret = 1;
+			break;
+		}
+	}
+
+	esdm_hash_zero_free(ctx);
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
 	static const uint8_t abc[] = { 'a', 'b', 'c' };
@@ -207,6 +247,12 @@ int main(int argc, char *argv[])
 			   sizeof(exp_shake256));
 	ret += sha3_check("SHA3-512", esdm_sha3_512, "\"abc\"", abc,
 			  sizeof(abc), NULL, exp_512_abc, sizeof(exp_512_abc));
+
+	ret += sha3_init_wipes("SHA3-224", esdm_sha3_224);
+	ret += sha3_init_wipes("SHA3-256", esdm_sha3_256);
+	ret += sha3_init_wipes("SHA3-384", esdm_sha3_384);
+	ret += sha3_init_wipes("SHA3-512", esdm_sha3_512);
+	ret += sha3_init_wipes("SHAKE256", esdm_shake256);
 
 	return ret ? 1 : 0;
 }

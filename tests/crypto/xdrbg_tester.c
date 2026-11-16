@@ -19,8 +19,9 @@
  * leancrypto for seeds longer than a SHAKE256 block, for an instantiation and
  * a reseed, see exp_long_inst.
  *
- * Beyond the reference implementation: output longer than one chunk, and an
- * extraction being a reseed and a generate with the same alpha.
+ * Beyond the reference implementation: output longer than one chunk, an
+ * extraction being a reseed and a generate with the same alpha, and a
+ * zeroization wiping the XOF context.
  *
  * Copyright (C) 2026, Markus Theil <theil.markus@gmail.com>
  *
@@ -578,6 +579,46 @@ static void xdrbg_insert(void)
 	esdm_xdrbg_zero_free(&xdrbg);
 }
 
+/*
+ * The XOF of the crypto backend, counting the initializations of its contexts.
+ * Static, as esdm_default_xof_cb points to it.
+ */
+static const struct esdm_xof_cb *xof_real;
+static struct esdm_xof_cb xof_counting;
+static unsigned int xof_inits;
+
+static int xof_counting_init(void *xof)
+{
+	xof_inits++;
+	return xof_real->xof_init(xof);
+}
+
+/*
+ * A zeroization initializes the XOF context again, which wipes what it
+ * absorbed, see sha3_tester.c for the built-in SHAKE256
+ */
+static void xdrbg_zero_wipes(void)
+{
+	struct esdm_xdrbg xdrbg;
+	unsigned int inits;
+	int ret;
+
+	xof_real = esdm_default_xof_cb;
+	xof_counting = *xof_real;
+	xof_counting.xof_init = xof_counting_init;
+	esdm_default_xof_cb = &xof_counting;
+
+	ret = esdm_xdrbg_alloc(&xdrbg);
+	ret |= esdm_xdrbg_insert(&xdrbg, seed, sizeof(seed));
+	inits = xof_inits;
+	esdm_xdrbg_zero(&xdrbg);
+	check(!ret && xof_inits == inits + 1,
+	      "a zeroization leaves what the XOF context absorbed");
+	esdm_xdrbg_zero_free(&xdrbg);
+
+	esdm_default_xof_cb = xof_real;
+}
+
 /* An extraction is a reseed and a generate, both with its alpha */
 static void xdrbg_extract(void)
 {
@@ -636,6 +677,7 @@ int main(int argc, char *argv[])
 	xdrbg_seeding();
 	xdrbg_seeding_long();
 	xdrbg_insert();
+	xdrbg_zero_wipes();
 	xdrbg_extract();
 	xdrbg_negative();
 

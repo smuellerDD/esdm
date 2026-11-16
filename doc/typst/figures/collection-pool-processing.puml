@@ -1,0 +1,56 @@
+@startuml
+' Figure: Kernel Entropy Source Data Extraction
+' esdm_es_drbg_pool_extract() / esdm_es_drbg_pool_extract_block() of
+' kernel/esdm_es/esdm_es_drbg.c, serving the ESDM_IRQ_ENT_BUF and
+' ESDM_SCHED_ENT_BUF IOCTLs of /dev/esdm_es
+skinparam defaultFontName "Liberation Sans"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #000000
+skinparam ActivityBorderColor #000000
+skinparam ActivityBackgroundColor #FFB66C
+skinparam ActivityDiamondBackgroundColor #FFFFFF
+skinparam ActivityDiamondBorderColor #000000
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #000000
+
+start
+:ESDM_IRQ_ENT_BUF / ESDM_SCHED_ENT_BUF
+IOCTL of /dev/esdm_es
+(b requested bits: 256, 320 or 384); <<#FFFFFF>>
+if (SP800-90B startup test completed\nand high-resolution timer?) then (no)
+  :Return no data;
+  stop
+else (yes)
+endif
+if (Recorded events suffice for\nall ceil(b / 256) blocks?) then (no)
+  :Return no data;
+  stop
+else (yes)
+endif
+repeat
+  :Collect ceil((256 + o) * r / 256) time stamps
+  from the per-CPU rings;
+  note right
+    |<#FFB66C>| |<#FFB66C>| |<#FFB66C>| |<#FFB66C>      ...      |<#FFB66C>| |<#FFB66C>| |<#FFB66C>| |
+    CPU 0 ... CPU N rings
+    r: time stamps per 256 bits of entropy
+    o: 65 bits oversampling in FIPS mode
+    (129 bits before the DRBG is instantiated)
+  end note
+  :DRBG.Seed(time stamps)
+  (instantiate, then reseed);
+  :Block = DRBG.Generate(up to 256 bits,
+  additional input "ESDM_IRQ_DRBG"
+  or "ESDM_SCH_DRBG");
+  :Release the ring slots;
+repeat while (More blocks needed?) is (yes)
+-> no;
+if (Rings reset during the extraction?) then (yes)
+  :Zeroize and return no data;
+else (no)
+  :Return b bits of the blocks
+  credited with b bits of entropy; <<#FFFFFF>>
+endif
+stop
+@enduml

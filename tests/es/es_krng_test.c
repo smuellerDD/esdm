@@ -26,29 +26,26 @@
 #include "esdm_es_aux.h"
 #include "esdm_es_mgr.h"
 #include "esdm_es_sched.h"
+#include "../es_state_check.h"
 
 static int es_krng_getstate(void)
 {
-	char buf[500];
+	struct json_object *state = es_state_get(esdm_es[esdm_ext_es_krng]);
+	int ret = 0;
 
-	if (!esdm_es[esdm_ext_es_krng]->state) {
-		printf("ES Kernel RNG - fail: state callback missing\n");
-		return 1;
-	}
-
-	memset(buf, 0, sizeof(buf));
-
-	esdm_es[esdm_ext_es_krng]->state(buf, sizeof(buf));
-	if (!strstr(buf, "Entropy Rate per 256 data bits") ||
-	    !strstr(buf, "Available entropy")) {
+	if (!es_state_member(state, "entropy_rate_per_256_data_bits",
+			     json_type_int) ||
+	    !es_state_member(state, "available_entropy", json_type_int)) {
 		printf("ES Kernel RNG - fail: state information contains unexpected content: %s\n",
-		       buf);
-		return 1;
+		       es_state_print(state));
+		ret = 1;
+	} else {
+		printf("ES Kernel RNG - pass: state information found:\n%s\n",
+		       es_state_print(state));
 	}
 
-	printf("ES KRNG - pass: get state test passed:\n%s\n", buf);
-
-	return 0;
+	json_object_put(state);
+	return ret;
 }
 
 static int es_krng_getdata(uint32_t expected_ent_level)
@@ -67,7 +64,7 @@ static int es_krng_getdata(uint32_t expected_ent_level)
 	memset(&zero, 0, sizeof(zero));
 
 	esdm_es[esdm_ext_es_krng]->get_ent(&eb_es,
-					   ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+					   ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (eb_es.e_bits !=
 	    esdm_fast_noise_entropylevel(esdm_config_es_krng_entropy_rate(),
 					 ESDM_DRNG_INIT_SEED_SIZE_BITS)) {

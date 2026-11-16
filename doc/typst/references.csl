@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Numeric citations, references sorted by author as with BibTeX "plain",
+     which the original document used. -->
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0"
+       demote-non-dropping-particle="sort-only">
+  <info>
+    <title>ESDM plain numeric</title>
+    <id>esdm-plain-numeric</id>
+    <updated>2026-10-16T00:00:00+00:00</updated>
+  </info>
+  <macro name="author">
+    <names variable="author">
+      <name and="text" delimiter=", " delimiter-precedes-last="contextual"
+            initialize="false"/>
+    </names>
+  </macro>
+  <macro name="date">
+    <group delimiter=" ">
+      <date variable="issued" form="text" date-parts="year-month"/>
+    </group>
+  </macro>
+  <citation collapse="citation-number">
+    <sort>
+      <key variable="citation-number"/>
+    </sort>
+    <layout prefix="[" suffix="]" delimiter=", ">
+      <text variable="citation-number"/>
+    </layout>
+  </citation>
+  <bibliography second-field-align="flush" entry-spacing="0">
+    <sort>
+      <key variable="author"/>
+      <key variable="issued"/>
+    </sort>
+    <layout suffix=".">
+      <text variable="citation-number" prefix="[" suffix="]"/>
+      <group delimiter=". ">
+        <text macro="author"/>
+        <choose>
+          <if type="book">
+            <text variable="title" font-style="italic"/>
+          </if>
+          <else>
+            <text variable="title"/>
+          </else>
+        </choose>
+        <group delimiter=", ">
+          <group delimiter=" ">
+            <text variable="genre"/>
+            <text variable="number"/>
+          </group>
+          <text macro="date"/>
+        </group>
+        <group delimiter=" ">
+          <text value="URL"/>
+          <text variable="URL"/>
+        </group>
+      </group>
+    </layout>
+  </bibliography>
+</style>

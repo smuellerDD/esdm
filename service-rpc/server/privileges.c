@@ -25,7 +25,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "linux_support.h"
 #include "esdm_logger.h"
 #include "privileges.h"
 #include "visibility.h"
@@ -53,10 +52,10 @@ int drop_privileges_permanent(const char *user, const char *group)
 		grp = NULL;
 	}
 
-	ret = linux_isolate_namespace();
-	if (ret)
-		return ret;
-
+	/*
+	 * No namespace jail here: unshare() only affects the calling thread,
+	 * so esdm_rpc_server_init() enters it before any thread exists.
+	 */
 	pwd = getpwnam(user);
 	if (pwd == NULL) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_ANY, "User %s unknown\n",

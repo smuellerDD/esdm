@@ -18,6 +18,7 @@
 #include <linux/suspend.h>
 #include <linux/reboot.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 #include <linux/version.h>
 
 #include "esdm_es_ioctl.h"
@@ -119,20 +120,20 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 			    unsigned long arg)
 {
 	struct esdm_es_file __maybe_unused *f = filp->private_data;
-	int ret = -ENODEV;
+	union esdm_es_ioctl_arg buf __aligned(ESDM_KCAPI_ALIGN);
+	int (*ioctl)(unsigned int cmd, union esdm_es_ioctl_arg *arg,
+		     struct esdm_es_conf *conf);
+	void __user *argp = (void __user *)arg;
+	unsigned int size = _IOC_SIZE(cmd);
+	struct esdm_es_conf *conf;
+	int ret;
 
 	/*
 	 * All IOCTLs are allowed without restriction. However, the device
 	 * node can only be opened with CAP_SYS_ADMIN. This allows the
 	 * restriction of the access to the IOCTLs to root, but the calling
 	 * service can drop its privileges after opening the device.
-	 *
-	 * The lock serializes the IOCTLs on the entropy sources, the
-	 * configuration of the descriptor among them.
 	 */
-
-	mutex_lock(&esdm_cdev_lock);
-
 	switch (cmd) {
 #ifdef ESDM_ES_IRQ
 	case ESDM_IRQ_AVAIL_ENTROPY:
@@ -140,7 +141,8 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	case ESDM_IRQ_ENT_BUF:
 	case ESDM_IRQ_CONF:
 	case ESDM_IRQ_STATUS_JSON:
-		ret = esdm_es_mgr_irq_ioctl(cmd, arg, &f->irq);
+		ioctl = esdm_es_mgr_irq_ioctl;
+		conf = &f->irq;
 		break;
 #endif /* ESDM_ES_IRQ */
 #ifdef ESDM_ES_SCHED
@@ -149,15 +151,36 @@ static long esdm_cdev_ioctl(struct file *filp, unsigned int cmd,
 	case ESDM_SCHED_ENT_BUF:
 	case ESDM_SCHED_CONF:
 	case ESDM_SCHED_STATUS_JSON:
-		ret = esdm_es_mgr_sched_ioctl(cmd, arg, &f->sched);
+		ioctl = esdm_es_mgr_sched_ioctl;
+		conf = &f->sched;
 		break;
 #endif /* ESDM_ES_SCHED */
 	default:
-		ret = -ENOIOCTLCMD;
-		break;
+		return -ENOIOCTLCMD;
 	}
 
+	/* The IOCTL numbers carry the direction and size of the argument */
+	if (WARN_ON_ONCE(size > sizeof(buf)))
+		return -EINVAL;
+
+	memset(&buf, 0, sizeof(buf));
+	if ((_IOC_DIR(cmd) & _IOC_WRITE) && copy_from_user(&buf, argp, size))
+		return -EFAULT;
+
+	/*
+	 * The lock serializes the ES IOCTLs, the descriptor configuration
+	 * included. User memory is accessed outside of it only: a slow fault
+	 * (FUSE or userfaultfd mapping) would stall every other caller.
+	 */
+	mutex_lock(&esdm_cdev_lock);
+	ret = ioctl(cmd, &buf, conf);
 	mutex_unlock(&esdm_cdev_lock);
+
+	if (!ret && (_IOC_DIR(cmd) & _IOC_READ) &&
+	    copy_to_user(argp, &buf, size))
+		ret = -EFAULT;
+
+	memzero_explicit(&buf, sizeof(buf));
 	return ret;
 }
 

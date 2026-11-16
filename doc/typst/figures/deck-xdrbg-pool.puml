@@ -1,0 +1,42 @@
+@startuml
+' Slide deck: an entropy pool of the ESDM - the auxiliary pool, the
+' conditioning pool of an eBPF entropy source - as an XDRBG-256
+' (esdm/crypto/esdm_xdrbg.h, esdm/esdm_es_aux.c).
+skinparam defaultFontName "Liberation Sans"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #0F172A
+skinparam shadowing false
+skinparam ArrowColor #475569
+skinparam ActivityBorderColor #2563EB
+skinparam ActivityBackgroundColor #DBEAFE
+skinparam ActivityDiamondBackgroundColor #FFFFFF
+skinparam ActivityDiamondBorderColor #475569
+skinparam ActivityStartColor #2563EB
+skinparam NoteBackgroundColor #F8FAFC
+skinparam NoteBorderColor #CBD5E1
+skinparam RoundCorner 12
+
+start
+repeat
+  :Next seed: SHAKE256 absorbs the state V;
+  note right
+    V: 512 bits - none
+    before the first seed
+  end note
+  repeat
+    :Insert: SHAKE256 absorbs the data;
+    note right
+      writes, RNDADDENTROPY,
+      eBPF events: the seed
+      of the next reseed
+    end note
+  repeat while (DRNG reseed?) is (no) not (yes)
+  :Reseed: V = SHAKE256(V || seed || encode(α, 1));
+  :Generate: V || out = SHAKE256(V || encode(α, 2));
+  note right
+    α: name of the pool
+    out: seed data,
+    never revealing V
+  end note
+repeat while (next seed)
+@enduml

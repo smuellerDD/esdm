@@ -1,0 +1,57 @@
+@startuml
+' Seeding of one DRNG instance: esdm_drng_seed_es() with the emergency
+' reseeding loop and esdm_drng_reseed_seed_locked() (esdm/esdm_drng_mgr.c),
+' the seed buffers of esdm_get_seed_buffers() (esdm/esdm_es_mgr.c)
+skinparam defaultFontName "Liberation Sans"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #000000
+skinparam ActivityBorderColor #000000
+skinparam ActivityBackgroundColor #EEEEEE
+skinparam ActivityDiamondBackgroundColor #FFFFFF
+skinparam ActivityDiamondBorderColor #000000
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #000000
+
+start
+:Serialize the seedings of the DRNG
+(seed lock, the DRNG lock for the PR DRNG);
+if (DRNG fully seeded?) then (no)
+  :Initial seeding (forced):
+  request 256 bits
+  (384 bits with SP800-90C oversampling)
+  from every entropy source;
+else (yes)
+  :Reseed:
+  request 256 bits from every entropy source
+  (+64 bits for the PR DRNG with the
+  SP800-90C oversampling, RBG3(RS));
+endif
+repeat
+  if (Forced, ESDM not yet fully seeded\nor >= 256 bits available?) then (yes)
+    :Fill the slots of the seed buffer T
+    and the additional input U
+    (esdm_get_seed_buffers);
+    note right
+      Entropy sources with an entropy
+      rate of zero, or no entropy at the
+      time, go to U - not the eBPF-based ones
+    end note
+  else (no)
+    :Empty seed buffer;
+  endif
+  :Lock the DRNG
+  (throughout for an initial seeding);
+  :Add up the entropy of all passes;
+  if (Entropy >= fully seeded level?\n(initial seeding with NTG.1:\n2 entropy sources x 240 bits,\nor the Jitter RNG in its NTG.1\nmode x 240 bits)) then (yes)
+    :DRNG.Seed(T, U),
+    mark DRNG fully seeded;
+  else (no)
+    :DRNG.Seed(T, U);
+  endif
+  :Unlock
+  (after the last pass for an initial seeding);
+repeat while (Forced, not fully seeded and\nentropy sources still deliver?) is (yes)
+-> no;
+stop
+@enduml

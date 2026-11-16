@@ -12,7 +12,7 @@
 #ifdef ESDM_ES_SCHED
 
 void esdm_es_mgr_sched_conf_init(struct esdm_es_conf *conf);
-int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg,
+int esdm_es_mgr_sched_ioctl(unsigned int cmd, union esdm_es_ioctl_arg *arg,
 			    struct esdm_es_conf *conf);
 void esdm_es_mgr_sched_reset(void);
 int __init esdm_es_mgr_sched_init(void);
@@ -24,7 +24,8 @@ static inline void esdm_es_mgr_sched_conf_init(struct esdm_es_conf *conf)
 {
 }
 
-static inline int esdm_es_mgr_sched_ioctl(unsigned int cmd, unsigned long arg,
+static inline int esdm_es_mgr_sched_ioctl(unsigned int cmd,
+					  union esdm_es_ioctl_arg *arg,
 					  struct esdm_es_conf *conf)
 {
 	return -ENOIOCTLCMD;

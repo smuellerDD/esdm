@@ -23,22 +23,29 @@
 #include <sched.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "config.h"
 #include "esdm.h"
 #include "esdm_config.h"
 #include "esdm_config_internal.h"
+#include "esdm_drng_mgr.h"
 #include "esdm_es_mgr.h"
 #include "esdm_logger.h"
+#include "esdm_node.h"
 #include "es_rates.h"
 #include "ret_checkers.h"
 
 #ifdef ESDM_TESTMODE
-static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
+/* Bits a DRNG may produce without a full reseed once the test lowered it */
+#define TEST_MAX_BITS 256
+
+static int esdm_drng_mgr_max_wo_reseed_bits_test(bool multi)
 {
 	uint8_t buf[256];
 	unsigned int i;
+	ssize_t rc;
 	int ret;
 
 	esdm_logger_set_verbosity(LOGGER_DEBUG);
@@ -66,7 +73,7 @@ static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
 	}
 
 	esdm_drng_force_reseed();
-	esdm_config_drng_max_wo_reseed_bits_set(256);
+	esdm_config_drng_max_wo_reseed_bits_set(TEST_MAX_BITS);
 
 	esdm_test_es_rates_zero();
 
@@ -75,17 +82,105 @@ static int esdm_drng_mgr_max_wo_reseed_bits_test(bool success)
 		goto err;
 	}
 
+	/*
+	 * No DRNG reseeds with entropy, and the limit is checked before every
+	 * chunk. With one DRNG, the initial one is spent already. With more,
+	 * the node DRNG of this CPU is spent and the initial one, unused since
+	 * its last full seed, serves at most its own maximum: short of the
+	 * request either way.
+	 */
 	esdm_drng_force_reseed();
-	esdm_get_random_bytes(buf, sizeof(buf));
-	if (esdm_state_operational() != success) {
-		printf("failed to %soperational mode\n",
-		       success ? "remain in " : "enter non-");
+	rc = esdm_get_random_bytes(buf, sizeof(buf));
+	if (rc > (multi ? (ssize_t)(TEST_MAX_BITS / 8) : 0)) {
+		printf("%zd bytes generated past the maximum of %u bits\n", rc,
+		       TEST_MAX_BITS);
+		goto err;
+	}
+
+	/* Which takes the ESDM out of operation with the initial DRNG */
+	if (esdm_state_operational()) {
+		printf("failed to enter non-operational mode\n");
 		goto err;
 	}
 
 out:
 	esdm_fini();
 	return ret;
+err:
+	ret = 1;
+	goto out;
+}
+
+/*
+ * A request starting below the maximum of bits without a full reseed is served
+ * whole, crossing it (SP800-90C 5.2.3, AIS 20/31 DRG.4.10), and the DRNG serves
+ * nothing more before a reseed. A node DRNG: the initial one keeps within the
+ * maximum, see esdm_drng_get().
+ */
+static int esdm_drng_mgr_max_wo_reseed_bits_crossing(void)
+{
+	uint8_t buf[256];
+	struct esdm_drng *drng;
+	unsigned int i;
+	uint32_t used;
+	bool seeded;
+	ssize_t rc;
+	int ret;
+
+	esdm_logger_set_verbosity(LOGGER_DEBUG);
+	esdm_config_es_cpu_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	esdm_config_es_jent_entropy_rate_set(ESDM_DRNG_SECURITY_STRENGTH_BITS);
+	CKINT(esdm_init());
+
+	/* Until the node DRNG of this CPU serves */
+	for (i = 0; i < 100; i++) {
+		esdm_get_random_bytes(buf, sizeof(buf));
+		drng = esdm_drng_node_instance();
+		seeded = drng != esdm_drng_init_instance() &&
+			 atomic_load(&drng->fully_seeded);
+		esdm_drng_put_instances();
+		if (seeded)
+			break;
+		usleep(100000);
+	}
+	if (!seeded) {
+		printf("the node DRNG did not become fully seeded\n");
+		goto err;
+	}
+
+	/* 64 bytes left below the maximum, no entropy for a reseed */
+	drng = esdm_drng_node_instance();
+	used = atomic_read_u32(&drng->request_bits_since_fully_seeded);
+	esdm_config_drng_max_wo_reseed_bits_set(used + 64 * 8);
+	esdm_test_es_rates_zero();
+
+	rc = esdm_get_random_bytes(buf, sizeof(buf));
+	if (rc != (ssize_t)sizeof(buf)) {
+		printf("a request crossing the maximum got %zd of %zu bytes\n",
+		       rc, sizeof(buf));
+		goto err_put;
+	}
+	if (atomic_read_u32(&drng->request_bits_since_fully_seeded) <
+	    used + 64 * 8) {
+		printf("the request did not come from the node DRNG\n");
+		goto err_put;
+	}
+
+	/* Spent, it serves the next request no more: another instance does */
+	used = atomic_read_u32(&drng->request_bits_since_fully_seeded);
+	esdm_get_random_bytes(buf, sizeof(buf));
+	if (atomic_read_u32(&drng->request_bits_since_fully_seeded) > used) {
+		printf("the node DRNG serves past the maximum before a reseed\n");
+		goto err_put;
+	}
+	esdm_drng_put_instances();
+
+out:
+	esdm_fini();
+	return ret;
+
+err_put:
+	esdm_drng_put_instances();
 err:
 	ret = 1;
 	goto out;
@@ -99,8 +194,8 @@ int main(int argc, char *argv[])
 	unsigned long drng_instances;
 	int ret;
 
-	if (argc != 2) {
-		printf("Provide number of DRNG instances to be created\n");
+	if (argc != 2 && !(argc == 3 && !strcmp(argv[2], "crossing"))) {
+		printf("Provide number of DRNG instances to be created [crossing]\n");
 		return 1;
 	}
 
@@ -111,10 +206,10 @@ int main(int argc, char *argv[])
 		return 1;
 
 	/*
-	 * Test idea: instantiate 1 DRNG and set the max without reseed
-	 * threshold to 2. Also set all entropy sources to deliver insufficient
-	 * entropy. Now, cause 2 reseeds and verify that the DRNG goes
-	 * into non-operational mode.
+	 * Test idea: set the maximum of bits without a full reseed below what
+	 * the DRNGs produced and starve the entropy sources. Request more than
+	 * that maximum: no DRNG may generate past it, and the ESDM goes
+	 * non-operational.
 	 */
 	esdm_config_max_nodes_set((uint32_t)drng_instances);
 	if (drng_instances > 1) {
@@ -130,8 +225,13 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
-	ret = esdm_drng_mgr_max_wo_reseed_bits_test(drng_instances > 1 ? true :
-									 false);
+	if (argc == 3)
+		ret = drng_instances > 1 ?
+			      esdm_drng_mgr_max_wo_reseed_bits_crossing() :
+			      77;
+	else
+		ret = esdm_drng_mgr_max_wo_reseed_bits_test(
+			drng_instances > 1 ? true : false);
 
 	return ret;
 #else

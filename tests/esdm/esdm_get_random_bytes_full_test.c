@@ -21,6 +21,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "config.h"
 #include "esdm.h"
 #include "esdm_logger.h"
 #include "test_pertubation.h"
@@ -29,7 +30,15 @@ int main(int argc, char *argv[])
 {
 	uint8_t buf[1024 * 1024];
 	uint8_t zero[sizeof(buf)];
+#if ESDM_DRNG_MAX_RESEED_BITS != 0xffffffff
+	/*
+	 * A build capping the output without a full reseed serves at the pace
+	 * of its reseeds: a quarter of the volume, a sixteenth of the bytes
+	 */
+	size_t len = sizeof(buf) / 4;
+#else
 	size_t len = sizeof(buf);
+#endif
 	int ret;
 
 	(void)argc;
@@ -57,7 +66,7 @@ int main(int argc, char *argv[])
 
 		rc = esdm_get_random_bytes_full(buf, len);
 		if (rc < 0) {
-			ret = (int)ret;
+			ret = (int)rc;
 			goto out;
 		}
 

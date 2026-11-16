@@ -563,15 +563,20 @@ static uint64_t esdm_ebpf_events_for_bits(struct esdm_ebpf_es *es,
 	uint32_t rate = es->entropy_rate();
 	uint64_t rate_bits, events_rate, events_osr;
 
-	/* An uncredited source never accumulates creditable events */
+	events_osr = (uint64_t)bits * esdm_ebpf_osr(es);
+
+	/*
+	 * An uncredited source has no rate to invert: its events add no entropy
+	 * but still stir the pool, as many as the oversampling rate charges for
+	 * the bits - what an extraction then fetches.
+	 */
 	if (!rate)
-		return 0;
+		return events_osr;
 
 	rate_bits = (uint64_t)rate * ESDM_EBPF_EVENT_DATA_BITS;
 	events_rate = ((uint64_t)bits * ESDM_DRNG_SECURITY_STRENGTH_BITS +
 		       rate_bits - 1) /
 		      rate_bits;
-	events_osr = (uint64_t)bits * esdm_ebpf_osr(es);
 
 	return max_uint64(events_rate, events_osr);
 }
@@ -801,10 +806,15 @@ static void esdm_ebpf_handle_events(struct esdm_ebpf_es *es,
 	es->consumed_events += events;
 	es->ingested += (uint32_t)events;
 
-	/* The deltas are inserted in full, not folded into bytes */
+	/*
+	 * The deltas are inserted in full, not folded into bytes. A failing
+	 * insert discards what the pool absorbed, and so its credit.
+	 */
 	if (esdm_xdrbg_insert(&es->pool, (const uint8_t *)rec->delta,
-			      events * sizeof(rec->delta[0])))
+			      events * sizeof(rec->delta[0]))) {
+		es->credited_events = 0;
 		return;
+	}
 
 	/*
 	 * Events observed under a previous reset generation were in flight in
@@ -1112,8 +1122,11 @@ int esdm_ebpf_consume(struct esdm_ebpf_es *es)
 	 * finds it.
 	 */
 	es->fetch_target = esdm_ebpf_events_per_block(es);
-	if (es->credited_events >= es->fetch_target)
+	if (es->credited_events >= es->fetch_target) {
+		/* A health failure voids the credit of a full pool too */
+		esdm_ebpf_update_status(es);
 		return 0;
+	}
 
 	es->ingested = 0;
 	ret = ring_buffer__consume(es->rb);

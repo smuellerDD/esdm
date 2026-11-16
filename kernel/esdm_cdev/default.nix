@@ -2,6 +2,7 @@
   lib,
   stdenv,
   kernel,
+  kernelModuleMakeFlags,
   kmod,
   python3,
   # Turn the warnings of the extra set into errors, for the builds that check
@@ -41,8 +42,9 @@ stdenv.mkDerivation rec {
   ]
   ++ kernel.moduleBuildDependencies;
 
-  makeFlags = [
-    "KBUILD_OUTPUT=${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
+  # Those of the kernel package set: its compiler, no depmod of this module
+  # alone, and the signing that writes the .ko.cer NixOS merges for it
+  makeFlags = kernelModuleMakeFlags ++ [
     "KERNELRELEASE=${kernel.modDirVersion}"
     "KERNEL_DIR=${kernel.dev}/lib/modules/${kernel.modDirVersion}/build"
     "INSTALL_MOD_PATH=${placeholder "out"}"

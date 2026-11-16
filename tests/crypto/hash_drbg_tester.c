@@ -86,7 +86,8 @@ static int hash_drbg_tester(void)
 	uint8_t mod[sizeof(ent_nonce)];
 	ESDM_DRBG_HASH_CTX_ON_STACK(drbg_stack);
 	struct esdm_drbg_state *drbg = NULL;
-	int ret = 0;
+	/* A failing step leaves ret at 1: it passed with every seed failing */
+	int ret = 1, fails = 0;
 
 	printf("hash DRBG ctx len %lu\n",
 	       ESDM_DRBG_HASH_CTX_SIZE(ESDM_DRBG_HASH_CORE));
@@ -103,7 +104,7 @@ static int hash_drbg_tester(void)
 		goto out;
 
 	/* Checks the output and that an output off by a byte is rejected */
-	ret += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
+	fails += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
 
 	esdm_drbg_zero(drbg_stack);
 
@@ -117,7 +118,7 @@ static int hash_drbg_tester(void)
 	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 
-	ret += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
+	fails += esdm_kat_check(act, exp, sizeof(exp)) ? 1 : 0;
 
 	esdm_drbg_zero(drbg_stack);
 
@@ -134,7 +135,7 @@ static int hash_drbg_tester(void)
 	if (esdm_drbg_generate(drbg_stack, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
 
-	ret += esdm_kat_check_differs(act, exp, sizeof(exp)) ? 1 : 0;
+	fails += esdm_kat_check_differs(act, exp, sizeof(exp)) ? 1 : 0;
 
 	esdm_drbg_zero(drbg_stack);
 
@@ -149,6 +150,8 @@ static int hash_drbg_tester(void)
 
 	if (esdm_drbg_generate(drbg, act, sizeof(exp), addtl2, 32) < 0)
 		goto out;
+
+	ret = fails;
 #endif
 #if 0
 	static const uint8_t ent_nonce[] = {

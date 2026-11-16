@@ -19,6 +19,7 @@
  */
 
 #include <errno.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -217,6 +218,7 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 	char c[30];
 	char thread_name[ESDM_THREAD_MAX_NAMELEN];
 	FILE *stream;
+	int cancel_state;
 
 	if (severity > esdm_logger_verbosity_level)
 		return;
@@ -267,6 +269,12 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 		fprintf_color = &fprintf;
 
 	thread_get_name(thread_name, sizeof(thread_name));
+
+	/*
+	 * No cancellation while writing: a cancel inside the stdio calls below
+	 * would leave the stream lock held for good.
+	 */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancel_state);
 
 	/*
 	 * The header and the message body are two separate stdio writes; hold
@@ -322,6 +330,8 @@ void _esdm_logger(const enum esdm_logger_verbosity severity,
 		fflush(stream);
 		funlockfile(stream);
 	}
+
+	pthread_setcancelstate(cancel_state, NULL);
 }
 
 static void esdm_logger_destructor(void)

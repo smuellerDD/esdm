@@ -18,6 +18,7 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -25,12 +26,40 @@
 #include <stdlib.h>
 #include <esdm_rpc_client.h>
 
+/*
+ * Does the server named in the PID file still run? It locks the file for its
+ * lifetime. A file left behind (removal fails after the privilege drop) names
+ * a PID that may be anybody's now, which SIGUSR1 would terminate.
+ */
+static bool pidfile_locked_by(FILE *pidfile, pid_t pid)
+{
+	struct flock fl = {
+		.l_type = F_WRLCK,
+		.l_whence = SEEK_SET,
+		.l_start = 0,
+		.l_len = 0,
+	};
+
+	if (fcntl(fileno(pidfile), F_GETLK, &fl) < 0) {
+		perror("Cannot test the PID file lock");
+		return false;
+	}
+
+	if (fl.l_type == F_UNLCK || fl.l_pid != pid) {
+		fprintf(stderr, "ESDM server %d is not running\n", (int)pid);
+		return false;
+	}
+
+	return true;
+}
+
 static bool signal_suspend(char *pidfile_path)
 {
 	char pid_string[30] = { 0 };
 	FILE *pidfile = NULL;
 	size_t read_ret;
 	pid_t pid = -1;
+	bool running;
 
 	/* read PID */
 	if (pidfile_path == NULL) {
@@ -47,14 +76,19 @@ static bool signal_suspend(char *pidfile_path)
 		fclose(pidfile);
 		return false;
 	}
-	fclose(pidfile);
 
 	errno = 0;
 	pid = (pid_t)strtol(pid_string, NULL, 10);
 	if (errno || pid <= 0) {
 		perror("PID conversion failed");
+		fclose(pidfile);
 		return false;
 	}
+
+	running = pidfile_locked_by(pidfile, pid);
+	fclose(pidfile);
+	if (!running)
+		return false;
 
 	fprintf(stdout, "Signal suspend to ESDM\n");
 	return kill(pid, SIGUSR1) == 0;

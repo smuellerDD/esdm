@@ -46,14 +46,6 @@ int fips_post_integrity(const char *pathname);
  */
 int fips_post_integrity_obj(const void *addr);
 
-/**
- * @brief Pre-operational integrity test of a loaded shared object
- * @param [in] soname Start of the file name of the object to attest
- * @return number of objects attested (0 if none is loaded), < 0 if one of them
- * 	does not match its reference value
- */
-int fips_post_integrity_loaded(const char *soname);
-
 #ifdef __cplusplus
 }
 #endif

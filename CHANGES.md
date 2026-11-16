@@ -62,17 +62,13 @@ es_irq_ebpf): no kernel patches required, in-program SP800-90B health tests,
 zeroization of every collected raw sample when the sources are unloaded - the
 in-program collection buffers and the ring buffer holding the events included -
 raw entropy measurement tooling including the SP800-90B restart test in
-addon/es_ebpf_testing
+tests/es_ebpf_testing
 
-* Add external entropy sources: provider processes written against libesdm_es_ext (esdm_es_ext.h) serve them over a Unix domain socket in protobuf, read by the ExternalSocket ES (esdm-server --es_ext)
+* Add external entropy sources: provider processes written against libesdm_es_ext (esdm_es_ext.h) serve them over a Unix domain socket in protobuf, read by the ExternalSocket ES (esdm-server --es_ext); the ES monitor asks the provider for its status on every round, one not answering within 500 ms not again for a minute
 
-* Centralize asynchronous buffer management to collect entropy from slow entropy sources
+* Entropy sources: no entropy is buffered ahead of a request, the auxiliary pool aside - the Jitter RNG block buffer is gone with es_jent_entropy_blocks, esdm-server --jent_block_disable and esdm_config_es_jent_async_enabled{,_set}()
 
-* Entropy source caches: a block is retired after es_buf_max_age seconds (default 30) and credited at most at the rate the source has when it is served; a block filled across a reset is discarded, a failed fill counts as a miss while the source is credited, and the blocks of an uncredited source carry no entropy; a consumer takes any filled slot, the ES monitor refills until no slot is empty, a wakeup of the monitor during its round is no longer lost, and the Jitter RNG waits for a block in the making while its synchronous collector is busy
-
-* Seeding: a reseed takes what the sources with a cache have ready and asks a source whose cache is empty only when the others fall short of the entropy of the reseed, so a slow source such as a TPM no longer holds up every reseed once its cache is drained; only the sources to fetch get a thread of the parallel fetch, and the prediction resistance DRNG is seeded with entropy collected for its request rather than from the caches
-
-* Jitter RNG ES: es_jent_instances collectors (meson option, esdm-server --es_jent_instances, default 1) refill the block cache side by side, each in a thread of its own; with jitterentropy >= 3.8.0 the known answer tests of its conditioning component run through jent_selftest() bound to the synchronous collector and to the collector of every instance, a collector that failed them serves nothing, and a failed periodic self test empties the block cache
+* Jitter RNG ES: es_jent_instances collectors (meson option, esdm-server --es_jent_instances 1 to 64, default 4 in a build reseeding often - sp80090c, fips140, ais2031_drg4 - and 1 otherwise) serve the seedings of the DRNGs side by side, each behind a lock of its own - in an SP800-90C build four of them raise the output under load from some 35000 to 90000 requests of 32 bytes per second on ten CPUs; with jitterentropy >= 3.8.0 the known answer tests of its conditioning component run through jent_selftest() bound to every collector, and a collector that failed them serves nothing
 
 * Kernel Jitter RNG ES: the kernel crypto API RNG it reads is configurable (meson option es_jent_kernel_name, esdm-server --es_jent_kernel_name, jitterentropy_rng by default), e.g. for a jitterentropy kernel module registering its RNG under another name; the status names the RNG in use
 
@@ -98,7 +94,7 @@ addon/es_ebpf_testing
 
 * FIPS 140 integrity test: a missing HMAC file is now a failed integrity test rather than a pass; the reference values are written at installation time with esdm-tool (see README.usage.md)
 
-* FIPS 140 integrity test: attest every component of the module - the ESDM library, the Jitter RNG and the crypto library of the selected backend - and not only the executable
+* FIPS 140 integrity test: attest the ESDM library as well, not only the executable
 
 * Run the self tests of the hash and the DRNG implementation every 10 minutes, and hand out random bits only while their outcome, reported in the status, is that they passed
 
@@ -116,6 +112,10 @@ addon/es_ebpf_testing
 
 * Status reports are no longer truncated silently: a report that does not fit into the buffer is answered with -EMSGSIZE, a JSON document empty and a text report as far as it got, so esdm_status() returns a value now
 
+* Status: the ESDM and its entropy sources report their state as JSON only; the status text - of esdm_status() and so of the RPC, EGD, CUSE and shared memory status - is rendered from that document, its labels derived from the member names; in the JSON, the CPU source reports a hash for compressing data of null when there is none, and the eBPF sources report a permanent health test failure as permanent_failure rather than in the failure count; an entropy source is headed by its name and ID
+
+* RPC latency: each RPC worker serves its requests from a DRNG instance of its own instead of the one of the CPU it runs on; a reseed collects its entropy without holding the DRNG, which keeps serving meanwhile; the global entropy pool lock is gone - the entropy sources lock themselves and the seedings of different DRNGs run side by side, the reseed worker starting the reseed or bring-up of each DRNG as it falls due, on a thread of its own, as far as Jitter RNG collectors are free; a caller that may not wait seeds a DRNG itself only while a Jitter RNG collector is free and leaves the seeding to the reseed worker otherwise; a client reads the answer with a blocking socket and timeouts, a request taking two system calls instead of four, and when waiting for data polls again after 1 ms, backing off to 16 ms, instead of after one second (measured by tests/rpc_client/rpc_latency_bench, meson test --benchmark)
+
 * Add an RPC call to obtain the status of a single DRNG instance as JSON, addressed by the node it serves or by asking for the prediction resistance instance
 
 * esdm-tool: add --drng-status [=NODE|pr] and --drng-status-json [=NODE|pr] to print one DRNG instance or, without an argument, all of them as a JSON array
@@ -127,6 +127,45 @@ log files, pipes and the test logs carry no escape sequences
 entropy rate of one or all entropy sources - honored by a server built in test
 mode or with buildtype=debug only, for tests that take the entropy away from
 the ESDM
+
+* fix: RPC server: a failing start-up exits with an error instead of hanging; the namespace jail covers every thread; the selftest RPC needs root; privileged prediction resistance requests take precedence
+
+* fix: RPC client: a request without answer fails with -ETIMEDOUT after a few seconds so callers reach their fallback; a lost connection is reconnected; waiting for the seeding no longer pins a connection or blocks fork(); a forked child no longer shuts down the parent's connections; esdm_rpcc_get_random_bytes_full_timeout() keeps its deadline with interrupt data; the scratch buffers are per-thread heap memory instead of 130 KB of static TLS; esdm_rpcc_get_random_bytes() returns short or -EAGAIN instead of spinning while the DRNGs of the ESDM wait for their reseed; a refused connect fails at once unless a server served the process within 10 s, instead of after 2.4 s of retries on a socket file a stopped server left behind; requests whose effect adds up (rnd_add_entropy, rnd_add_to_ent_cnt, rnd_clear_pool, rnd_reseed_crng, selftest, write_data) are not sent again when their answer is missing
+
+* Add esdm_rpcc_get_random_bytes_full_noblock() and esdm_rpcc_get_random_bytes_pr_noblock(): one request, -EAGAIN instead of waiting
+
+* fix: EGD server: input sent before a hangup is processed. EGD client: a symlinked socket path no longer reconnects on every call, a vanished daemon no longer raises SIGPIPE, a descriptor number the application closed and reused is no longer closed by the reconnect, the free or the fork handler; a non-blocking read finding the DRNGs of an operational ESDM waiting for their reseed is answered once one landed, for up to 1 s, instead of empty, which esdm_cdev takes for not operational; the status no longer waits for an es-ext provider in the middle of a request
+
+* fix: DRNG manager: max_wo_reseed and max_wo_reseed_bits are enforced before every chunk, a DRNG may return short, the initial DRNG stops at its reseed threshold so that the ESDM stays operational, and the non-waiting getters answer -EAGAIN while every DRNG waits for its reseed; the prediction resistance DRNG is seeded with fresh entropy right before every chunk only and is fully seeded at s + 64 bits; the operational state follows the successfully seeded initial DRNG only; the non-blocking getters never wait for the entropy pool, esdm_get_random_bytes_pr_noblock() returns -EAGAIN instead of 0; without a reseed worker the node DRNGs reseed inline instead of never; a DRNG out of its output adds up collections for its reseed, so a single source credited below a full seed per collection works in SP800-90C and DRG.4 builds
+
+* fix: esdm-server: --username takes its argument instead of falling back to "nobody"; the systemd unit no longer hides FIPS mode from the server (ProcSubset=pid) and allows AF_ALG where the kernel Jitter RNG source is built
+
+* fix: libesdm: esdm_init() after esdm_fini() fails with -ESHUTDOWN; raising max_nodes after init is safe; the status SHM and semaphores are torn down after the threads are joined; the reseed worker no longer misses a wakeup; pool threads are cancelled deferred after a grace period
+
+
+* fix: hwrng and TPM 2.0 entropy sources: the device is read by a thread of its own with a deadline of 2 s, so a stalled device no longer hangs seeding, start-up, shutdown or the status; a failing device is probed by the ES monitor only
+
+* fix: entropy sources: failed self tests of the CPU, kernel RNG, kernel Jitter RNG and TPM 2.0 sources are sticky, a stalled CPU RNG is credited with nothing until it delivers again instead of failing the self test, and a source credited with nothing after a failed read is read by the next seedings whatever entropy is available, as nothing else would read it, the TPM 2.0 self test requires two reads to differ; the Jitter RNG claims no entropy while it fails and reports its status without holding off its collections; RISC-V: the seed CSR is probed instead of raising SIGILL; es-ext provider: a later unprivileged client can no longer take the ESDM's slot
+
+* TPM 2.0 and /dev/hwrng entropy sources: credited with no entropy by default (es_tpm2_entropy_rate and es_hwrand_entropy_rate 0), and an uncredited device busy with another seeding is skipped rather than waited for - the TPM serialized every seeding, which capped the output of an SP800-90C build at some 180 reseeds per second
+
+* DRNG manager: the reseed worker stays on duty with a reseed interval of zero seconds, and the reseed_pending member of the DRNG status is gone with the handshake behind it. ES manager: the ES monitors run one after the other in the monitor thread
+
+* DRNG manager: in a build capping the output without a full reseed (sp80090c, fips140, ais2031_drg4), a request starting below the 2^17 bit limit is completed rather than cut at it, as SP800-90C 5.2.3 and AIS 20/31 DRG.4.10 allow, and the DRNGs generate up to 2^19 bits per request at once - a large request needs one reseed rather than one per 16 KiB; a node DRNG spent by such a request is skipped and reseeded by the worker at once instead of handing the next request to the initial DRNG
+
+* fix: eBPF entropy sources and esdm_es: the RCT and APT fail at their cutoffs, one sample earlier, and APT windows start with their base sample; eBPF: a health failure discards the partial batch, events of an uncredited source are stirred into the pool, a failed insertion drops the credit
+
+* fix: esdm_es: ioctls no longer hold the global lock while accessing user memory; a permanent health failure panics from an irq_work; a failing health test resets the source once per window; BUILD_TESTING creates the debugfs files of the built sources only. esdm_cdev: poll() no longer runs the watcher back to back, timeout_ms bounds a whole transfer
+
+* fix: CUSE: O_DSYNC no longer selects prediction resistance; privileged ioctls require CAP_SYS_ADMIN of the caller; the privileges are always dropped; /proc content is generated per open, uuid was always empty
+
+* fix: getrandom shim: GRND_NONBLOCK returns EAGAIN before full seeding, refused flags set errno, PID 1 and processes embedding libesdm use the system call, a request of no bytes reports the readiness of the ESDM instead of passing to the kernel; kernel seeder: a stop interrupts waiting RPCs, its unit starts as Type=exec without systemd support; server-signal-helper signals a server holding the PID file lock only
+
+* fix: crypto: the leancrypto backend reports failed leancrypto self tests and refuses unseeded output (leancrypto >= 1.6.0 required) and absorbs the full additional input; the OpenSSL backend passes the additional input on every reseed and keeps no copy of a seed; SHA-3 init and the XDRBG zeroization wipe absorbed data; the GnuTLS backend requires GnuTLS >= 3.6.7, whose DRBG context layout it relies on
+
+* fix: build: -Dfips140=true applies the SP800-90C adjustments it claims - oversampled entropy sources, the output cap without a full reseed - as -Dsp80090c does
+
+* Timeouts, ages and reseed intervals use CLOCK_MONOTONIC_COARSE, saving a clock source read per request - a hypervisor trap in VMs without a vDSO capable clock source
 
 Changes 1.2.3
 * Fix handling of non-blocking server response

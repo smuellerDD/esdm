@@ -24,7 +24,18 @@
 extern "C" {
 #endif
 
+#include <stddef.h>
+
 void esdm_pool_inc_node_node(void);
+
+struct json_object;
+
+/*
+ * Render the status document @doc as text, the only place it takes that form:
+ * "Label: value" lines, nested objects and arrays as indented blocks. Returns
+ * -EMSGSIZE when the text does not fit, leaving what did in @buf.
+ */
+int esdm_status_text(struct json_object *doc, char *buf, size_t buflen);
 
 #ifdef __cplusplus
 }

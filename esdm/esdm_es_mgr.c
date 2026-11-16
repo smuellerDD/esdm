@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
@@ -81,7 +82,6 @@ struct esdm_state {
 	 */
 
 	atomic_int boot_entropy_thresh; /* Reseed threshold */
-	mutex_w_t reseed_in_progress; /* Flag for on executing reseed */
 };
 
 static struct esdm_state esdm_state = {
@@ -89,7 +89,6 @@ static struct esdm_state esdm_state = {
 	.esdm_fully_seeded = false,
 	.all_online_nodes_seeded = false,
 	.boot_entropy_thresh = ESDM_FULL_SEED_ENTROPY_BITS,
-	.reseed_in_progress = MUTEX_W_UNLOCKED,
 };
 
 /*
@@ -103,8 +102,7 @@ static atomic_int esdm_es_mgr_terminate = 0;
 
 /*
  * Serializes the ES monitor's active work against esdm_reinit(). The monitor
- * holds this around the per-ES monitor_es() pass (which, for the Jitter/TPM2
- * sources, resets/fills their async caches), and esdm_reinit() holds it
+ * holds this around the per-ES monitor_es() pass, and esdm_reinit() holds it
  * across the whole reinitialization via esdm_es_mgr_monitor_pause()/_resume().
  * This guarantees no monitor iteration runs while the entropy sources are being
  * torn down and re-initialized, so the reinit path cannot reset/reallocate ES
@@ -118,8 +116,7 @@ static DECLARE_WAIT_QUEUE(esdm_monitor_wait);
 
 /*
  * A wakeup for the monitor that must not be lost: one that arrives during a
- * round - a cache drained while it refills another - has it start the next
- * round at once instead of after its interval.
+ * round has it start the next round at once instead of after its interval.
  */
 static atomic_bool esdm_es_mgr_monitor_pending = false;
 
@@ -216,35 +213,19 @@ void esdm_es_mgr_monitor_resume(void)
 	mutex_w_unlock(&esdm_es_mgr_monitor_lock);
 }
 
-struct esdm_es_monitor_thread_arg {
-	unsigned int es_idx;
-	int rc;
-};
-
-static int esdm_es_monitor_thread(void *data)
-{
-	struct esdm_es_monitor_thread_arg *arg = data;
-
-	arg->rc = esdm_es[arg->es_idx]->monitor_es();
-	return arg->rc;
-}
-
 #ifdef ESDM_ES_PARALLEL_FETCH
 struct esdm_es_get_ent_thread_arg {
 	unsigned int es_idx;
 	struct entropy_es *eb_es;
 	uint32_t requested_bits;
-	bool allow_cached;
 };
 
 static void *esdm_es_get_ent_thread(void *data)
 {
 	struct esdm_es_get_ent_thread_arg *arg = data;
 
-	if (arg->eb_es) {
-		esdm_es[arg->es_idx]->get_ent(arg->eb_es, arg->requested_bits,
-					      arg->allow_cached);
-	}
+	if (arg->eb_es)
+		esdm_es[arg->es_idx]->get_ent(arg->eb_es, arg->requested_bits);
 
 	return NULL;
 }
@@ -253,7 +234,6 @@ static void *esdm_es_get_ent_thread(void *data)
 /* ES monitor worker loop */
 int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 {
-	struct esdm_es_monitor_thread_arg args[esdm_ext_es_last];
 	unsigned int i, avail = 0;
 	bool priv_init_completed = false;
 
@@ -278,76 +258,28 @@ int esdm_es_mgr_monitor_initialize(void (*priv_init_completion)(void))
 	while (!atomic_load(&esdm_es_mgr_terminate)) {
 		struct timespec deadline;
 		unsigned int j;
-		int ret = 0;
+		int ret;
 		bool priv_init_complete = true;
-		bool spawned = false;
 
 		/* Taken down before the round, so one raised during it is kept */
 		atomic_store(&esdm_es_mgr_monitor_pending, false);
 
 		/*
-		 * Hold the monitor lock across the active pass (spawning the
-		 * per-ES monitors, joining them, and consuming their results) so
-		 * esdm_reinit() cannot tear down/re-initialize entropy sources
-		 * while a monitor pass is touching them. The lock is dropped
-		 * before the sleep below so a pause only waits for an in-flight
-		 * pass to finish.
+		 * Under the monitor lock, so esdm_reinit() does not tear the
+		 * sources down underneath a round. The monitors are cheap, a
+		 * failing device's probe bounded by its read deadline, so they
+		 * run one after the other in this thread.
 		 */
 		mutex_w_lock(&esdm_es_mgr_monitor_lock);
 
-		/*
-		 * Re-check the termination request under the lock: the loop
-		 * condition above may have been evaluated just before
-		 * esdm_es_mgr_finalize() set the flag. Starting a pass after
-		 * that function waited one out leaves the per-ES threads
-		 * outstanding when it joins every thread - and joining makes an
-		 * unstarted worker exit without clearing the job this pass waits
-		 * for, so neither the pass nor the join ever returns.
-		 */
-		if (atomic_load(&esdm_es_mgr_terminate)) {
-			mutex_w_unlock(&esdm_es_mgr_monitor_lock);
-			break;
-		}
-
 		for_each_esdm_es (j) {
-			args[j].es_idx = j;
-			args[j].rc = 0;
-
-			if (!esdm_es[j]->monitor_es)
-				continue;
-
-			if (thread_start(esdm_es_monitor_thread, &args[j], 0,
-					 NULL) == 0) {
-				spawned = true;
-			} else {
-				/*
-				 * Fall back to running the monitor in this
-				 * thread if no worker slot is available.
-				 */
-				args[j].rc = esdm_es[j]->monitor_es();
-			}
-		}
-
-		if (spawned)
-			thread_wait(true);
-
-		for_each_esdm_es (j) {
-			int rc;
-
-			if (!esdm_es[j]->monitor_es)
-				continue;
-
-			rc = args[j].rc;
-
 			/*
-			 * If the caller returns -EAGAIN, it blocks
-			 * the initialization process as it requires
-			 * root privileges until completed.
+			 * -EAGAIN: initialization needing root privileges is
+			 * not complete yet.
 			 */
-			if (rc == -EAGAIN)
+			if (esdm_es[j]->monitor_es &&
+			    esdm_es[j]->monitor_es() == -EAGAIN)
 				priv_init_complete = false;
-
-			ret |= rc;
 		}
 
 		if (!priv_init_completed && priv_init_complete &&
@@ -489,6 +421,26 @@ err:
 	eb_es->e_bits = 0;
 }
 
+void esdm_es_state_write(struct json_object *obj, char *buf, size_t buflen)
+{
+	const char *str =
+		obj ? json_object_to_json_string_ext(
+			      obj, JSON_C_TO_STRING_PLAIN |
+					   JSON_C_TO_STRING_NOSLASHESCAPE) :
+		      NULL;
+
+	if (buflen) {
+		size_t len = str ? strlen(str) : buflen;
+
+		if (len < buflen)
+			memcpy(buf, str, len + 1);
+		else
+			buf[0] = '\0';
+	}
+
+	json_object_put(obj);
+}
+
 /**
  * Common service function to set the requested amount of bits with the kernel
  * entropy sources.
@@ -498,69 +450,6 @@ err:
  * @param [in] fd file descriptor to the entropy source
  * @param [in] ioctl_cmd IOCTL command to be used with the FD
  */
-/* The labels of the status text for the members of the module's JSON status */
-static const struct {
-	const char *member;
-	const char *label;
-} esdm_kernel_state_labels[] = {
-	{ "drbg_for_operating_entropy_pool",
-	  "DRBG for operating entropy pool" },
-	{ "available_entropy", "Available entropy" },
-	{ "per_cpu_interrupt_collection_size",
-	  "per-CPU interrupt collection size" },
-	{ "per_cpu_scheduler_event_collection_size",
-	  "per-CPU scheduler event collection size" },
-	{ "standards_compliance", "Standards compliance" },
-	{ "fips_mode_enabled", "FIPS mode enabled" },
-	{ "high_resolution_timer", "High-resolution timer" },
-};
-
-void esdm_kernel_state(char *buf, size_t buflen, int fd,
-		       unsigned int ioctl_json)
-{
-	char status[ESDM_STATUS_JSON_BUFLEN] = { 0 };
-	struct json_object *obj = NULL;
-	size_t len = 0;
-
-	if (fd < 0) {
-		snprintf(buf, buflen, " disabled - missing kernel support\n");
-		return;
-	}
-
-	if (ioctl(fd, ioctl_json, status) >= 0) {
-		status[sizeof(status) - 1] = '\0';
-		obj = json_tokener_parse(status);
-	}
-
-	if (!json_object_is_type(obj, json_type_object)) {
-		snprintf(buf, buflen, " failure in reading kernel status\n");
-		goto out;
-	}
-
-	json_object_object_foreach(obj, key, val)
-	{
-		const char *label = key;
-		size_t i;
-		int ret;
-
-		for (i = 0; i < ARRAY_SIZE(esdm_kernel_state_labels); i++) {
-			if (!strcmp(key, esdm_kernel_state_labels[i].member)) {
-				label = esdm_kernel_state_labels[i].label;
-				break;
-			}
-		}
-
-		ret = snprintf(buf + len, buflen - len, " %s: %s\n", label,
-			       json_object_get_string(val));
-		if (ret < 0 || (size_t)ret >= buflen - len)
-			break;
-		len += (size_t)ret;
-	}
-
-out:
-	json_object_put(obj);
-}
-
 void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 				    uint32_t requested_bits, int fd,
 				    unsigned int ioctl_cmd)
@@ -596,27 +485,6 @@ void esdm_kernel_set_requested_bits(uint32_t *configured_bits,
 
 /********************************** Helper ***********************************/
 
-/*
- * Reading of the ESDM pool is only allowed by one caller. The reading is
- * only performed to (re)seed DRNGs. Thus, if this "lock" is already taken,
- * the reseeding operation is in progress. The caller is not intended to wait
- * but continue with its other operation.
- */
-int esdm_pool_trylock(void)
-{
-	return mutex_w_trylock(&esdm_state.reseed_in_progress) == 0;
-}
-
-void esdm_pool_lock(void)
-{
-	mutex_w_lock(&esdm_state.reseed_in_progress);
-}
-
-void esdm_pool_unlock(void)
-{
-	mutex_w_unlock(&esdm_state.reseed_in_progress);
-}
-
 /* Set new entropy threshold for reseeding during boot */
 void esdm_set_entropy_thresh(uint32_t new_entropy_bits)
 {
@@ -635,8 +503,10 @@ void esdm_reset_state(void)
 		if (esdm_es[i]->reset)
 			esdm_es[i]->reset();
 	}
-	atomic_store(&esdm_state.esdm_operational, false);
-	atomic_store(&esdm_state.esdm_fully_seeded, false);
+	/*
+	 * Not the operational state: that follows the initial DRNG and is
+	 * cleared with it, under its lock - see esdm_unset_fully_seeded().
+	 */
 	atomic_store(&esdm_state.all_online_nodes_seeded, false);
 	esdm_logger(LOGGER_DEBUG, LOGGER_C_ES, "reset ESDM\n");
 
@@ -769,21 +639,24 @@ uint32_t esdm_entropy_rate_eb(struct entropy_buf *eb)
 	return collected_entropy;
 }
 
-/* Mark one DRNG as not fully seeded */
+/*
+ * Mark one DRNG as not fully seeded.
+ *
+ * Seeds nothing and takes no lock, so non-blocking requests and holders of the
+ * lock of @drng may call it - the operational state changes with the initial
+ * DRNG under its lock, see esdm_init_ops(). Reseeding is left to the caller
+ * (which knows whether it may wait), the ES monitor and the reseed worker.
+ */
 void esdm_unset_fully_seeded(struct esdm_drng *drng)
 {
 	atomic_store(&drng->fully_seeded, false);
 
 	/*
-	 * Clear all_online_nodes_seeded under the pool lock so it stays ordered
-	 * with the pool-lock-guarded set-to-true in __esdm_drng_seed_work() and
-	 * with the readers in esdm_get_seed() that evaluate this flag under
-	 * the same lock. The lock is scoped narrowly here because
-	 * esdm_force_fully_seeded() below acquires the pool lock itself.
+	 * After the DRNG: __esdm_drng_seed_work() sets this flag only to look
+	 * at every DRNG once more afterwards, so a seeding that saw this one
+	 * still seeded either finds it unset there or is followed by this.
 	 */
-	esdm_pool_lock();
 	esdm_pool_all_nodes_seeded(false);
-	esdm_pool_unlock();
 
 	/*
 	 * The init DRNG instance must always be fully seeded as this instance
@@ -791,17 +664,15 @@ void esdm_unset_fully_seeded(struct esdm_drng *drng)
 	 * insufficiently seeded. Thus, we mark the entire ESDM as
 	 * non-operational if the initial DRNG becomes not fully seeded.
 	 */
-	if (drng == esdm_drng_init_instance() && esdm_state_operational()) {
+	if (drng == esdm_drng_init_instance() &&
+	    atomic_exchange(&esdm_state.esdm_operational, false)) {
 		esdm_logger(LOGGER_DEBUG, LOGGER_C_ES,
 			    "ESDM set to non-operational\n");
-		atomic_store(&esdm_state.esdm_operational, false);
 		atomic_store(&esdm_state.esdm_fully_seeded, false);
 
 		esdm_shm_status_set_operational(false);
 	}
 
-	/* If sufficient entropy is available, reseed now. */
-	esdm_force_fully_seeded();
 	esdm_es_mgr_monitor_wakeup();
 }
 
@@ -901,54 +772,29 @@ static uint32_t esdm_init_entropy_level(bool fully_seeded)
 }
 
 /**
- * esdm_init_ops() - Set seed stages of ESDM
+ * esdm_init_ops() - The initial DRNG is fully seeded
  *
- * Set the slow noise source reseed trigger threshold. The initial threshold
- * is set to the minimum data size that can be read from the pool: a word. Upon
- * reaching this value, the next seed threshold of 128 bits is set followed
- * by 256 bits.
+ * The ESDM is operational exactly while the initial DRNG is fully seeded, as
+ * every request falls back on it. Called with that DRNG's lock held once an
+ * injection left it fully seeded; esdm_unset_fully_seeded() clears the state
+ * under the same lock, so the two cannot disagree.
  *
- * @param [in] eb buffer containing the size of entropy currently injected into
- *		  DRNG - if NULL, the function obtains the available entropy
- *		  from the ES.
+ * @param [in] seed_bits entropy injected by the seeding, for the log
  */
-void esdm_init_ops(struct entropy_buf *eb)
+void esdm_init_ops(uint32_t seed_bits)
 {
 	struct esdm_state *state = &esdm_state;
-	uint32_t i, requested_bits, seed_bits = 0;
 
+	/* A reseed of the initial DRNG while it is fully seeded changes none */
 	if (atomic_load(&state->esdm_operational))
 		return;
 
-	requested_bits = esdm_init_entropy_level(
-		atomic_load(&state->all_online_nodes_seeded));
-
-	if (eb) {
-		seed_bits = esdm_entropy_rate_eb(eb);
-	} else {
-		uint32_t ent_thresh = esdm_avail_entropy_thresh();
-
-		for_each_esdm_es (i)
-			seed_bits += esdm_es[i]->curr_entropy(ent_thresh);
-	}
-
-	/* DRNG is already seeded with full security strength */
-	if (atomic_load(&state->esdm_fully_seeded)) {
-		esdm_set_operational();
-		esdm_set_entropy_thresh(requested_bits);
-		return;
-	}
-
-	if (esdm_fully_seeded(!atomic_load(&state->all_online_nodes_seeded),
-			      seed_bits, eb)) {
-		atomic_store(&state->esdm_fully_seeded, true);
-		esdm_set_operational();
-		esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
-			    "ESDM fully seeded with %u bits of entropy\n",
-			    seed_bits);
-		esdm_set_entropy_thresh(requested_bits);
-		esdm_init_wakeup();
-	}
+	atomic_store(&state->esdm_fully_seeded, true);
+	esdm_logger(LOGGER_VERBOSE, LOGGER_C_ES,
+		    "ESDM fully seeded with %u bits of entropy\n", seed_bits);
+	esdm_set_entropy_thresh(esdm_init_entropy_level(
+		atomic_load(&state->all_online_nodes_seeded)));
+	esdm_set_operational();
 }
 
 int esdm_es_mgr_reinitialize(void)
@@ -1067,19 +913,6 @@ void esdm_es_mgr_finalize(void)
 	atomic_store(&esdm_es_mgr_terminate, 1);
 	esdm_es_mgr_monitor_wakeup();
 
-	/*
-	 * Wait out an in-flight monitor pass before joining anything. A pass
-	 * waits for its per-ES threads with thread_wait(), which ignores the
-	 * shutdown flag, while thread_wait_all() below sets that flag and joins
-	 * - and a worker with a job assigned but not started exits on the flag
-	 * without running or clearing it, so the pass waits forever and the join
-	 * never returns. Taking the monitor lock blocks until any pass has
-	 * finished, and the terminate flag set above keeps the monitor from
-	 * starting another (it re-checks under this very lock).
-	 */
-	esdm_es_mgr_monitor_pause();
-	esdm_es_mgr_monitor_resume();
-
 	/* wait for monitor thread */
 	thread_wait_all(true);
 
@@ -1163,8 +996,8 @@ static bool esdm_es_approved(uint32_t es)
  * esdm_get_seed() that is the caller's own buffer, which it got back as seed -
  * its own bytes, or those of its previous seed. Cleared here before the source
  * is asked, the slot hands on the source's bytes and zeros. Nothing is lost by
- * it: the source writes what it delivers - a block from its cache as well -
- * after this. With ESDM_ES_PARALLEL_FETCH the slots are cleared here before the
+ * it: the source writes what it delivers after this. With
+ * ESDM_ES_PARALLEL_FETCH the slots are cleared here before the
  * threads fetching into them are started.
  */
 static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
@@ -1197,10 +1030,9 @@ static struct entropy_es *esdm_es_seed_slot(struct entropy_buf *seedbuf,
 	return slot;
 }
 
-/* Fetch the sources marked in @fetch, each into its slot */
+/* Fetch every source into its slot */
 static void esdm_es_fetch(struct entropy_buf *seedbuf,
-			  struct entropy_buf *addtl, uint32_t requested_bits,
-			  bool allow_cached, const bool *fetch)
+			  struct entropy_buf *addtl, uint32_t requested_bits)
 {
 #ifdef ESDM_ES_PARALLEL_FETCH
 	struct esdm_es_get_ent_thread_arg args[esdm_ext_es_last];
@@ -1212,88 +1044,49 @@ static void esdm_es_fetch(struct entropy_buf *seedbuf,
 	/*
 	 * The slots are cleared here before the threads fetching into them
 	 * are started. One join for both buffers: the wait is for the slowest
-	 * source there is rather than for the slowest of each buffer. Only the
-	 * sources to fetch get a thread - a reseed served from the caches
-	 * fetches few, or one, which runs in this thread.
+	 * source there is rather than for the slowest of each buffer.
 	 */
 	for_each_esdm_es (i) {
-		struct entropy_es *eb_es;
+		struct entropy_es *eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
 
-		if (!fetch[i])
-			continue;
-		eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
 		if (!eb_es)
 			continue;
 
 		args[n].es_idx = i;
 		args[n].eb_es = eb_es;
 		args[n].requested_bits = requested_bits;
-		args[n].allow_cached = allow_cached;
 		n++;
 	}
 	thread_fork_join(esdm_es_get_ent_thread, args, sizeof(args[0]), n);
 #else
 	/* Concatenate the output of the entropy sources. */
 	for_each_esdm_es (i) {
-		struct entropy_es *eb_es;
+		struct entropy_es *eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
 
-		if (!fetch[i])
-			continue;
-		eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
-		if (!eb_es)
-			continue;
-
-		esdm_es[i]->get_ent(eb_es, requested_bits, allow_cached);
+		if (eb_es)
+			esdm_es[i]->get_ent(eb_es, requested_bits);
 	}
 #endif
 }
 
-/*
- * A reseed takes what the sources with a cache have ready, see struct
- * esdm_es_cb.get_cached, and the others as always. A source whose cache is
- * empty is only asked to collect if the rest fall short of @requested_bits:
- * under load, a slow source such as a TPM otherwise holds up every reseed
- * once its cache is drained, while the sources served from their caches
- * deliver the entropy of the reseed by themselves.
- */
-static void esdm_es_fetch_reseed(struct entropy_buf *seedbuf,
-				 struct entropy_buf *addtl,
-				 uint32_t requested_bits, bool *fetch)
+/* Does a source wait for a working read to be credited again? */
+static bool esdm_es_read_failed(void)
 {
-	bool missed[esdm_ext_es_last];
-	uint32_t i, credited = 0;
+	uint32_t i;
 
 	for_each_esdm_es (i) {
-		struct entropy_es *eb_es;
-
-		missed[i] = false;
-		if (!esdm_es[i]->get_cached)
-			continue;
-
-		fetch[i] = false;
-		eb_es = esdm_es_seed_slot(seedbuf, addtl, i);
-		if (eb_es && !esdm_es[i]->get_cached(eb_es, requested_bits))
-			missed[i] = true;
+		if (esdm_es[i]->read_failed && esdm_es[i]->read_failed())
+			return true;
 	}
 
-	esdm_es_fetch(seedbuf, addtl, requested_bits, true, fetch);
-
-	/* An uncredited source writes no entropy into @seedbuf */
-	for_each_esdm_es (i)
-		credited += seedbuf->entropy_es[i].e_bits;
-	if (credited >= requested_bits)
-		return;
-
-	esdm_es_fetch(seedbuf, addtl, requested_bits, true, missed);
+	return false;
 }
 
-static void esdm_get_seed_buffers_common(struct entropy_buf *seedbuf,
-					 struct entropy_buf *addtl,
-					 uint32_t requested_bits, bool force,
-					 bool allow_cached, bool reseed)
+void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
+			   struct entropy_buf *addtl, uint32_t requested_bits,
+			   bool force)
 {
 	struct esdm_state *state = &esdm_state;
-	bool fetch[esdm_ext_es_last];
 	uint32_t i, req_ent = esdm_es_oversampling() ?
 				      esdm_security_strength() :
 				      ESDM_FULL_SEED_ENTROPY_BITS;
@@ -1314,8 +1107,10 @@ static void esdm_get_seed_buffers_common(struct entropy_buf *seedbuf,
 	 * Require at least 256 bits of entropy for any reseed. If the ESDM is
 	 * operated SP800-90C compliant we want to comply with SP800-90A section
 	 * 9.2 mandating that DRNG is reseeded with the security strength.
+	 * Not while a source waits for a working read: nothing else reads it.
 	 */
-	if (!force && fully_seeded && (esdm_avail_entropy() < req_ent)) {
+	if (!force && fully_seeded && (esdm_avail_entropy() < req_ent) &&
+	    !esdm_es_read_failed()) {
 		for_each_esdm_es (i) {
 			seedbuf->entropy_es[i].e_bits = 0;
 			if (addtl)
@@ -1325,31 +1120,8 @@ static void esdm_get_seed_buffers_common(struct entropy_buf *seedbuf,
 		goto wakeup;
 	}
 
-	for_each_esdm_es (i)
-		fetch[i] = true;
-
-	if (reseed)
-		esdm_es_fetch_reseed(seedbuf, addtl, requested_bits, fetch);
-	else
-		esdm_es_fetch(seedbuf, addtl, requested_bits, allow_cached,
-			      fetch);
+	esdm_es_fetch(seedbuf, addtl, requested_bits);
 
 wakeup:
 	esdm_writer_wakeup();
-}
-
-void esdm_get_seed_buffers(struct entropy_buf *seedbuf,
-			   struct entropy_buf *addtl, uint32_t requested_bits,
-			   bool force, bool allow_cached)
-{
-	esdm_get_seed_buffers_common(seedbuf, addtl, requested_bits, force,
-				     allow_cached, false);
-}
-
-void esdm_get_reseed_buffers(struct entropy_buf *seedbuf,
-			     struct entropy_buf *addtl, uint32_t requested_bits,
-			     bool force)
-{
-	esdm_get_seed_buffers_common(seedbuf, addtl, requested_bits, force,
-				     true, true);
 }

@@ -29,6 +29,7 @@
 #include "config.h"
 #include "constructor.h"
 #include "esdm_rpc_client.h"
+#include "memset_secure.h"
 #include "mutex.h"
 #include "visibility.h"
 
@@ -51,7 +52,24 @@
 #define GRND_FULLY_SEEDED 0x0020
 
 static atomic_bool is_initialized = false;
+static atomic_bool use_esdm = false;
 static DEFINE_MUTEX_UNLOCKED(getrandom_mutex);
+
+/*
+ * Present where the ESDM itself runs in this process - esdm-server links it.
+ * Weak, so the library loads into every other process all the same.
+ */
+extern int esdm_init(void) __attribute__((weak));
+
+/*
+ * May this process ask the ESDM at all? Not as PID 1: preloaded via
+ * /etc/ld.so.preload, the init would wait on a socket only it activates. Nor
+ * where the ESDM runs in this process, which would ask itself for its seed.
+ */
+static bool esdm_getrandom_may_use_esdm(void)
+{
+	return getpid() != 1 && !esdm_init;
+}
 
 static void esdm_getrandom_lib_init(void)
 {
@@ -62,13 +80,18 @@ static void esdm_getrandom_lib_init(void)
 		goto out;
 	}
 
+	if (!esdm_getrandom_may_use_esdm())
+		goto done;
+
 #if ESDM_GETRANDOM_NUM_NODES > 0
 	esdm_rpcc_set_max_online_nodes(ESDM_GETRANDOM_NUM_NODES);
 #endif
 
 	/* Return code irrelevant due to fallback in functions below */
 	esdm_rpcc_init_unpriv_service(NULL);
+	atomic_store(&use_esdm, true);
 
+done:
 	atomic_store(&is_initialized, true);
 
 out:
@@ -78,7 +101,8 @@ out:
 ESDM_DEFINE_DESTRUCTOR(esdm_getrandom_lib_exit);
 static void esdm_getrandom_lib_exit(void)
 {
-	esdm_rpcc_fini_unpriv_service();
+	if (atomic_load(&use_esdm))
+		esdm_rpcc_fini_unpriv_service();
 }
 
 ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags);
@@ -88,14 +112,35 @@ ssize_t __real_getrandom(void *__buffer, size_t __length, unsigned int __flags)
 	return syscall(__NR_getrandom, __buffer, __length, __flags);
 }
 
+/*
+ * GRND_NONBLOCK: what the ESDM serves right away, nothing (EAGAIN) before it
+ * is fully seeded - as the kernel's getrandom() before its CRNG is ready.
+ */
+static ssize_t getrandom_nonblock(uint8_t *buffer, size_t length,
+				  ssize_t (*get)(uint8_t *buf, size_t buflen))
+{
+	size_t done = 0;
+	ssize_t ret = 0;
+
+	while (done < length) {
+		esdm_invoke(get(buffer + done, length - done));
+		if (ret <= 0)
+			break;
+		done += (size_t)ret;
+	}
+
+	return done ? (ssize_t)done : ret;
+}
+
 static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 {
 	ssize_t ret;
 
+	/* The system call's conventions: -1 and errno */
 	if (flags &
 	    (unsigned int)(~(GRND_NONBLOCK | GRND_RANDOM | GRND_INSECURE |
 			     GRND_SEED | GRND_FULLY_SEEDED)))
-		return -EINVAL;
+		goto einval;
 
 	/*
 	 * Requesting insecure and blocking randomness at the same time makes
@@ -103,12 +148,12 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 	 */
 	if ((flags & (GRND_INSECURE | GRND_RANDOM)) ==
 	    (GRND_INSECURE | GRND_RANDOM))
-		return -EINVAL;
+		goto einval;
 	if ((flags & (GRND_INSECURE | GRND_SEED)) ==
 	    (GRND_INSECURE | GRND_SEED))
-		return -EINVAL;
+		goto einval;
 	if ((flags & (GRND_RANDOM | GRND_SEED)) == (GRND_RANDOM | GRND_SEED))
-		return -EINVAL;
+		goto einval;
 
 	/*
 	 * Cap to INT_MAX to match the kernel getrandom() behavior which
@@ -121,8 +166,47 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 		esdm_getrandom_lib_init();
 	}
 
+	if (!atomic_load(&use_esdm))
+		goto kernel;
+
+	/*
+	 * Nothing to fill, but report readiness as the system call does: EAGAIN
+	 * with GRND_NONBLOCK until seeded, else wait for it. A discarded byte
+	 * asks the same question as any request.
+	 */
+	if (!length && !(flags & (GRND_INSECURE | GRND_SEED))) {
+		uint8_t probe;
+
+		if (flags & GRND_NONBLOCK) {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full_noblock(
+				&probe, sizeof(probe)));
+		} else {
+			esdm_invoke(esdm_rpcc_get_random_bytes_full(
+				&probe, sizeof(probe)));
+		}
+		memset_secure(&probe, 0, sizeof(probe));
+
+		if (ret == -EAGAIN) {
+			errno = EAGAIN;
+			return -1;
+		}
+		if (ret >= 0)
+			return 0;
+		goto kernel;
+	}
+
 	if (flags & GRND_INSECURE) {
 		esdm_invoke(esdm_rpcc_get_random_bytes(buffer, length));
+	} else if ((flags & GRND_NONBLOCK) && !(flags & GRND_SEED)) {
+		ret = getrandom_nonblock(
+			buffer, length,
+			(flags & GRND_RANDOM) ?
+				esdm_rpcc_get_random_bytes_pr_noblock :
+				esdm_rpcc_get_random_bytes_full_noblock);
+		if (ret == -EAGAIN) {
+			errno = EAGAIN;
+			return -1;
+		}
 	} else if (flags & GRND_RANDOM) {
 		esdm_invoke(esdm_rpcc_get_random_bytes_pr(buffer, length));
 	} else if (flags & GRND_SEED) {
@@ -145,7 +229,18 @@ static ssize_t getrandom_common(void *buffer, size_t length, unsigned int flags)
 	if (ret >= 0)
 		return ret;
 
+	/* Whatever kept the ESDM from answering, the kernel does */
+kernel:
+	/* The kernel knows nothing of a seed request */
+	if (flags & GRND_SEED) {
+		errno = EOPNOTSUPP;
+		return -1;
+	}
 	return syscall(__NR_getrandom, buffer, length, flags);
+
+einval:
+	errno = EINVAL;
+	return -1;
 }
 
 /* Declare the prototype even though libc declares it internally */
@@ -201,7 +296,8 @@ static int getentropy_common(void *buffer, size_t length)
 		esdm_getrandom_lib_init();
 	}
 
-	esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
+	if (atomic_load(&use_esdm))
+		esdm_invoke(esdm_rpcc_get_random_bytes_full(buffer, length));
 	if (ret < 0) {
 		ssize_t rc = syscall(__NR_getrandom, buffer, length, 0);
 

@@ -172,6 +172,8 @@ static inline void sha3_init(struct esdm_hash_state *ctx)
 
 	for (i = 0; i < 25; i++)
 		ctx->state[i] = 0;
+	/* Unread until rewritten, but an init must not leave input behind */
+	memset_secure(ctx->partial, 0, sizeof(ctx->partial));
 	ctx->msg_len = 0;
 	ctx->squeeze_more = 0;
 }

@@ -27,6 +27,11 @@
 
 extern struct esdm_es_cb esdm_es_hwrand;
 
+#ifdef ESDM_TESTMODE
+/* The device read in place of /dev/hwrng from the next init, NULL for it */
+void esdm_hwrand_test_set_path(const char *path);
+#endif
+
 #endif /* ESDM_ES_HWRAND */
 
 #endif /* _ESDM_ES_HWRAND_H */

@@ -1,0 +1,49 @@
+@startuml
+' Figure: Scheduler Event Recording
+' esdm_time_process() / esdm_time_process_common() of
+' kernel/esdm_es/esdm_es_timer_common.c - the same for interrupts
+skinparam defaultFontName "Liberation Sans"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #000000
+skinparam ActivityBorderColor #000000
+skinparam ActivityBackgroundColor #66FFFF
+skinparam ActivityDiamondBackgroundColor #FFFFFF
+skinparam ActivityDiamondBorderColor #000000
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #000000
+
+start
+:Task wakeup on CPU x; <<#FFFFFF>>
+:t = random_get_entropy();
+if (GCD known?) then (yes)
+  :t = t / GCD;
+else (no)
+  :Record t for the GCD
+  of the first 100 time stamps;
+endif
+if (First event of the CPU?) then (yes)
+  :Remember t;
+  stop
+else (no)
+endif
+:Delta to the previous time stamp
+to the raw data test interface
+(only with BUILD_TESTING=1);
+:Health tests: stuck test,
+RCT, APT;
+if (Passed?) then (yes)
+  if (Ring of CPU x full?) then (no)
+    :Store t in the ring of CPU x;
+    note right
+      |<#66FFFF>| |<#66FFFF>| |<#66FFFF>| |<#66FFFF>      ...      |<#66FFFF>| |<#66FFFF>| |<#66FFFF>| |
+      CPU x ring
+    end note
+  else (yes)
+    :Drop t;
+  endif
+else (no)
+  :Drop t;
+endif
+stop
+@enduml

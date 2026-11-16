@@ -46,6 +46,7 @@
 #include "helper.h"
 #include "memset_secure.h"
 #include "visibility.h"
+#include "esdm_ppoll.h"
 
 struct esdm_es_ext_server {
 	const struct esdm_es_ext_plugin *plugin;
@@ -65,9 +66,12 @@ struct esdm_es_ext_server {
 	int listen_fd;
 	int stop_pipe[2];
 	int clients[ESDM_ES_EXT_MAX_CLIENTS];
-	/* Accepted or last active, monotonic ns */
-	uint64_t client_active[ESDM_ES_EXT_MAX_CLIENTS];
+	/* Accepted, monotonic ns */
+	uint64_t client_accepted[ESDM_ES_EXT_MAX_CLIENTS];
+	/* Of root, or of a process of root before - see accept_one() */
 	bool client_root[ESDM_ES_EXT_MAX_CLIENTS];
+	pid_t root_pids[ESDM_ES_EXT_MAX_CLIENTS];
+	unsigned int root_pids_next;
 
 	uid_t allowed_uids[ESDM_ES_EXT_MAX_CLIENT_UIDS];
 	unsigned int allowed_uids_num;
@@ -92,9 +96,9 @@ static void esdm_es_ext_server_close(struct esdm_es_ext_server *server,
 	server->clients[i] = -1;
 }
 
-/* With uids allowed, only those and root - *@root tells which */
+/* With uids allowed, only those and root - *@root tells which, *@pid whose */
 static bool esdm_es_ext_server_allowed(struct esdm_es_ext_server *server,
-				       int fd, bool *root)
+				       int fd, bool *root, pid_t *pid)
 {
 	struct ucred cred;
 	socklen_t len = sizeof(cred);
@@ -102,6 +106,8 @@ static bool esdm_es_ext_server_allowed(struct esdm_es_ext_server *server,
 	unsigned int i;
 
 	*root = known && cred.uid == 0;
+	/* 0 for a process outside of the PID namespace */
+	*pid = known ? cred.pid : 0;
 	if (!server->allowed_uids_num || *root)
 		return true;
 	for (i = 0; known && i < server->allowed_uids_num; i++) {
@@ -116,14 +122,40 @@ static bool esdm_es_ext_server_allowed(struct esdm_es_ext_server *server,
 
 /*
  * Make room for a new client by disconnecting @a rather than @b? A client of
- * root goes after one that is not, else the one idle the longer goes first.
+ * root goes after one that is not, else the one connected last goes first, so
+ * clients connecting later, however often, cannot take the ESDM's slot.
  */
 static bool esdm_es_ext_server_evict_first(struct esdm_es_ext_server *server,
 					   unsigned int a, unsigned int b)
 {
 	if (server->client_root[a] != server->client_root[b])
 		return !server->client_root[a];
-	return server->client_active[a] < server->client_active[b];
+	return server->client_accepted[a] > server->client_accepted[b];
+}
+
+/*
+ * A process once of root counts as root: the ESDM reconnects after dropping
+ * its privileges, when any process of the allowed uid could take its slot.
+ * The last root pids are remembered, which stay theirs while they live.
+ */
+static bool esdm_es_ext_server_root_pid(struct esdm_es_ext_server *server,
+					pid_t pid, bool root)
+{
+	unsigned int i;
+
+	if (pid <= 0)
+		return root;
+
+	for (i = 0; i < ESDM_ES_EXT_MAX_CLIENTS; i++) {
+		if (server->root_pids[i] == pid)
+			return true;
+	}
+	if (root) {
+		server->root_pids[server->root_pids_next] = pid;
+		server->root_pids_next =
+			(server->root_pids_next + 1) % ESDM_ES_EXT_MAX_CLIENTS;
+	}
+	return root;
 }
 
 /* Take one pending connection: false once there is none */
@@ -131,6 +163,7 @@ static bool esdm_es_ext_server_accept_one(struct esdm_es_ext_server *server)
 {
 	unsigned int i, slot = ESDM_ES_EXT_MAX_CLIENTS;
 	bool root;
+	pid_t pid;
 	int fd;
 
 	fd = accept4(server->listen_fd, NULL, NULL,
@@ -144,10 +177,11 @@ static bool esdm_es_ext_server_accept_one(struct esdm_es_ext_server *server)
 		return false;
 	}
 
-	if (!esdm_es_ext_server_allowed(server, fd, &root)) {
+	if (!esdm_es_ext_server_allowed(server, fd, &root, &pid)) {
 		close(fd);
 		return true;
 	}
+	root = esdm_es_ext_server_root_pid(server, pid, root);
 
 	/* A free slot, else one to evict - never one of root for a non-root */
 	for (i = 0; i < ESDM_ES_EXT_MAX_CLIENTS; i++) {
@@ -172,11 +206,11 @@ static bool esdm_es_ext_server_accept_one(struct esdm_es_ext_server *server)
 	if (server->clients[slot] >= 0)
 		esdm_logger(
 			LOGGER_DEBUG, LOGGER_C_ANY,
-			"External ES provider: too many clients, the one idle the longest disconnected\n");
+			"External ES provider: too many clients, the one connected last disconnected\n");
 
 	esdm_es_ext_server_close(server, slot);
 	server->clients[slot] = fd;
-	server->client_active[slot] = esdm_monotonic_now_ns();
+	server->client_accepted[slot] = esdm_monotonic_now_ns();
 	server->client_root[slot] = root;
 	return true;
 }
@@ -331,8 +365,6 @@ static void esdm_es_ext_server_serve(struct esdm_es_ext_server *server,
 	size_t msglen;
 	ssize_t n;
 	bool ret = false;
-
-	server->client_active[i] = esdm_monotonic_now_ns();
 
 	/* MSG_TRUNC: the size of a longer message, which is no request */
 	n = recv(server->clients[i], req, sizeof(req),
@@ -701,7 +733,7 @@ int esdm_es_ext_server_run(struct esdm_es_ext_server *server)
 			pfd[i + 2] = (struct pollfd){ .fd = server->clients[i],
 						      .events = POLLIN };
 
-		if (poll(pfd, ESDM_ES_EXT_MAX_CLIENTS + 2, -1) < 0) {
+		if (esdm_ppoll_ms(pfd, ESDM_ES_EXT_MAX_CLIENTS + 2, -1) < 0) {
 			if (errno == EINTR)
 				continue;
 			return -errno;

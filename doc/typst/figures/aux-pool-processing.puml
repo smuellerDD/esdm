@@ -1,0 +1,52 @@
+@startuml
+' Figure: Auxiliary Pool Processing
+' The auxiliary pool is an XDRBG-256 (esdm/crypto/esdm_xdrbg.c,
+' esdm/esdm_es_aux.c); user space inserts three buffers. The colours of the
+' seed buffer are those of figure big-picture.
+skinparam defaultFontName "Liberation Sans"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #000000
+skinparam ActivityBorderColor #000000
+skinparam ActivityBackgroundColor #EC9BA4
+skinparam ActivityDiamondBackgroundColor #FFFFFF
+skinparam ActivityDiamondBorderColor #000000
+skinparam NoteBackgroundColor #EC9BA4
+skinparam NoteBorderColor #000000
+
+:ESDM lib start; <<#FFFFFF>>
+:SHAKE256 Init;
+note left #FFFFFF: Auxiliary Pool (XDRBG-256)
+repeat
+  :Absorb D;
+  note right
+    User Space
+    Writes
+    IOCTL
+  end note
+  :Absorb D;
+  note right
+    User Space
+    Writes
+    IOCTL
+  end note
+  -[dotted]-> ...;
+  :Absorb D;
+  note right
+    User Space
+    Writes
+    IOCTL
+  end note
+  :Absorb encode(alpha, 1)
+  (encode(alpha, 0) at the first extraction);
+  :V = SHAKE256 Final (512 bits);
+  :SHAKE256 Init, absorb V, encode(alpha, 2);
+  :V' || A = SHAKE256 Final (512 bits + |A|);
+  note right #FFFFFF
+    A to the seed buffer
+    |<#FFB66C>   |<#66FFFF>   |<#FFDBB6>   |<#B3FFFF>   |<#FFFFA6>   |<#AFD095>   |<#FF4000>   |<#6B5E9B>   |<#8FB0D9>   |<#E6E64C>   |<#A0A0A0>   |<#EC9BA4>   |<#E8F2A1> |
+  end note
+  :SHAKE256 Init, absorb V';
+repeat while (...)
+detach
+@enduml

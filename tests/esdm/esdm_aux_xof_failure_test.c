@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
 	/* An extraction whose XDRBG fails */
 	esdm_ahf_fail = true;
 	memset(&eb_es, 0, sizeof(eb_es));
-	aux->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	aux->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	esdm_ahf_fail = false;
 
 	if (eb_es.e_bits) {
@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
 	}
 
 	memset(&eb_es, 0, sizeof(eb_es));
-	aux->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS, true);
+	aux->get_ent(&eb_es, ESDM_DRNG_INIT_SEED_SIZE_BITS);
 	if (!eb_es.e_bits) {
 		printf("Auxiliary pool delivered no entropy after its recovery\n");
 		ret = 1;

@@ -70,8 +70,9 @@ static void test_request(void)
 		{ INFO + 1, 0, -EPROTO },
 	};
 	uint8_t req[ESDM_ES_EXT_PROTO_REQ_MAX + 1] = { 0 };
-	uint32_t length;
-	uint16_t type;
+	/* Read by the checks even after a failed unpack */
+	uint32_t length = 0;
+	uint16_t type = 0;
 	unsigned int i;
 	size_t len;
 	int ret;

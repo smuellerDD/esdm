@@ -20,9 +20,11 @@
 #ifndef ACCOUNTING_PROBE_H
 #define ACCOUNTING_PROBE_H
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <time.h>
 
 #include "esdm_rpc_service.h"
 #include "test_pertubation.h"
@@ -41,9 +43,29 @@
  * to agree, as discarded entropy is neither free to generate nor explicable
  * except by a request having been answered twice.
  *
+ * A getter that does not wait may return short or -EAGAIN while every DRNG
+ * waits for its reseed; the accounting has to match what it returned.
+ *
  * Returns the number of shapes that did not add up.
  */
 typedef ssize_t (*probe_call_t)(uint8_t *buf, size_t buflen);
+
+/* @call, asked again while it answers -EAGAIN, for up to 30 seconds */
+static inline ssize_t probe_call_retry(probe_call_t call, uint8_t *buf,
+				       size_t buflen)
+{
+	const struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000000 };
+	unsigned int i;
+	ssize_t rc = -EAGAIN;
+
+	for (i = 0; i < 600 && rc == -EAGAIN; i++) {
+		rc = call(buf, buflen);
+		if (rc == -EAGAIN)
+			nanosleep(&pause, NULL);
+	}
+
+	return rc;
+}
 
 static inline unsigned int probe_accounting(probe_call_t call, const char *name)
 {
@@ -71,7 +93,7 @@ static inline unsigned int probe_accounting(probe_call_t call, const char *name)
 
 		esdm_test_shm_status_reset();
 
-		rc = call(buf, want);
+		rc = probe_call_retry(call, buf, want);
 		if (rc < 0) {
 			printf("PROBE %s: request of %zu bytes failed: %zd\n",
 			       name, want, rc);
@@ -81,6 +103,7 @@ static inline unsigned int probe_accounting(probe_call_t call, const char *name)
 
 		client = esdm_test_shm_status_get_rpc_client_written();
 		server = esdm_test_shm_status_get_rpc_server_written();
+		want = (size_t)rc;
 
 		if (client == want && server == want) {
 			printf("PROBE %s: %zu bytes - client %zu, server %zu: ok\n",

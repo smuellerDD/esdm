@@ -36,6 +36,7 @@
 #include "esdm_rpc_service.h"
 #include "helper.h"
 #include "esdm_logger.h"
+#include "memset_secure.h"
 #include "mutex.h"
 #include "privileges.h"
 #include "ret_checkers.h"
@@ -43,26 +44,35 @@
 
 #define ESDM_PROC_UUID_LEN 38
 #define ESDM_PROC_BUF_LEN ESDM_SHM_STATUS_INFO_SIZE
+
+/*
+ * Content of a file as one open sees it: generated when it is opened, as the
+ * kernel's /proc/sys files do, so concurrent readers neither tear nor see each
+ * other's content, and a "uuid" is fresh for every open.
+ */
+struct esdm_proc_content {
+	size_t vallen;
+	char valdata[ESDM_PROC_BUF_LEN];
+};
+
 struct esdm_proc_file {
 	const char *filename;
 	size_t filename_len;
 	mode_t perm;
-	int (*fill_data)(struct esdm_proc_file *file);
+	int (*fill_data)(struct esdm_proc_content *content);
 	int (*write_data)(struct esdm_proc_file *file, const char *buf,
 			  size_t buflen);
 	/*
-	 * If non-zero, esdm_proc_getattr() reports this as the file size instead
-	 * of invoking fill_data(). Used for files whose fill_data() has side
-	 * effects that must not run on a mere stat() - e.g. "uuid" draws fresh
-	 * DRNG output and performs a server round trip on every generation, so a
-	 * plain `ls -l` would needlessly consume randomness. The size is fixed
-	 * (a UUID string is always the same length), so reporting it statically
-	 * is exact.
+	 * Size esdm_proc_getattr() reports, as a stat() generates nothing (a
+	 * "uuid" costs DRNG output, the others a server request): a uuid's
+	 * fixed length, else 0 as for /proc/sys. Reads ignore it (direct_io).
 	 */
 	size_t getattr_size;
-	size_t vallen;
-	char valdata[ESDM_PROC_BUF_LEN];
+	/* Static content of boot_id, filled before the file system is up */
+	struct esdm_proc_content *fixed;
 };
+
+static struct esdm_proc_content esdm_proc_boot_id;
 
 /******************************************************************************
  * Helper
@@ -123,7 +133,7 @@ static void esdm_proc_drop_privilege(void)
 	mutex_unlock(&esdm_proc_priv);
 }
 
-static void esdm_proc_empty_file(struct esdm_proc_file *file)
+static void esdm_proc_empty_file(struct esdm_proc_content *file)
 {
 	file->valdata[0] = '\0';
 	file->vallen = 0;
@@ -151,7 +161,7 @@ static void esdm_proc_uuid_bin2hex(uint8_t uuid[16], char uuid_str[37])
 	uuid_str[36] = '\0';
 }
 
-static int esdm_proc_uuid(struct esdm_proc_file *file)
+static int esdm_proc_uuid(struct esdm_proc_content *file)
 {
 	uint8_t uuid[16];
 	ssize_t ret;
@@ -165,6 +175,20 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	 * acceptable and matches the interface being emulated.
 	 */
 	esdm_invoke(esdm_rpcc_get_random_bytes(uuid, sizeof(uuid)));
+	/*
+	 * Short or -EAGAIN: operational, every DRNG awaiting its reseed, which
+	 * the waiting getter waits for.
+	 */
+	if (ret == -EAGAIN)
+		ret = 0;
+	if (ret >= 0 && ret < (ssize_t)sizeof(uuid)) {
+		size_t done = (size_t)ret;
+
+		esdm_invoke(esdm_rpcc_get_random_bytes_full(
+			uuid + done, sizeof(uuid) - done));
+		if (ret >= 0)
+			ret += (ssize_t)done;
+	}
 	if (ret < 0) {
 		esdm_proc_empty_file(file);
 		return 0;
@@ -185,7 +209,7 @@ static int esdm_proc_uuid(struct esdm_proc_file *file)
 	return 0;
 }
 
-static int esdm_proc_data(struct esdm_proc_file *file,
+static int esdm_proc_data(struct esdm_proc_content *file,
 			  int (*content)(unsigned int *entcnt))
 {
 	unsigned int val = 0;
@@ -202,17 +226,17 @@ static int esdm_proc_data(struct esdm_proc_file *file,
 	return 0;
 }
 
-static int esdm_proc_poolsize(struct esdm_proc_file *file)
+static int esdm_proc_poolsize(struct esdm_proc_content *file)
 {
 	return esdm_proc_data(file, esdm_rpcc_get_poolsize);
 }
 
-static int esdm_proc_get_ent(struct esdm_proc_file *file)
+static int esdm_proc_get_ent(struct esdm_proc_content *file)
 {
 	return esdm_proc_data(file, esdm_rpcc_rnd_get_ent_cnt);
 }
 
-static int esdm_proc_get_write_wakeup_thresh(struct esdm_proc_file *file)
+static int esdm_proc_get_write_wakeup_thresh(struct esdm_proc_content *file)
 {
 	return esdm_proc_data(file, esdm_rpcc_get_write_wakeup_thresh);
 }
@@ -244,7 +268,7 @@ static int esdm_proc_set_write_wakeup_thresh(struct esdm_proc_file *file,
 	return ret;
 }
 
-static int esdm_proc_get_min_reseed_secs(struct esdm_proc_file *file)
+static int esdm_proc_get_min_reseed_secs(struct esdm_proc_content *file)
 {
 	return esdm_proc_data(file, esdm_rpcc_get_min_reseed_secs);
 }
@@ -276,7 +300,7 @@ static int esdm_proc_set_min_reseed_secs(struct esdm_proc_file *file,
 	return ret;
 }
 
-static int esdm_proc_get_status(struct esdm_proc_file *file)
+static int esdm_proc_get_status(struct esdm_proc_content *file)
 {
 	int ret = 0;
 
@@ -302,8 +326,7 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = NULL,
 		.write_data = NULL,
-		.vallen = 0,
-		.valdata[0] = '\0',
+		.fixed = &esdm_proc_boot_id,
 	},
 	{
 		.filename = "uuid",
@@ -312,8 +335,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.fill_data = esdm_proc_uuid,
 		.write_data = NULL,
 		.getattr_size = ESDM_PROC_UUID_LEN - 1,
-		.vallen = 0,
-		.valdata[0] = '\0',
 	},
 	{
 		.filename = "entropy_avail",
@@ -321,8 +342,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = esdm_proc_get_ent,
 		.write_data = NULL,
-		.vallen = 0,
-		.valdata[0] = '\0',
 	},
 	{
 		.filename = "poolsize",
@@ -330,8 +349,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = esdm_proc_poolsize,
 		.write_data = NULL,
-		.vallen = 0,
-		.valdata[0] = '\0',
 	},
 	{
 		.filename = "write_wakeup_threshold",
@@ -339,8 +356,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0644,
 		.fill_data = esdm_proc_get_write_wakeup_thresh,
 		.write_data = esdm_proc_set_write_wakeup_thresh,
-		.vallen = 0,
-		.valdata[0] = '\0',
 	},
 	{
 		.filename = "urandom_min_reseed_secs",
@@ -348,8 +363,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0644,
 		.fill_data = esdm_proc_get_min_reseed_secs,
 		.write_data = esdm_proc_set_min_reseed_secs,
-		.vallen = 0,
-		.valdata[0] = '\0',
 	},
 	{
 		.filename = "esdm_type",
@@ -357,8 +370,6 @@ static struct esdm_proc_file esdm_proc_files[] = {
 		.perm = 0444,
 		.fill_data = esdm_proc_get_status,
 		.write_data = NULL,
-		.vallen = 0,
-		.valdata[0] = '\0',
 	},
 };
 
@@ -374,7 +385,7 @@ static void esdm_proc_term(void)
 
 static int esdm_proc_pre_init(void)
 {
-	struct esdm_proc_file *file = &esdm_proc_files[0];
+	struct esdm_proc_content *file = &esdm_proc_boot_id;
 	char buf[ESDM_RPC_MAX_DATA];
 	size_t data_read = 0;
 	ssize_t rc;
@@ -460,34 +471,10 @@ static int esdm_proc_getattr(const char *path, struct stat *stbuf,
 				     file->filename_len)) {
 				stbuf->st_mode = S_IFREG | file->perm;
 				stbuf->st_nlink = 1;
-
-				if (file->getattr_size) {
-					/*
-					 * Report the known fixed size without
-					 * running fill_data(), whose side effects
-					 * (e.g. consuming DRNG output for "uuid")
-					 * must not be triggered by a bare stat().
-					 */
-					stbuf->st_size =
-						(off_t)file->getattr_size;
-					goto out;
-				}
-
-				if (file->fill_data) {
-					/*
-					 * fill_data issues unprivileged RPCs; take
-					 * the read lock so it never overlaps a
-					 * privileged (write-locked) raise/drop
-					 * window in another thread.
-					 */
-					mutex_reader_lock(&esdm_proc_priv);
-					ret = file->fill_data(file);
-					mutex_reader_unlock(&esdm_proc_priv);
-					if (ret < 0)
-						goto out;
-				}
-
-				stbuf->st_size = (off_t)file->vallen;
+				stbuf->st_size =
+					(off_t)(file->fixed ?
+							file->fixed->vallen :
+							file->getattr_size);
 				goto out;
 			}
 		}
@@ -533,6 +520,41 @@ out:
 	return ret;
 }
 
+/* The content one open of @file reads, see struct esdm_proc_content */
+static int esdm_proc_content_get(struct esdm_proc_file *file,
+				 struct fuse_file_info *fi)
+{
+	struct esdm_proc_content *content = calloc(1, sizeof(*content));
+	int ret = 0;
+
+	if (!content)
+		return -ENOMEM;
+
+	if (file->fixed) {
+		memcpy(content, file->fixed, sizeof(*content));
+	} else if (file->fill_data) {
+		/*
+		 * fill_data issues unprivileged RPCs; take the read lock so it
+		 * never overlaps a privileged (write-locked) raise/drop window
+		 * in another thread.
+		 */
+		mutex_reader_lock(&esdm_proc_priv);
+		ret = file->fill_data(content);
+		mutex_reader_unlock(&esdm_proc_priv);
+		if (ret < 0) {
+			free(content);
+			return ret;
+		}
+	}
+
+	fi->fh = (uint64_t)(uintptr_t)content;
+
+	/* Read what was generated, not as far as the size stat() reported */
+	fi->direct_io = 1;
+
+	return 0;
+}
+
 static int esdm_proc_open(const char *path, struct fuse_file_info *fi)
 {
 	size_t pathlen;
@@ -553,7 +575,7 @@ static int esdm_proc_open(const char *path, struct fuse_file_info *fi)
 		    !strncmp(path + 1, file->filename, file->filename_len)) {
 			/* Read-access is always granted */
 			if ((fi->flags & O_ACCMODE) == O_RDONLY)
-				goto out;
+				return esdm_proc_content_get(file, fi);
 
 			/*
 			 * Write access is only granted for root and then only
@@ -562,8 +584,12 @@ static int esdm_proc_open(const char *path, struct fuse_file_info *fi)
 			if ((((fi->flags & O_ACCMODE) == O_WRONLY) ||
 			     ((fi->flags & O_ACCMODE) == O_RDWR)) &&
 			    (file->perm & S_IWUSR) &&
-			    (fuse_get_context()->uid == 0))
+			    (fuse_get_context()->uid == 0)) {
+				if ((fi->flags & O_ACCMODE) == O_RDWR)
+					return esdm_proc_content_get(file, fi);
+				fi->fh = 0;
 				goto out;
+			}
 
 			/* All other access requests are denied. */
 			return -EACCES;
@@ -576,40 +602,50 @@ out:
 	return ret;
 }
 
+static int esdm_proc_release(const char *path, struct fuse_file_info *fi)
+{
+	struct esdm_proc_content *content =
+		(struct esdm_proc_content *)(uintptr_t)fi->fh;
+
+	(void)path;
+
+	if (content) {
+		/* A uuid is DRNG output */
+		memset_secure(content, 0, sizeof(*content));
+		free(content);
+		fi->fh = 0;
+	}
+
+	return 0;
+}
+
 static int esdm_proc_read(const char *path, char *buf, size_t size,
 			  off_t offset, struct fuse_file_info *fi)
 {
+	const struct esdm_proc_content *content;
 	size_t pathlen;
-	unsigned int i;
 	int ret = 0;
-
-	(void)fi;
 
 	CKNULL(path, -ENOENT);
 	pathlen = strlen(path);
 	if (pathlen <= 1)
 		return -ENOENT;
-	pathlen--;
 	if (offset < 0)
 		return -EINVAL;
 
-	for (i = 0; i < ARRAY_SIZE(esdm_proc_files); i++) {
-		struct esdm_proc_file *file = &esdm_proc_files[i];
+	/* Generated at open */
+	content =
+		fi ? (const struct esdm_proc_content *)(uintptr_t)fi->fh : NULL;
+	if (!content)
+		return -EBADF;
 
-		/* pathlen is one longer than file name due to / */
-		if (pathlen == file->filename_len &&
-		    !strncmp(path + 1, file->filename, file->filename_len)) {
-			if ((size_t)offset < file->vallen) {
-				if ((size_t)offset + size > file->vallen) {
-					size = file->vallen - (size_t)offset;
-				}
-				memcpy(buf, file->valdata + offset, size);
-				return (int)size;
-			} else {
-				return 0;
-			}
-		}
-	}
+	if ((size_t)offset >= content->vallen)
+		return 0;
+	if (size > content->vallen - (size_t)offset)
+		size = content->vallen - (size_t)offset;
+	memcpy(buf, content->valdata + offset, size);
+
+	return (int)size;
 
 out:
 	return ret;
@@ -665,6 +701,7 @@ static const struct fuse_operations esdm_proc_oper = {
 	.open = esdm_proc_open,
 	.read = esdm_proc_read,
 	.write = esdm_proc_write,
+	.release = esdm_proc_release,
 };
 
 static struct esdm_proc_options {

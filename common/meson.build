@@ -35,14 +35,18 @@ endif
 # Everything keyed on the oversampling below therefore reads this variable
 # rather than the option; the thresholds further down are left to the option, so
 # that a DRG.3 build does not pick them up.
-sp80090c = get_option('sp80090c') or get_option('ais2031_drg3')
+#
+# fips140 implies the SP800-90C compliance mode, which a FIPS kernel turns on at
+# runtime - and so the build adjustments of sp80090c: the reseeding limits
+# further down.
+sp80090c = get_option('sp80090c') or get_option('ais2031_drg3') or \
+	   get_option('fips140')
 
-conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES',
-	      sp80090c or get_option('fips140'))
+conf_data.set('ESDM_OVERSAMPLE_ENTROPY_SOURCES', sp80090c)
 conf_data.set('ESDM_AIS2031_NTG1_SEEDING_STRATEGY', get_option('ais2031_ntg1'))
 conf_data.set('ESDM_AIS2031_DRG3', get_option('ais2031_drg3'))
 conf_data.set('ESDM_AIS2031_DRG4', get_option('ais2031_drg4'))
-if sp80090c or get_option('fips140')
+if sp80090c
 	# The values the kernel module esdm_es applies in a FIPS kernel, from
 	# the header the two share: the seed size makes up the entropy buffer
 	# its IOCTLs hand over.
@@ -119,27 +123,6 @@ conf_data.set('ESDM_JENT_HASH_LOOP_COUNT',
 conf_data.set('ESDM_JENT_ALL_CACHES',
 	      get_option('es_jent_all_caches').enabled())
 
-# Async per-ES buffering (es_buf) is incompatible with SP800-90C oversampled
-# seeding by default. When sp80090c is set, zero out every ESDM_*_ENTROPY_BLOCKS
-# count so esdm_es_buf compiles out of all ES sources. The es_buf_force option
-# overrides this and keeps the per-ES counts honored.
-disable_es_buf = sp80090c and not get_option('es_buf_force')
-# Counted in whole seconds, it has to outlive the ES monitor interval of 2^29 ns
-if get_option('es_buf_max_age') == 1
-	error('es_buf_max_age must be 0 or at least 2')
-endif
-conf_data.set('ESDM_ES_BUF_MAX_AGE', get_option('es_buf_max_age'))
-conf_data.set('ESDM_JENT_INSTANCES', get_option('es_jent_instances'))
-
-# In esdm_es_jent.c the ESDM_JENT_ENTROPY_BLOCKS are divided by 4 and yet
-# need to result in a value larger than zero
-if get_option('es_jent_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS',
-		      get_option('es_jent_entropy_blocks'))
-else
-	conf_data.set('ESDM_JENT_ENTROPY_BLOCKS', 0)
-endif
-
 conf_data.set('ESDM_ES_CPU', get_option('es_cpu').enabled())
 conf_data.set('ESDM_CPU_ENTROPY_RATE',
 	      get_option('es_cpu_entropy_rate'))
@@ -149,12 +132,6 @@ conf_data.set('ESDM_CPU_FULL_ENT_MULTIPLIER',
 conf_data.set('ESDM_ES_IRQ', get_option('es_irq').enabled())
 conf_data.set('ESDM_IRQ_ENTROPY_RATE',
 	      get_option('es_irq_entropy_rate'))
-if get_option('es_irq_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS',
-		      get_option('es_irq_entropy_blocks'))
-else
-	conf_data.set('ESDM_IRQ_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_KERNEL_RNG', get_option('es_kernel').enabled())
 conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
@@ -163,12 +140,6 @@ conf_data.set('ESDM_KERNEL_RNG_ENTROPY_RATE',
 conf_data.set('ESDM_ES_SCHED', get_option('es_sched').enabled())
 conf_data.set('ESDM_SCHED_ENTROPY_RATE',
 	      get_option('es_sched_entropy_rate'))
-if get_option('es_sched_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS',
-		      get_option('es_sched_entropy_blocks'))
-else
-	conf_data.set('ESDM_SCHED_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_SCHED_EBPF', get_option('es_sched_ebpf').enabled())
 conf_data.set('ESDM_SCHED_EBPF_ENTROPY_RATE',
@@ -187,24 +158,12 @@ conf_data.set('ESDM_ES_EBPF_TESTING', get_option('es_ebpf_testing').enabled())
 conf_data.set('ESDM_ES_HWRAND', get_option('es_hwrand').enabled())
 conf_data.set('ESDM_HWRAND_ENTROPY_RATE',
 	      get_option('es_hwrand_entropy_rate'))
-if get_option('es_hwrand_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_HWRAND_ENTROPY_BLOCKS',
-		      get_option('es_hwrand_entropy_blocks'))
-else
-	conf_data.set('ESDM_HWRAND_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_TPM2', get_option('es_tpm2').enabled())
 conf_data.set('ESDM_TPM2_ENTROPY_RATE',
 	      get_option('es_tpm2_entropy_rate'))
 conf_data.set('ESDM_TPM2_STIR', get_option('es_tpm2_stir').enabled())
 conf_data.set_quoted('ESDM_TPM2_RM_PATH', get_option('es_tpm2_rm_path'))
-if get_option('es_tpm2_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS',
-		      get_option('es_tpm2_entropy_blocks'))
-else
-	conf_data.set('ESDM_TPM2_ENTROPY_BLOCKS', 0)
-endif
 
 # The defaults of esdm-es-pkcs11, see es-ext/meson.build
 conf_data.set('ESDM_PKCS11_ENTROPY_RATE',
@@ -218,12 +177,6 @@ conf_data.set('ESDM_ES_EXT', get_option('es_ext').enabled())
 conf_data.set_quoted('ESDM_EXT_PATH', get_option('es_ext_path'))
 conf_data.set('ESDM_EXT_ENTROPY_RATE', get_option('es_ext_entropy_rate'))
 conf_data.set('ESDM_EXT_PEER_UID', get_option('es_ext_peer_uid'))
-if get_option('es_ext_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_EXT_ENTROPY_BLOCKS',
-		      get_option('es_ext_entropy_blocks'))
-else
-	conf_data.set('ESDM_EXT_ENTROPY_BLOCKS', 0)
-endif
 
 conf_data.set('ESDM_ES_JENT_KERNEL', get_option('es_jent_kernel').enabled())
 if get_option('es_jent_kernel_name') == '' or get_option('es_jent_kernel_name').contains('"')
@@ -232,12 +185,6 @@ endif
 conf_data.set_quoted('ESDM_JENT_KERNEL_NAME', get_option('es_jent_kernel_name'))
 conf_data.set('ESDM_JENT_KERNEL_ENTROPY_RATE',
 	      get_option('es_jent_kernel_entropy_rate'))
-if get_option('es_jent_kernel_entropy_blocks') >= 4 and not disable_es_buf
-	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS',
-		      get_option('es_jent_kernel_entropy_blocks'))
-else
-	conf_data.set('ESDM_JENT_KERNEL_ENTROPY_BLOCKS', 0)
-endif
 
 timing_es_credited = 0
 foreach timing_es_rate_option : [ 'es_irq_entropy_rate',
@@ -280,12 +227,16 @@ conf_data.set('ESDM_LINUX_RESEED_ENTROPY_COUNT', get_option('linux-reseed-entrop
 # outright: these caps are the DRG.4 reseeding limits, and skipping them is the
 # whole point of the DRG.3 option. A build asking for it keeps whatever
 # thresholds it configured, even where sp80090c is set alongside.
-if not get_option('ais2031_drg3') and (get_option('sp80090c') or get_option('ais2031_drg4'))
+if not get_option('ais2031_drg3') and (get_option('sp80090c') or
+				       get_option('fips140') or
+				       get_option('ais2031_drg4'))
 	reseed_thresh = get_option('drng_reseed_threshold_bits')
 	max_reseed = get_option('drng_max_reseed_bits')
 
 	# SP800-90C and AIS 20/31 DRG.4.10 cap the bits a DRNG may produce
-	# without a full reseed at 2**17.
+	# without a full reseed at 2**17. A request starting below the cap is
+	# completed, in generate operations of 2**19 bits at most, and the
+	# reseed is due before the next one - see esdm_drng_get().
 	if max_reseed > 131072
 		max_reseed = 131072
 	endif
@@ -312,10 +263,19 @@ if not get_option('ais2031_drg3') and (get_option('sp80090c') or get_option('ais
 
 	conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', reseed_thresh)
 	conf_data.set('ESDM_DRNG_MAX_RESEED_BITS', max_reseed)
+
+	# A full reseed every 12 KiB of output, each collecting from the Jitter
+	# RNG for some 17 ms: the output scales with the collectors.
+	jent_instances = 4
 else
 	conf_data.set('ESDM_DRNG_RESEED_THRESH_BITS', get_option('drng_reseed_threshold_bits'))
 	conf_data.set('ESDM_DRNG_MAX_RESEED_BITS', get_option('drng_max_reseed_bits'))
+	jent_instances = 1
 endif
+if get_option('es_jent_instances') > 0
+	jent_instances = get_option('es_jent_instances')
+endif
+conf_data.set('ESDM_JENT_INSTANCES', jent_instances)
 
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH_UNPRIVILEGED', get_option('esdm-server-rpc-path-unprivileged'))
 conf_data.set_quoted('ESDM_SERVER_RPC_BASE_PATH_PRIVILEGED', get_option('esdm-server-rpc-path-privileged'))

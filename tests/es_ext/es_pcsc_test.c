@@ -25,14 +25,16 @@
  * answers the test steers. Covered:
  *
  *   - GET CHALLENGE as ISO/IEC 7816-4 has it, in chunks of the configured
- *     length within one transaction, and the data handed out as the card gave
+ *     length without a transaction, and the data handed out as the card gave
  *     it, claimed at 8 bits per byte,
  *   - a card delivering fewer bytes than asked for (SW 6Cxx) asked again,
  *   - no reader, no card, and the configured reader picked by its name,
  *   - a card reset during a request reconnected in the same request, a
  *     pcscd gone set up anew on the next one,
- *   - a card refusing GET CHALLENGE, the transaction ended all the same, the
- *     failure logged once and cleared once the card delivers,
+ *   - another program's transaction failing a request at once, without the
+ *     reconnect pcscd would let wait for its end,
+ *   - a card refusing GET CHALLENGE, the failure logged once and cleared once
+ *     the card delivers,
  *   - every card connected tested, 16 bytes twice: one repeating itself is
  *     claimed with nothing until a self test passes; no card fails no self
  *     test,
@@ -46,6 +48,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <PCSC/winscard.h>
@@ -73,11 +76,12 @@ static struct {
 	bool stuck;
 	/* The next transmission fails with this */
 	LONG fail_once;
+	/* Another program's transaction, under PCSCLITE_NO_BLOCKING */
+	bool locked;
 
 	/* The byte the next challenge starts with */
 	uint8_t next;
-	unsigned int contexts, connects, transmits, transactions;
-	bool in_transaction;
+	unsigned int contexts, connects, transmits;
 	int connected_reader;
 	uint8_t last_le;
 } card;
@@ -160,6 +164,7 @@ LONG SCardConnect(SCARDCONTEXT hContext, LPCSTR szReader, DWORD dwShareMode,
 {
 	unsigned int i;
 
+	CHECK(!card.locked, "a connection pcscd lets wait for a transaction");
 	for (i = 0; i < TEST_READERS; i++) {
 		if (!card.reader[i] || strcmp(card.reader[i], szReader))
 			continue;
@@ -177,24 +182,10 @@ LONG SCardConnect(SCARDCONTEXT hContext, LPCSTR szReader, DWORD dwShareMode,
 LONG SCardDisconnect(SCARDHANDLE hCard, DWORD dwDisposition)
 {
 	card.connected_reader = -1;
-	card.in_transaction = false;
 	return SCARD_S_SUCCESS;
 }
 
-LONG SCardBeginTransaction(SCARDHANDLE hCard)
-{
-	CHECK(!card.in_transaction, "a transaction begun inside another");
-	card.in_transaction = true;
-	card.transactions++;
-	return SCARD_S_SUCCESS;
-}
-
-LONG SCardEndTransaction(SCARDHANDLE hCard, DWORD dwDisposition)
-{
-	CHECK(card.in_transaction, "a transaction ended that was not begun");
-	card.in_transaction = false;
-	return SCARD_S_SUCCESS;
-}
+/* No SCardBeginTransaction(): it waits for another one without limit */
 
 LONG SCardStatus(SCARDHANDLE hCard, LPSTR mszReaderName, LPDWORD pcchReaderLen,
 		 LPDWORD pdwState, LPDWORD pdwProtocol, LPBYTE pbAtr,
@@ -217,13 +208,14 @@ LONG SCardTransmit(SCARDHANDLE hCard, const SCARD_IO_REQUEST *pioSendPci,
 	unsigned int le, i;
 
 	CHECK(pioSendPci == SCARD_PCI_T1, "not the PCI of T=1");
-	CHECK(card.in_transaction, "a command outside of a transaction");
 	CHECK(cbSendLength == 5 && pbSendBuffer[0] == 0x00 &&
 		      pbSendBuffer[1] == 0x84 && pbSendBuffer[2] == 0x00 &&
 		      pbSendBuffer[3] == 0x00,
 	      "no GET CHALLENGE");
 	card.transmits++;
 
+	if (card.locked)
+		return SCARD_E_SHARING_VIOLATION;
 	if (card.fail_once) {
 		LONG rv = card.fail_once;
 
@@ -260,7 +252,7 @@ static void *test_init(void)
 
 	CHECK_EQ(src->init(&ctx), 0);
 	card.next = 0;
-	card.transmits = card.transactions = 0;
+	card.transmits = 0;
 	return ctx;
 }
 
@@ -296,15 +288,15 @@ static void test_read(void)
 	test_card_reset();
 	ctx = test_init();
 	CHECK_EQ(card.connects, 1);
+	CHECK(getenv("PCSCLITE_NO_BLOCKING"),
+	      "libpcsclite left to wait for other programs' transactions");
 
 	CHECK_EQ(src->get_entropy(ctx, buf, sizeof(buf), &bits), 0);
 	CHECK_EQ(bits, 256);
 	CHECK(test_counted(buf, sizeof(buf), 0), "not the bytes of the card");
-	/* 4 GET CHALLENGE of 8 bytes, in one transaction */
+	/* 4 GET CHALLENGE of 8 bytes */
 	CHECK_EQ(card.transmits, 4);
 	CHECK_EQ(card.last_le, 8);
-	CHECK_EQ(card.transactions, 1);
-	CHECK(!card.in_transaction, "the transaction is left open");
 
 	/* A request not a multiple of the chunk: the last one is shorter */
 	CHECK_EQ(src->get_entropy(ctx, buf, 13, &bits), 0);
@@ -404,7 +396,6 @@ static void test_recovery(void)
 	card.fail_once = SCARD_W_RESET_CARD;
 	CHECK_EQ(src->get_entropy(ctx, buf, sizeof(buf), &bits), 0);
 	CHECK_EQ(card.connects, 2);
-	CHECK(!card.in_transaction, "the transaction is left open");
 
 	/* pcscd gone: this request fails, the next sets everything up anew */
 	card.fail_once = SCARD_E_NO_SERVICE;
@@ -416,10 +407,17 @@ static void test_recovery(void)
 	CHECK_EQ(card.contexts, 2);
 	CHECK_EQ(card.connects, 3);
 
-	/* A card refusing GET CHALLENGE: no data, the transaction ended */
+	/* Another program's transaction: no data, the card kept connected */
+	card.locked = true;
+	CHECK_EQ(src->get_entropy(ctx, buf, sizeof(buf), &bits), -EBUSY);
+	CHECK_EQ(src->selftest(ctx), 0);
+	card.locked = false;
+	CHECK_EQ(src->get_entropy(ctx, buf, sizeof(buf), &bits), 0);
+	CHECK_EQ(card.connects, 3);
+
+	/* A card refusing GET CHALLENGE: no data */
 	card.refuse = true;
 	CHECK_EQ(src->get_entropy(ctx, buf, sizeof(buf), &bits), -EIO);
-	CHECK(!card.in_transaction, "the transaction is left open");
 	CHECK(test_status_has(ctx, "\"last_error\":\"the card answers GET "
 				   "CHALLENGE with SW 6d00 and 0 bytes\""),
 	      "the refusal not told");

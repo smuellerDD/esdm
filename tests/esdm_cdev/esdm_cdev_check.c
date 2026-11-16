@@ -69,6 +69,7 @@
 
 #include "config.h"
 #include "esdm_egd_protocol.h"
+#include "esdm_ppoll.h"
 
 #define CDEV_RANDOM "/dev/esdm_random"
 #define CDEV_URANDOM "/dev/esdm_urandom"
@@ -608,7 +609,7 @@ static void cmd_poll(int argc, char *argv[])
 		const char *dev = cdev_devs[d];
 		struct pollfd pfd = { .fd = open_or_fail(dev, O_RDWR),
 				      .events = want[d] };
-		int rc = poll(&pfd, 1, 10000);
+		int rc = esdm_ppoll_ms(&pfd, 1, 10000);
 		int err = errno;
 
 		close(pfd.fd);
@@ -967,9 +968,8 @@ static void cmd_proc(int argc, char *argv[])
 					       "write_wakeup_threshold",
 					       "urandom_min_reseed_secs" };
 	static const char *const bad[] = { "abc", "-1", "4294967295", "1 2" };
-	static const char *const sections[] = { "ESDM library version",
-						"Entropy Source",
-						"DRNG instance" };
+	static const char *const sections[] = { "Library version",
+						"Entropy sources:", "DRNGs:" };
 	char *val;
 	size_t i;
 	int err;
@@ -1281,8 +1281,12 @@ static ssize_t throughput_egd(void *ctx, uint8_t *buf, size_t size)
 	int fd = *(int *)ctx;
 	size_t num = (size + ESDM_EGD_MAX_TRANSFER - 1) / ESDM_EGD_MAX_TRANSFER;
 	size_t i, done = 0;
-	uint8_t *req = xmalloc(2 * num);
+	/* Zeroed, which GCC 15 cannot tell the loop below does for all of it */
+	uint8_t *req = calloc(1, 2 * num + 1);
 	ssize_t ret;
+
+	if (!req)
+		fail("out of memory for %zu bytes", 2 * num);
 
 	for (i = 0; i < num; i++) {
 		size_t chunk = size - i * ESDM_EGD_MAX_TRANSFER;
@@ -2010,7 +2014,7 @@ static void poll_writable_only(int fd, const char *when)
 	struct pollfd pfd = {
 		.fd = fd, .events = POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM
 	};
-	int ret = poll(&pfd, 1, 0);
+	int ret = esdm_ppoll_ms(&pfd, 1, 0);
 
 	if (ret < 0)
 		fail("poll %s: %s", when, strerror(errno));
@@ -2045,7 +2049,7 @@ static void cmd_poll_notop(int argc, char *argv[])
 		int ret;
 
 		polls++;
-		ret = poll(&pfd, 1, 200);
+		ret = esdm_ppoll_ms(&pfd, 1, 200);
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;

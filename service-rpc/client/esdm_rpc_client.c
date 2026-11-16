@@ -22,9 +22,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <stdatomic.h>
 #include <time.h>
@@ -60,16 +60,160 @@ struct esdm_rpcc_write_buf {
  * call - they never carry state across calls or get touched by another thread.
  * So one buffer set per calling thread suffices instead of one per connection,
  * bounding this memory by the number of RPC-issuing threads rather than by the
- * connection pool size. esdm_rpcc_reqbuf is cast to the protocol header
- * structs, hence the 64-bit alignment.
+ * connection pool size.
+ *
+ * Allocated on a thread's first RPC: as static TLS of a library preloaded
+ * into any process, they would be carved from every thread's stack.
  */
-static __thread uint8_t esdm_rpcc_reqbuf[ESDM_RPC_MAX_MSG_SIZE]
-	__attribute__((aligned(sizeof(uint64_t))));
+struct esdm_rpcc_tbuf {
+	/* Cast to the protocol header structs, hence the 64-bit alignment */
+	uint8_t reqbuf[ESDM_RPC_MAX_MSG_SIZE]
+		__attribute__((aligned(sizeof(uint64_t))));
+	/*
+	 * Unpacks a response without a malloc()/free() per call; backs the
+	 * esdm_rpc_alloc() bump allocator.
+	 */
+	uint8_t unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
+};
+
+static pthread_key_t esdm_rpcc_tbuf_key;
+static pthread_once_t esdm_rpcc_tbuf_once = PTHREAD_ONCE_INIT;
+static bool esdm_rpcc_tbuf_key_valid = false;
+
+static void esdm_rpcc_tbuf_free(void *tbuf)
+{
+	memset_secure(tbuf, 0, sizeof(struct esdm_rpcc_tbuf));
+	free(tbuf);
+}
+
+static void esdm_rpcc_tbuf_key_init(void)
+{
+	esdm_rpcc_tbuf_key_valid =
+		!pthread_key_create(&esdm_rpcc_tbuf_key, esdm_rpcc_tbuf_free);
+}
+
 /*
- * Scratch buffer used to unpack a response without a malloc()/free() round-trip
- * per call; backs the esdm_rpc_alloc() bump allocator while in use.
+ * Delete the key when the library goes away: after a dlclose() its destructor
+ * would otherwise be called from unmapped code at every thread exit.
  */
-static __thread uint8_t esdm_rpcc_unpack_buf[ESDM_RPC_MAX_UNPACK_SIZE];
+__attribute__((destructor)) static void esdm_rpcc_tbuf_key_fini(void)
+{
+	void *tbuf;
+
+	if (!esdm_rpcc_tbuf_key_valid)
+		return;
+
+	tbuf = pthread_getspecific(esdm_rpcc_tbuf_key);
+	if (tbuf) {
+		pthread_setspecific(esdm_rpcc_tbuf_key, NULL);
+		esdm_rpcc_tbuf_free(tbuf);
+	}
+	pthread_key_delete(esdm_rpcc_tbuf_key);
+	esdm_rpcc_tbuf_key_valid = false;
+}
+
+static struct esdm_rpcc_tbuf *esdm_rpcc_tbuf_get(void)
+{
+	struct esdm_rpcc_tbuf *tbuf;
+
+	pthread_once(&esdm_rpcc_tbuf_once, esdm_rpcc_tbuf_key_init);
+	if (!esdm_rpcc_tbuf_key_valid)
+		return NULL;
+
+	tbuf = pthread_getspecific(esdm_rpcc_tbuf_key);
+	if (tbuf)
+		return tbuf;
+
+	tbuf = malloc(sizeof(*tbuf));
+	if (!tbuf)
+		return NULL;
+	if (pthread_setspecific(esdm_rpcc_tbuf_key, tbuf)) {
+		free(tbuf);
+		return NULL;
+	}
+
+	return tbuf;
+}
+
+/*
+ * Bound of one esdm_client_invoke(), so a server that never answers cannot
+ * keep callers without an interrupt function (getrandom library, OpenSSL
+ * provider, kernel seeder) from their fallbacks. Three read budgets cover a
+ * slow connect and one re-submission.
+ */
+#define ESDM_CLIENT_INVOKE_TIMEOUT_NS                                          \
+	(3ULL * (ESDM_MAX_RX_TX_RETRIES + 1) *                                 \
+	 (1ULL << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT))
+
+/* Connection resets after which an invoke gives up */
+#define ESDM_CLIENT_RESET_RETRIES 2
+
+/*
+ * How long after a server last served this process a refused connect is taken
+ * for a restart worth waiting for - see esdm_connect_proto_service().
+ */
+#define ESDM_CLIENT_RESTART_GRACE_SEC 10
+
+/* ESDM_CLOCK_COARSE second of the last accepted connect or answer, 0: none */
+static _Atomic int64_t esdm_rpcc_last_served = 0;
+
+static void esdm_rpcc_served(const struct timespec *now)
+{
+	/* Once a second at most: the threads of a busy client share it */
+	if (atomic_load_explicit(&esdm_rpcc_last_served,
+				 memory_order_relaxed) != now->tv_sec)
+		atomic_store_explicit(&esdm_rpcc_last_served, now->tv_sec,
+				      memory_order_relaxed);
+}
+
+static bool esdm_rpcc_served_recently(void)
+{
+	int64_t last = atomic_load_explicit(&esdm_rpcc_last_served,
+					    memory_order_relaxed);
+	struct timespec now;
+
+	if (!last)
+		return false;
+
+	clock_gettime(ESDM_CLOCK_COARSE, &now);
+	return now.tv_sec - last <= ESDM_CLIENT_RESTART_GRACE_SEC;
+}
+
+static void esdm_rpcc_arm_deadline(esdm_rpc_client_connection_t *rpc_conn)
+{
+	struct timespec *deadline = &rpc_conn->deadline;
+
+	clock_gettime(ESDM_CLOCK_COARSE, deadline);
+	deadline->tv_sec +=
+		(time_t)(ESDM_CLIENT_INVOKE_TIMEOUT_NS / 1000000000);
+	deadline->tv_nsec += (long)(ESDM_CLIENT_INVOKE_TIMEOUT_NS % 1000000000);
+	if (deadline->tv_nsec >= 1000000000) {
+		deadline->tv_sec++;
+		deadline->tv_nsec -= 1000000000;
+	}
+}
+
+/* Has ESDM_CLOCK_COARSE reached @ts? */
+static bool esdm_rpcc_passed(const struct timespec *ts)
+{
+	struct timespec now;
+
+	clock_gettime(ESDM_CLOCK_COARSE, &now);
+	return now.tv_sec > ts->tv_sec ||
+	       (now.tv_sec == ts->tv_sec && now.tv_nsec >= ts->tv_nsec);
+}
+
+static bool esdm_rpcc_expired(const esdm_rpc_client_connection_t *rpc_conn)
+{
+	return esdm_rpcc_passed(&rpc_conn->deadline);
+}
+
+/* Does the caller want us to interrupt? */
+static bool esdm_rpcc_interrupted(const esdm_rpc_client_connection_t *rpc_conn)
+{
+	return rpc_conn->interrupt_func &&
+	       rpc_conn->interrupt_func(rpc_conn->interrupt_data);
+}
 
 static void register_fork_handler(void);
 
@@ -105,6 +249,26 @@ static void esdm_fini_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 
 	mutex_w_destroy(&rpc_conn->lock);
 	mutex_w_destroy(&rpc_conn->ref_cnt);
+}
+
+/*
+ * A blocking socket with RX/TX timeouts makes a request one write and one
+ * read; a non-blocking one also took a failing read and a poll(). A timed out
+ * send or receive fails with EAGAIN.
+ */
+static int esdm_rpcc_set_timeouts(int fd)
+{
+	static const uint64_t ns = 1ULL << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT;
+	struct timeval tv = {
+		.tv_sec = (time_t)(ns / 1000000000),
+		.tv_usec = (suseconds_t)(ns % 1000000000 / 1000),
+	};
+
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0 ||
+	    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0)
+		return -errno;
+
+	return 0;
 }
 
 static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
@@ -162,8 +326,8 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 	 * the full message. Short reads will therefore not happen on the server
 	 * side.
 	 */
-	rpc_conn->fd = socket(addr.sun_family,
-			      SOCK_SEQPACKET | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+	rpc_conn->fd =
+		socket(addr.sun_family, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
 	if (rpc_conn->fd < 0) {
 		errsv = errno;
 
@@ -175,34 +339,80 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 		return -errsv;
 	}
 
-	do {
-		/* If we have another attempt, try to wait a bit */
-		if (attempts)
-			nanosleep(&ts, NULL);
+	/* Before the connect, which waits for a full backlog as long */
+	errsv = -esdm_rpcc_set_timeouts(rpc_conn->fd);
+	if (errsv) {
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Error setting socket timeouts: %s\n",
+			    strerror(errsv));
+		reset_conn_socket(rpc_conn);
+		return -errsv;
+	}
 
-		if (connect(rpc_conn->fd, (struct sockaddr *)&addr,
-			    sizeof(addr)) < 0) {
-			errsv = errno;
-
-			esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
-				    "Error connecting socket: %s\n",
-				    strerror(errsv));
-			attempts++;
-		} else {
+	for (;;) {
+		if (!connect(rpc_conn->fd, (struct sockaddr *)&addr,
+			     sizeof(addr))) {
 			errsv = 0;
+			break;
 		}
-	} while (attempts < (ESDM_CLIENT_RECONNECT_ATTEMPTS) &&
-		 (errsv == EAGAIN || errsv == ECONNREFUSED || errsv == EINTR ||
-		  errsv == EINPROGRESS));
 
-	if (errsv || attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS) {
+		errsv = errno;
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Error connecting socket: %s\n", strerror(errsv));
+
+		if (++attempts >= ESDM_CLIENT_RECONNECT_ATTEMPTS ||
+		    !(errsv == EAGAIN || errsv == ECONNREFUSED ||
+		      errsv == EINTR || errsv == EINPROGRESS))
+			break;
+
+		/*
+		 * Do not outwait an interrupt or the invoke bound; an interrupt
+		 * returns -EAGAIN as in the write path.
+		 */
+		if (esdm_rpcc_interrupted(rpc_conn)) {
+			errsv = EAGAIN;
+			break;
+		}
+		if (esdm_rpcc_expired(rpc_conn)) {
+			errsv = ETIMEDOUT;
+			break;
+		}
+
+		/*
+		 * Nobody listens. Only shortly after a server served us is that
+		 * a restart worth waiting for; otherwise the socket file is
+		 * stale and every call, even a GRND_NONBLOCK getrandom(), would
+		 * wait out all attempts before its fallback. One short retry
+		 * covers a server between bind() and listen().
+		 */
+		if (errsv == ECONNREFUSED && !esdm_rpcc_served_recently()) {
+			static const struct timespec listen_ts = {
+				.tv_nsec = 1000000
+			};
+
+			if (attempts > 1)
+				break;
+			nanosleep(&listen_ts, NULL);
+			continue;
+		}
+
+		/*
+		 * Pause before the next attempt, unless the connect already
+		 * waited for a full backlog, see esdm_rpcc_set_timeouts().
+		 */
+		if (errsv != EAGAIN)
+			nanosleep(&ts, NULL);
+	}
+
+	if (errsv) {
 		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
 			    "Connection attempt using socket %s failed\n",
 			    socketname);
 		reset_conn_socket(rpc_conn);
 	} else {
 		/* only update this time on a successful connection */
-		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+		clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
+		esdm_rpcc_served(&rpc_conn->last_used);
 	}
 
 	return -errsv;
@@ -211,68 +421,56 @@ static int esdm_connect_proto_service(esdm_rpc_client_connection_t *rpc_conn)
 static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
 					 const uint8_t *data, size_t len)
 {
-	static const int CLIENT_TX_TIMEOUT_MS =
-		(1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
 	unsigned int retries = 0;
-	int pret = -1;
 	ssize_t ret;
 
 	if (rpc_conn->fd < 0)
 		return -EINVAL;
 
 	do {
+		int errsv;
+
 		/* Does the caller wants us to interrupt? */
-		if (rpc_conn->interrupt_func &&
-		    rpc_conn->interrupt_func(rpc_conn->interrupt_data)) {
+		if (esdm_rpcc_interrupted(rpc_conn))
 			return -EAGAIN;
-		}
 
 		retries++;
 		ret = write(rpc_conn->fd, data, len);
-		if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			struct pollfd pfd = { .fd = rpc_conn->fd,
-					      .events = POLLOUT };
+		if (ret >= 0)
+			break;
 
-			pret = poll(&pfd, 1, CLIENT_TX_TIMEOUT_MS);
-			/* data available before timeout? */
-			if (pret > 0) {
-				continue;
-			}
-			if (pret < 0 && errno == EINTR) {
-				continue;
-			}
+		errsv = errno;
+		if (errsv == EINTR)
+			continue;
+
+		/* No room within the send timeout - esdm_rpcc_set_timeouts() */
+		if (errsv == EAGAIN || errsv == EWOULDBLOCK) {
+			if (esdm_rpcc_expired(rpc_conn))
+				return -ETIMEDOUT;
+			continue;
 		}
 
-		if (ret < 0) {
-			int errsv = errno;
-
-			/*
-			 * EPIPE is due to the server was restarted -> reconnect
-			 */
-			if (pret == 0) {
-				continue;
-			}
-
-			if (errsv == EPIPE) {
-				esdm_logger(
-					LOGGER_DEBUG, LOGGER_C_RPC,
-					"Connection to server needs to be re-established\n");
-
-				reset_conn_socket(rpc_conn);
-				int rc = esdm_connect_proto_service(rpc_conn);
-				if (rc)
-					return rc;
-				continue;
-			}
-
+		/*
+		 * EPIPE is due to the server was restarted -> reconnect
+		 */
+		if (errsv == EPIPE) {
 			esdm_logger(
-				LOGGER_ERR, LOGGER_C_RPC,
-				"Writing of data to file descriptor %d failed: %s\n",
-				rpc_conn->fd, strerror(errsv));
+				LOGGER_DEBUG, LOGGER_C_RPC,
+				"Connection to server needs to be re-established\n");
 
-			return -errsv;
+			reset_conn_socket(rpc_conn);
+			int rc = esdm_connect_proto_service(rpc_conn);
+			if (rc)
+				return rc;
+			continue;
 		}
-	} while (ret < 0 && retries <= ESDM_MAX_RX_TX_RETRIES);
+
+		esdm_logger(LOGGER_ERR, LOGGER_C_RPC,
+			    "Writing of data to file descriptor %d failed: %s\n",
+			    rpc_conn->fd, strerror(errsv));
+
+		return -errsv;
+	} while (retries <= ESDM_MAX_RX_TX_RETRIES);
 
 	/*
 	 * SOCK_SEQPACKET guarantees atomic messages - a short write is a
@@ -299,15 +497,17 @@ static int esdm_rpc_client_write_data_fd(esdm_rpc_client_connection_t *rpc_conn,
  */
 static int esdm_rpc_client_pack(const ProtobufCMessage *message,
 				unsigned int method_index,
-				esdm_rpc_client_connection_t *rpc_conn)
+				esdm_rpc_client_connection_t *rpc_conn,
+				struct esdm_rpcc_tbuf *tbuf)
 {
 #define ESDM_RPCC_BUF_WRITE_HEADER_SZ (sizeof(struct esdm_rpc_proto_cs_header))
 
+	uint8_t *const esdm_rpcc_reqbuf = tbuf->reqbuf;
 	size_t message_length;
 	int ret;
 	struct esdm_rpc_proto_cs_header *cs_header;
 	struct esdm_rpc_write_data_buf tmp = {
-		.dst_len = sizeof(esdm_rpcc_reqbuf) - ESDM_RPCC_BUF_WRITE_HEADER_SZ,
+		.dst_len = sizeof(tbuf->reqbuf) - ESDM_RPCC_BUF_WRITE_HEADER_SZ,
 		.dst_written = 0,
 	};
 
@@ -360,11 +560,12 @@ out:
 
 static int
 esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
+			     struct esdm_rpcc_tbuf *tbuf,
 			     const ProtobufCMessageDescriptor *message_desc,
 			     ProtobufCClosure closure, void *closure_data)
 {
-	static const int CLIENT_RX_TIMEOUT_MS =
-		(1 << ESDM_CLIENT_RX_TX_TIMEOUT_EXPONENT) / 1000000;
+	uint8_t *const esdm_rpcc_reqbuf = tbuf->reqbuf;
+	uint8_t *const esdm_rpcc_unpack_buf = tbuf->unpack_buf;
 	struct esdm_rpc_proto_sc *received_data;
 	struct esdm_rpc_proto_sc_header *header = NULL;
 	/*
@@ -375,7 +576,6 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	ssize_t received = 0;
 	unsigned int retries = 0;
 	int ret = 0;
-	int pret;
 	bool interrupted = false;
 
 	if (rpc_conn->fd < 0)
@@ -387,8 +587,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 	/* Read the data into the local buffer storage */
 	do {
 		/* Does the caller wants us to interrupt? */
-		if (rpc_conn->interrupt_func &&
-		    rpc_conn->interrupt_func(rpc_conn->interrupt_data)) {
+		if (esdm_rpcc_interrupted(rpc_conn)) {
 			interrupted = true;
 			break;
 		}
@@ -401,26 +600,22 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 		 * short-reads cannot occur here and can be ignored.
 		 */
 		received = read(rpc_conn->fd, esdm_rpcc_reqbuf,
-				sizeof(esdm_rpcc_reqbuf));
+				sizeof(tbuf->reqbuf));
 
-		pret = 0;
-		if (received < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			struct pollfd pfd = { .fd = rpc_conn->fd,
-					      .events = POLLIN };
-
-			pret = poll(&pfd, 1, CLIENT_RX_TIMEOUT_MS);
-			/* data available before timeout? */
-			if (pret > 0) {
-				continue;
-			}
-			if (pret < 0 && errno == EINTR) {
-				continue;
-			}
-		}
-
-		/* Handle a read timeout */
 		if (received < 0) {
-			if (pret == 0) {
+			/*
+			 * A signal is no wait for the answer: it does not take
+			 * from the budget, only the bound of the invoke ends it.
+			 */
+			if (errno == EINTR) {
+				if (esdm_rpcc_expired(rpc_conn))
+					break;
+				retries--;
+				continue;
+			}
+
+			/* Receive timeout, see esdm_rpcc_set_timeouts() */
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				/*
 				 * Keep waiting rather than asking again. The
 				 * request is already at the server - a connected
@@ -429,9 +624,12 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				 * would produce the answer twice and leave the
 				 * first one queued as the reply to the next
 				 * call, as responses are matched by order. The
-				 * retry budget bounds the wait; re-submission
-				 * stays available once it is exhausted, below.
+				 * retry budget and the invoke bound limit the
+				 * wait; re-submission remains once the budget
+				 * is spent, below.
 				 */
+				if (esdm_rpcc_expired(rpc_conn))
+					break;
 				continue;
 			}
 
@@ -441,8 +639,19 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			break;
 		}
 
-		if (received < (ssize_t)sizeof(*header))
-			continue;
+		/*
+		 * EOF: the server closed without answering (idle timeout,
+		 * restart, connection limit); like a lost answer, ask again.
+		 */
+		if (received == 0) {
+			ret = -ECONNRESET;
+			break;
+		}
+
+		if (received < (ssize_t)sizeof(*header)) {
+			ret = -EPROTO;
+			break;
+		}
 
 		header = &received_data->header;
 
@@ -535,7 +744,7 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 			 * free() would otherwise leave it in the heap unscrubbed.
 			 */
 			struct buffer tlh = {
-				.len = sizeof(esdm_rpcc_unpack_buf),
+				.len = sizeof(tbuf->unpack_buf),
 				.consumed = 0,
 				.buf = esdm_rpcc_unpack_buf,
 			};
@@ -564,7 +773,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 				memset_secure(esdm_rpcc_unpack_buf, 0,
 					      tlh.consumed);
 		}
-		clock_gettime(CLOCK_MONOTONIC, &rpc_conn->last_used);
+		clock_gettime(ESDM_CLOCK_COARSE, &rpc_conn->last_used);
+		esdm_rpcc_served(&rpc_conn->last_used);
 	} else if (interrupted) {
 		ProtobufCMessage *msg;
 
@@ -580,7 +790,8 @@ esdm_rpc_client_read_handler(esdm_rpc_client_connection_t *rpc_conn,
 
 		msg = ERR_PTR(-EINTR);
 		closure(msg, closure_data);
-	} else {
+	} else if (ret != -EAGAIN && ret != -ECONNRESET) {
+		/* Those two are asked again by esdm_client_invoke() */
 		ProtobufCMessage *msg;
 
 		esdm_logger(LOGGER_VERBOSE, LOGGER_C_RPC,
@@ -602,6 +813,7 @@ int esdm_rpcc_fuzz_response(const ProtobufCMessageDescriptor *message_desc,
 			    ProtobufCClosure closure, void *closure_data)
 {
 	esdm_rpc_client_connection_t rpc_conn;
+	struct esdm_rpcc_tbuf *tbuf;
 	int sockets[2];
 	int ret;
 
@@ -609,9 +821,8 @@ int esdm_rpcc_fuzz_response(const ProtobufCMessageDescriptor *message_desc,
 		return -EINVAL;
 
 	/*
-	 * The type and the non-blocking mode of a real client connection - a
-	 * message is delivered whole or not at all, and the read path handles
-	 * its own waiting.
+	 * The type and the timeouts of a real client connection - a message is
+	 * delivered whole or not at all, and a read waits a timeout at most.
 	 */
 	if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) < 0)
 		return -errno;
@@ -621,16 +832,23 @@ int esdm_rpcc_fuzz_response(const ProtobufCMessageDescriptor *message_desc,
 		goto out;
 	}
 
-	if (set_fd_nonblocking(sockets[0])) {
+	if (esdm_rpcc_set_timeouts(sockets[0])) {
 		ret = -EBADF;
 		goto out;
 	}
 
 	memset(&rpc_conn, 0, sizeof(rpc_conn));
 	rpc_conn.fd = sockets[0];
+	esdm_rpcc_arm_deadline(&rpc_conn);
 
-	ret = esdm_rpc_client_read_handler(&rpc_conn, message_desc, closure,
-					   closure_data);
+	tbuf = esdm_rpcc_tbuf_get();
+	if (!tbuf) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = esdm_rpc_client_read_handler(&rpc_conn, tbuf, message_desc,
+					   closure, closure_data);
 
 out:
 	close(sockets[0]);
@@ -639,6 +857,27 @@ out:
 	return ret;
 }
 #endif /* ESDM_FUZZING */
+
+/*
+ * May a request be re-sent when its answer does not come? Not one whose
+ * effect adds up or costs, as the server may have run it: entropy credited
+ * twice, a pool cleared again, self tests rerun.
+ */
+static bool esdm_rpcc_resendable(const ProtobufCMethodDescriptor *method)
+{
+	static const char *const once[] = {
+		"RpcRndAddToEntCnt", "RpcRndAddEntropy", "RpcRndClearPool",
+		"RpcRndReseedCRNG",  "RpcSelftest",	 "RpcWriteData",
+	};
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(once); i++) {
+		if (!strcmp(method->name, once[i]))
+			return false;
+	}
+
+	return true;
+}
 
 static void esdm_client_invoke(ProtobufCService *service,
 			       unsigned int method_index,
@@ -651,8 +890,10 @@ static void esdm_client_invoke(ProtobufCService *service,
 		(esdm_rpc_client_connection_t *)service;
 	static const int64_t half_server_timeout_ns =
 		(int64_t)ESDM_RPC_IDLE_TIMEOUT_USEC * 1000 / 2;
+	struct esdm_rpcc_tbuf *tbuf;
 	struct timespec current_time;
 	int64_t used_before_ns;
+	unsigned int resets = 0;
 	int ret;
 
 	/*
@@ -667,8 +908,13 @@ static void esdm_client_invoke(ProtobufCService *service,
 
 	rpc_conn->last_error = 0;
 
+	tbuf = esdm_rpcc_tbuf_get();
+	CKNULL(tbuf, -ENOMEM);
+
+	esdm_rpcc_arm_deadline(rpc_conn);
+
 	do {
-		clock_gettime(CLOCK_MONOTONIC, &current_time);
+		clock_gettime(ESDM_CLOCK_COARSE, &current_time);
 		used_before_ns =
 			((int64_t)current_time.tv_sec -
 			 (int64_t)rpc_conn->last_used.tv_sec) *
@@ -690,17 +936,21 @@ static void esdm_client_invoke(ProtobufCService *service,
 		}
 
 		/* Pack the protobuf-c data and send it over the wire */
-		CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn),
+		CKINT_LOG(esdm_rpc_client_pack(input, method_index, rpc_conn,
+					       tbuf),
 			  "Sending of data failed: %d\n", ret);
 
 		/* Receive data */
-		ret = esdm_rpc_client_read_handler(rpc_conn, method->output,
-						   closure, closure_data);
+		ret = esdm_rpc_client_read_handler(
+			rpc_conn, tbuf, method->output, closure, closure_data);
 		/* EAGAIN is ok here, since sockets are non-blocking now */
-		if (ret < 0 && ret != -EAGAIN) {
+		if (ret < 0 && ret != -EAGAIN && ret != -ECONNRESET) {
 			esdm_logger(LOGGER_ERR, LOGGER_C_ANY,
 				    "Receiving of data failed: %d\n", ret);
 		}
+
+		if (ret != -EAGAIN && ret != -ECONNRESET)
+			break;
 
 		/*
 		 * Re-submitting gives up on the answer to the request just
@@ -708,9 +958,26 @@ static void esdm_client_invoke(ProtobufCService *service,
 		 * responses are matched purely by order, so a late one would be
 		 * handed out as the reply to the next call.
 		 */
-		if (ret == -EAGAIN)
-			reset_conn_socket(rpc_conn);
-	} while (ret == -EAGAIN);
+		reset_conn_socket(rpc_conn);
+
+		if (!esdm_rpcc_resendable(method)) {
+			if (ret == -EAGAIN)
+				ret = -ETIMEDOUT;
+			break;
+		}
+
+		/*
+		 * Ask again only within bounds, so a server that never answers
+		 * or keeps closing does not block callers' fallbacks.
+		 */
+		if (esdm_rpcc_expired(rpc_conn)) {
+			if (ret == -EAGAIN)
+				ret = -ETIMEDOUT;
+			break;
+		}
+		if (ret == -ECONNRESET && ++resets > ESDM_CLIENT_RESET_RETRIES)
+			break;
+	} while (1);
 
 out:
 	/*
@@ -734,7 +1001,7 @@ static void esdm_client_destroy(ProtobufCService *service)
 		reset_conn_socket(rpc_conn);
 	}
 	/*
-	 * No per-connection buffer to wipe - the per-thread esdm_rpcc_reqbuf is
+	 * No per-connection buffer to wipe - the per-thread request buffer is
 	 * zeroized after every invoke in esdm_rpc_client_read_handler().
 	 */
 	mutex_w_unlock(&rpc_conn->lock);
@@ -754,6 +1021,7 @@ static int esdm_init_proto_service(const ProtobufCServiceDescriptor *descriptor,
 	strncpy(rpc_conn->socketname, socketname, sizeof(rpc_conn->socketname));
 	rpc_conn->socketname[sizeof(rpc_conn->socketname) - 1] = '\0';
 	rpc_conn->interrupt_func = interrupt_func;
+	rpc_conn->interrupt_func_init = interrupt_func;
 
 	service->descriptor = descriptor;
 	service->invoke = esdm_client_invoke;
@@ -805,12 +1073,11 @@ static _Atomic uint32_t esdm_rpcc_max_nodes = UINT32_MAX;
 /*
  * Guards the pairing of a connection-array pointer and its count across
  * init/fini versus concurrent getters. A getter holds the reader side from
- * loading the array pointer until it owns a connection's ref_cnt, so a
- * concurrent fini (which takes the writer side for the pointer swap and only
- * then waits on each ref_cnt) can no longer destroy and free the array
- * between the getter's pointer load and its ref_cnt acquisition. The same
- * writer side serializes concurrent init calls against each other.
- * Writer-preferring so init/fini cannot be starved by a flood of getters.
+ * loading the array pointer until it owns a connection's ref_cnt or counts as
+ * its waiter, so fini (which swaps the pointer under the writer side, then
+ * waits on each ref_cnt and its waiters) cannot free the array in between.
+ * The writer side also serializes init calls. Writer-preferring so getters
+ * cannot starve init/fini - hence no getter may block while holding it.
  */
 static mutex_t esdm_rpcc_conn_lock = MUTEX_UNLOCKED_PREFER_WRITER;
 
@@ -902,6 +1169,21 @@ static void esdm_rpcc_release_conns(
 			continue;
 		}
 		mutex_w_unlock(&rpc_conn_p->ref_cnt);
+
+		/*
+		 * A getter blocked on ref_cnt before the unpublish still takes
+		 * it to see the shutdown - the mutexes must outlive it.
+		 */
+		while (atomic_load(&rpc_conn_p->waiters) &&
+		       !esdm_rpcc_passed(&abstime)) {
+			static const struct timespec ts = { .tv_nsec = 1000000 };
+
+			nanosleep(&ts, NULL);
+		}
+		if (atomic_load(&rpc_conn_p->waiters)) {
+			still_in_use = true;
+			continue;
+		}
 
 		/* Terminate the handle */
 		esdm_fini_proto_service(rpc_conn_p);
@@ -1019,7 +1301,7 @@ static int esdm_rpcc_init_service(const ProtobufCServiceDescriptor *descriptor,
 		 * silently disable the interrupt handling of its owner.
 		 */
 		if (interrupt_func &&
-		    interrupt_func != curr_conn_array->interrupt_func) {
+		    interrupt_func != curr_conn_array->interrupt_func_init) {
 			esdm_logger(
 				LOGGER_WARN, LOGGER_C_RPC,
 				"Interrupt function for socket %s ignored: the connections are already established\n",
@@ -1091,6 +1373,27 @@ out:
 	return ret;
 }
 
+/* Hand out a connection whose ref_cnt the caller owns */
+static int esdm_rpcc_claim_service(esdm_rpc_client_connection_t *rpc_conn_p,
+				   esdm_rpc_client_connection_t **ret_rpc_conn,
+				   void *int_data)
+{
+	if (atomic_load(&rpc_conn_p->state) != esdm_rpcc_initialized) {
+		mutex_w_unlock(&rpc_conn_p->ref_cnt);
+
+		/* Safety measure */
+		*ret_rpc_conn = NULL;
+
+		return -ESHUTDOWN;
+	}
+
+	*ret_rpc_conn = rpc_conn_p;
+	rpc_conn_p->interrupt_func = rpc_conn_p->interrupt_func_init;
+	rpc_conn_p->interrupt_data = int_data;
+
+	return 0;
+}
+
 static int esdm_rpcc_get_service(
 	_Atomic(esdm_rpc_client_connection_t *) *rpc_conn_array_ptr,
 	uint32_t *num_conn_ptr, esdm_rpc_client_connection_t **ret_rpc_conn,
@@ -1098,7 +1401,6 @@ static int esdm_rpcc_get_service(
 {
 	esdm_rpc_client_connection_t *rpc_conn_array, *rpc_conn_p;
 	uint32_t node, num_conn;
-	bool found_unused_conn = false;
 	int ret = 0;
 	uint32_t i;
 
@@ -1107,11 +1409,10 @@ static int esdm_rpcc_get_service(
 
 	/*
 	 * Hold the reader side from the pointer load until the connection's
-	 * ref_cnt is owned: fini swaps the pointer under the writer side and
-	 * only then waits on each ref_cnt, so it cannot destroy and free the
-	 * array between our load and the ref_cnt acquisition. The lock also
-	 * makes the pointer and count a consistent pair (no transient
-	 * non-NULL pointer with count 0 and its modulo-by-zero SIGFPE).
+	 * ref_cnt is owned or we count as its waiter, so fini cannot free the
+	 * array in between (see esdm_rpcc_conn_lock). The lock also makes the
+	 * pointer and count a consistent pair (no transient non-NULL pointer
+	 * with count 0 and its modulo-by-zero SIGFPE).
 	 */
 	mutex_reader_lock(&esdm_rpcc_conn_lock);
 
@@ -1147,35 +1448,29 @@ static int esdm_rpcc_get_service(
 	for (i = 0; i < num_conn; ++i) {
 		rpc_conn_p = rpc_conn_array + (i + node) % num_conn;
 		if (mutex_w_trylock(&rpc_conn_p->ref_cnt) == 0) {
-			found_unused_conn = true;
-			break;
+			ret = esdm_rpcc_claim_service(rpc_conn_p, ret_rpc_conn,
+						      int_data);
+			goto out;
 		}
 	}
 
-	if (!found_unused_conn) {
-		rpc_conn_p = rpc_conn_array + node % num_conn;
+	/*
+	 * Wait for the previous call - a handle has one caller at a time. Its
+	 * owner may hold it long (a slow request), so wait outside the
+	 * connection lock: holding the reader side that long would block
+	 * fork() and, as writers are preferred, every new getter.
+	 */
+	rpc_conn_p = rpc_conn_array + node % num_conn;
+	atomic_fetch_add(&rpc_conn_p->waiters, 1);
+	mutex_reader_unlock(&esdm_rpcc_conn_lock);
 
-		/*
-		 * Wait until the previous call completed - each connection
-		 * handle has only one caller at one given time. Lock the
-		 * ref_cnt if we obtained the connection handle.
-		 */
-		mutex_w_lock(&rpc_conn_p->ref_cnt);
-		found_unused_conn = true;
-	}
+	mutex_w_lock(&rpc_conn_p->ref_cnt);
+	ret = esdm_rpcc_claim_service(rpc_conn_p, ret_rpc_conn, int_data);
 
-	if (atomic_load(&rpc_conn_p->state) != esdm_rpcc_initialized) {
-		mutex_w_unlock(&rpc_conn_p->ref_cnt);
+	/* Last access - the connection may be torn down right after */
+	atomic_fetch_sub(&rpc_conn_p->waiters, 1);
 
-		/* Safety measure */
-		*ret_rpc_conn = NULL;
-
-		ret = -ESHUTDOWN;
-		goto out;
-	}
-
-	*ret_rpc_conn = rpc_conn_p;
-	rpc_conn_p->interrupt_data = int_data;
+	return ret;
 
 out:
 	mutex_reader_unlock(&esdm_rpcc_conn_lock);
@@ -1310,8 +1605,8 @@ static pthread_once_t fork_handler_once = PTHREAD_ONCE_INIT;
  * array the child considers empty forever (init). It also keeps the child from
  * inheriting the lock held by a thread that no longer exists, which would
  * deadlock its first esdm_rpcc_get_service(). The price is that a fork waits
- * for an in-flight getter, bounded by one RPC round trip and only when all
- * connections are busy.
+ * for an in-flight getter's lookup - getters never block while holding the
+ * lock.
  */
 static void prepare_fork(void)
 {
@@ -1338,10 +1633,19 @@ static void reinit_conns_after_fork(
 	 * esdm_init_proto_service(). Recreating them rather than recovering
 	 * them is what is needed here: a mutex left locked by a thread of the
 	 * parent has no owner in this process at all, so there is nobody for
-	 * the robustness protocol to hand it over to.
+	 * the robustness protocol to hand it over to. The same holds for the
+	 * waiters.
+	 *
+	 * Only close() the sockets: the parent still uses them, and a
+	 * shutdown() would end its connections as well.
 	 */
 	for (i = 0; i < num_conn; ++i) {
-		reset_conn_socket(&rpc_conn_array[i]);
+		if (rpc_conn_array[i].fd >= 0)
+			close(rpc_conn_array[i].fd);
+		rpc_conn_array[i].fd = -1;
+		memset(&rpc_conn_array[i].last_used, 0,
+		       sizeof(rpc_conn_array[i].last_used));
+		atomic_store(&rpc_conn_array[i].waiters, 0);
 		mutex_w_destroy(&rpc_conn_array[i].ref_cnt);
 		mutex_w_destroy(&rpc_conn_array[i].lock);
 		mutex_w_init(&rpc_conn_array[i].ref_cnt, 0, 1);

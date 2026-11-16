@@ -11,7 +11,7 @@ Wants=esdm-server.service
 After=esdm-server.service
 
 [Service]
-Type=notify
+@SERVICE_TYPE@
 AmbientCapabilities=CAP_SYS_ADMIN
 CapabilityBoundingSet=CAP_SYS_ADMIN
 Restart=on-failure
